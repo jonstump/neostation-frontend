@@ -252,8 +252,10 @@ class EsdeImportResult {
       safBudgetRefused: this.safBudgetRefused || safBudgetRefused,
       safBudgetRequiredBytes:
           this.safBudgetRequiredBytes + safBudgetRequiredBytes,
-      // The first refusal's reading is the one worth showing: later ones
-      // measure the same volume after nothing more was written.
+      // The budget is checked per system with a fresh free-space reading, so
+      // earlier systems may have copied before a later one was refused; the
+      // first refusal's reading is the one worth showing, and the required
+      // bytes are summed across refused systems.
       safBudgetAvailableBytes:
           this.safBudgetAvailableBytes ?? safBudgetAvailableBytes,
       cancelled: this.cancelled || cancelled,

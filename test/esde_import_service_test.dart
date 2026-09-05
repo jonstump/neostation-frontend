@@ -632,6 +632,11 @@ void main() {
     late dynamic db;
 
     setUp(() async {
+      // Pin the mirror root to a temp dir so no test in this group can ever
+      // reach the real user-data path through _resolveMirrorRoot().
+      EsdeImportService.mirrorRootOverride = Directory.systemTemp
+          .createTempSync('esde_infolder_mirror_')
+          .path;
       db = await dbHelper.setUp();
       await db.execute(
         "INSERT INTO app_systems (id, real_name, folder_name, screenscraper_id) VALUES ('snes', 'SNES', 'snes', 4)",
@@ -642,6 +647,9 @@ void main() {
     });
 
     tearDown(() async {
+      final pinned = EsdeImportService.mirrorRootOverride;
+      EsdeImportService.mirrorRootOverride = null;
+      if (pinned != null) Directory(pinned).deleteSync(recursive: true);
       EsdeImportService.safRomFolderResolverOverride = null;
       await dbHelper.tearDown();
     });

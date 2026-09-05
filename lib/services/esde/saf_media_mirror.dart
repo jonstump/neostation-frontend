@@ -359,8 +359,15 @@ class SafMediaMirror {
           'listed=${file.size} written=$written',
         );
       }
-      if (destination.existsSync()) await destination.delete();
-      await partial.rename(destination.path);
+      // Rename over an existing destination is atomic on the platforms this
+      // runs on; only if that fails fall back to delete-then-rename, so a
+      // previously good copy is never removed before its replacement exists.
+      try {
+        await partial.rename(destination.path);
+      } on FileSystemException {
+        if (destination.existsSync()) await destination.delete();
+        await partial.rename(destination.path);
+      }
       return written;
     } catch (_) {
       if (sink != null) {
