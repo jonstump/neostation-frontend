@@ -1165,11 +1165,24 @@ class ScreenScraperService {
       }
 
       if (!screenscraperAvailable) {
-        _log.i(
+        final log = stepResult.status == RommScrapeStepStatus.failed
+            ? _log.w
+            : _log.i;
+        log(
           'RomM scrape step ${stepResult.status.name} and ScreenScraper is '
           'not set up; counting as failed '
           '(filename=$filename, system=$systemFolder'
           '${stepResult.error == null ? '' : ', error=${stepResult.error}'})',
+        );
+        // Release the thread row so it does not keep showing the RomM step.
+        scrapingProvider.updateThreadProgress(
+          threadId: threadId,
+          gameName: filename,
+          systemName: systemName,
+          isActive: false,
+          status: ThreadStatus.idle,
+          currentStep: ThreadProcessingStep.completed,
+          progress: 1.0,
         );
         return {
           'success': false,
