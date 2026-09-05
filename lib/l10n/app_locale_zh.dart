@@ -1213,4 +1213,9 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.rommSystemFetchBusy: '{system} 的 RomM 元数据获取仍在进行中。请等待其完成后再试。',
   AppLocale.rommSystemFetchFailedToStart: '无法获取 {system} 的 RomM 元数据：{error}',
   AppLocale.scrapeFetchingFromRomm: '正在从 RomM 获取元数据…',
+  AppLocale.scrapeCompletedFromRomm: '已从 RomM 抓取',
+  AppLocale.scrapeCompletedFromScreenscraper: '已从 ScreenScraper 抓取',
+  AppLocale.scrapeCompletedFallback: 'RomM 中没有此游戏的数据；已从 ScreenScraper 抓取',
+  AppLocale.scrapeFailedWithReason: '抓取失败：{reason}',
+  AppLocale.scrapeSystemIdMissing: '错误：缺少系统 ID。',
 };

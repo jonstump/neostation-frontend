@@ -1257,4 +1257,10 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommSystemFetchFailedToStart:
       '{system} の RomM メタデータを取得できませんでした: {error}',
   AppLocale.scrapeFetchingFromRomm: 'RomM からメタデータを取得中…',
+  AppLocale.scrapeCompletedFromRomm: 'RomM からスクレイピングしました',
+  AppLocale.scrapeCompletedFromScreenscraper: 'ScreenScraper からスクレイピングしました',
+  AppLocale.scrapeCompletedFallback:
+      'RomM にはこのゲームのデータがなかったため、ScreenScraper からスクレイピングしました',
+  AppLocale.scrapeFailedWithReason: 'スクレイピングに失敗しました: {reason}',
+  AppLocale.scrapeSystemIdMissing: 'エラー: システム ID がありません。',
 };

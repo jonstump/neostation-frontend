@@ -27,6 +27,7 @@ import '../../services/secondary_achievements_controller.dart';
 import '../../utils/gamepad_nav.dart';
 import '../../utils/letter_jump.dart';
 import '../../providers/file_provider.dart';
+import '../../providers/romm_provider.dart';
 import '../../providers/sqlite_config_provider.dart';
 import '../../providers/collections_provider.dart';
 import '../../providers/sqlite_database_provider.dart';
@@ -53,6 +54,7 @@ import '../../widgets/letter_indicator.dart';
 import '../../constants/system_folder_names.dart';
 import '../../utils/artwork_cache.dart';
 import '../../utils/game_list_update.dart';
+import '../../utils/scrape_result_message.dart';
 import 'package:neostation/themes/chrome_surface.dart';
 import '../../themes/corner_radii.dart';
 
@@ -1990,6 +1992,13 @@ class _SystemGamesListState extends State<SystemGamesList> {
   /// view-mode-independent path drives the same [ScreenScraperService] flow and
   /// feeds the [_scrapingGameRomnames]/[_scrapeProgress] overlay maps that those
   /// grids already render. Bound to the Select + A chord in those views.
+  static NotificationType _scrapeNotificationTypeFor(ScrapeResultTone tone) =>
+      switch (tone) {
+        ScrapeResultTone.success => NotificationType.success,
+        ScrapeResultTone.info => NotificationType.info,
+        ScrapeResultTone.error => NotificationType.error,
+      };
+
   Future<void> _scrapeSelectedGame() async {
     final game = _selectedGame;
     if (game == null || _isScrapingSelectedGame) return;
@@ -2003,16 +2012,11 @@ class _SystemGamesListState extends State<SystemGamesList> {
     final scrapeSystemId = game.systemId ?? widget.system.id;
     if (scrapeSystemId == null) return;
 
-    if (!await ScreenScraperService.hasSavedCredentials()) {
-      if (!mounted) return;
-      AppNotification.showNotification(
-        context,
-        'Please log in to ScreenScraper in the Scraping tab first.',
-        type: NotificationType.info,
-      );
-      return;
-    }
-    if (!mounted) return;
+    // RomM goes first when connected; the service checks ScreenScraper
+    // credentials only when RomM did not scrape the game, so there is no
+    // credentials pre-check here. Read the step before the first await.
+    // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "Entry Point Consistency"
+    final rommStep = context.read<RommProvider>().scrapeStep(_fileProvider);
 
     _isScrapingSelectedGame = true;
 
@@ -2063,6 +2067,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
         romPath: game.romPath ?? '',
         gameName: game.name,
         forceOverwrite: forceOverwrite,
+        rommStep: rommStep,
         onProgress: (statusKey, progress) {
           if (!mounted) return;
           final localizedStatus = statusKey.getString(context);
@@ -2080,6 +2085,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
       );
 
       if (!mounted) return;
+      // The notification names the source that handled the game.
+      // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "Entry Point Consistency"
+      final message = scrapeResultMessageFor(result);
       if (result['success'] == true) {
         // Drop the decoded copies of every artwork file the scrape may have
         // rewritten, so the rebuild below reads the new files from disk.
@@ -2092,15 +2100,15 @@ class _SystemGamesListState extends State<SystemGamesList> {
         if (mounted) {
           AppNotification.showNotification(
             context,
-            AppLocale.scrapeSuccessful.getString(context),
-            type: NotificationType.success,
+            message.format((key) => key.getString(context)),
+            type: _scrapeNotificationTypeFor(message.tone),
           );
         }
       } else {
         AppNotification.showNotification(
           context,
-          result['message'].toString().getString(context),
-          type: NotificationType.error,
+          message.format((key) => key.getString(context)),
+          type: _scrapeNotificationTypeFor(message.tone),
         );
       }
     } catch (e) {
