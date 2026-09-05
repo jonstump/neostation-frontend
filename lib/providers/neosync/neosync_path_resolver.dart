@@ -650,7 +650,17 @@ extension NeoSyncPathResolver on NeoSyncProvider {
         cloudFile.emulator!,
       );
       if (customFolder != null && customFolder.isNotEmpty) {
-        final target = path.join(customFolder, relativeName);
+        // Standalone saves are stored under `v2/custom/<emulator>/<relative>`
+        // in R2; strip that namespace so the file lands under the custom folder.
+        var rel = relativeName;
+        final prefix = 'v2/custom/${cloudFile.emulator}/';
+        if (rel.startsWith(prefix)) {
+          rel = rel.substring(prefix.length);
+        } else {
+          final m = RegExp(r'^v2/custom/[^/]+/(.+)$').firstMatch(rel);
+          if (m != null) rel = m.group(1)!;
+        }
+        final target = path.join(customFolder, rel);
         NeoSyncProvider._log.i(
           'Download: ${cloudFile.filePath} -> custom folder $target',
         );

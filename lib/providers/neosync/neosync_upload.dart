@@ -301,18 +301,15 @@ extension NeoSyncUpload on NeoSyncProvider {
       String? syncEmulatorId;
       String syncType = 'save';
       if (customFolderSystem != null && customFolderEmulatorSlug != null) {
-        // The configured folder root is the basePath for custom folders, so a
-        // nested layout (e.g. `memcards/slot1/Mcd001.ps2`) is preserved on the
-        // cloud path instead of collapsing every file to its basename.
+        // The configured folder root is the basePath for the standalone folder,
+        // so a nested layout (e.g. `memcards/slot1/Mcd001.ps2`) is preserved.
+        // file_path keeps the real on-disk path; the backend builds the R2
+        // object key as `user_id/v2/custom/<emulator>/<relative>` where
+        // `<emulator>` is the emulator's unique id (e.g. `ps2.com.armsx2`).
         final relativeToFolder = path
             .relative(file.path, from: basePath)
             .replaceAll('\\', '/');
-        relativePath = CloudPathBuilder.build(
-          system: customFolderSystem,
-          emulatorSlug: customFolderEmulatorSlug,
-          scope: 'shared',
-          filePath: relativeToFolder,
-        );
+        relativePath = relativeToFolder;
         syncSystemId = customFolderSystem;
         syncEmulatorId = customFolderEmulatorSlug;
         syncType = 'custom';
@@ -441,7 +438,7 @@ extension NeoSyncUpload on NeoSyncProvider {
         emulatorId: syncEmulatorId,
         gameHash: gameHash,
         isState: isState,
-        scope: customFolderSystem != null ? 'shared' : null,
+        scope: null,
         type: syncType,
       );
 
@@ -567,12 +564,20 @@ extension NeoSyncUpload on NeoSyncProvider {
       }
 
       String? gameHash;
+      String? systemId;
+      String? emulatorId;
       try {
         final fileName = path.basenameWithoutExtension(file.path);
         final row = await GameRepository.findRomForSaveName(fileName);
         if (row != null) {
           final game = _gameModelFromRomRow(row, fileName);
           gameHash = await _resolveGameHashForUpload(game);
+          systemId = game.systemFolderName;
+          // Derive the RetroArch slug from the save's core folder (ground
+          // truth); fall back to the game metadata.
+          emulatorId =
+              await _resolveRetroArchEmulatorSlug(file, basePath) ??
+              _retroArchCoreSlugFromGame(game);
         }
       } catch (e) {
         NeoSyncProvider._log.w(
@@ -586,6 +591,8 @@ extension NeoSyncUpload on NeoSyncProvider {
         customFilename: relativePath,
         gameHash: gameHash,
         isState: isState,
+        systemId: systemId,
+        emulatorId: emulatorId,
       );
 
       if (result['success']) {
@@ -635,7 +642,7 @@ extension NeoSyncUpload on NeoSyncProvider {
     _setSyncing(true);
     _error = null;
     _syncProgress = 0.0;
-    _syncStatus = 'Uploading custom save folder...';
+    _syncStatus = 'Uploading standalone save folder...';
     _totalFiles = 0;
     _processedFiles = 0;
     _uploadedFiles = 0;
@@ -674,7 +681,7 @@ extension NeoSyncUpload on NeoSyncProvider {
           'Upload complete: $_uploadedFiles uploaded, $_skippedFiles already synced';
       _processedItems.add(_syncStatus);
     } catch (e) {
-      _error = 'Error uploading custom save folder: $e';
+      _error = 'Error uploading standalone save folder: $e';
       _syncStatus = 'Error: $_error';
       _processedItems.add(_syncStatus);
       NeoSyncProvider._log.e(_error!);
