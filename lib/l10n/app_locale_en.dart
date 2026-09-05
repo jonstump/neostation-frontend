@@ -1371,4 +1371,5 @@ const Map<String, dynamic> appLocaleEn = {
       'A RomM metadata fetch is already running for {system}. Wait for it to finish, then try again.',
   AppLocale.rommSystemFetchFailedToStart:
       'Could not fetch RomM metadata for {system}: {error}',
+  AppLocale.scrapeFetchingFromRomm: 'Fetching metadata from RomM…',
 };

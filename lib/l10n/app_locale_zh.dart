@@ -1212,4 +1212,5 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.rommSystemFetchCancelled: '已取消 — {summary}',
   AppLocale.rommSystemFetchBusy: '{system} 的 RomM 元数据获取仍在进行中。请等待其完成后再试。',
   AppLocale.rommSystemFetchFailedToStart: '无法获取 {system} 的 RomM 元数据：{error}',
+  AppLocale.scrapeFetchingFromRomm: '正在从 RomM 获取元数据…',
 };

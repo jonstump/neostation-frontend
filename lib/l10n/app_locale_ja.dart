@@ -1256,4 +1256,5 @@ const Map<String, dynamic> appLocaleJa = {
       '{system} の RomM メタデータ取得がすでに実行中です。完了を待ってからもう一度お試しください。',
   AppLocale.rommSystemFetchFailedToStart:
       '{system} の RomM メタデータを取得できませんでした: {error}',
+  AppLocale.scrapeFetchingFromRomm: 'RomM からメタデータを取得中…',
 };

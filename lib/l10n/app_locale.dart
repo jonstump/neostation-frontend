@@ -1405,6 +1405,9 @@ mixin AppLocale {
   static const String rommFetchMetadataPartial = 'romm_fetch_metadata_partial';
   static const String rommFetchMetadataFailed = 'romm_fetch_metadata_failed';
 
+  // SPEC-0006 REQ "Per-Game Source Chain" — RomM-first scrape progress
+  static const String scrapeFetchingFromRomm = 'scrape_fetching_from_romm';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================

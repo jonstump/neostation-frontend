@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
 import 'package:neostation/services/logger_service.dart';
 import '../models/rom_fingerprint.dart';
+import '../models/romm_scrape_step.dart';
 import '../repositories/scraper_repository.dart';
 import 'retroachievements_hash_service.dart';
 import 'rom_fingerprint_service.dart';
@@ -667,7 +668,23 @@ class ScreenScraperService {
     }
   }
 
+  /// `source` value of a scrape result map when RomM scraped the game.
+  static const String scrapeSourceRomm = 'romm';
+
+  /// `source` value of a scrape result map when ScreenScraper handled it
+  /// (whether or not RomM was attempted first).
+  static const String scrapeSourceScreenscraper = 'screenscraper';
+
   /// Scrapes a single game by its filename and updates its local state.
+  ///
+  /// With a [rommStep] the game is offered to RomM first; when the step
+  /// scraped it the result is returned with `source` `romm` and ScreenScraper
+  /// — its credentials included — is never consulted. Otherwise, and when the
+  /// step is null, the ScreenScraper flow runs exactly as before. Every
+  /// result map carries `source` (`romm` | `screenscraper`) and
+  /// `rommAttempted` (whether a step was given), so a caller can say which
+  /// source handled the game and that RomM fell through.
+  // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "Per-Game Source Chain"
   static Future<Map<String, dynamic>> scrapeSingleGame({
     required String appSystemId,
     required String romName,
@@ -676,12 +693,60 @@ class ScreenScraperService {
     String? gameName,
     Function(String status, double progress)? onProgress,
     bool forceOverwrite = false,
+    RommScrapeStep? rommStep,
   }) async {
+    final rommAttempted = rommStep != null;
+    Map<String, dynamic> screenscraperResult(bool success, String message) => {
+      'success': success,
+      'message': message,
+      'source': scrapeSourceScreenscraper,
+      'rommAttempted': rommAttempted,
+    };
+
+    if (rommStep != null) {
+      onProgress?.call(AppLocale.scrapeFetchingFromRomm, 0.05);
+      final target = RommScrapeTarget(
+        appSystemId: appSystemId,
+        filename: romName,
+        systemFolder: systemFolder,
+        forceOverwrite: forceOverwrite,
+      );
+      RommScrapeStepResult stepResult;
+      try {
+        stepResult = await rommStep(target);
+      } catch (e) {
+        // A step never throws by contract; a throw is a failed step and the
+        // chain still falls through to ScreenScraper.
+        stepResult = RommScrapeStepResult.failed(e);
+      }
+      if (stepResult.scraped) {
+        return {
+          'success': true,
+          'message': AppLocale.scrapeSuccessful,
+          'source': scrapeSourceRomm,
+          'rommAttempted': true,
+        };
+      }
+      if (stepResult.status == RommScrapeStepStatus.failed) {
+        _log.w(
+          'RomM scrape step failed, falling through to ScreenScraper '
+          '(filename=$romName, system=$systemFolder, '
+          'error=${stepResult.error})',
+        );
+      } else {
+        _log.i(
+          'RomM scrape step ${stepResult.status.name}, '
+          'falling through to ScreenScraper '
+          '(filename=$romName, system=$systemFolder)',
+        );
+      }
+    }
+
     try {
       onProgress?.call(AppLocale.checkingCredentials, 0.05);
 
       if (!await hasSavedCredentials()) {
-        return {'success': false, 'message': AppLocale.scrapeNoCredentials};
+        return screenscraperResult(false, AppLocale.scrapeNoCredentials);
       }
 
       int? screenScraperSystemId =
@@ -696,7 +761,7 @@ class ScreenScraperService {
       }
 
       if (screenScraperSystemId == null) {
-        return {'success': false, 'message': AppLocale.scrapeSystemNotMapped};
+        return screenscraperResult(false, AppLocale.scrapeSystemNotMapped);
       }
 
       onProgress?.call(AppLocale.fetchingMetadata, 0.1);
@@ -717,7 +782,7 @@ class ScreenScraperService {
       }
 
       if (gameInfoResult == null || gameInfoResult['gameInfo'] == null) {
-        return {'success': false, 'message': AppLocale.scrapeGameNotFound};
+        return screenscraperResult(false, AppLocale.scrapeGameNotFound);
       }
 
       final gameInfo = gameInfoResult['gameInfo'] as Map<String, dynamic>;
@@ -740,7 +805,7 @@ class ScreenScraperService {
       final allowedMediaTypes = await ScraperRepository.getEnabledMediaTypes();
 
       if (allowedMediaTypes.isEmpty) {
-        return {'success': true, 'message': AppLocale.scrapeSuccessful};
+        return screenscraperResult(true, AppLocale.scrapeSuccessful);
       }
 
       final medias = gameInfo['medias'] as List<dynamic>? ?? [];
@@ -759,17 +824,17 @@ class ScreenScraperService {
                 onProgress?.call(AppLocale.downloadingImages, 0.2 + (p * 0.8)),
           );
 
-      return {
-        'success': downloadResult['success'] == true,
-        'message': downloadResult['success'] == true
+      return screenscraperResult(
+        downloadResult['success'] == true,
+        downloadResult['success'] == true
             ? AppLocale.scrapeSuccessful
             : AppLocale.scrapeMediaDownloadsFailed,
-      };
+      );
     } on ScreenscraperQuotaExceededException {
-      return {'success': false, 'message': AppLocale.scrapeQuotaExceeded};
+      return screenscraperResult(false, AppLocale.scrapeQuotaExceeded);
     } catch (e) {
       _log.e('Error scraping single game: $e');
-      return {'success': false, 'message': AppLocale.scrapeUnexpectedError};
+      return screenscraperResult(false, AppLocale.scrapeUnexpectedError);
     }
   }
 

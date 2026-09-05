@@ -1433,4 +1433,5 @@ const Map<String, dynamic> appLocaleFr = {
       'Une récupération de métadonnées RomM est déjà en cours pour {system}. Attendez qu\'elle se termine, puis réessayez.',
   AppLocale.rommSystemFetchFailedToStart:
       'Impossible de récupérer les métadonnées RomM pour {system} : {error}',
+  AppLocale.scrapeFetchingFromRomm: 'Récupération des métadonnées depuis RomM…',
 };
