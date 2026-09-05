@@ -6,8 +6,11 @@ import 'package:path/path.dart' as path;
 import 'package:xml/xml.dart';
 
 import '../data/datasources/sqlite_service.dart';
+import '../repositories/game_repository.dart';
 import '../repositories/scraper_repository.dart';
 import 'logger_service.dart';
+import 'permission_service.dart';
+import 'user_data_location_service.dart';
 
 /// Summary of an ES-DE import run, surfaced to the settings UI.
 class EsdeImportResult {
@@ -32,7 +35,28 @@ class EsdeImportResult {
 
   /// Whether a `gamelists/` directory was found under the picked folder. When
   /// false, the selected folder is almost certainly not an ES-DE installation.
+  /// Only meaningful for [GamelistSourceMode.esdeRoot]; in-folder runs report
+  /// [noInFolderGamelistsFound] instead.
   final bool gamelistsDirFound;
+
+  /// Which discovery mode produced this result.
+  final GamelistSourceMode mode;
+
+  /// Number of system folders holding a `gamelist.xml`, before any matching.
+  final int systemsFound;
+
+  /// In-folder mode only: configured ROM folders that are SAF `content://`
+  /// trees with no readable real path. They are skipped, never fatal.
+  final int foldersSkippedSaf;
+
+  /// Number of systems with artwork but no `gamelist.xml` whose media
+  /// location was recorded so the read-time fallback can use it.
+  final int mediaOnlyLinked;
+
+  /// In-folder mode only: no configured ROM folder held any
+  /// `<system>/gamelist.xml`. Distinct from [gamelistsDirFound], which is
+  /// the ES-DE "not an ES-DE folder" outcome.
+  final bool noInFolderGamelistsFound;
 
   const EsdeImportResult({
     this.systemsMatched = 0,
@@ -42,6 +66,11 @@ class EsdeImportResult {
     this.gamesUnmatched = 0,
     this.statsUpdated = 0,
     this.gamelistsDirFound = true,
+    this.mode = GamelistSourceMode.esdeRoot,
+    this.systemsFound = 0,
+    this.foldersSkippedSaf = 0,
+    this.mediaOnlyLinked = 0,
+    this.noInFolderGamelistsFound = false,
   });
 
   EsdeImportResult _add({
@@ -51,6 +80,10 @@ class EsdeImportResult {
     int gamesImported = 0,
     int gamesUnmatched = 0,
     int statsUpdated = 0,
+    int systemsFound = 0,
+    int foldersSkippedSaf = 0,
+    int mediaOnlyLinked = 0,
+    bool? noInFolderGamelistsFound,
   }) {
     return EsdeImportResult(
       systemsMatched: this.systemsMatched + systemsMatched,
@@ -60,8 +93,58 @@ class EsdeImportResult {
       gamesUnmatched: this.gamesUnmatched + gamesUnmatched,
       statsUpdated: this.statsUpdated + statsUpdated,
       gamelistsDirFound: gamelistsDirFound,
+      mode: mode,
+      systemsFound: this.systemsFound + systemsFound,
+      foldersSkippedSaf: this.foldersSkippedSaf + foldersSkippedSaf,
+      mediaOnlyLinked: this.mediaOnlyLinked + mediaOnlyLinked,
+      noInFolderGamelistsFound:
+          noInFolderGamelistsFound ?? this.noInFolderGamelistsFound,
     );
   }
+}
+
+/// How a gamelist was discovered, which decides where its media lives and
+/// which `user_system_settings` column records that location.
+enum GamelistSourceMode {
+  /// `<root>/gamelists/<system>/gamelist.xml` with media under one global
+  /// `downloaded_media/<system>/` tree; recorded as `esde_media_dir`.
+  esdeRoot,
+
+  /// `<romfolder>/<system>/gamelist.xml` with media in sibling category
+  /// folders of the platform folder; recorded as `esde_media_root`.
+  inFolder,
+}
+
+/// One importable gamelist and the layout it was found in. Discovery (ES-DE
+/// root or in-folder) produces these; the shared importer core consumes only
+/// them, so parsing, matching, merge, and provenance know nothing about layout.
+// Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ "In-Folder Gamelist Discovery"
+class GamelistSource {
+  /// The `gamelist.xml` to parse.
+  final File gamelistFile;
+
+  /// ES-DE mode: the global media root (`downloaded_media` or the
+  /// `MediaDirectory` override). In-folder mode: the absolute platform folder.
+  final String mediaRoot;
+
+  /// The system folder name as found on disk (`snes`, `segacd`, …); resolved
+  /// to a NeoStation system through the folder-alias table.
+  final String systemFolderName;
+
+  final GamelistSourceMode mode;
+
+  const GamelistSource({
+    required this.gamelistFile,
+    required this.mediaRoot,
+    required this.systemFolderName,
+    required this.mode,
+  });
+
+  /// Directory holding this system's `<category>/` media folders.
+  String get systemMediaDir => switch (mode) {
+    GamelistSourceMode.esdeRoot => path.join(mediaRoot, systemFolderName),
+    GamelistSourceMode.inFolder => mediaRoot,
+  };
 }
 
 /// Imports metadata and wires up fallback artwork from an ES-DE
@@ -102,6 +185,7 @@ class EsdeImportService {
         .where((d) => File(path.join(d.path, 'gamelist.xml')).existsSync())
         .toList();
 
+    result = result._add(systemsFound: systemDirs.length);
     final importedDirs = <String>{};
     final preferredLang = await ScraperRepository.getPreferredLanguage();
     final descColumn = _descriptionColumn(preferredLang);
@@ -110,6 +194,12 @@ class EsdeImportService {
       final systemDir = systemDirs[i];
       final esdeDirName = path.basename(systemDir.path);
       onProgress?.call(i / systemDirs.length, esdeDirName);
+      final source = GamelistSource(
+        gamelistFile: File(path.join(systemDir.path, 'gamelist.xml')),
+        mediaRoot: mediaRoot,
+        systemFolderName: esdeDirName,
+        mode: GamelistSourceMode.esdeRoot,
+      );
 
       final system = await ScraperRepository.resolveSystemByFolderName(
         esdeDirName,
@@ -128,10 +218,8 @@ class EsdeImportService {
       // system with an unreadable gamelist.xml counts as skipped, not matched.
       final matchedBefore = result.systemsMatched;
       result = await _importSystem(
-        mediaRoot: mediaRoot,
-        esdeDirName: esdeDirName,
+        source: source,
         appSystemId: appSystemId,
-        gamelistFile: File(path.join(systemDir.path, 'gamelist.xml')),
         descColumn: descColumn,
         accumulator: result,
         // Big systems can hold thousands of entries, so report progress
@@ -146,12 +234,13 @@ class EsdeImportService {
       // imported (a corrupt/unparseable gamelist.xml is skipped, not matched);
       // otherwise we'd record an esde_media_dir with no matching metadata rows.
       if (result.systemsMatched > matchedBefore) {
-        await _recordEsdeMediaDir(mediaRoot, esdeDirName, appSystemId);
+        await _recordMediaLocation(source, appSystemId);
         importedDirs.add(esdeDirName.toLowerCase());
       }
     }
 
-    await _linkMediaOnlySystems(mediaRoot, importedDirs);
+    final linked = await _linkMediaOnlySystems(mediaRoot, importedDirs);
+    result = result._add(mediaOnlyLinked: linked);
 
     onProgress?.call(1.0, '');
     _log.i(
@@ -163,6 +252,185 @@ class EsdeImportService {
     return result;
   }
 
+  /// Runs the in-folder import over the configured [romFolders]: every
+  /// immediate `<system>/` subfolder holding a `gamelist.xml` is imported
+  /// through the same core as the ES-DE mode, with the platform folder itself
+  /// recorded as the system's media root. Enumeration is the ROM scanner's own
+  /// listing, and subfolder names resolve through the same folder-alias table,
+  /// so the importer sees exactly the system set the library does.
+  ///
+  /// Only ROM folders that resolve to a real filesystem path are read: a SAF
+  /// `content://` folder with no readable real path is counted in
+  /// [EsdeImportResult.foldersSkippedSaf], logged, and skipped — never fatal.
+  ///
+  /// [onProgress] is invoked as `(fraction 0..1, currentSystemLabel)`.
+  // Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ "In-Folder Gamelist Discovery"
+  static Future<EsdeImportResult> importInFolder(
+    List<String> romFolders, {
+    void Function(double progress, String label)? onProgress,
+  }) async {
+    var result = const EsdeImportResult(mode: GamelistSourceMode.inFolder);
+    _mediaIndexCache.clear();
+
+    // Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ "Real-Path Scope"
+    final realFolders = <String>[];
+    for (final folder in romFolders) {
+      final real = await _resolveRomFolderPath(folder);
+      if (real == null) {
+        _log.w(
+          'in-folder import: skipped ROM folder uri=$folder '
+          'reason=no readable real path (SAF tree without all-files access)',
+        );
+        result = result._add(foldersSkippedSaf: 1);
+        continue;
+      }
+      if (!realFolders.contains(real)) realFolders.add(real);
+    }
+
+    final subdirsByFolder = realFolders.isEmpty
+        ? const <String, Map<String, String>>{}
+        : await GameRepository.getExistingSubdirectories(realFolders);
+
+    // Split the scanner's listing into gamelist-bearing subfolders (imported
+    // through the core) and the rest (candidates for media-only linking).
+    final sources = <GamelistSource>[];
+    final mediaOnlyCandidates = <({String name, String dir})>[];
+    for (final romFolder in realFolders) {
+      final subdirs = subdirsByFolder[romFolder] ?? const <String, String>{};
+      final names = subdirs.keys.toList()..sort();
+      for (final name in names) {
+        final dir = subdirs[name]!;
+        final gamelistFile = File(path.join(dir, 'gamelist.xml'));
+        if (gamelistFile.existsSync()) {
+          sources.add(
+            GamelistSource(
+              gamelistFile: gamelistFile,
+              mediaRoot: dir,
+              systemFolderName: path.basename(dir),
+              mode: GamelistSourceMode.inFolder,
+            ),
+          );
+        } else {
+          mediaOnlyCandidates.add((name: path.basename(dir), dir: dir));
+        }
+      }
+    }
+    result = result._add(
+      systemsFound: sources.length,
+      noInFolderGamelistsFound: sources.isEmpty,
+    );
+    if (sources.isEmpty) {
+      _log.w(
+        'in-folder import: no <system>/gamelist.xml found '
+        'folders=${realFolders.length} skippedSaf=${result.foldersSkippedSaf}',
+      );
+    }
+
+    final preferredLang = await ScraperRepository.getPreferredLanguage();
+    final descColumn = _descriptionColumn(preferredLang);
+    final importedSystemIds = <String>{};
+
+    for (var i = 0; i < sources.length; i++) {
+      final source = sources[i];
+      final folderName = source.systemFolderName;
+      onProgress?.call(i / sources.length, folderName);
+
+      final system = await ScraperRepository.resolveSystemByFolderName(
+        folderName,
+      );
+      if (system == null) {
+        _log.i(
+          'in-folder import: no NeoStation system for folder=$folderName '
+          'dir=${source.mediaRoot}, skipping',
+        );
+        result = result._add(systemsUnmatched: 1);
+        continue;
+      }
+      final appSystemId = system['app_system_id']!;
+
+      // Tallied inside _importSystem so an unparseable gamelist.xml counts as
+      // skipped, not matched, and gets no media root recorded.
+      final matchedBefore = result.systemsMatched;
+      result = await _importSystem(
+        source: source,
+        appSystemId: appSystemId,
+        descColumn: descColumn,
+        accumulator: result,
+        onGameProgress: onProgress == null
+            ? null
+            : (fraction) =>
+                  onProgress((i + fraction) / sources.length, folderName),
+      );
+      if (result.systemsMatched > matchedBefore) {
+        await _recordMediaLocation(source, appSystemId);
+        importedSystemIds.add(appSystemId);
+      }
+    }
+
+    final linked = await _linkInFolderMediaOnlySystems(
+      mediaOnlyCandidates,
+      importedSystemIds,
+    );
+    result = result._add(mediaOnlyLinked: linked);
+
+    onProgress?.call(1.0, '');
+    _log.i(
+      'in-folder import done: folders=${realFolders.length} '
+      'skippedSaf=${result.foldersSkippedSaf} '
+      'systems found=${result.systemsFound} matched=${result.systemsMatched} '
+      'unmatched=${result.systemsUnmatched} skipped=${result.systemsSkipped}, '
+      'games imported=${result.gamesImported} noRomMatch=${result.gamesUnmatched}, '
+      'stats updated=${result.statsUpdated} mediaOnlyLinked=${result.mediaOnlyLinked}',
+    );
+    return result;
+  }
+
+  /// Resolves a SAF `content://` ROM folder to a real filesystem path, or null
+  /// when none is readable. Tests inject a fake so `content://` resolution can
+  /// be exercised off-device; plain paths never go through it.
+  @visibleForTesting
+  static Future<String?> Function(String contentUri)?
+  safRomFolderResolverOverride;
+
+  /// The real path to read [romFolder] from: plain paths as-is, `content://`
+  /// trees through the same SAF-to-real-path resolution the ES-DE picker uses.
+  /// Null when the folder is a SAF tree the importer's `dart:io` core cannot
+  /// read (no all-files access, a non-external-storage provider, or a real
+  /// path that isn't there).
+  // Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ "Real-Path Scope"
+  static Future<String?> _resolveRomFolderPath(String romFolder) async {
+    if (!romFolder.startsWith('content://')) return romFolder;
+    final override = safRomFolderResolverOverride;
+    final real = override != null
+        ? await override(romFolder)
+        : await _resolveSafRomFolder(romFolder);
+    if (real == null || real.trim().isEmpty) return null;
+    if (!Directory(real).existsSync()) {
+      _log.w(
+        'in-folder import: resolved real path is not readable '
+        'uri=$romFolder path=$real',
+      );
+      return null;
+    }
+    return real;
+  }
+
+  static Future<String?> _resolveSafRomFolder(String contentUri) async {
+    final real = UserDataLocationService.safUriToRealPath(contentUri);
+    if (real == null) return null;
+    // A real path under /storage is only readable with all-files access; the
+    // app requests it but cannot assume it, so treat its absence as "no real
+    // path" rather than failing later on an opaque listing error.
+    if (Platform.isAndroid && !await PermissionService.hasAllFilesAccess()) {
+      _log.w(
+        'in-folder import: all-files access not granted, '
+        'cannot read uri=$contentUri path=$real',
+      );
+      return null;
+    }
+    return real;
+  }
+
   /// Clears all ES-DE-imported data so the import can be re-run from scratch.
   /// Deletes only metadata rows the ES-DE import itself created
   /// (`esde_imported = 1`) that a later NeoStation scrape hasn't upgraded
@@ -172,7 +440,9 @@ class EsdeImportService {
   /// folder path lives in `user_config` / SqliteConfigProvider and is cleared by
   /// the caller (so the cached config and UI update too); favorites /
   /// last-played are left untouched (indistinguishable from the user's own).
-  /// Returns the number of metadata rows removed.
+  /// Both discovery modes share the provenance flag, so one reset clears the
+  /// rows of either; the in-folder `esde_media_root` is cleared alongside
+  /// `esde_media_dir`. Returns the number of metadata rows removed.
   static Future<int> reset() async {
     final db = await SqliteService.getDatabase();
     final deleted = await db.delete(
@@ -182,7 +452,12 @@ class EsdeImportService {
     await db.update('user_system_settings', {
       'esde_media_dir': null,
     }, where: 'esde_media_dir IS NOT NULL');
-    _log.i('ES-DE reset: cleared $deleted metadata rows and media dirs');
+    // Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ "Fill-Gaps Merge and Provenance"
+    final rootsCleared = await ScraperRepository.clearEsdeMediaRoots();
+    _log.i(
+      'ES-DE reset: cleared $deleted metadata rows, media dirs, '
+      'and $rootsCleared in-folder media roots',
+    );
     return deleted;
   }
 
@@ -296,13 +571,14 @@ class EsdeImportService {
   /// usable: recording `esde_media_dir` lets [FileProvider] resolve it for any
   /// ROM NeoStation has scanned. Without this the whole system's art is
   /// invisible even though the files are right there.
-  static Future<void> _linkMediaOnlySystems(
+  static Future<int> _linkMediaOnlySystems(
     String mediaRoot,
     Set<String> importedDirs,
   ) async {
     final mediaDir = Directory(mediaRoot);
-    if (!mediaDir.existsSync()) return;
+    if (!mediaDir.existsSync()) return 0;
 
+    var linked = 0;
     for (final dir in mediaDir.listSync().whereType<Directory>()) {
       final esdeDirName = path.basename(dir.path);
       if (importedDirs.contains(esdeDirName.toLowerCase())) continue;
@@ -317,23 +593,124 @@ class EsdeImportService {
         esdeDirName,
         system['app_system_id']!,
       );
+      linked++;
       _log.i(
         'ES-DE import: linked art-only system "$esdeDirName" '
         '(no gamelist.xml) to ${system['app_system_id']}',
       );
     }
+    return linked;
+  }
+
+  /// Media folder names an in-folder platform folder may carry that map to a
+  /// NeoStation media slot (the `FileProvider` category map plus RomM's
+  /// generic `images` and `thumbnails`). Anything else — `manuals`,
+  /// `miximages`, `bezels`, ROM subfolders — is not media evidence.
+  static const List<String> _inFolderMediaCategories = [
+    'covers',
+    '3dboxes',
+    'marquees',
+    'screenshots',
+    'titlescreens',
+    'fanart',
+    'videos',
+    'images',
+    'thumbnails',
+  ];
+
+  /// In-folder counterpart of [_linkMediaOnlySystems]: a platform subfolder
+  /// with no `gamelist.xml` still gets its media root recorded when it
+  /// resolves to a system and at least one mapped category folder holds a
+  /// file. Gating on real files keeps empty folders from acquiring a root.
+  /// Systems already imported from a gamelist in this run are left alone so a
+  /// second ROM folder's empty `snes/` cannot clobber the first one's root.
+  // Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ "In-Folder Gamelist Discovery"
+  static Future<int> _linkInFolderMediaOnlySystems(
+    List<({String name, String dir})> candidates,
+    Set<String> importedSystemIds,
+  ) async {
+    var linked = 0;
+    for (final candidate in candidates) {
+      if (!_hasInFolderMedia(candidate.dir)) continue;
+
+      final system = await ScraperRepository.resolveSystemByFolderName(
+        candidate.name,
+      );
+      if (system == null) continue;
+      final appSystemId = system['app_system_id']!;
+      if (importedSystemIds.contains(appSystemId)) continue;
+
+      final recorded = await ScraperRepository.recordEsdeMediaRoot(
+        appSystemId,
+        candidate.dir,
+      );
+      if (!recorded) continue;
+      importedSystemIds.add(appSystemId);
+      linked++;
+      _log.i(
+        'in-folder import: linked art-only system folder=${candidate.name} '
+        '(no gamelist.xml) to system=$appSystemId root=${candidate.dir}',
+      );
+    }
+    return linked;
+  }
+
+  /// Whether any mapped media category folder directly under [dir] contains
+  /// at least one file. Read-only: only lists, never creates.
+  static bool _hasInFolderMedia(String dir) {
+    for (final category in _inFolderMediaCategories) {
+      final categoryDir = Directory(path.join(dir, category));
+      if (!categoryDir.existsSync()) continue;
+      try {
+        if (categoryDir.listSync().any((e) => e is File)) return true;
+      } on FileSystemException catch (e) {
+        _log.w(
+          'in-folder import: cannot list media folder '
+          'dir=${categoryDir.path} error=${e.message}',
+        );
+      }
+    }
+    return false;
+  }
+
+  /// Records where the media for [source]'s system lives, in the column its
+  /// discovery mode owns: ES-DE keeps the folder-name form (`esde_media_dir`),
+  /// in-folder stores the absolute platform folder (`esde_media_root`).
+  // Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ "Fill-Gaps Merge and Provenance"
+  static Future<void> _recordMediaLocation(
+    GamelistSource source,
+    String appSystemId,
+  ) async {
+    switch (source.mode) {
+      case GamelistSourceMode.esdeRoot:
+        await _recordEsdeMediaDir(
+          source.mediaRoot,
+          source.systemFolderName,
+          appSystemId,
+        );
+      case GamelistSourceMode.inFolder:
+        final recorded = await ScraperRepository.recordEsdeMediaRoot(
+          appSystemId,
+          source.mediaRoot,
+        );
+        if (!recorded) {
+          _log.w(
+            'in-folder import: media root not recorded '
+            'system=$appSystemId root=${source.mediaRoot}',
+          );
+        }
+    }
   }
 
   static Future<EsdeImportResult> _importSystem({
-    required String mediaRoot,
-    required String esdeDirName,
+    required GamelistSource source,
     required String appSystemId,
-    required File gamelistFile,
     required String descColumn,
     required EsdeImportResult accumulator,
     void Function(double fraction)? onGameProgress,
   }) async {
     var result = accumulator;
+    final gamelistFile = source.gamelistFile;
     // Parsed as a fragment, not a document: when the user picks a non-default
     // emulator for a system, ES-DE writes an `<alternativeEmulator>` element as
     // a SECOND root alongside `<gameList>`. That is invalid XML which ES-DE's
@@ -348,7 +725,11 @@ class EsdeImportService {
         utf8.decode(await gamelistFile.readAsBytes(), allowMalformed: true),
       );
     } catch (e) {
-      _log.e('ES-DE import: failed to parse ${gamelistFile.path}: $e');
+      _log.e(
+        'gamelist import: skipped system=${source.systemFolderName} '
+        'mode=${source.mode.name} file=${gamelistFile.path} '
+        'reason=could not read or parse gamelist: $e',
+      );
       return result._add(systemsSkipped: 1);
     }
     // gamelist.xml read and parsed: this system counts as matched.
@@ -386,7 +767,7 @@ class EsdeImportService {
     // transaction (and fsync) per game.
     final batch = db.batch();
 
-    final games = _selectGames(doc, mediaRoot, esdeDirName);
+    final games = _selectGames(doc, source.systemMediaDir);
     for (var g = 0; g < games.length; g++) {
       if (g % 100 == 0) onGameProgress?.call(g / games.length);
       final game = games[g];
@@ -602,11 +983,7 @@ class EsdeImportService {
   /// "N games imported" count never dropping to zero). Keep one entry per
   /// filename, preferring whichever subfolder actually holds downloaded media so
   /// the artwork fallback resolves correctly; otherwise keep the first seen.
-  static List<XmlElement> _selectGames(
-    XmlNode doc,
-    String mediaRoot,
-    String esdeDirName,
-  ) {
+  static List<XmlElement> _selectGames(XmlNode doc, String systemMediaDir) {
     final chosen = <String, XmlElement>{};
     for (final game in doc.findAllElements('game')) {
       final rawPath = _text(game, 'path');
@@ -625,20 +1002,19 @@ class EsdeImportService {
         (_text(existing, 'path') ?? '').replaceAll('\\', '/'),
       );
       final newSubdir = _mediaSubdir(normalized);
-      if (!_esdeMediaExists(mediaRoot, esdeDirName, filename, existingSubdir) &&
-          _esdeMediaExists(mediaRoot, esdeDirName, filename, newSubdir)) {
+      if (!_esdeMediaExists(systemMediaDir, filename, existingSubdir) &&
+          _esdeMediaExists(systemMediaDir, filename, newSubdir)) {
         chosen[key] = game;
       }
     }
     return chosen.values.toList();
   }
 
-  /// Whether any `<mediaRoot>/<system>/<category>/<subdir>/` folder holds a
-  /// file whose name (sans extension) matches [filename]'s base — i.e. ES-DE
-  /// scraped artwork for this ROM under [subdir].
+  /// Whether any `<systemMediaDir>/<category>/<subdir>/` folder holds a file
+  /// whose name (sans extension) matches [filename]'s base — i.e. scraped
+  /// artwork for this ROM under [subdir].
   static bool _esdeMediaExists(
-    String mediaRoot,
-    String esdeDirName,
+    String systemMediaDir,
     String filename,
     String subdir,
   ) {
@@ -651,7 +1027,7 @@ class EsdeImportService {
       'marquees',
       'fanart',
     ]) {
-      final dir = path.join(mediaRoot, esdeDirName, category, subdir);
+      final dir = path.join(systemMediaDir, category, subdir);
       if (_mediaIndex(dir).contains(base)) return true;
     }
     return false;
@@ -721,5 +1097,5 @@ class EsdeImportService {
     XmlNode doc,
     String mediaRoot,
     String esdeDirName,
-  ) => _selectGames(doc, mediaRoot, esdeDirName);
+  ) => _selectGames(doc, path.join(mediaRoot, esdeDirName));
 }

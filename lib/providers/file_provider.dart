@@ -564,9 +564,7 @@ class FileProvider extends ChangeNotifier {
   ///
   /// If [extensions] is provided, it overrides the default image extensions
   /// with the provided list (e.g., video extensions for video lookups).
-  ///
-  /// Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ
-  /// "Per-System Media Root", REQ "Media Category Mapping"
+  // Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ "Per-System Media Root", REQ "Media Category Mapping"
   List<String> getEsdeMediaCandidates(
     String systemFolderName,
     String imageType,

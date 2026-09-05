@@ -484,4 +484,323 @@ void main() {
       },
     );
   });
+
+  group('EsdeImportService in-folder mode', () {
+    final dbHelper = DatabaseTestHelper();
+    late dynamic db;
+
+    setUp(() async {
+      db = await dbHelper.setUp();
+      await db.execute(
+        "INSERT INTO app_systems (id, real_name, folder_name, screenscraper_id) VALUES ('snes', 'SNES', 'snes', 4)",
+      );
+      await db.execute(
+        "INSERT INTO app_systems (id, real_name, folder_name, screenscraper_id) VALUES ('nes', 'NES', 'nes', 3)",
+      );
+    });
+
+    tearDown(() async {
+      EsdeImportService.safRomFolderResolverOverride = null;
+      await dbHelper.tearDown();
+    });
+
+    /// A fresh ROM folder, removed after the test.
+    Directory romFolder() {
+      final dir = Directory.systemTemp.createTempSync('esde_infolder_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      return dir;
+    }
+
+    /// Writes `<romFolder>/<system>/gamelist.xml` and returns the system dir.
+    Directory writeGamelist(Directory romFolder, String system, String xml) {
+      final systemDir = Directory(p.join(romFolder.path, system))
+        ..createSync(recursive: true);
+      File(p.join(systemDir.path, 'gamelist.xml')).writeAsStringSync(xml);
+      return systemDir;
+    }
+
+    Future<void> seedRom(String filename, String systemId) => db.execute(
+      "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('$filename', '/roms/$systemId/$filename', '$systemId')",
+    );
+
+    Future<Map<String, Object?>> mediaLocation(String systemId) async {
+      final rows = await db.rawQuery(
+        "SELECT esde_media_dir, esde_media_root FROM user_system_settings WHERE app_system_id = '$systemId'",
+      );
+      return rows.isEmpty ? const {} : rows.first;
+    }
+
+    const sonicGamelist =
+        '<gameList><game><path>./sonic.smc</path><name>Sonic</name></game></gameList>';
+    const marioGamelist =
+        '<gameList><game><path>./mario.nes</path><name>Mario</name></game></gameList>';
+
+    test('imports systems from two ROM folders and records the platform folder '
+        'as each media root', () async {
+      await seedRom('sonic.smc', 'snes');
+      await seedRom('mario.nes', 'nes');
+      final romA = romFolder();
+      final romB = romFolder();
+      final snesDir = writeGamelist(romA, 'snes', sonicGamelist);
+      Directory(p.join(snesDir.path, 'covers')).createSync();
+      Directory(p.join(snesDir.path, 'screenshots')).createSync();
+      final nesDir = writeGamelist(romB, 'nes', marioGamelist);
+
+      final result = await EsdeImportService.importInFolder([
+        romA.path,
+        romB.path,
+      ]);
+
+      expect(result.mode, GamelistSourceMode.inFolder);
+      expect(result.systemsFound, 2);
+      expect(result.systemsMatched, 2);
+      expect(result.systemsUnmatched, 0);
+      expect(result.systemsSkipped, 0);
+      expect(result.gamesImported, 2);
+      expect(result.foldersSkippedSaf, 0);
+      expect(result.noInFolderGamelistsFound, isFalse);
+      // The ES-DE outcome flag keeps its default: in-folder mode never
+      // looked for a gamelists/ dir.
+      expect(result.gamelistsDirFound, isTrue);
+
+      final snes = await mediaLocation('snes');
+      expect(snes['esde_media_root'], snesDir.path);
+      expect(snes['esde_media_dir'], isNull);
+      final nes = await mediaLocation('nes');
+      expect(nes['esde_media_root'], nesDir.path);
+
+      final rows = await db.rawQuery(
+        'SELECT app_system_id, filename, esde_imported FROM user_screenscraper_metadata ORDER BY filename',
+      );
+      expect(rows.map((r) => r['filename']), ['mario.nes', 'sonic.smc']);
+      expect(rows.every((r) => r['esde_imported'] == 1), isTrue);
+    });
+
+    test('resolves an alias subfolder to the canonical system', () async {
+      await db.execute(
+        "INSERT INTO app_systems (id, real_name, folder_name, screenscraper_id) VALUES ('scd', 'Sega CD', 'scd', 20)",
+      );
+      await db.execute(
+        "INSERT INTO app_system_folders (system_id, folder_name) VALUES ('scd', 'segacd')",
+      );
+      await seedRom('sonic.chd', 'scd');
+      final romA = romFolder();
+      final segacdDir = writeGamelist(
+        romA,
+        'segacd',
+        '<gameList><game><path>./sonic.chd</path><name>Sonic CD</name></game></gameList>',
+      );
+
+      final result = await EsdeImportService.importInFolder([romA.path]);
+
+      expect(result.systemsMatched, 1);
+      expect(result.gamesImported, 1);
+      final rows = await db.rawQuery(
+        'SELECT app_system_id, real_name FROM user_screenscraper_metadata',
+      );
+      expect(rows.single['app_system_id'], 'scd');
+      expect(rows.single['real_name'], 'Sonic CD');
+      expect((await mediaLocation('scd'))['esde_media_root'], segacdDir.path);
+    });
+
+    test(
+      'counts a subfolder that resolves to no system as unmatched',
+      () async {
+        final romA = romFolder();
+        writeGamelist(romA, 'foo', sonicGamelist);
+
+        final result = await EsdeImportService.importInFolder([romA.path]);
+
+        expect(result.systemsFound, 1);
+        expect(result.systemsUnmatched, 1);
+        expect(result.systemsMatched, 0);
+        expect(result.systemsSkipped, 0);
+        expect(result.noInFolderGamelistsFound, isFalse);
+        final rows = await db.rawQuery('SELECT * FROM user_system_settings');
+        expect(rows, isEmpty);
+      },
+    );
+
+    test(
+      'reports no in-folder gamelists distinctly from the ES-DE outcome',
+      () async {
+        final romA = romFolder();
+        Directory(p.join(romA.path, 'snes')).createSync();
+        File(p.join(romA.path, 'snes', 'sonic.smc')).writeAsStringSync('rom');
+
+        final inFolder = await EsdeImportService.importInFolder([romA.path]);
+        expect(inFolder.mode, GamelistSourceMode.inFolder);
+        expect(inFolder.noInFolderGamelistsFound, isTrue);
+        expect(inFolder.gamelistsDirFound, isTrue);
+        expect(inFolder.systemsFound, 0);
+
+        // The same folder through the ES-DE entry point is "not an ES-DE
+        // folder" — a different flag, so the UI can word the two apart.
+        final esde = await EsdeImportService.import(romA.path);
+        expect(esde.mode, GamelistSourceMode.esdeRoot);
+        expect(esde.gamelistsDirFound, isFalse);
+        expect(esde.noInFolderGamelistsFound, isFalse);
+      },
+    );
+
+    test(
+      'links a media-only system when a mapped category folder holds a file',
+      () async {
+        await db.execute(
+          "INSERT INTO app_systems (id, real_name, folder_name, screenscraper_id) VALUES ('gb', 'Game Boy', 'gb', 9)",
+        );
+        await seedRom('sonic.smc', 'snes');
+        final romA = romFolder();
+        writeGamelist(romA, 'snes', sonicGamelist);
+        // nes: art, no gamelist → linked.
+        final nesCovers = Directory(p.join(romA.path, 'nes', 'covers'))
+          ..createSync(recursive: true);
+        File(p.join(nesCovers.path, 'mario.png')).writeAsStringSync('png');
+        // gb: only an unmapped folder → not media evidence.
+        final gbManuals = Directory(p.join(romA.path, 'gb', 'manuals'))
+          ..createSync(recursive: true);
+        File(p.join(gbManuals.path, 'x.pdf')).writeAsStringSync('pdf');
+        // A folder that resolves to no system is ignored even with art.
+        final fooCovers = Directory(p.join(romA.path, 'foo', 'covers'))
+          ..createSync(recursive: true);
+        File(p.join(fooCovers.path, 'y.png')).writeAsStringSync('png');
+
+        final result = await EsdeImportService.importInFolder([romA.path]);
+
+        expect(result.systemsMatched, 1);
+        expect(result.mediaOnlyLinked, 1);
+        expect(
+          (await mediaLocation('nes'))['esde_media_root'],
+          p.join(romA.path, 'nes'),
+        );
+        expect(await mediaLocation('gb'), isEmpty);
+        final rows = await db.rawQuery(
+          'SELECT app_system_id FROM user_system_settings ORDER BY app_system_id',
+        );
+        expect(rows.map((r) => r['app_system_id']), ['nes', 'snes']);
+      },
+    );
+
+    test('does not link an empty media category folder', () async {
+      final romA = romFolder();
+      Directory(p.join(romA.path, 'nes', 'covers')).createSync(recursive: true);
+
+      final result = await EsdeImportService.importInFolder([romA.path]);
+
+      expect(result.mediaOnlyLinked, 0);
+      expect(await mediaLocation('nes'), isEmpty);
+    });
+
+    test('keeps an existing description and fills empty columns', () async {
+      await seedRom('sonic.smc', 'snes');
+      await db.execute(
+        "INSERT INTO user_screenscraper_metadata (app_system_id, filename, real_name, description_en, is_fully_scraped, esde_imported) VALUES ('snes', 'sonic.smc', 'Sonic', 'NeoStation text', 0, 0)",
+      );
+      final romA = romFolder();
+      writeGamelist(
+        romA,
+        'snes',
+        '<gameList><game>'
+            '<path>./sonic.smc</path>'
+            '<name>Sonic the Hedgehog</name>'
+            '<desc>Gamelist text</desc>'
+            '<developer>Sonic Team</developer>'
+            '</game></gameList>',
+      );
+
+      final result = await EsdeImportService.importInFolder([romA.path]);
+
+      expect(result.gamesImported, 1);
+      final row = (await db.rawQuery(
+        'SELECT real_name, description_en, developer FROM user_screenscraper_metadata',
+      )).single;
+      expect(row['real_name'], 'Sonic');
+      expect(row['description_en'], 'NeoStation text');
+      expect(row['developer'], 'Sonic Team');
+    });
+
+    test('reset clears in-folder rows and media roots', () async {
+      await seedRom('sonic.smc', 'snes');
+      final romA = romFolder();
+      writeGamelist(romA, 'snes', sonicGamelist);
+      final nesCovers = Directory(p.join(romA.path, 'nes', 'covers'))
+        ..createSync(recursive: true);
+      File(p.join(nesCovers.path, 'mario.png')).writeAsStringSync('png');
+      await EsdeImportService.importInFolder([romA.path]);
+      expect((await mediaLocation('snes'))['esde_media_root'], isNotNull);
+      expect((await mediaLocation('nes'))['esde_media_root'], isNotNull);
+
+      final deleted = await EsdeImportService.reset();
+
+      expect(deleted, 1);
+      final roots = await db.rawQuery(
+        'SELECT app_system_id FROM user_system_settings WHERE esde_media_root IS NOT NULL',
+      );
+      expect(roots, isEmpty);
+      final meta = await db.rawQuery(
+        'SELECT * FROM user_screenscraper_metadata',
+      );
+      expect(meta, isEmpty);
+    });
+
+    test(
+      'skips and counts an unresolvable SAF folder, scans a resolvable one',
+      () async {
+        await seedRom('sonic.smc', 'snes');
+        await seedRom('mario.nes', 'nes');
+        final romA = romFolder();
+        final romB = romFolder();
+        writeGamelist(romA, 'snes', sonicGamelist);
+        writeGamelist(romB, 'nes', marioGamelist);
+
+        // Off-device there is no SAF; the override stands in for the resolver
+        // so both outcomes are exercised: one tree resolves, one does not.
+        const resolvable =
+            'content://com.android.externalstorage.documents/tree/primary%3Aroms';
+        const unresolvable =
+            'content://com.android.externalstorage.documents/tree/1234-5678%3Aroms';
+        EsdeImportService.safRomFolderResolverOverride = (uri) async =>
+            uri == resolvable ? romB.path : null;
+
+        final result = await EsdeImportService.importInFolder([
+          romA.path,
+          unresolvable,
+          resolvable,
+        ]);
+
+        expect(result.foldersSkippedSaf, 1);
+        expect(result.systemsMatched, 2);
+        expect(result.gamesImported, 2);
+        expect(
+          (await mediaLocation('nes'))['esde_media_root'],
+          p.join(romB.path, 'nes'),
+        );
+      },
+    );
+
+    test(
+      'isolates a malformed gamelist as skipped and imports the rest',
+      () async {
+        await seedRom('sonic.smc', 'snes');
+        await seedRom('mario.nes', 'nes');
+        final romA = romFolder();
+        writeGamelist(
+          romA,
+          'snes',
+          '<gameList><game><path>./sonic.smc</path></gameList>',
+        );
+        writeGamelist(romA, 'nes', marioGamelist);
+
+        final result = await EsdeImportService.importInFolder([romA.path]);
+
+        expect(result.systemsFound, 2);
+        expect(result.systemsSkipped, 1);
+        expect(result.systemsMatched, 1);
+        expect(result.gamesImported, 1);
+        // A skipped system gets no media root: there is nothing to back it.
+        expect(await mediaLocation('snes'), isEmpty);
+        expect((await mediaLocation('nes'))['esde_media_root'], isNotNull);
+      },
+    );
+  });
 }

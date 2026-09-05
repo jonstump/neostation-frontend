@@ -6970,9 +6970,7 @@ class SqliteMigrations {
   /// resolve media exactly as before. In-folder systems store the absolute
   /// platform folder here and leave `esde_media_dir` null. Nullable and
   /// guarded by `PRAGMA table_info`, so a re-run is a no-op.
-  ///
-  /// Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ "Schema
-  /// Migration"
+  // Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ "Schema Migration"
   static Future<void> _migrateToVersion157(Database db) async {
     _log.i('Migration v157: Adding esde_media_root to user_system_settings');
     try {
