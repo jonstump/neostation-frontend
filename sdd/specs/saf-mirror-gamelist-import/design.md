@@ -49,8 +49,8 @@ Constraints from the repo rules: prefer Dart over Kotlin for new behaviour, keep
 
 ### Budget guard from listing sizes before any copy
 
-**Choice**: Sum the sizes of files that are missing or size-mismatched, compare with the existing free-space query for the user-data volume, and refuse the whole folder's mirror when short, while still importing metadata.
-**Rationale**: Users on small internal storage should never end a run with a half-mirrored library and a full disk. Metadata import is cheap and still valuable on its own.
+**Choice**: Per system, sum the sizes of files that are missing or size-mismatched, compare with a fresh reading of the existing free-space query for the user-data volume, and refuse that system's mirror when short, while still importing its metadata. Earlier systems keep their mirrors.
+**Rationale**: The disk is what must be protected, and a fresh reading before each system guarantees no system starts a copy it cannot finish. Planning the whole folder first would double the listing work for large libraries and still could not account for space consumed by other apps mid-run. A partially mirrored library is a valid state: every mirrored file is complete, and the next run resumes by size skip.
 
 ### Reset deletes by prefix, never by column value alone
 

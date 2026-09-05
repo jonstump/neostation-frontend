@@ -93,12 +93,12 @@ The importer SHALL record the mirror directory for a system, not the SAF platfor
 
 ### Requirement: Storage Budget Guard
 
-Before copying, the importer SHALL sum the sizes of the files it would copy for the SAF folder from the listing data, subtract files that already match, and compare against free space on the user-data volume. If free space is insufficient, the importer MUST NOT start copying for that folder, MUST record a distinct budget-refused outcome with the required and available byte counts, and MUST still import metadata from the gamelists.
+Before copying a system's media, the importer SHALL sum the sizes of the files it would copy for that system from the listing data, subtract files that already match, and compare against a fresh reading of free space on the user-data volume. If free space is insufficient, the importer MUST NOT start copying for that system, MUST record a distinct budget-refused outcome with the required and available byte counts (summed across refused systems; the first refusal's available reading is reported), and MUST still import metadata from the gamelists. Systems mirrored before a refusal keep their mirrors.
 
 #### Scenario: Insufficient space
 
-- **WHEN** the pending copy needs more bytes than are free
-- **THEN** no files are copied, the result names the shortfall, and metadata rows are still written
+- **WHEN** a system's pending copy needs more bytes than are free
+- **THEN** no files are copied for that system, the result names the shortfall, and metadata rows are still written
 
 #### Scenario: Sufficient space
 
