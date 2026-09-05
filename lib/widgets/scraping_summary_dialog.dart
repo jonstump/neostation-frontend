@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_localization/flutter_localization.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
+import '../l10n/app_locale.dart';
 import '../utils/gamepad_nav.dart';
 import '../services/game_service.dart';
 
@@ -16,12 +18,20 @@ class ScrapingSummaryDialog extends StatefulWidget {
   final int failedGames;
   final String elapsedTime;
 
+  /// Games scraped by RomM and by ScreenScraper. Both are null when RomM took
+  /// no part in the run, and the per-source lines are then not shown.
+  // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "Bulk Source Chain"
+  final int? rommGames;
+  final int? screenscraperGames;
+
   const ScrapingSummaryDialog({
     super.key,
     required this.totalGames,
     required this.successfulGames,
     required this.failedGames,
     required this.elapsedTime,
+    this.rommGames,
+    this.screenscraperGames,
   });
 
   @override
@@ -146,6 +156,21 @@ class _ScrapingSummaryDialogState extends State<ScrapingSummaryDialog> {
                       widget.elapsedTime,
                       valueColor: Theme.of(context).colorScheme.primary,
                     ),
+                    // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "Bulk Source Chain"
+                    if (widget.rommGames != null) ...[
+                      SizedBox(height: 4.h),
+                      _buildSourceLine(
+                        AppLocale.scrapeSummaryFromRomm,
+                        widget.rommGames!,
+                      ),
+                    ],
+                    if (widget.screenscraperGames != null) ...[
+                      SizedBox(height: 4.h),
+                      _buildSourceLine(
+                        AppLocale.scrapeSummaryFromScreenscraper,
+                        widget.screenscraperGames!,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -176,6 +201,18 @@ class _ScrapingSummaryDialogState extends State<ScrapingSummaryDialog> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// One per-source line ("From RomM: N"), from a key with a `{count}`
+  /// placeholder.
+  Widget _buildSourceLine(String localeKey, int count) {
+    return Text(
+      localeKey.getString(context).replaceFirst('{count}', count.toString()),
+      style: TextStyle(
+        fontSize: 11.r,
+        color: Theme.of(context).colorScheme.onSurface,
       ),
     );
   }

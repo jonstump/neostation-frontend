@@ -1441,4 +1441,10 @@ const Map<String, dynamic> appLocaleFr = {
       'RomM n’avait rien pour ce jeu ; scraping effectué depuis ScreenScraper',
   AppLocale.scrapeFailedWithReason: 'Échec du scraping : {reason}',
   AppLocale.scrapeSystemIdMissing: 'Erreur : l’ID du système est manquant.',
+  AppLocale.scrapeSummaryFromRomm: 'Depuis RomM : {count}',
+  AppLocale.scrapeSummaryFromScreenscraper: 'Depuis ScreenScraper : {count}',
+  AppLocale.scrapeBulkRommOnlyStarted:
+      "Scraping depuis RomM uniquement ; ScreenScraper n'est pas configuré",
+  AppLocale.scrapeBulkNoSourceAvailable:
+      'Connectez-vous à ScreenScraper ou connectez RomM avant de lancer le scraping',
 };

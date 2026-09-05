@@ -1394,4 +1394,10 @@ const Map<String, dynamic> appLocaleId = {
       'RomM tidak memiliki data untuk game ini; data diambil dari ScreenScraper',
   AppLocale.scrapeFailedWithReason: 'Scraping gagal: {reason}',
   AppLocale.scrapeSystemIdMissing: 'Kesalahan: ID sistem tidak ada.',
+  AppLocale.scrapeSummaryFromRomm: 'Dari RomM: {count}',
+  AppLocale.scrapeSummaryFromScreenscraper: 'Dari ScreenScraper: {count}',
+  AppLocale.scrapeBulkRommOnlyStarted:
+      'Scraping hanya dari RomM; ScreenScraper belum disiapkan',
+  AppLocale.scrapeBulkNoSourceAvailable:
+      'Masuk ke ScreenScraper atau hubungkan RomM sebelum memulai scraping',
 };

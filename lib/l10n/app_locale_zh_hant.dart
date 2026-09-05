@@ -1219,4 +1219,8 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.scrapeCompletedFallback: 'RomM 中沒有此遊戲的資料；已從 ScreenScraper 抓取',
   AppLocale.scrapeFailedWithReason: '抓取失敗：{reason}',
   AppLocale.scrapeSystemIdMissing: '錯誤：缺少系統 ID。',
+  AppLocale.scrapeSummaryFromRomm: '來自 RomM：{count}',
+  AppLocale.scrapeSummaryFromScreenscraper: '來自 ScreenScraper：{count}',
+  AppLocale.scrapeBulkRommOnlyStarted: '僅從 RomM 擷取；尚未設定 ScreenScraper',
+  AppLocale.scrapeBulkNoSourceAvailable: '開始擷取前請先登入 ScreenScraper 或連線 RomM',
 };
