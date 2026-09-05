@@ -7,7 +7,7 @@ import 'package:neostation/utils/romm_link_state.dart';
 /// it), both as pure functions.
 
 RommSaveMapping _row(RommLinkSource source, {String? fsName}) =>
-    (rommRomId: 12, fsName: fsName, source: source);
+    (romname: 'a.sfc', rommRomId: 12, fsName: fsName, source: source);
 
 void main() {
   group('rommLinkStateOf', () {

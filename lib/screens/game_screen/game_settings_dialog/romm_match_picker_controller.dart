@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:neostation/models/romm_metadata_fetch.dart';
 import 'package:neostation/models/romm_rom.dart';
 import 'package:neostation/models/romm_rom_page.dart';
 import 'package:neostation/repositories/romm_save_map_repository.dart';
@@ -33,6 +34,11 @@ typedef RommMatchMappingWriter =
 
 /// Drops the sync provider's cached state for one game after the row changed.
 typedef RommMatchSyncInvalidator = void Function(String romname);
+
+/// Fills the game's metadata gaps from the ROM it was just linked to —
+/// `RommProvider.fetchMetadata` in fill-gaps mode in the app, a fake in tests.
+typedef RommMatchMetadataFetcher =
+    Future<RommMetadataOutcome> Function(RommRom rom);
 
 /// A picker search that did not complete, with the query it was for and the
 /// underlying failure. A sentinel type so the dialog can tell a failed search
@@ -109,6 +115,7 @@ class RommMatchPickerController extends ChangeNotifier {
   final RommMatchMappingReader readMapping;
   final RommMatchMappingWriter writeMapping;
   final RommMatchSyncInvalidator invalidateSyncState;
+  final RommMatchMetadataFetcher fetchMetadata;
   final Duration debounce;
   final int pageLimit;
 
@@ -126,6 +133,7 @@ class RommMatchPickerController extends ChangeNotifier {
     required this.readMapping,
     required this.writeMapping,
     required this.invalidateSyncState,
+    required this.fetchMetadata,
     this.preselected,
     this.debounce = const Duration(milliseconds: 350),
     this.pageLimit = 25,
@@ -137,6 +145,7 @@ class RommMatchPickerController extends ChangeNotifier {
   RommMatchPickerStatus _status = RommMatchPickerStatus.idle;
   RommMatchSearchException? _lastError;
   int? _currentRomId;
+  RommMetadataOutcome? _lastFetchOutcome;
   Timer? _debounceTimer;
   int _requestSerial = 0;
   bool _disposed = false;
@@ -161,6 +170,10 @@ class RommMatchPickerController extends ChangeNotifier {
 
   /// Rom id of the row the game is linked to right now, for the check mark.
   int? get currentRomId => _currentRomId;
+
+  /// What the fill-gaps fetch after the last successful [confirm] did, or
+  /// null before one ran. A fetch that threw is recorded as a failed outcome.
+  RommMetadataOutcome? get lastFetchOutcome => _lastFetchOutcome;
 
   /// Index of [preselected] within [results], or -1.
   int get preselectedIndex {
@@ -268,10 +281,15 @@ class RommMatchPickerController extends ChangeNotifier {
     return [pinned, ...items];
   }
 
-  /// Writes the manual row for [rom] under [linkKey] and invalidates the
-  /// game's sync state exactly once. Returns false — with nothing invalidated
-  /// — when the repository reported the write failed, and refuses outright
-  /// while the scope is [RommMatchPickerScope.unsupported].
+  /// Writes the manual row for [rom] under [linkKey], invalidates the game's
+  /// sync state exactly once, then fills the game's metadata gaps from [rom].
+  /// Returns false — with nothing invalidated and nothing fetched — when the
+  /// repository reported the write failed, and refuses outright while the
+  /// scope is [RommMatchPickerScope.unsupported].
+  ///
+  /// The fetch runs after the row is written so the writer keys the metadata
+  /// row off the mapping that now exists, and it never fails the link: its
+  /// outcome (or a failed one, when it threw) is kept in [lastFetchOutcome].
   Future<bool> confirm(RommRom rom) async {
     if (!canConfirm) {
       _log.w(
@@ -300,6 +318,24 @@ class RommMatchPickerController extends ChangeNotifier {
     invalidateSyncState(syncKey);
     _currentRomId = rom.id;
     if (!_disposed) notifyListeners();
+    try {
+      _lastFetchOutcome = await fetchMetadata(rom);
+    } catch (e, st) {
+      _log.e(
+        'RomM link picker: metadata fetch after link threw '
+        '(linkKey=$linkKey, systemFolder=$systemFolder, romId=${rom.id})',
+        error: e,
+        stackTrace: st,
+      );
+      _lastFetchOutcome = RommMetadataOutcome.failed(
+        RommMetadataFetchException(
+          stage: 'detail',
+          romId: rom.id,
+          filename: linkKey,
+          cause: e,
+        ),
+      );
+    }
     return true;
   }
 
