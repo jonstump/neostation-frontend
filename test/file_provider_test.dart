@@ -297,6 +297,29 @@ void main() {
       ]);
     });
 
+    // A SAF import records `<user data>/imported_media/<system>` as the
+    // absolute root; resolution is the unchanged absolute-root path.
+    // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Mirror Media Root"
+    test('resolves a mirrored SAF system from its imported_media root', () async {
+      await db.execute(
+        "INSERT INTO user_system_settings (app_system_id, esde_media_root) VALUES ('snes', '/data/user-data/imported_media/snes')",
+      );
+      await provider.refreshEsde();
+
+      expect(
+        provider.getEsdeMediaCandidates('snes', 'box2d', 'Chrono Trigger.sfc'),
+        contains(
+          '/data/user-data/imported_media/snes/covers/Chrono Trigger.png',
+        ),
+      );
+      expect(
+        provider.getEsdeVideoCandidates('snes', 'Chrono Trigger.sfc'),
+        contains(
+          '/data/user-data/imported_media/snes/videos/Chrono Trigger.mp4',
+        ),
+      );
+    });
+
     test('screenshots fall back to RomM images after titlescreens', () async {
       await db.execute(
         "INSERT INTO user_system_settings (app_system_id, esde_media_root) VALUES ('snes', '/roms/snes')",

@@ -8,9 +8,12 @@ import 'package:xml/xml.dart';
 import '../data/datasources/sqlite_service.dart';
 import '../repositories/game_repository.dart';
 import '../repositories/scraper_repository.dart';
+import 'config_service.dart';
+import 'esde/saf_media_mirror.dart';
 import 'logger_service.dart';
 import 'permission_service.dart';
 import 'saf_directory_service.dart';
+import 'storage_space_service.dart';
 import 'user_data_location_service.dart';
 
 /// Which path the in-folder importer took for one configured ROM folder.
@@ -55,6 +58,19 @@ class EsdeSafAccessException implements Exception {
 
   @override
   String toString() => 'EsdeSafAccessException(uri=$uri reason=$reason)';
+}
+
+/// Thrown by [EsdeImportService.reset] when an import is running: two
+/// overlapping runs would race on the same metadata rows and mirror files.
+/// The import entry points return a result flagged
+/// [EsdeImportResult.refusedAlreadyRunning] instead of throwing, because they
+/// already hand back a result object.
+// Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Concurrency Safety"
+class EsdeImportBusyException implements Exception {
+  const EsdeImportBusyException();
+
+  @override
+  String toString() => 'EsdeImportBusyException(an import is already running)';
 }
 
 /// Summary of an ES-DE import run, surfaced to the settings UI.
@@ -113,10 +129,48 @@ class EsdeImportResult {
   final int systemsImportedViaSaf;
 
   /// In-folder mode only: SAF subfolders that resolve to a system and carry a
-  /// mapped media category folder but no `gamelist.xml`. Not linked — there
-  /// is no real path to record until the media mirror exists — so they are
-  /// counted here for the mirror step to act on.
+  /// mapped media category folder but no `gamelist.xml`, left unlinked.
+  /// Since the media mirror exists such folders are mirrored and counted in
+  /// [mediaOnlyLinked] when they hold files, so this stays 0; kept so
+  /// existing readers of the result keep compiling.
   final int safMediaOnlyPending;
+
+  /// In-folder mode only: media files copied out of SAF category folders
+  /// into the mirror this run.
+  final int safFilesCopied;
+
+  /// In-folder mode only: mirror files left alone because their size already
+  /// matched the SAF listing.
+  final int safFilesSkippedUnchanged;
+
+  /// In-folder mode only: media files that could not be mirrored (each one
+  /// is logged with its URI).
+  final int safFilesFailed;
+
+  /// In-folder mode only: bytes written into the mirror this run.
+  final int safBytesCopied;
+
+  /// In-folder mode only: SAF systems whose mirror directory holds at least
+  /// one file after the run and was recorded as their media root.
+  final int safSystemsMirrored;
+
+  /// In-folder mode only: at least one system's mirror was refused because
+  /// the pending copy did not fit in free space. Metadata is still imported.
+  final bool safBudgetRefused;
+
+  /// In-folder mode only: bytes the refused mirrors needed, summed.
+  final int safBudgetRequiredBytes;
+
+  /// In-folder mode only: free bytes on the mirror volume when the first
+  /// refusal happened; null when no refusal occurred.
+  final int? safBudgetAvailableBytes;
+
+  /// The run was stopped by the caller's `shouldStop` between files; the
+  /// work done so far is kept and the rest was not attempted.
+  final bool cancelled;
+
+  /// The run never started because another import was in progress.
+  final bool refusedAlreadyRunning;
 
   const EsdeImportResult({
     this.systemsMatched = 0,
@@ -134,6 +188,16 @@ class EsdeImportResult {
     this.folderOutcomes = const [],
     this.systemsImportedViaSaf = 0,
     this.safMediaOnlyPending = 0,
+    this.safFilesCopied = 0,
+    this.safFilesSkippedUnchanged = 0,
+    this.safFilesFailed = 0,
+    this.safBytesCopied = 0,
+    this.safSystemsMirrored = 0,
+    this.safBudgetRefused = false,
+    this.safBudgetRequiredBytes = 0,
+    this.safBudgetAvailableBytes,
+    this.cancelled = false,
+    this.refusedAlreadyRunning = false,
   });
 
   EsdeImportResult _add({
@@ -150,6 +214,15 @@ class EsdeImportResult {
     List<EsdeImportFolderOutcome> folderOutcomes = const [],
     int systemsImportedViaSaf = 0,
     int safMediaOnlyPending = 0,
+    int safFilesCopied = 0,
+    int safFilesSkippedUnchanged = 0,
+    int safFilesFailed = 0,
+    int safBytesCopied = 0,
+    int safSystemsMirrored = 0,
+    bool safBudgetRefused = false,
+    int safBudgetRequiredBytes = 0,
+    int? safBudgetAvailableBytes,
+    bool cancelled = false,
   }) {
     return EsdeImportResult(
       systemsMatched: this.systemsMatched + systemsMatched,
@@ -170,8 +243,60 @@ class EsdeImportResult {
           : List.unmodifiable([...this.folderOutcomes, ...folderOutcomes]),
       systemsImportedViaSaf: this.systemsImportedViaSaf + systemsImportedViaSaf,
       safMediaOnlyPending: this.safMediaOnlyPending + safMediaOnlyPending,
+      safFilesCopied: this.safFilesCopied + safFilesCopied,
+      safFilesSkippedUnchanged:
+          this.safFilesSkippedUnchanged + safFilesSkippedUnchanged,
+      safFilesFailed: this.safFilesFailed + safFilesFailed,
+      safBytesCopied: this.safBytesCopied + safBytesCopied,
+      safSystemsMirrored: this.safSystemsMirrored + safSystemsMirrored,
+      safBudgetRefused: this.safBudgetRefused || safBudgetRefused,
+      safBudgetRequiredBytes:
+          this.safBudgetRequiredBytes + safBudgetRequiredBytes,
+      // The first refusal's reading is the one worth showing: later ones
+      // measure the same volume after nothing more was written.
+      safBudgetAvailableBytes:
+          this.safBudgetAvailableBytes ?? safBudgetAvailableBytes,
+      cancelled: this.cancelled || cancelled,
+      refusedAlreadyRunning: refusedAlreadyRunning,
     );
   }
+
+  /// Folds one system's mirror [summary] into the SAF tallies.
+  EsdeImportResult _addMirror(
+    SafMirrorSummary summary, {
+    bool recorded = false,
+  }) {
+    return _add(
+      safFilesCopied: summary.filesCopied,
+      safFilesSkippedUnchanged: summary.filesSkippedUnchanged,
+      safFilesFailed: summary.filesFailed,
+      safBytesCopied: summary.bytesCopied,
+      safSystemsMirrored: recorded ? 1 : 0,
+      safBudgetRefused: summary.budgetRefused,
+      safBudgetRequiredBytes: summary.budgetRefused ? summary.requiredBytes : 0,
+      safBudgetAvailableBytes: summary.budgetRefused
+          ? summary.availableBytes
+          : null,
+      cancelled: summary.cancelled,
+    );
+  }
+}
+
+/// A SAF platform subfolder with mapped media category folders but no
+/// `gamelist.xml`: nothing to parse, but its artwork is worth mirroring.
+class _SafMediaOnlyCandidate {
+  final String name;
+  final String uri;
+
+  /// Lowercased category name → `content://` folder URI, from the one
+  /// listing discovery made of the subfolder.
+  final Map<String, String> categoryDirs;
+
+  const _SafMediaOnlyCandidate({
+    required this.name,
+    required this.uri,
+    required this.categoryDirs,
+  });
 }
 
 /// How a gamelist was discovered, which decides where its media lives and
@@ -223,6 +348,11 @@ class GamelistSource {
   /// filesystem sources, which stat category folders on demand.
   final Map<String, String> safCategoryDirs;
 
+  /// SAF mode: the real directory the media mirror copies this system's
+  /// category folders into (`<user data>/imported_media/<system folder>`),
+  /// or null when no mirror root could be resolved for the run.
+  final String? safMirrorDir;
+
   const GamelistSource({
     this.gamelistFile,
     this.gamelistUri,
@@ -230,6 +360,7 @@ class GamelistSource {
     required this.systemFolderName,
     required this.mode,
     this.safCategoryDirs = const {},
+    this.safMirrorDir,
   }) : assert(
          (gamelistFile == null) != (gamelistUri == null),
          'exactly one of gamelistFile / gamelistUri must be set',
@@ -242,6 +373,7 @@ class GamelistSource {
     required String folderUri,
     required this.systemFolderName,
     this.safCategoryDirs = const {},
+    this.safMirrorDir,
   }) : gamelistFile = null,
        mediaRoot = folderUri,
        mode = GamelistSourceMode.saf;
@@ -250,11 +382,15 @@ class GamelistSource {
   String get location => gamelistFile?.path ?? gamelistUri!;
 
   /// Directory holding this system's `<category>/` media folders. For a SAF
-  /// source this is a `content://` URI that `dart:io` cannot stat, so the
-  /// duplicate-entry media probe finds nothing and keeps the first entry.
+  /// source this is the mirror directory, so the duplicate-entry media probe
+  /// sees whatever an earlier mirror run copied; without a mirror root it
+  /// falls back to the `content://` URI, which `dart:io` cannot stat, and
+  /// the probe keeps the first entry.
+  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Mirror Media Root"
   String get systemMediaDir => switch (mode) {
     GamelistSourceMode.esdeRoot => path.join(mediaRoot, systemFolderName),
-    GamelistSourceMode.inFolder || GamelistSourceMode.saf => mediaRoot,
+    GamelistSourceMode.inFolder => mediaRoot,
+    GamelistSourceMode.saf => safMirrorDir ?? mediaRoot,
   };
 }
 
@@ -272,11 +408,50 @@ class GamelistSource {
 class EsdeImportService {
   static final _log = LoggerService.instance;
 
+  // ── Single-instance guard ───────────────────────────────────────────────
+  // One import (or reset) at a time: a second start is refused with a named
+  // outcome rather than racing the first on the same metadata rows and
+  // mirror files. Shared by every entry point.
+  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Concurrency Safety"
+  static bool _running = false;
+
+  /// Whether an import or reset is in progress.
+  static bool get isRunning => _running;
+
+  /// Runs [body] under the guard, or returns [refused] when busy.
+  static Future<T> _guarded<T>(
+    String entryPoint,
+    Future<T> Function() body, {
+    required T Function() refused,
+  }) async {
+    if (_running) {
+      _log.w('ES-DE import: $entryPoint refused, another run is in progress');
+      return refused();
+    }
+    _running = true;
+    try {
+      return await body();
+    } finally {
+      _running = false;
+    }
+  }
+
   /// Runs the import against [esdeRoot] (the ES-DE application folder that
   /// contains `gamelists/`, `settings/`, and by default `downloaded_media/`).
   ///
   /// [onProgress] is invoked as `(fraction 0..1, currentSystemLabel)`.
+  /// Returns a result flagged [EsdeImportResult.refusedAlreadyRunning] when
+  /// another import or reset is in progress.
   static Future<EsdeImportResult> import(
+    String esdeRoot, {
+    void Function(double progress, String label)? onProgress,
+  }) => _guarded(
+    'import',
+    () => _importEsdeRoot(esdeRoot, onProgress: onProgress),
+    refused: () => const EsdeImportResult(refusedAlreadyRunning: true),
+  );
+
+  static Future<EsdeImportResult> _importEsdeRoot(
     String esdeRoot, {
     void Function(double progress, String label)? onProgress,
   }) async {
@@ -373,17 +548,50 @@ class EsdeImportService {
   /// A ROM folder that resolves to a readable real filesystem path is read
   /// exactly as before. A SAF `content://` folder with no readable real path
   /// is discovered over SAF instead: its subfolders are listed once each,
-  /// `gamelist.xml` bytes are read through SAF into the same parser, and no
-  /// media root is recorded (the media mirror does that). Only a folder that
-  /// cannot be listed at all (lost grant, SAF unavailable) is counted in
+  /// `gamelist.xml` bytes are read through SAF into the same parser, and its
+  /// mapped media category folders are mirrored into
+  /// `<user data>/imported_media/<system>/`, which is then recorded as the
+  /// system's media root. Only a folder that cannot be listed at all (lost
+  /// grant, SAF unavailable) is counted in
   /// [EsdeImportResult.foldersSkippedSaf], logged, and skipped — never fatal.
   ///
   /// [onProgress] is invoked as `(fraction 0..1, currentSystemLabel)`.
+  /// [onMirrorProgress] is invoked per mirrored file as
+  /// `(systemFolder, copied, total)`. [shouldStop] is polled between mirrored
+  /// files and between systems; when it answers true the run stops, keeps
+  /// what it has done, and reports [EsdeImportResult.cancelled]. Returns a
+  /// result flagged [EsdeImportResult.refusedAlreadyRunning] when another
+  /// import or reset is in progress.
   // Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ "In-Folder Gamelist Discovery"
   // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "SAF Discovery"
+  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Concurrency Safety"
   static Future<EsdeImportResult> importInFolder(
     List<String> romFolders, {
     void Function(double progress, String label)? onProgress,
+    void Function(String systemFolder, int copied, int total)? onMirrorProgress,
+    bool Function()? shouldStop,
+  }) => _guarded(
+    'importInFolder',
+    () => _importInFolder(
+      romFolders,
+      onProgress: onProgress,
+      onMirrorProgress: onMirrorProgress,
+      shouldStop: shouldStop ?? _neverStop,
+    ),
+    refused: () => const EsdeImportResult(
+      mode: GamelistSourceMode.inFolder,
+      refusedAlreadyRunning: true,
+    ),
+  );
+
+  static bool _neverStop() => false;
+
+  static Future<EsdeImportResult> _importInFolder(
+    List<String> romFolders, {
+    required void Function(double progress, String label)? onProgress,
+    required void Function(String systemFolder, int copied, int total)?
+    onMirrorProgress,
+    required bool Function() shouldStop,
   }) async {
     var result = const EsdeImportResult(mode: GamelistSourceMode.inFolder);
     _mediaIndexCache.clear();
@@ -448,15 +656,20 @@ class EsdeImportService {
     // listing per folder because there is no per-document exists primitive.
     // A folder that cannot be listed keeps the SPEC-0002 skipped outcome.
     // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "SAF Discovery"
-    final safMediaOnlyCandidates = <({String name, String uri})>[];
+    // The mirror root is resolved once, before discovery, so every SAF
+    // source knows its mirror directory before its gamelist is imported and
+    // the duplicate-entry probe can look at an earlier run's copies.
+    // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Mirror Media Root"
+    final mirrorRoot = safFolders.isEmpty ? null : await _resolveMirrorRoot();
+    final safMediaOnlyCandidates = <_SafMediaOnlyCandidate>[];
     for (final folderUri in safFolders) {
       final ({
         List<GamelistSource> sources,
-        List<({String name, String uri})> mediaOnly,
+        List<_SafMediaOnlyCandidate> mediaOnly,
       })
       discovered;
       try {
-        discovered = await _discoverSafFolder(folderUri);
+        discovered = await _discoverSafFolder(folderUri, mirrorRoot);
       } on EsdeSafAccessException catch (e) {
         _log.w(
           'in-folder import: skipped ROM folder uri=${e.uri} '
@@ -519,6 +732,11 @@ class EsdeImportService {
     final importedSystemIds = <String>{};
 
     for (var i = 0; i < sources.length; i++) {
+      // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Concurrency Safety"
+      if (shouldStop()) {
+        result = result._add(cancelled: true);
+        break;
+      }
       final source = sources[i];
       final folderName = source.systemFolderName;
       onProgress?.call(i / sources.length, folderName);
@@ -554,6 +772,18 @@ class EsdeImportService {
         importedSystemIds.add(appSystemId);
         if (source.mode == GamelistSourceMode.saf) {
           result = result._add(systemsImportedViaSaf: 1);
+          // Metadata is in; now mirror the artwork and, once the mirror
+          // holds a file, point the system's media root at it.
+          // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Media Mirror"
+          result = await _mirrorSafSystem(
+            mirrorRoot: mirrorRoot,
+            systemFolder: folderName,
+            categoryDirs: source.safCategoryDirs,
+            appSystemId: appSystemId,
+            accumulator: result,
+            onMirrorProgress: onMirrorProgress,
+            shouldStop: shouldStop,
+          );
         }
       }
     }
@@ -564,11 +794,16 @@ class EsdeImportService {
     );
     result = result._add(mediaOnlyLinked: linked);
 
-    final pending = await _countSafMediaOnlySystems(
-      safMediaOnlyCandidates,
-      importedSystemIds,
-    );
-    result = result._add(safMediaOnlyPending: pending);
+    if (!result.cancelled) {
+      result = await _mirrorSafMediaOnlySystems(
+        safMediaOnlyCandidates,
+        importedSystemIds,
+        mirrorRoot: mirrorRoot,
+        accumulator: result,
+        onMirrorProgress: onMirrorProgress,
+        shouldStop: shouldStop,
+      );
+    }
 
     onProgress?.call(1.0, '');
     _log.i(
@@ -580,8 +815,172 @@ class EsdeImportService {
       'unmatched=${result.systemsUnmatched} skipped=${result.systemsSkipped}, '
       'games imported=${result.gamesImported} noRomMatch=${result.gamesUnmatched}, '
       'stats updated=${result.statsUpdated} mediaOnlyLinked=${result.mediaOnlyLinked} '
-      'safMediaOnlyPending=${result.safMediaOnlyPending}',
+      'safMirrored=${result.safSystemsMirrored} '
+      'safCopied=${result.safFilesCopied} '
+      'safSkipped=${result.safFilesSkippedUnchanged} '
+      'safFailed=${result.safFilesFailed} safBytes=${result.safBytesCopied} '
+      'budgetRefused=${result.safBudgetRefused} cancelled=${result.cancelled}',
     );
+    return result;
+  }
+
+  // ── SAF media mirror ────────────────────────────────────────────────────
+
+  /// `<user data>/imported_media`, the root every SAF mirror lands under.
+  /// Tests point this at a temp directory.
+  @visibleForTesting
+  static String? mirrorRootOverride;
+
+  /// Reads one SAF byte range; stands in for [SafDirectoryService.readRange].
+  @visibleForTesting
+  static Future<Uint8List?> Function(String uri, int offset, int length)?
+  safReadRangeOverride;
+
+  /// Free bytes on the volume holding a path; stands in for
+  /// [StorageSpaceService.freeSpaceBytes].
+  @visibleForTesting
+  static Future<int?> Function(String path)? freeSpaceBytesOverride;
+
+  /// Directory name under the user-data folder that holds SAF mirrors.
+  static const String importedMediaDirName = 'imported_media';
+
+  /// The mirror root for this run, or null when the user-data path cannot be
+  /// resolved (storage not ready): metadata still imports, nothing mirrors.
+  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Mirror Media Root"
+  static Future<String?> _resolveMirrorRoot() async {
+    final override = mirrorRootOverride;
+    if (override != null) return override;
+    try {
+      final userData = await ConfigService.getUserDataPath();
+      return path.join(userData, importedMediaDirName);
+    } catch (e) {
+      // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Error Handling Standards"
+      _log.e(
+        'in-folder import: cannot resolve the user-data path for the SAF '
+        'media mirror, metadata only this run: $e',
+      );
+      return null;
+    }
+  }
+
+  static Future<Uint8List?> _safReadRange(String uri, int offset, int length) {
+    final override = safReadRangeOverride;
+    if (override != null) return override(uri, offset, length);
+    if (!Platform.isAndroid) {
+      throw EsdeSafAccessException(uri, 'SAF is unavailable on this platform');
+    }
+    return SafDirectoryService.readRange(uri, offset, length);
+  }
+
+  static Future<int?> _freeSpaceBytes(String dir) {
+    final override = freeSpaceBytesOverride;
+    if (override != null) return override(dir);
+    return StorageSpaceService.freeSpaceBytes(dir);
+  }
+
+  /// Mirrors one SAF system's category folders under [mirrorRoot] and, when
+  /// the mirror directory holds at least one file afterwards (copied now or
+  /// by an earlier run), records it as the system's `esde_media_root`.
+  /// Returns [accumulator] with the mirror tallies folded in, and with
+  /// [EsdeImportResult.cancelled] set if the mirror was stopped.
+  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Media Mirror"
+  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Mirror Media Root"
+  static Future<EsdeImportResult> _mirrorSafSystem({
+    required String? mirrorRoot,
+    required String systemFolder,
+    required Map<String, String> categoryDirs,
+    required String appSystemId,
+    required EsdeImportResult accumulator,
+    required void Function(String systemFolder, int copied, int total)?
+    onMirrorProgress,
+    required bool Function() shouldStop,
+  }) async {
+    if (mirrorRoot == null) return accumulator;
+    final mirror = SafMediaMirror(
+      listFiles: _safListFiles,
+      readRange: _safReadRange,
+      freeSpaceBytes: _freeSpaceBytes,
+      mirrorRoot: mirrorRoot,
+      shouldStop: shouldStop,
+      onProgress: onMirrorProgress == null
+          ? null
+          : (copied, total, _) => onMirrorProgress(systemFolder, copied, total),
+    );
+    final summary = await mirror.run(systemFolder, categoryDirs);
+
+    var recorded = false;
+    if (summary.filesPresent > 0) {
+      // Written through the repository's parameterized upsert.
+      // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Mirror Media Root"
+      // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Database Operation Standards"
+      recorded = await ScraperRepository.recordEsdeMediaRoot(
+        appSystemId,
+        summary.mirrorDir,
+      );
+      if (!recorded) {
+        _log.w(
+          'in-folder import: mirror media root not recorded '
+          'system=$appSystemId root=${summary.mirrorDir}',
+        );
+      }
+    } else {
+      _log.i(
+        'in-folder import: SAF mirror holds no files, no media root recorded '
+        'system=$appSystemId folder=$systemFolder dir=${summary.mirrorDir}',
+      );
+    }
+    return accumulator._addMirror(summary, recorded: recorded);
+  }
+
+  /// SAF counterpart of [_linkInFolderMediaOnlySystems]: a SAF platform
+  /// subfolder with mapped category folders but no gamelist is mirrored, and
+  /// linked to its system when the mirror ends up holding a file. The
+  /// listing the mirror makes is the file check, so an empty category folder
+  /// never acquires a root. Systems already imported this run are left alone
+  /// so a second folder's `snes/` cannot clobber the first one's root.
+  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Media Mirror"
+  static Future<EsdeImportResult> _mirrorSafMediaOnlySystems(
+    List<_SafMediaOnlyCandidate> candidates,
+    Set<String> importedSystemIds, {
+    required String? mirrorRoot,
+    required EsdeImportResult accumulator,
+    required void Function(String systemFolder, int copied, int total)?
+    onMirrorProgress,
+    required bool Function() shouldStop,
+  }) async {
+    var result = accumulator;
+    if (mirrorRoot == null) return result;
+    for (final candidate in candidates) {
+      // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Concurrency Safety"
+      if (shouldStop()) return result._add(cancelled: true);
+      final system = await ScraperRepository.resolveSystemByFolderName(
+        candidate.name,
+      );
+      if (system == null) continue;
+      final appSystemId = system['app_system_id']!;
+      if (importedSystemIds.contains(appSystemId)) continue;
+
+      final mirroredBefore = result.safSystemsMirrored;
+      result = await _mirrorSafSystem(
+        mirrorRoot: mirrorRoot,
+        systemFolder: candidate.name,
+        categoryDirs: candidate.categoryDirs,
+        appSystemId: appSystemId,
+        accumulator: result,
+        onMirrorProgress: onMirrorProgress,
+        shouldStop: shouldStop,
+      );
+      if (result.safSystemsMirrored > mirroredBefore) {
+        importedSystemIds.add(appSystemId);
+        result = result._add(mediaOnlyLinked: 1);
+        _log.i(
+          'in-folder import: linked art-only SAF system '
+          'folder=${candidate.name} uri=${candidate.uri} '
+          'to system=$appSystemId',
+        );
+      }
+      if (result.cancelled) return result;
+    }
     return result;
   }
 
@@ -644,12 +1043,9 @@ class EsdeImportService {
   // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "SAF Discovery"
   // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Error Handling Standards"
   static Future<
-    ({
-      List<GamelistSource> sources,
-      List<({String name, String uri})> mediaOnly,
-    })
+    ({List<GamelistSource> sources, List<_SafMediaOnlyCandidate> mediaOnly})
   >
-  _discoverSafFolder(String folderUri) async {
+  _discoverSafFolder(String folderUri, String? mirrorRoot) async {
     if (!await _safHasPermission(folderUri)) {
       throw EsdeSafAccessException(folderUri, 'no persisted SAF grant');
     }
@@ -670,7 +1066,7 @@ class EsdeImportService {
     );
 
     final sources = <GamelistSource>[];
-    final mediaOnly = <({String name, String uri})>[];
+    final mediaOnly = <_SafMediaOnlyCandidate>[];
     for (final sub in subfolders) {
       List<Map<String, dynamic>> children;
       try {
@@ -706,10 +1102,19 @@ class EsdeImportService {
             folderUri: sub.uri,
             systemFolderName: sub.name,
             safCategoryDirs: Map.unmodifiable(categoryDirs),
+            safMirrorDir: mirrorRoot == null
+                ? null
+                : path.normalize(path.join(mirrorRoot, sub.name)),
           ),
         );
       } else if (categoryDirs.isNotEmpty) {
-        mediaOnly.add(sub);
+        mediaOnly.add(
+          _SafMediaOnlyCandidate(
+            name: sub.name,
+            uri: sub.uri,
+            categoryDirs: Map.unmodifiable(categoryDirs),
+          ),
+        );
       }
     }
     _log.i(
@@ -718,35 +1123,6 @@ class EsdeImportService {
       'mediaOnly=${mediaOnly.length}',
     );
     return (sources: sources, mediaOnly: mediaOnly);
-  }
-
-  /// SAF counterpart of [_linkInFolderMediaOnlySystems] that only counts: a
-  /// SAF platform subfolder with mapped category folders but no gamelist
-  /// resolves to a system yet has no real directory to record as its media
-  /// root, so it is reported as pending for the media mirror rather than
-  /// linked. Whether its category folders actually hold files is left to the
-  /// mirror, which lists them anyway; listing them here would be a second
-  /// pass over the tree for a count alone.
-  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "SAF Discovery"
-  static Future<int> _countSafMediaOnlySystems(
-    List<({String name, String uri})> candidates,
-    Set<String> importedSystemIds,
-  ) async {
-    var pending = 0;
-    for (final candidate in candidates) {
-      final system = await ScraperRepository.resolveSystemByFolderName(
-        candidate.name,
-      );
-      if (system == null) continue;
-      final appSystemId = system['app_system_id']!;
-      if (importedSystemIds.contains(appSystemId)) continue;
-      pending++;
-      _log.i(
-        'in-folder import: SAF art-only system folder=${candidate.name} '
-        'uri=${candidate.uri} system=$appSystemId left for the media mirror',
-      );
-    }
-    return pending;
   }
 
   /// Resolves a SAF `content://` ROM folder to a real filesystem path, or null
@@ -806,8 +1182,16 @@ class EsdeImportService {
   /// last-played are left untouched (indistinguishable from the user's own).
   /// Both discovery modes share the provenance flag, so one reset clears the
   /// rows of either; the in-folder `esde_media_root` is cleared alongside
-  /// `esde_media_dir`. Returns the number of metadata rows removed.
-  static Future<int> reset() async {
+  /// `esde_media_dir`. Returns the number of metadata rows removed. Throws
+  /// [EsdeImportBusyException] while an import is running.
+  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Concurrency Safety"
+  static Future<int> reset() => _guarded(
+    'reset',
+    _reset,
+    refused: () => throw const EsdeImportBusyException(),
+  );
+
+  static Future<int> _reset() async {
     final db = await SqliteService.getDatabase();
     final deleted = await db.delete(
       'user_screenscraper_metadata',
@@ -1064,15 +1448,15 @@ class EsdeImportService {
           );
         }
       // A content:// folder is not a directory the media resolver can stat,
-      // so nothing is recorded here; the media mirror records its own
-      // real directory once it has copied the category folders.
+      // so nothing is recorded here; [_mirrorSafSystem] records the mirror
+      // directory once it holds a copied file.
       // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Mirror Media Root"
       case GamelistSourceMode.saf:
-        _log.i(
-          'in-folder import: no media root recorded for SAF system '
-          'system=$appSystemId folder=${source.mediaRoot} '
+        _log.d(
+          'in-folder import: media root for SAF system=$appSystemId '
+          'folder=${source.mediaRoot} '
           'categories=${source.safCategoryDirs.keys.join(',')} '
-          '(pending media mirror)',
+          'is recorded by the media mirror',
         );
     }
   }
@@ -1492,10 +1876,12 @@ class EsdeImportService {
 
   /// Runs SAF discovery on one ROM folder and returns the gamelist sources it
   /// found, so a test can inspect the category folders each source carries.
+  /// [mirrorRoot] stands in for the resolved `imported_media` directory.
   @visibleForTesting
   static Future<List<GamelistSource>> discoverSafSourcesForTest(
-    String folderUri,
-  ) async => (await _discoverSafFolder(folderUri)).sources;
+    String folderUri, {
+    String? mirrorRoot,
+  }) async => (await _discoverSafFolder(folderUri, mirrorRoot)).sources;
 
   @visibleForTesting
   static List<XmlElement> selectGamesForTest(
