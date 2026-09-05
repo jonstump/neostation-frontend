@@ -582,7 +582,21 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
 
     try {
       final system = await _targetSystem();
-      if (system == null) return;
+      if (system == null) {
+        // Not silent: the user pressed the row, so say why nothing happened.
+        _log.w(
+          'RomM metadata fetch skipped: system not found '
+          'folder=$_targetSystemFolder rom=${widget.game.romname}',
+        );
+        if (mounted) {
+          AppNotification.showNotification(
+            context,
+            AppLocale.rommFetchMetadataFailed.getString(context),
+            type: NotificationType.error,
+          );
+        }
+        return;
+      }
 
       final outcome = await rommProvider.fetchMetadata(
         game: widget.game,
