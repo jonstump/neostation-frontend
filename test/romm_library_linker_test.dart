@@ -58,6 +58,10 @@ DatabaseGameModel _game(String filename, String folder) => DatabaseGameModel(
 /// The mapping table: `(systemFolder, filename)` → rom id, insert-if-absent.
 class _FakeMap {
   final Map<String, int> rows = {};
+
+  /// Provenance per key; a key absent here reads as `auto`, like a legacy
+  /// null row does in the real index.
+  final Map<String, RommLinkSource> sources = {};
   final List<List<RommSaveMapEntry>> batches = [];
 
   static String _key(String folder, String romname) => '$folder\t$romname';
@@ -69,16 +73,27 @@ class _FakeMap {
       final key = _key(e.systemFolder, e.romname);
       if (rows.containsKey(key)) continue;
       rows[key] = e.rommRomId;
+      sources[key] = RommLinkSource.auto;
       inserted++;
     }
     return inserted;
   }
 
+  /// A row the user picked by hand, as the picker writes it.
+  void putManual(String folder, String filename, int romId) {
+    rows[_key(folder, filename)] = romId;
+    sources[_key(folder, filename)] = RommLinkSource.manual;
+  }
+
   /// Same shape [RommSaveMapRepository.getRomIdIndex] builds — keyed on the
   /// stored (on-disk) spelling, which is what the linker asks for first.
-  Future<RommRomIdIndex> index() async => RommRomIdIndex(Map.of(rows));
+  Future<RommRomIdIndex> index() async =>
+      RommRomIdIndex(Map.of(rows), Map.of(sources));
 
   int? romIdFor(String folder, String filename) => rows[_key(folder, filename)];
+
+  RommLinkSource? sourceFor(String folder, String filename) =>
+      sources[_key(folder, filename)];
 }
 
 /// A RomM server: platforms, their ROMs, and what was asked of it.
@@ -288,6 +303,11 @@ void main() {
       expect(conflict.systemFolder, 'snes');
       expect(conflict.filename, 'Game.sfc');
       expect(conflict.existingRomId, 12);
+      expect(
+        conflict.existingSource,
+        RommLinkSource.auto,
+        reason: 'a row with no recorded source reads as automatic',
+      );
       expect(conflict.matchedRomId, 40);
 
       final lines = LoggerService.instance.takeCapture();
@@ -303,6 +323,77 @@ void main() {
           contains('rom 40'),
         ]),
       );
+    });
+
+    // Governing: ADR-0004 (manual link provenance), SPEC-0004 REQ "Manual Rows Are Never Replaced by Automatic Writers"
+    test('a manual row matched to a different ROM is kept and reported '
+        'with its source', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes')],
+        romsByPlatform: {
+          1: [_rom(40, platformId: 1, fsName: 'Game.sfc')],
+        },
+        systemBySlug: {'snes': snes},
+      );
+      final map = _FakeMap()..putManual('snes', 'Game.sfc', 12);
+
+      // An unlinked sibling keeps the pass from short-circuiting on a fully
+      // linked library, which is the case under test for the manual row.
+      final summary = await _linker(server, map, [
+        _game('Game.sfc', 'snes'),
+        _game('Other.sfc', 'snes'),
+      ]).run();
+
+      expect(map.romIdFor('snes', 'Game.sfc'), 12, reason: 'the user\'s pick');
+      expect(map.sourceFor('snes', 'Game.sfc'), RommLinkSource.manual);
+      expect(map.batches, isEmpty, reason: 'nothing was even offered');
+      expect(summary.rowsAdded, 0);
+      expect(summary.rowsAlreadyPresent, 1);
+      expect(summary.conflictCount, 1);
+      final conflict = summary.conflicts.single;
+      expect(conflict.systemFolder, 'snes');
+      expect(conflict.filename, 'Game.sfc');
+      expect(conflict.existingRomId, 12);
+      expect(conflict.existingSource, RommLinkSource.manual);
+      expect(conflict.matchedRomId, 40);
+      expect(conflict.toString(), contains('manual'));
+
+      final lines = LoggerService.instance.takeCapture();
+      expect(
+        lines.where((l) => l.startsWith('i|RomM link pass')).single,
+        contains('1 conflicting'),
+      );
+      expect(
+        lines.where((l) => l.startsWith('w|')).single,
+        allOf([
+          contains('snes/Game.sfc'),
+          contains('rom 12'),
+          contains('manual'),
+          contains('rom 40'),
+        ]),
+      );
+    });
+
+    test('a manual row the pass agrees with is no conflict', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes')],
+        romsByPlatform: {
+          1: [_rom(12, platformId: 1, fsName: 'Game.sfc')],
+        },
+        systemBySlug: {'snes': snes},
+      );
+      final map = _FakeMap()..putManual('snes', 'Game.sfc', 12);
+
+      // An unlinked sibling keeps the pass from short-circuiting on a fully
+      // linked library, which is the case under test for the manual row.
+      final summary = await _linker(server, map, [
+        _game('Game.sfc', 'snes'),
+        _game('Other.sfc', 'snes'),
+      ]).run();
+
+      expect(summary.rowsAlreadyPresent, 1);
+      expect(summary.conflicts, isEmpty);
+      expect(map.sourceFor('snes', 'Game.sfc'), RommLinkSource.manual);
     });
 
     test('a row the pass agrees with is no conflict', () async {

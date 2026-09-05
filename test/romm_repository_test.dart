@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:neostation/data/datasources/sqlite_migrations.dart';
 import 'package:neostation/repositories/romm_repository.dart';
 import 'package:neostation/repositories/romm_save_map_repository.dart';
 import 'package:neostation/services/credential_store.dart';
@@ -27,17 +28,9 @@ void main() {
     );
     db = await dbHelper.setUp();
     // user_romm_config comes from the shared helper (production DDL).
-    // app_romm_rom_map (migration v92) isn't part of the minimal schema.
-    await db.execute('''
-      CREATE TABLE app_romm_rom_map (
-        romname TEXT NOT NULL,
-        system_folder TEXT NOT NULL,
-        romm_rom_id INTEGER NOT NULL,
-        romm_fs_name TEXT,
-        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (romname, system_folder)
-      )
-    ''');
+    // app_romm_rom_map isn't part of the minimal schema; the production DDL
+    // rather than a copy so the primary key and `link_source` match a device.
+    await db.execute(SqliteMigrations.createAppRommRomMapTableSql);
   });
 
   tearDown(() async {
@@ -243,6 +236,7 @@ void main() {
 
     test('putMapping then getRommRomId round-trips', () async {
       await RommSaveMapRepository.putMapping(
+        source: RommLinkSource.download,
         romname: 'Chrono Trigger.sfc',
         systemFolder: 'snes',
         rommRomId: 99,
@@ -260,6 +254,7 @@ void main() {
     // disabling save sync and playtime for a game that was downloaded here.
     test('a GameModel romname resolves against the stored filename', () async {
       await RommSaveMapRepository.putMapping(
+        source: RommLinkSource.download,
         romname: 'Extra Mario Bros. [Hacks].zip',
         systemFolder: 'nes',
         rommRomId: 6320,
@@ -276,6 +271,7 @@ void main() {
 
     test('stem matching stays scoped to the system folder', () async {
       await RommSaveMapRepository.putMapping(
+        source: RommLinkSource.download,
         romname: 'game.bin',
         systemFolder: 'megadrive',
         rommRomId: 7,
@@ -287,6 +283,7 @@ void main() {
 
     test('a dotted title is not truncated into a false match', () async {
       await RommSaveMapRepository.putMapping(
+        source: RommLinkSource.download,
         romname: 'Mr. Do.zip',
         systemFolder: 'nes',
         rommRomId: 11,
@@ -298,11 +295,13 @@ void main() {
 
     test('mapping is scoped by both romname and system folder', () async {
       await RommSaveMapRepository.putMapping(
+        source: RommLinkSource.download,
         romname: 'game.bin',
         systemFolder: 'snes',
         rommRomId: 1,
       );
       await RommSaveMapRepository.putMapping(
+        source: RommLinkSource.download,
         romname: 'game.bin',
         systemFolder: 'megadrive',
         rommRomId: 2,
@@ -340,6 +339,7 @@ void main() {
     test('putMappingIfAbsent leaves an existing row untouched and returns '
         'false', () async {
       await RommSaveMapRepository.putMapping(
+        source: RommLinkSource.download,
         romname: 'Game.gba',
         systemFolder: 'gba',
         rommRomId: 12,
@@ -364,6 +364,7 @@ void main() {
       'putMappingIfAbsent is scoped by system folder like putMapping',
       () async {
         await RommSaveMapRepository.putMapping(
+          source: RommLinkSource.download,
           romname: 'Game.bin',
           systemFolder: 'genesis',
           rommRomId: 1,
@@ -389,6 +390,7 @@ void main() {
 
     test('putMappingsIfAbsent counts only the rows it inserted', () async {
       await RommSaveMapRepository.putMapping(
+        source: RommLinkSource.download,
         romname: 'Existing.sfc',
         systemFolder: 'snes',
         rommRomId: 100,
@@ -447,11 +449,13 @@ void main() {
 
     test('putMapping replaces an existing mapping for the same key', () async {
       await RommSaveMapRepository.putMapping(
+        source: RommLinkSource.download,
         romname: 'game.bin',
         systemFolder: 'snes',
         rommRomId: 1,
       );
       await RommSaveMapRepository.putMapping(
+        source: RommLinkSource.download,
         romname: 'game.bin',
         systemFolder: 'snes',
         rommRomId: 2,
@@ -476,6 +480,7 @@ void main() {
       // A bundled-playlist multi-disc download records its arbitrary .m3u
       // basename as the indexed romname; detection reverse-looks it up by id.
       await RommSaveMapRepository.putMapping(
+        source: RommLinkSource.download,
         romname: 'Final Fantasy VII (Disc set).m3u',
         systemFolder: 'psx',
         rommRomId: 7,
@@ -498,6 +503,7 @@ void main() {
       'removeMapping unlinks a deleted game and reports its rom id',
       () async {
         await RommSaveMapRepository.putMapping(
+          source: RommLinkSource.download,
           romname: 'Super Mario Bros.zip',
           systemFolder: 'nes',
           rommRomId: 6320,
@@ -528,6 +534,7 @@ void main() {
     // hands over a name the mapping was never written with.
     test('removeMapping unlinks via the extension-stripped romname', () async {
       await RommSaveMapRepository.putMapping(
+        source: RommLinkSource.download,
         romname: 'Extra Mario Bros. [Hacks].zip',
         systemFolder: 'nes',
         rommRomId: 6320,
@@ -551,11 +558,13 @@ void main() {
 
     test('removeMapping leaves other systems and games alone', () async {
       await RommSaveMapRepository.putMapping(
+        source: RommLinkSource.download,
         romname: 'game.bin',
         systemFolder: 'megadrive',
         rommRomId: 7,
       );
       await RommSaveMapRepository.putMapping(
+        source: RommLinkSource.download,
         romname: 'game.sfc',
         systemFolder: 'snes',
         rommRomId: 8,
@@ -574,5 +583,405 @@ void main() {
         );
       },
     );
+  });
+
+  // Governing: ADR-0004 (manual link provenance), SPEC-0004 REQ "Link Provenance Column"
+  // Governing: ADR-0004 (manual link provenance), SPEC-0004 REQ "Manual Rows Are Never Replaced by Automatic Writers"
+  group('RommSaveMapRepository link provenance', () {
+    Future<Map<String, Object?>> rowFor(String romname, String folder) async {
+      final rows = await db.query(
+        'app_romm_rom_map',
+        where: 'romname = ? AND system_folder = ?',
+        whereArgs: [romname, folder],
+      );
+      expect(
+        rows,
+        hasLength(1),
+        reason: 'exactly one row for $folder/$romname',
+      );
+      return rows.single;
+    }
+
+    test('the download path writes link_source = download', () async {
+      await RommSaveMapRepository.putMapping(
+        source: RommLinkSource.download,
+        romname: 'Game.sfc',
+        systemFolder: 'snes',
+        rommRomId: 12,
+        fsName: 'Game.sfc',
+      );
+
+      expect((await rowFor('Game.sfc', 'snes'))['link_source'], 'download');
+    });
+
+    test('insert-if-absent writes link_source = auto', () async {
+      expect(
+        await RommSaveMapRepository.putMappingIfAbsent(
+          romname: 'Game.sfc',
+          systemFolder: 'snes',
+          rommRomId: 12,
+        ),
+        isTrue,
+      );
+      await RommSaveMapRepository.putMappingsIfAbsent([
+        (
+          romname: 'Other.sfc',
+          systemFolder: 'snes',
+          rommRomId: 13,
+          fsName: null,
+        ),
+      ]);
+
+      expect((await rowFor('Game.sfc', 'snes'))['link_source'], 'auto');
+      expect((await rowFor('Other.sfc', 'snes'))['link_source'], 'auto');
+    });
+
+    test(
+      'putMapping with source auto never replaces an existing row',
+      () async {
+        await RommSaveMapRepository.putMapping(
+          romname: 'Game.sfc',
+          systemFolder: 'snes',
+          rommRomId: 12,
+          source: RommLinkSource.download,
+        );
+        final written = await RommSaveMapRepository.putMapping(
+          romname: 'Game.sfc',
+          systemFolder: 'snes',
+          rommRomId: 40,
+          source: RommLinkSource.auto,
+        );
+        expect(written, isFalse);
+        final row = await RommSaveMapRepository.getMapping('Game.sfc', 'snes');
+        expect(row?.rommRomId, 12);
+        expect(row?.source, RommLinkSource.download);
+      },
+    );
+
+    test('a re-download over an auto row rewrites link_source', () async {
+      await RommSaveMapRepository.putMappingIfAbsent(
+        romname: 'Game.sfc',
+        systemFolder: 'snes',
+        rommRomId: 12,
+      );
+      await RommSaveMapRepository.putMapping(
+        romname: 'Game.sfc',
+        systemFolder: 'snes',
+        rommRomId: 40,
+        source: RommLinkSource.download,
+      );
+      final row = await RommSaveMapRepository.getMapping('Game.sfc', 'snes');
+      expect(row?.rommRomId, 40);
+      expect(row?.source, RommLinkSource.download);
+    });
+
+    test('putManualMapping writes link_source = manual', () async {
+      expect(
+        await RommSaveMapRepository.putManualMapping(
+          romname: 'ct-final.sfc',
+          systemFolder: 'snes',
+          rommRomId: 12,
+          fsName: 'Chrono Trigger.sfc',
+        ),
+        isTrue,
+      );
+
+      final row = await rowFor('ct-final.sfc', 'snes');
+      expect(row['link_source'], 'manual');
+      expect(row['romm_rom_id'], 12);
+      expect(row['romm_fs_name'], 'Chrono Trigger.sfc');
+    });
+
+    test('a re-download does not replace a manual row', () async {
+      await RommSaveMapRepository.putManualMapping(
+        romname: 'Game.sfc',
+        systemFolder: 'snes',
+        rommRomId: 12,
+        fsName: 'Chrono Trigger.sfc',
+      );
+
+      final written = await RommSaveMapRepository.putMapping(
+        source: RommLinkSource.download,
+        romname: 'Game.sfc',
+        systemFolder: 'snes',
+        rommRomId: 40,
+        fsName: 'Game.sfc',
+      );
+
+      expect(written, isFalse, reason: 'the refusal is reported, not thrown');
+      final row = await rowFor('Game.sfc', 'snes');
+      expect(row['romm_rom_id'], 12);
+      expect(row['romm_fs_name'], 'Chrono Trigger.sfc');
+      expect(row['link_source'], 'manual');
+      expect(await RommSaveMapRepository.getRommRomId('Game.sfc', 'snes'), 12);
+    });
+
+    test('an auto write does not replace a manual row either', () async {
+      await RommSaveMapRepository.putManualMapping(
+        romname: 'Game.sfc',
+        systemFolder: 'snes',
+        rommRomId: 12,
+      );
+
+      expect(
+        await RommSaveMapRepository.putMapping(
+          source: RommLinkSource.auto,
+          romname: 'Game.sfc',
+          systemFolder: 'snes',
+          rommRomId: 40,
+        ),
+        isFalse,
+      );
+      expect(
+        await RommSaveMapRepository.putMappingIfAbsent(
+          romname: 'Game.sfc',
+          systemFolder: 'snes',
+          rommRomId: 41,
+        ),
+        isFalse,
+      );
+
+      final row = await rowFor('Game.sfc', 'snes');
+      expect(row['romm_rom_id'], 12);
+      expect(row['link_source'], 'manual');
+    });
+
+    test(
+      'a download replaces a download row (replace-unless-manual)',
+      () async {
+        await RommSaveMapRepository.putMapping(
+          source: RommLinkSource.download,
+          romname: 'Game.sfc',
+          systemFolder: 'snes',
+          rommRomId: 12,
+        );
+
+        expect(
+          await RommSaveMapRepository.putMapping(
+            source: RommLinkSource.download,
+            romname: 'Game.sfc',
+            systemFolder: 'snes',
+            rommRomId: 40,
+            fsName: 'Game.sfc',
+          ),
+          isTrue,
+        );
+
+        final row = await rowFor('Game.sfc', 'snes');
+        expect(row['romm_rom_id'], 40);
+        expect(row['romm_fs_name'], 'Game.sfc');
+        expect(row['link_source'], 'download');
+      },
+    );
+
+    test('a download replaces a legacy row with a null source', () async {
+      await db.execute(
+        "INSERT INTO app_romm_rom_map (romname, system_folder, romm_rom_id) "
+        "VALUES ('Game.sfc', 'snes', 12)",
+      );
+
+      expect(
+        await RommSaveMapRepository.putMapping(
+          source: RommLinkSource.download,
+          romname: 'Game.sfc',
+          systemFolder: 'snes',
+          rommRomId: 40,
+        ),
+        isTrue,
+        reason: 'IS NOT must treat null as "not manual"',
+      );
+
+      expect((await rowFor('Game.sfc', 'snes'))['romm_rom_id'], 40);
+    });
+
+    test('a manual write replaces an auto row', () async {
+      await RommSaveMapRepository.putMappingIfAbsent(
+        romname: 'Game.sfc',
+        systemFolder: 'snes',
+        rommRomId: 12,
+      );
+
+      await RommSaveMapRepository.putManualMapping(
+        romname: 'Game.sfc',
+        systemFolder: 'snes',
+        rommRomId: 40,
+        fsName: 'Chrono Trigger.sfc',
+      );
+
+      final rows = await db.query('app_romm_rom_map');
+      expect(rows, hasLength(1));
+      expect(rows.single['romm_rom_id'], 40);
+      expect(rows.single['link_source'], 'manual');
+    });
+
+    test('a manual write replaces a download row', () async {
+      await RommSaveMapRepository.putMapping(
+        source: RommLinkSource.download,
+        romname: 'Game.sfc',
+        systemFolder: 'snes',
+        rommRomId: 12,
+      );
+
+      await RommSaveMapRepository.putManualMapping(
+        romname: 'Game.sfc',
+        systemFolder: 'snes',
+        rommRomId: 40,
+      );
+
+      final row = await rowFor('Game.sfc', 'snes');
+      expect(row['romm_rom_id'], 40);
+      expect(row['link_source'], 'manual');
+    });
+
+    test('a manual write over a manual row is a re-pick', () async {
+      await RommSaveMapRepository.putManualMapping(
+        romname: 'Game.sfc',
+        systemFolder: 'snes',
+        rommRomId: 12,
+      );
+      await RommSaveMapRepository.putManualMapping(
+        romname: 'Game.sfc',
+        systemFolder: 'snes',
+        rommRomId: 40,
+      );
+
+      expect((await rowFor('Game.sfc', 'snes'))['romm_rom_id'], 40);
+    });
+
+    test('putMapping with source manual behaves as putManualMapping', () async {
+      await RommSaveMapRepository.putManualMapping(
+        romname: 'Game.sfc',
+        systemFolder: 'snes',
+        rommRomId: 12,
+      );
+
+      expect(
+        await RommSaveMapRepository.putMapping(
+          source: RommLinkSource.manual,
+          romname: 'Game.sfc',
+          systemFolder: 'snes',
+          rommRomId: 40,
+        ),
+        isTrue,
+      );
+
+      expect((await rowFor('Game.sfc', 'snes'))['romm_rom_id'], 40);
+    });
+
+    test('getMapping returns the row with its source', () async {
+      await RommSaveMapRepository.putManualMapping(
+        romname: 'Game.sfc',
+        systemFolder: 'snes',
+        rommRomId: 12,
+        fsName: 'Chrono Trigger.sfc',
+      );
+      await RommSaveMapRepository.putMapping(
+        source: RommLinkSource.download,
+        romname: 'Other.sfc',
+        systemFolder: 'snes',
+        rommRomId: 13,
+        fsName: 'Other.sfc',
+      );
+
+      expect(await RommSaveMapRepository.getMapping('Game.sfc', 'snes'), (
+        rommRomId: 12,
+        fsName: 'Chrono Trigger.sfc',
+        source: RommLinkSource.manual,
+      ));
+      expect(await RommSaveMapRepository.getMapping('Other.sfc', 'snes'), (
+        rommRomId: 13,
+        fsName: 'Other.sfc',
+        source: RommLinkSource.download,
+      ));
+    });
+
+    test('getMapping reads a null source as auto', () async {
+      await db.execute(
+        "INSERT INTO app_romm_rom_map (romname, system_folder, romm_rom_id) "
+        "VALUES ('Legacy.sfc', 'snes', 7)",
+      );
+
+      expect(await RommSaveMapRepository.getMapping('Legacy.sfc', 'snes'), (
+        rommRomId: 7,
+        fsName: null,
+        source: RommLinkSource.auto,
+      ));
+    });
+
+    test('getMapping resolves the extension-stripped romname', () async {
+      await RommSaveMapRepository.putManualMapping(
+        romname: 'Game.sfc',
+        systemFolder: 'snes',
+        rommRomId: 12,
+      );
+
+      final mapping = await RommSaveMapRepository.getMapping('Game', 'snes');
+      expect(mapping?.rommRomId, 12);
+      expect(mapping?.source, RommLinkSource.manual);
+      expect(await RommSaveMapRepository.getMapping('Game', 'nes'), isNull);
+    });
+
+    test('getMapping returns null when unmapped', () async {
+      expect(
+        await RommSaveMapRepository.getMapping('Game.sfc', 'snes'),
+        isNull,
+      );
+    });
+
+    test(
+      'getRomIdIndex carries each row\'s source under both spellings',
+      () async {
+        await RommSaveMapRepository.putManualMapping(
+          romname: 'Picked.sfc',
+          systemFolder: 'snes',
+          rommRomId: 12,
+        );
+        await RommSaveMapRepository.putMappingIfAbsent(
+          romname: 'Linked.sfc',
+          systemFolder: 'snes',
+          rommRomId: 13,
+        );
+        await db.execute(
+          "INSERT INTO app_romm_rom_map (romname, system_folder, romm_rom_id) "
+          "VALUES ('Legacy.sfc', 'snes', 14)",
+        );
+
+        final index = await RommSaveMapRepository.getRomIdIndex();
+        expect(index.sourceFor('Picked.sfc', 'snes'), RommLinkSource.manual);
+        expect(index.sourceFor('Picked', 'snes'), RommLinkSource.manual);
+        expect(index.sourceFor('Linked.sfc', 'snes'), RommLinkSource.auto);
+        expect(index.sourceFor('Legacy', 'snes'), RommLinkSource.auto);
+        expect(index.sourceFor('Missing.sfc', 'snes'), isNull);
+        expect(index.lookup('Picked', 'snes'), 12);
+      },
+    );
+
+    test('an index built from ids alone reads every row as auto', () {
+      const index = RommRomIdIndex({'snes\tGame.sfc': 12});
+      expect(index.sourceFor('Game.sfc', 'snes'), RommLinkSource.auto);
+      expect(index.sourceFor('Other.sfc', 'snes'), isNull);
+    });
+
+    test('removeMapping unlinks a manual row too', () async {
+      await RommSaveMapRepository.putManualMapping(
+        romname: 'Game.sfc',
+        systemFolder: 'snes',
+        rommRomId: 12,
+      );
+
+      expect(await RommSaveMapRepository.removeMapping('Game', 'snes'), 12);
+      expect(
+        await RommSaveMapRepository.getMapping('Game.sfc', 'snes'),
+        isNull,
+      );
+    });
+
+    test('RommLinkSource round-trips through its stored value', () {
+      for (final source in RommLinkSource.values) {
+        expect(RommLinkSource.fromDb(source.dbValue), source);
+      }
+      expect(RommLinkSource.fromDb(null), RommLinkSource.auto);
+      expect(RommLinkSource.fromDb('garbage'), RommLinkSource.auto);
+    });
   });
 }

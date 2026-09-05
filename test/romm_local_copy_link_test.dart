@@ -212,6 +212,7 @@ void main() {
     test('never overwrites a row that points elsewhere', () async {
       await put('snes', 'a.sfc');
       await RommSaveMapRepository.putMapping(
+        source: RommLinkSource.download,
         romname: 'a.sfc',
         systemFolder: 'snes',
         rommRomId: 1,
