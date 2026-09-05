@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
@@ -10,10 +11,10 @@ import 'package:xml/xml.dart';
 
 import 'database_test_helper.dart';
 
-/// An in-memory SAF tree behind the importer's three read-only overrides.
+/// An in-memory SAF tree behind the importer's four read-only overrides.
 /// Records every call so a test can assert exactly how the tree was touched:
-/// one listing per folder, whole-file reads for gamelists only, and nothing
-/// that is not a list, read, or grant check.
+/// one listing per folder, whole-file reads for gamelists only, ranged reads
+/// for mirrored media, and nothing that is not a list, read, or grant check.
 class RecordingSaf {
   static const treeUri =
       'content://com.android.externalstorage.documents/tree/primary%3Aroms';
@@ -32,6 +33,13 @@ class RecordingSaf {
 
   /// Tree URIs the fake reports no persisted grant for.
   final Set<String> noPermission = {};
+
+  /// Free bytes the fake reports for the mirror volume (null: unmeasurable).
+  int? freeSpace = 1 << 40;
+
+  /// When set, every listing waits on it first, so a test can hold an import
+  /// open while it starts another.
+  Completer<void>? gate;
 
   /// Every call in order, as `op:uri`.
   final List<String> calls = [];
@@ -80,10 +88,22 @@ class RecordingSaf {
 
   Future<List<Map<String, dynamic>>> listFiles(String uri) async {
     calls.add('list:$uri');
+    final gate = this.gate;
+    if (gate != null) await gate.future;
     if (failListing.contains(uri)) {
       throw StateError('listing refused for $uri');
     }
     return listings[uri] ?? const [];
+  }
+
+  Future<Uint8List?> readRange(String uri, int offset, int length) async {
+    calls.add('range:$uri:$offset');
+    if (failRead.contains(uri)) throw StateError('read refused for $uri');
+    final data = documents[uri];
+    if (data == null) return null;
+    if (offset >= data.length) return Uint8List(0);
+    final end = (offset + length).clamp(0, data.length);
+    return Uint8List.sublistView(data, offset, end);
   }
 
   Future<Uint8List?> readFile(String uri) async {
@@ -103,12 +123,18 @@ class RecordingSaf {
   Iterable<String> get readUris =>
       calls.where((c) => c.startsWith('read:')).map((c) => c.substring(5));
 
-  /// Routes the importer's SAF operations through this fake; the override
-  /// slots are cleared again by [uninstall].
-  void install() {
+  Iterable<String> get rangeCalls => calls.where((c) => c.startsWith('range:'));
+
+  /// Routes the importer's SAF operations through this fake, with the media
+  /// mirror rooted at [mirrorRoot]; the override slots are cleared again by
+  /// [uninstall].
+  void install({required String mirrorRoot}) {
     EsdeImportService.safListFilesOverride = listFiles;
     EsdeImportService.safReadFileOverride = readFile;
+    EsdeImportService.safReadRangeOverride = readRange;
     EsdeImportService.safHasPermissionOverride = hasPermission;
+    EsdeImportService.freeSpaceBytesOverride = (_) async => freeSpace;
+    EsdeImportService.mirrorRootOverride = mirrorRoot;
     // A content:// tree with no real path is the SAF-branch trigger.
     EsdeImportService.safRomFolderResolverOverride = (_) async => null;
   }
@@ -116,7 +142,10 @@ class RecordingSaf {
   static void uninstall() {
     EsdeImportService.safListFilesOverride = null;
     EsdeImportService.safReadFileOverride = null;
+    EsdeImportService.safReadRangeOverride = null;
     EsdeImportService.safHasPermissionOverride = null;
+    EsdeImportService.freeSpaceBytesOverride = null;
+    EsdeImportService.mirrorRootOverride = null;
     EsdeImportService.safRomFolderResolverOverride = null;
   }
 }
@@ -603,6 +632,11 @@ void main() {
     late dynamic db;
 
     setUp(() async {
+      // Pin the mirror root to a temp dir so no test in this group can ever
+      // reach the real user-data path through _resolveMirrorRoot().
+      EsdeImportService.mirrorRootOverride = Directory.systemTemp
+          .createTempSync('esde_infolder_mirror_')
+          .path;
       db = await dbHelper.setUp();
       await db.execute(
         "INSERT INTO app_systems (id, real_name, folder_name, screenscraper_id) VALUES ('snes', 'SNES', 'snes', 4)",
@@ -613,6 +647,9 @@ void main() {
     });
 
     tearDown(() async {
+      final pinned = EsdeImportService.mirrorRootOverride;
+      EsdeImportService.mirrorRootOverride = null;
+      if (pinned != null) Directory(pinned).deleteSync(recursive: true);
       EsdeImportService.safRomFolderResolverOverride = null;
       await dbHelper.tearDown();
     });
@@ -922,6 +959,8 @@ void main() {
     final dbHelper = DatabaseTestHelper();
     late dynamic db;
     late RecordingSaf saf;
+    late Directory userData;
+    late String mirrorRoot;
 
     setUp(() async {
       db = await dbHelper.setUp();
@@ -931,13 +970,28 @@ void main() {
       await db.execute(
         "INSERT INTO app_systems (id, real_name, folder_name, screenscraper_id) VALUES ('nes', 'NES', 'nes', 3)",
       );
-      saf = RecordingSaf()..install();
+      userData = Directory.systemTemp.createTempSync('esde_saf_userdata_');
+      mirrorRoot = p.join(userData.path, 'imported_media');
+      saf = RecordingSaf()..install(mirrorRoot: mirrorRoot);
     });
 
     tearDown(() async {
       RecordingSaf.uninstall();
       await dbHelper.tearDown();
+      userData.deleteSync(recursive: true);
     });
+
+    /// Relative paths of every file under the mirror root, sorted.
+    List<String> mirrored() {
+      final dir = Directory(mirrorRoot);
+      if (!dir.existsSync()) return const [];
+      return dir
+          .listSync(recursive: true)
+          .whereType<File>()
+          .map((f) => p.relative(f.path, from: mirrorRoot))
+          .toList()
+        ..sort();
+    }
 
     Future<void> seedRom(String filename, String systemId) => db.execute(
       "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('$filename', 'content://roms/$systemId/$filename', '$systemId')",
@@ -989,11 +1043,14 @@ void main() {
         ]);
         expect(result.folderOutcomes.single.folder, RecordingSaf.treeUri);
 
-        // Exactly one listing of the root and one of the system folder; no
-        // listing of the category folders and no per-document probe.
-        expect(saf.listedUris, [RecordingSaf.treeUri, snesUri]);
-        expect(saf.listedUris, isNot(contains(coversUri)));
-        expect(saf.listedUris, isNot(contains(shotsUri)));
+        // Exactly one listing of the root, one of the system folder, and
+        // one per mapped category for the mirror; no per-document probe.
+        expect(saf.listedUris, [
+          RecordingSaf.treeUri,
+          snesUri,
+          coversUri,
+          shotsUri,
+        ]);
         expect(saf.readUris, [gamelistUri]);
 
         // Metadata lands exactly as the real-path import writes it.
@@ -1005,10 +1062,186 @@ void main() {
         expect(rows.single['real_name'], 'Sonic');
         expect(rows.single['esde_imported'], 1);
 
-        // No media root until the mirror step provides a real directory.
-        expect(await mediaLocation('snes'), isEmpty);
+        // The category folders were mirrored into user data and the mirror
+        // directory, not the content:// folder, is the system's media root.
+        // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Mirror Media Root"
+        expect(mirrored(), [
+          p.join('snes', 'covers', 'sonic.png'),
+          p.join('snes', 'screenshots', 'sonic.png'),
+        ]);
+        expect(
+          (await mediaLocation('snes'))['esde_media_root'],
+          p.join(mirrorRoot, 'snes'),
+        );
+        expect(result.safSystemsMirrored, 1);
+        expect(result.safFilesCopied, 2);
+        expect(result.safFilesSkippedUnchanged, 0);
+        expect(result.safFilesFailed, 0);
+        expect(result.safBytesCopied, 6);
+        expect(result.safBudgetRefused, isFalse);
+        expect(result.cancelled, isFalse);
+        expect(result.refusedAlreadyRunning, isFalse);
       },
     );
+
+    test('a second run skips the mirrored files by size', () async {
+      await seedRom('sonic.smc', 'snes');
+      saf.dir('snes');
+      saf.file('snes/gamelist.xml', sonicGamelist);
+      saf.dir('snes/covers');
+      saf.file('snes/covers/sonic.png', 'png');
+      await EsdeImportService.importInFolder([RecordingSaf.treeUri]);
+      saf.calls.clear();
+
+      final result = await EsdeImportService.importInFolder([
+        RecordingSaf.treeUri,
+      ]);
+
+      expect(result.safFilesCopied, 0);
+      expect(result.safFilesSkippedUnchanged, 1);
+      expect(result.safBytesCopied, 0);
+      expect(result.safSystemsMirrored, 1);
+      expect(saf.rangeCalls, isEmpty);
+      expect(
+        (await mediaLocation('snes'))['esde_media_root'],
+        p.join(mirrorRoot, 'snes'),
+      );
+    });
+
+    test('records no media root when the mirror ends up empty', () async {
+      await seedRom('sonic.smc', 'snes');
+      saf.dir('snes');
+      saf.file('snes/gamelist.xml', sonicGamelist);
+      final coversUri = saf.dir('snes/covers'); // present but empty
+
+      final result = await EsdeImportService.importInFolder([
+        RecordingSaf.treeUri,
+      ]);
+
+      expect(result.gamesImported, 1);
+      expect(result.safSystemsMirrored, 0);
+      expect(result.safFilesCopied, 0);
+      expect(saf.listedUris, contains(coversUri));
+      expect(mirrored(), isEmpty);
+      expect(await mediaLocation('snes'), isEmpty);
+    });
+
+    // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Mirror Media Root"
+    test('a SAF source points its media dir at the mirror directory', () async {
+      final snesUri = saf.dir('snes');
+      saf.file('snes/gamelist.xml', sonicGamelist);
+      saf.dir('snes/covers');
+
+      final withMirror = await EsdeImportService.discoverSafSourcesForTest(
+        RecordingSaf.treeUri,
+        mirrorRoot: mirrorRoot,
+      );
+      final withoutMirror = await EsdeImportService.discoverSafSourcesForTest(
+        RecordingSaf.treeUri,
+      );
+
+      expect(withMirror.single.safMirrorDir, p.join(mirrorRoot, 'snes'));
+      expect(withMirror.single.systemMediaDir, p.join(mirrorRoot, 'snes'));
+      expect(withMirror.single.mediaRoot, snesUri);
+      expect(withoutMirror.single.safMirrorDir, isNull);
+      expect(withoutMirror.single.systemMediaDir, snesUri);
+    });
+
+    // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Storage Budget Guard"
+    test('still imports metadata when the mirror budget is refused', () async {
+      await seedRom('sonic.smc', 'snes');
+      saf.dir('snes');
+      saf.file('snes/gamelist.xml', sonicGamelist);
+      saf.dir('snes/covers');
+      saf.file('snes/covers/sonic.png', 'png');
+      saf.freeSpace = 1;
+
+      final result = await EsdeImportService.importInFolder([
+        RecordingSaf.treeUri,
+      ]);
+
+      expect(result.gamesImported, 1);
+      expect(result.systemsImportedViaSaf, 1);
+      expect(result.safBudgetRefused, isTrue);
+      expect(result.safBudgetRequiredBytes, 3);
+      expect(result.safBudgetAvailableBytes, 1);
+      expect(result.safFilesCopied, 0);
+      expect(result.safSystemsMirrored, 0);
+      expect(saf.rangeCalls, isEmpty);
+      expect(mirrored(), isEmpty);
+      expect(await mediaLocation('snes'), isEmpty);
+      final rows = await db.rawQuery(
+        'SELECT filename FROM user_screenscraper_metadata',
+      );
+      expect(rows.single['filename'], 'sonic.smc');
+    });
+
+    // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Concurrency Safety"
+    test('stops the mirror between files and reports cancellation', () async {
+      await seedRom('sonic.smc', 'snes');
+      saf.dir('snes');
+      saf.file('snes/gamelist.xml', sonicGamelist);
+      saf.dir('snes/covers');
+      saf.file('snes/covers/a.png', 'aaa');
+      saf.file('snes/covers/b.png', 'bbb');
+      saf.file('snes/covers/c.png', 'ccc');
+      final progress = <(String, int, int)>[];
+
+      final result = await EsdeImportService.importInFolder(
+        [RecordingSaf.treeUri],
+        shouldStop: () => mirrored().isNotEmpty,
+        onMirrorProgress: (system, copied, total) =>
+            progress.add((system, copied, total)),
+      );
+
+      expect(result.cancelled, isTrue);
+      expect(result.gamesImported, 1);
+      expect(result.safFilesCopied, 1);
+      expect(mirrored(), [p.join('snes', 'covers', 'a.png')]);
+      // The copied file is kept and is enough to record the media root.
+      expect(result.safSystemsMirrored, 1);
+      expect(
+        (await mediaLocation('snes'))['esde_media_root'],
+        p.join(mirrorRoot, 'snes'),
+      );
+      expect(progress, [('snes', 0, 3), ('snes', 1, 3)]);
+    });
+
+    test('refuses a second start while an import is running', () async {
+      await seedRom('sonic.smc', 'snes');
+      saf.dir('snes');
+      saf.file('snes/gamelist.xml', sonicGamelist);
+      saf.gate = Completer<void>();
+
+      final first = EsdeImportService.importInFolder([RecordingSaf.treeUri]);
+      expect(EsdeImportService.isRunning, isTrue);
+
+      final second = await EsdeImportService.importInFolder([
+        RecordingSaf.treeUri,
+      ]);
+      expect(second.refusedAlreadyRunning, isTrue);
+      expect(second.mode, GamelistSourceMode.inFolder);
+      expect(second.systemsFound, 0);
+      final esde = await EsdeImportService.import('/nowhere');
+      expect(esde.refusedAlreadyRunning, isTrue);
+      await expectLater(
+        EsdeImportService.reset(),
+        throwsA(isA<EsdeImportBusyException>()),
+      );
+
+      saf.gate!.complete();
+      final result = await first;
+      expect(result.refusedAlreadyRunning, isFalse);
+      expect(result.gamesImported, 1);
+      expect(EsdeImportService.isRunning, isFalse);
+
+      // The guard is released: the next run proceeds.
+      final again = await EsdeImportService.importInFolder([
+        RecordingSaf.treeUri,
+      ]);
+      expect(again.refusedAlreadyRunning, isFalse);
+      expect(again.systemsMatched, 1);
+    });
 
     test(
       'discovers the mapped category folders from the one subfolder listing',
@@ -1235,14 +1468,14 @@ void main() {
     );
 
     test(
-      'counts a media-only SAF subfolder as pending instead of linking it',
+      'mirrors a media-only SAF subfolder and links it to its system',
       () async {
         await seedRom('sonic.smc', 'snes');
         saf.dir('snes');
         saf.file('snes/gamelist.xml', sonicGamelist);
-        // nes: mapped art folder, no gamelist → pending for the mirror.
+        // nes: mapped art folder with a file, no gamelist → mirrored + linked.
         saf.dir('nes');
-        saf.dir('nes/covers');
+        final nesCoversUri = saf.dir('nes/covers');
         saf.file('nes/covers/mario.png', 'png');
         // gb: unmapped folder only → not media evidence.
         await db.execute(
@@ -1259,19 +1492,48 @@ void main() {
         ]);
 
         expect(result.systemsMatched, 1);
-        expect(result.mediaOnlyLinked, 0);
-        expect(result.safMediaOnlyPending, 1);
-        expect(await mediaLocation('nes'), isEmpty);
-        final rows = await db.rawQuery('SELECT * FROM user_system_settings');
-        expect(rows, isEmpty);
-        // Still one listing per system subfolder, none of the category dirs.
+        expect(result.mediaOnlyLinked, 1);
+        expect(result.safMediaOnlyPending, 0);
+        expect(result.safSystemsMirrored, 1);
+        expect(result.safFilesCopied, 1);
+        expect(mirrored(), [p.join('nes', 'covers', 'mario.png')]);
+        expect(
+          (await mediaLocation('nes'))['esde_media_root'],
+          p.join(mirrorRoot, 'nes'),
+        );
+        // snes had no category folders, so it gets no root.
+        final rows = await db.rawQuery(
+          'SELECT app_system_id FROM user_system_settings',
+        );
+        expect(rows.map((r) => r['app_system_id']), ['nes']);
+        // One listing per system subfolder, then the mirror's one listing of
+        // the linked system's category folder; foo resolves to no system and
+        // its art folder is never listed.
         expect(saf.listedUris, [
           RecordingSaf.treeUri,
           RecordingSaf.uriOf('foo'),
           RecordingSaf.uriOf('gb'),
           RecordingSaf.uriOf('nes'),
           RecordingSaf.uriOf('snes'),
+          nesCoversUri,
         ]);
+      },
+    );
+
+    test(
+      'does not link a media-only SAF subfolder whose folders are empty',
+      () async {
+        saf.dir('nes');
+        final coversUri = saf.dir('nes/covers');
+
+        final result = await EsdeImportService.importInFolder([
+          RecordingSaf.treeUri,
+        ]);
+
+        expect(result.mediaOnlyLinked, 0);
+        expect(result.safSystemsMirrored, 0);
+        expect(saf.listedUris, contains(coversUri));
+        expect(await mediaLocation('nes'), isEmpty);
       },
     );
 
@@ -1282,6 +1544,7 @@ void main() {
         // empty listing as an empty tree, so the SPEC-0002 skip outcome holds.
         RecordingSaf.uninstall();
         EsdeImportService.safRomFolderResolverOverride = (_) async => null;
+        EsdeImportService.mirrorRootOverride = mirrorRoot;
 
         final result = await EsdeImportService.importInFolder([
           RecordingSaf.treeUri,

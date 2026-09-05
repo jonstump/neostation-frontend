@@ -277,10 +277,12 @@ void main() {
       expect(snapshot(esdeRoot), equals(before));
     });
 
-    // A SAF tree can only be touched through the importer's three read-only
+    // A SAF tree can only be touched through the importer's four read-only
     // overrides; the fake records every call, so any write, create, move, or
-    // delete would show up as an unexpected op — and the service source is
-    // checked for the mutating SAF calls it must never reference.
+    // delete would show up as an unexpected op — and the service and mirror
+    // sources are checked for the mutating SAF calls they must never
+    // reference. The mirror's own writes land under the user-data
+    // `imported_media` root and nowhere else.
     // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Media Mirror"
     test('SAF in-folder import issues only read-only SAF calls', () async {
       const treeUri =
@@ -310,8 +312,17 @@ void main() {
           },
         ],
       };
+      final mirrorRoot = path.join(tempDir.path, 'imported_media');
       final calls = <String>[];
       EsdeImportService.safRomFolderResolverOverride = (_) async => null;
+      EsdeImportService.mirrorRootOverride = mirrorRoot;
+      EsdeImportService.freeSpaceBytesOverride = (_) async => 1 << 40;
+      EsdeImportService.safReadRangeOverride = (uri, offset, length) async {
+        calls.add('readRange');
+        return offset == 0 && uri == '$coversUri%2Fsonic.png'
+            ? Uint8List.fromList('png'.codeUnits)
+            : Uint8List(0);
+      };
       EsdeImportService.safHasPermissionOverride = (uri) async {
         calls.add('hasPermission');
         return true;
@@ -335,42 +346,77 @@ void main() {
         EsdeImportService.safHasPermissionOverride = null;
         EsdeImportService.safListFilesOverride = null;
         EsdeImportService.safReadFileOverride = null;
+        EsdeImportService.safReadRangeOverride = null;
+        EsdeImportService.freeSpaceBytesOverride = null;
+        EsdeImportService.mirrorRootOverride = null;
       });
+      final before = snapshot(tempDir);
 
       final result = await EsdeImportService.importInFolder([treeUri]);
       // The run must have done real work, or the assertion proves nothing.
       expect(result.gamesImported, 1);
       expect(result.systemsImportedViaSaf, 1);
+      expect(result.safFilesCopied, 1);
 
       expect(calls, isNotEmpty);
-      const readOnlyOps = {'hasPermission', 'listFiles', 'readFile'};
+      expect(calls, contains('readRange'));
+      const readOnlyOps = {
+        'hasPermission',
+        'listFiles',
+        'readFile',
+        'readRange',
+      };
       expect(
         calls.where((c) => !readOnlyOps.contains(c)),
         isEmpty,
         reason: 'a SAF import may only list, read, and check grants',
       );
-      // No media root for a SAF system until the mirror provides one.
+      // The mirror directory, never the content:// folder, is the media root.
+      // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Mirror Media Root"
       final roots = await db.rawQuery(
         'SELECT esde_media_root FROM user_system_settings',
       );
-      expect(roots, isEmpty);
+      expect(roots.single['esde_media_root'], path.join(mirrorRoot, 'snes'));
+      expect(
+        File(path.join(mirrorRoot, 'snes', 'covers', 'sonic.png')).existsSync(),
+        isTrue,
+      );
 
-      // The importer must not even reference a mutating SAF call.
-      final source = File(
+      // Everything the run wrote sits under the mirror root: the snapshot of
+      // the temp dir only grew inside imported_media.
+      final after = snapshot(tempDir);
+      final added = after.keys.where((k) => !before.containsKey(k));
+      expect(added, isNotEmpty);
+      expect(
+        added.where(
+          (rel) =>
+              !path.isWithin(mirrorRoot, path.join(tempDir.path, rel)) &&
+              path.join(tempDir.path, rel) != mirrorRoot,
+        ),
+        isEmpty,
+        reason: 'the mirror must only write under $mirrorRoot',
+      );
+
+      // Neither the importer nor the mirror may even reference a mutating
+      // SAF call.
+      for (final sourcePath in const [
         'lib/services/esde_import_service.dart',
-      ).readAsStringSync();
-      for (final mutator in const [
-        'SafDirectoryService.createDirectory',
-        'SafDirectoryService.moveFile',
-        'SafDirectoryService.writeTextFile',
-        'SafDirectoryService.deleteFile',
-        'SafDirectoryService.releasePermission',
+        'lib/services/esde/saf_media_mirror.dart',
       ]) {
-        expect(
-          source.contains(mutator),
-          isFalse,
-          reason: 'the importer is read-only toward SAF; found $mutator',
-        );
+        final source = File(sourcePath).readAsStringSync();
+        for (final mutator in const [
+          'SafDirectoryService.createDirectory',
+          'SafDirectoryService.moveFile',
+          'SafDirectoryService.writeTextFile',
+          'SafDirectoryService.deleteFile',
+          'SafDirectoryService.releasePermission',
+        ]) {
+          expect(
+            source.contains(mutator),
+            isFalse,
+            reason: '$sourcePath is read-only toward SAF; found $mutator',
+          );
+        }
       }
     });
   });
