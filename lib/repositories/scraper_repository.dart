@@ -5,6 +5,18 @@ import '../models/rom_fingerprint.dart';
 import '../services/credential_store.dart';
 import 'package:neostation/services/logger_service.dart';
 
+/// Where a system's imported gamelist media lives, as recorded in
+/// `user_system_settings`. Exactly one of the two locations is meaningful per
+/// system: [esdeMediaDir] is an ES-DE `downloaded_media` subfolder *name*
+/// (joined under the global ES-DE media root at read time), [esdeMediaRoot] is
+/// the *absolute* platform folder of an in-folder import. [folderName] is the
+/// NeoStation system folder the row belongs to.
+typedef EsdeSystemMediaLocation = ({
+  String folderName,
+  String? esdeMediaDir,
+  String? esdeMediaRoot,
+});
+
 class MetadataTransferResult {
   final String appSystemId;
   final bool metadataTransferred;
@@ -858,6 +870,98 @@ class ScraperRepository {
     } catch (e) {
       _log.e('Error resolving system for folder "$folderName": $e');
       return null;
+    }
+  }
+
+  /// Records [mediaRoot] — the absolute platform folder an in-folder gamelist
+  /// import found media in — as the system's `esde_media_root`.
+  ///
+  /// Upserts the `user_system_settings` row for [appSystemId] inside one
+  /// transaction with parameterized statements. `esde_media_dir` (the ES-DE
+  /// folder-name form) is left exactly as it is: the two columns are
+  /// independent and [FileProvider] prefers the absolute root when both are
+  /// set. Pass null to clear a previously recorded root.
+  ///
+  /// Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ
+  /// "Per-System Media Root", REQ "Database Operation Standards"
+  static Future<bool> recordEsdeMediaRoot(
+    String appSystemId,
+    String? mediaRoot,
+  ) async {
+    final normalized = mediaRoot == null || mediaRoot.trim().isEmpty
+        ? null
+        : mediaRoot.trim();
+    try {
+      final db = await SqliteService.getDatabase();
+      await db.transaction((txn) async {
+        final existing = await txn.query(
+          'user_system_settings',
+          columns: ['app_system_id'],
+          where: 'app_system_id = ?',
+          whereArgs: [appSystemId],
+          limit: 1,
+        );
+        final now = DateTime.now().toIso8601String();
+        if (existing.isEmpty) {
+          await txn.insert('user_system_settings', {
+            'app_system_id': appSystemId,
+            'esde_media_root': normalized,
+            'updated_at': now,
+          });
+        } else {
+          await txn.update(
+            'user_system_settings',
+            {'esde_media_root': normalized, 'updated_at': now},
+            where: 'app_system_id = ?',
+            whereArgs: [appSystemId],
+          );
+        }
+      });
+      return true;
+    } catch (e) {
+      _log.e('Error recording media root for system "$appSystemId": $e');
+      return false;
+    }
+  }
+
+  /// Every system with an imported-media location recorded: either an ES-DE
+  /// `esde_media_dir` folder name, an in-folder `esde_media_root` absolute
+  /// path, or both. Systems with neither are omitted. Values are trimmed and
+  /// empty strings read as null, so callers can test for null alone.
+  ///
+  /// Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ
+  /// "Per-System Media Root"
+  static Future<List<EsdeSystemMediaLocation>> getEsdeMediaLocations() async {
+    try {
+      final db = await SqliteService.getDatabase();
+      final rows = await db.rawQuery('''
+        SELECT s.folder_name AS folder_name,
+               ss.esde_media_dir AS esde_media_dir,
+               ss.esde_media_root AS esde_media_root
+        FROM user_system_settings ss
+        JOIN app_systems s ON s.id = ss.app_system_id
+        WHERE (ss.esde_media_dir IS NOT NULL AND ss.esde_media_dir != '')
+           OR (ss.esde_media_root IS NOT NULL AND ss.esde_media_root != '')
+      ''');
+      String? clean(Object? v) {
+        final t = v?.toString().trim();
+        return t == null || t.isEmpty ? null : t;
+      }
+
+      final out = <EsdeSystemMediaLocation>[];
+      for (final r in rows) {
+        final folderName = clean(r['folder_name']);
+        if (folderName == null) continue;
+        out.add((
+          folderName: folderName,
+          esdeMediaDir: clean(r['esde_media_dir']),
+          esdeMediaRoot: clean(r['esde_media_root']),
+        ));
+      }
+      return out;
+    } catch (e) {
+      _log.e('Error reading imported media locations: $e');
+      return const [];
     }
   }
 

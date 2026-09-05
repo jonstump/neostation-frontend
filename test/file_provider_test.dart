@@ -170,6 +170,237 @@ void main() {
       ]);
     });
   });
+  group('FileProvider per-system media root', () {
+    // In-folder (RomM / Batocera) imports record the platform folder itself as
+    // the system's absolute media root; ES-DE imports keep recording a folder
+    // name under the global ES-DE root. Both must resolve side by side, and
+    // an absolute root must not depend on the ES-DE root path setting.
+    //
+    // Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ
+    // "Per-System Media Root", REQ "Media Category Mapping"
+    final dbHelper = DatabaseTestHelper();
+    late dynamic db;
+    late FileProvider provider;
+
+    setUp(() async {
+      db = await dbHelper.setUp();
+      await db.execute(
+        "INSERT INTO app_systems (id, real_name, folder_name, screenscraper_id) VALUES ('snes', 'SNES', 'snes', 4)",
+      );
+      await db.execute(
+        "INSERT INTO app_systems (id, real_name, folder_name, screenscraper_id) VALUES ('nes', 'NES', 'nes', 3)",
+      );
+      await db.execute(
+        "INSERT INTO app_systems (id, real_name, folder_name, screenscraper_id) VALUES ('gba', 'GBA', 'gba', 12)",
+      );
+      provider = FileProvider();
+    });
+
+    tearDown(() async {
+      await dbHelper.tearDown();
+    });
+
+    test('resolves an in-folder system with no ES-DE root configured', () async {
+      await db.execute(
+        "INSERT INTO user_system_settings (app_system_id, esde_media_root) VALUES ('snes', '/roms/snes')",
+      );
+      await provider.refreshEsde();
+
+      expect(
+        provider.getEsdeMediaCandidates('snes', 'box2d', 'Chrono Trigger.sfc'),
+        [
+          '/roms/snes/covers/Chrono Trigger.png',
+          '/roms/snes/covers/Chrono Trigger.jpg',
+          '/roms/snes/covers/Chrono Trigger.webp',
+          '/roms/snes/3dboxes/Chrono Trigger.png',
+          '/roms/snes/3dboxes/Chrono Trigger.jpg',
+          '/roms/snes/3dboxes/Chrono Trigger.webp',
+          '/roms/snes/thumbnails/Chrono Trigger.png',
+          '/roms/snes/thumbnails/Chrono Trigger.jpg',
+          '/roms/snes/thumbnails/Chrono Trigger.webp',
+        ],
+      );
+    });
+
+    test('resolves an in-folder system when the ES-DE root is blank', () async {
+      await db.execute(
+        "INSERT INTO user_config (esde_folder_path) VALUES ('')",
+      );
+      await db.execute(
+        "INSERT INTO user_system_settings (app_system_id, esde_media_root) VALUES ('snes', '/roms/snes')",
+      );
+      await provider.refreshEsde();
+
+      expect(provider.getEsdeMediaCandidates('snes', 'wheels', 'Game.sfc'), [
+        '/roms/snes/marquees/Game.png',
+        '/roms/snes/marquees/Game.jpg',
+        '/roms/snes/marquees/Game.webp',
+      ]);
+    });
+
+    test('an ES-DE folder name alone still needs the ES-DE root', () async {
+      // Name-only rows are meaningless without the global root to join them
+      // under, so the pre-existing gate stays for them.
+      await db.execute(
+        "INSERT INTO user_system_settings (app_system_id, esde_media_dir) VALUES ('snes', 'snes')",
+      );
+      await provider.refreshEsde();
+
+      expect(
+        provider.getEsdeMediaCandidates('snes', 'box2d', 'sonic.smc'),
+        isEmpty,
+      );
+    });
+
+    test('ES-DE and in-folder systems resolve side by side', () async {
+      await db.execute(
+        "INSERT INTO user_config (esde_folder_path) VALUES ('/esde')",
+      );
+      await db.execute(
+        "INSERT INTO user_system_settings (app_system_id, esde_media_dir) VALUES ('snes', 'snes')",
+      );
+      await db.execute(
+        "INSERT INTO user_system_settings (app_system_id, esde_media_root) VALUES ('nes', '/roms/nes')",
+      );
+      await provider.refreshEsde();
+
+      expect(provider.getEsdeMediaCandidates('snes', 'fanarts', 'sonic.smc'), [
+        '/esde/downloaded_media/snes/fanart/sonic.png',
+        '/esde/downloaded_media/snes/fanart/sonic.jpg',
+        '/esde/downloaded_media/snes/fanart/sonic.webp',
+      ]);
+      expect(provider.getEsdeMediaCandidates('nes', 'fanarts', 'mario.nes'), [
+        '/roms/nes/fanart/mario.png',
+        '/roms/nes/fanart/mario.jpg',
+        '/roms/nes/fanart/mario.webp',
+      ]);
+      expect(
+        provider.getEsdeMediaCandidates('gba', 'fanarts', 'zelda.gba'),
+        isEmpty,
+        reason: 'a system with neither location recorded yields nothing',
+      );
+    });
+
+    test('an absolute root wins over an ES-DE folder name', () async {
+      await db.execute(
+        "INSERT INTO user_config (esde_folder_path) VALUES ('/esde')",
+      );
+      await db.execute(
+        "INSERT INTO user_system_settings (app_system_id, esde_media_dir, esde_media_root) VALUES ('snes', 'snes', '/roms/snes')",
+      );
+      await provider.refreshEsde();
+
+      expect(provider.getEsdeMediaCandidates('snes', 'wheels', 'sonic.smc'), [
+        '/roms/snes/marquees/sonic.png',
+        '/roms/snes/marquees/sonic.jpg',
+        '/roms/snes/marquees/sonic.webp',
+      ]);
+    });
+
+    test('screenshots fall back to RomM images after titlescreens', () async {
+      await db.execute(
+        "INSERT INTO user_system_settings (app_system_id, esde_media_root) VALUES ('snes', '/roms/snes')",
+      );
+      await provider.refreshEsde();
+
+      expect(
+        provider.getEsdeMediaCandidates('snes', 'screenshots', 'sonic.smc'),
+        [
+          '/roms/snes/screenshots/sonic.png',
+          '/roms/snes/screenshots/sonic.jpg',
+          '/roms/snes/screenshots/sonic.webp',
+          '/roms/snes/titlescreens/sonic.png',
+          '/roms/snes/titlescreens/sonic.jpg',
+          '/roms/snes/titlescreens/sonic.webp',
+          '/roms/snes/images/sonic.png',
+          '/roms/snes/images/sonic.jpg',
+          '/roms/snes/images/sonic.webp',
+        ],
+      );
+    });
+
+    test('unmapped folders never produce candidates', () async {
+      // A platform folder holding only manuals/, miximages/, backcovers/,
+      // bezels/ or physicalmedia/ contributes nothing to any slot.
+      await db.execute(
+        "INSERT INTO user_system_settings (app_system_id, esde_media_root) VALUES ('snes', '/roms/snes')",
+      );
+      await provider.refreshEsde();
+
+      const unmapped = [
+        'manuals',
+        'miximages',
+        'backcovers',
+        'bezels',
+        'physicalmedia',
+      ];
+      for (final type in const [
+        'box2d',
+        'wheels',
+        'screenshots',
+        'fanarts',
+        'videos',
+      ]) {
+        final candidates = provider.getEsdeMediaCandidates(
+          'snes',
+          type,
+          'sonic.smc',
+        );
+        for (final folder in unmapped) {
+          expect(
+            candidates,
+            isNot(contains(contains('/roms/snes/$folder/'))),
+            reason: '$type must not look in $folder',
+          );
+        }
+      }
+      expect(
+        provider.getEsdeMediaCandidates('snes', 'manuals', 'sonic.smc'),
+        isEmpty,
+        reason: 'an unmapped media type is not a slot at all',
+      );
+    });
+
+    test('honours the recorded subfolder under an absolute root', () async {
+      await db.execute(
+        "INSERT INTO user_system_settings (app_system_id, esde_media_root) VALUES ('snes', '/roms/snes')",
+      );
+      await db.execute(
+        "INSERT INTO user_screenscraper_metadata (app_system_id, filename, esde_media_subdir) VALUES ('snes', 'sonic.smc', 'Hacks')",
+      );
+      await provider.refreshEsde();
+
+      expect(provider.getEsdeMediaCandidates('snes', 'wheels', 'sonic.smc'), [
+        '/roms/snes/marquees/Hacks/sonic.png',
+        '/roms/snes/marquees/Hacks/sonic.jpg',
+        '/roms/snes/marquees/Hacks/sonic.webp',
+        '/roms/snes/marquees/sonic.png',
+        '/roms/snes/marquees/sonic.jpg',
+        '/roms/snes/marquees/sonic.webp',
+      ]);
+    });
+
+    test(
+      'videos under an absolute root keep the ES-DE extension order',
+      () async {
+        await db.execute(
+          "INSERT INTO user_system_settings (app_system_id, esde_media_root) VALUES ('snes', '/roms/snes')",
+        );
+        await provider.refreshEsde();
+
+        expect(provider.getEsdeVideoCandidates('snes', 'sonic.smc'), [
+          '/roms/snes/videos/sonic.mp4',
+          '/roms/snes/videos/sonic.webm',
+          '/roms/snes/videos/sonic.mkv',
+          '/roms/snes/videos/sonic.avi',
+          '/roms/snes/videos/sonic.wmv',
+          '/roms/snes/videos/sonic.mov',
+          '/roms/snes/videos/sonic.m4v',
+        ]);
+      },
+    );
+  });
+
   group('FileProvider.getEsdeVideoCandidates', () {
     final dbHelper = DatabaseTestHelper();
     late dynamic db;

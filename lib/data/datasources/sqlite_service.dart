@@ -459,7 +459,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 156;
+  static const int _databaseVersion = 157;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -2121,6 +2121,7 @@ class SqliteService {
         prefer_file_name INTEGER DEFAULT 0,
         subfolder_view INTEGER DEFAULT 0,
         esde_media_dir TEXT,
+        esde_media_root TEXT,
         updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (app_system_id) REFERENCES app_systems(id) ON DELETE CASCADE,
         UNIQUE(app_system_id)

@@ -332,4 +332,101 @@ void main() {
       expect(lang, 'es');
     });
   });
+
+  group('ScraperRepository imported media locations', () {
+    // Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ
+    // "Per-System Media Root", REQ "Database Operation Standards"
+    test(
+      'recordEsdeMediaRoot inserts a settings row when none exists',
+      () async {
+        expect(
+          await ScraperRepository.recordEsdeMediaRoot('snes', '/roms/snes'),
+          isTrue,
+        );
+
+        final rows = await db.query(
+          'user_system_settings',
+          where: 'app_system_id = ?',
+          whereArgs: ['snes'],
+        );
+        expect(rows.length, 1);
+        expect(rows.first['esde_media_root'], '/roms/snes');
+        expect(rows.first['esde_media_dir'], isNull);
+      },
+    );
+
+    test(
+      'recordEsdeMediaRoot leaves an existing ES-DE folder name alone',
+      () async {
+        await db.execute(
+          "INSERT INTO user_system_settings (app_system_id, esde_media_dir, hide_logo) VALUES ('snes', 'snes', 1)",
+        );
+
+        await ScraperRepository.recordEsdeMediaRoot('snes', ' /roms/snes ');
+
+        final rows = await db.query(
+          'user_system_settings',
+          where: 'app_system_id = ?',
+          whereArgs: ['snes'],
+        );
+        expect(rows.length, 1, reason: 'must update, not duplicate, the row');
+        expect(rows.first['esde_media_root'], '/roms/snes');
+        expect(rows.first['esde_media_dir'], 'snes');
+        expect(rows.first['hide_logo'], 1, reason: 'other settings survive');
+      },
+    );
+
+    test('recordEsdeMediaRoot with null or blank clears the root', () async {
+      await ScraperRepository.recordEsdeMediaRoot('snes', '/roms/snes');
+      await ScraperRepository.recordEsdeMediaRoot('snes', '   ');
+
+      final rows = await db.query(
+        'user_system_settings',
+        where: 'app_system_id = ?',
+        whereArgs: ['snes'],
+      );
+      expect(rows.first['esde_media_root'], isNull);
+    });
+
+    test('recordEsdeMediaRoot stores quote-bearing paths verbatim', () async {
+      // Parameterized statements: a path with SQL punctuation round-trips.
+      const tricky = "/roms/it's a 'test'; DROP TABLE user_system_settings";
+      await ScraperRepository.recordEsdeMediaRoot('snes', tricky);
+
+      final rows = await db.query(
+        'user_system_settings',
+        where: 'app_system_id = ?',
+        whereArgs: ['snes'],
+      );
+      expect(rows.first['esde_media_root'], tricky);
+    });
+
+    test('getEsdeMediaLocations returns both columns per system', () async {
+      await db.execute(
+        "INSERT INTO user_system_settings (app_system_id, esde_media_dir) VALUES ('snes', 'snes')",
+      );
+      await db.execute(
+        "INSERT INTO user_system_settings (app_system_id, esde_media_root) VALUES ('nes', '/roms/nes')",
+      );
+      await db.execute(
+        "INSERT INTO user_system_settings (app_system_id, esde_media_dir, esde_media_root) VALUES ('unmapped', '', '')",
+      );
+
+      final locations = await ScraperRepository.getEsdeMediaLocations();
+      final byFolder = {for (final l in locations) l.folderName: l};
+
+      expect(byFolder.keys, unorderedEquals(['snes', 'nes']));
+      expect(byFolder['snes']!.esdeMediaDir, 'snes');
+      expect(byFolder['snes']!.esdeMediaRoot, isNull);
+      expect(byFolder['nes']!.esdeMediaDir, isNull);
+      expect(byFolder['nes']!.esdeMediaRoot, '/roms/nes');
+    });
+
+    test('getEsdeMediaLocations is empty when nothing is recorded', () async {
+      await db.execute(
+        "INSERT INTO user_system_settings (app_system_id, hide_logo) VALUES ('snes', 1)",
+      );
+      expect(await ScraperRepository.getEsdeMediaLocations(), isEmpty);
+    });
+  });
 }
