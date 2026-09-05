@@ -97,6 +97,21 @@ void main() {
       expect(message.tone, ScrapeResultTone.error);
     });
 
+    test('a missing-credentials failure keeps the info tone', () {
+      final message = scrapeResultMessageFor({
+        'success': false,
+        'message': AppLocale.scrapeNoCredentials,
+        'source': ScreenScraperService.scrapeSourceScreenscraper,
+        'rommAttempted': true,
+      });
+      expect(message.key, AppLocale.scrapeFailedWithReason);
+      expect(
+        message.localizedPlaceholders['reason'],
+        AppLocale.scrapeNoCredentials,
+      );
+      expect(message.tone, ScrapeResultTone.info);
+    });
+
     test('a failure with no message reads as an unexpected error', () {
       for (final result in [
         _result(

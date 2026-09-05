@@ -73,9 +73,15 @@ ScrapeResultMessage scrapeResultMessageFor(Map<String, dynamic> result) {
   final reasonKey = message is String && message.isNotEmpty
       ? message
       : AppLocale.scrapeUnexpectedError;
+  // Missing credentials is a setup condition, not a failed attempt, and the
+  // grid and card sites showed it as an info toast before the RomM-first
+  // chain moved the check behind the step; keep that tone.
+  final tone = reasonKey == AppLocale.scrapeNoCredentials
+      ? ScrapeResultTone.info
+      : ScrapeResultTone.error;
   return ScrapeResultMessage(
     key: AppLocale.scrapeFailedWithReason,
     localizedPlaceholders: {'reason': reasonKey},
-    tone: ScrapeResultTone.error,
+    tone: tone,
   );
 }
