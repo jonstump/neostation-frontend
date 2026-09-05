@@ -1230,4 +1230,30 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommFetchMetadataPartial:
       '항목 {count}개를 기록했지만 아트워크 {media}개를 다운로드하지 못했습니다',
   AppLocale.rommFetchMetadataFailed: 'RomM에서 메타데이터를 가져오지 못했습니다',
+||||||| parent of 42d930a (feat(romm): per-system "Fetch metadata from RomM" pass with progress and summary)
+
+  // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
+  AppLocale.rommSystemFetchAction: 'RomM에서 메타데이터 가져오기',
+  AppLocale.rommSystemFetchActionSubtitle:
+      '이 시스템의 연결된 모든 게임에 대해 메타데이터와 아트워크의 빈 곳을 채우거나 전부 교체합니다',
+  AppLocale.rommSystemFetchRequiresConnection: '이 작업을 사용하려면 RomM에 연결하세요',
+  AppLocale.rommSystemFetchRowRunning: '가져오는 중 {done}/{total} — 누르면 취소',
+  AppLocale.rommSystemFetchChooserTitle: '{system}의 메타데이터를 RomM에서 가져오기',
+  AppLocale.rommSystemFetchModeFillGaps: '빈 곳 채우기 (권장)',
+  AppLocale.rommSystemFetchModeFillGapsHint:
+      '비어 있는 항목과 누락된 아트워크만 기록합니다. 기존 데이터는 유지됩니다.',
+  AppLocale.rommSystemFetchModeReplace: '모두 교체',
+  AppLocale.rommSystemFetchModeReplaceWarning:
+      '모든 항목과 아트워크 파일을 덮어씁니다. 영어 이외의 설명은 지워지며 RomM은 배급사 정보를 제공하지 않습니다.',
+  AppLocale.rommSystemFetchStarted: '{system}의 RomM 메타데이터를 백그라운드에서 가져오는 중입니다',
+  AppLocale.rommSystemFetchPreparing: '{system}의 RomM 메타데이터 가져오기를 준비하는 중…',
+  AppLocale.rommSystemFetchProgress:
+      '{system}의 RomM 메타데이터 가져오는 중: {done}/{total}',
+  AppLocale.rommSystemFetchSummary:
+      '{system}의 RomM 메타데이터: 연결됨 {linked}, 채움 {filled}, 교체 {replaced}, 미연결 건너뜀 {unlinked}, 찾을 수 없음 {notFound}, 실패 {failed}',
+  AppLocale.rommSystemFetchCancelled: '취소됨 — {summary}',
+  AppLocale.rommSystemFetchBusy:
+      '{system}의 RomM 메타데이터 가져오기가 이미 실행 중입니다. 완료될 때까지 기다린 후 다시 시도하세요.',
+  AppLocale.rommSystemFetchFailedToStart:
+      '{system}의 RomM 메타데이터를 가져올 수 없습니다: {error}',
 };

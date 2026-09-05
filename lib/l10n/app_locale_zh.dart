@@ -1182,4 +1182,25 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.rommFetchMetadataNotFound: '在 RomM 上未找到：链接的 ROM 已不存在',
   AppLocale.rommFetchMetadataPartial: '已写入 {count} 个字段，但 {media} 张封面图下载失败',
   AppLocale.rommFetchMetadataFailed: '从 RomM 获取元数据失败',
+||||||| parent of 42d930a (feat(romm): per-system "Fetch metadata from RomM" pass with progress and summary)
+
+  // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
+  AppLocale.rommSystemFetchAction: '从 RomM 获取元数据',
+  AppLocale.rommSystemFetchActionSubtitle: '为此系统中所有已关联的游戏填补或替换元数据和图片',
+  AppLocale.rommSystemFetchRequiresConnection: '连接 RomM 以启用此操作',
+  AppLocale.rommSystemFetchRowRunning: '正在获取 {done}/{total} — 按下以取消',
+  AppLocale.rommSystemFetchChooserTitle: '从 RomM 获取 {system} 的元数据',
+  AppLocale.rommSystemFetchModeFillGaps: '填补空缺（推荐）',
+  AppLocale.rommSystemFetchModeFillGapsHint: '仅写入空白字段和缺失的图片，保留现有数据。',
+  AppLocale.rommSystemFetchModeReplace: '全部替换',
+  AppLocale.rommSystemFetchModeReplaceWarning:
+      '覆盖所有字段和图片文件。非英文描述将被清除，且 RomM 不提供发行商信息。',
+  AppLocale.rommSystemFetchStarted: '正在后台获取 {system} 的 RomM 元数据',
+  AppLocale.rommSystemFetchPreparing: '正在准备获取 {system} 的 RomM 元数据…',
+  AppLocale.rommSystemFetchProgress: '正在获取 {system} 的 RomM 元数据：{done}/{total}',
+  AppLocale.rommSystemFetchSummary:
+      '{system} 的 RomM 元数据：已关联 {linked}，已填补 {filled}，已替换 {replaced}，未关联跳过 {unlinked}，未找到 {notFound}，失败 {failed}',
+  AppLocale.rommSystemFetchCancelled: '已取消 — {summary}',
+  AppLocale.rommSystemFetchBusy: '{system} 的 RomM 元数据获取仍在进行中。请等待其完成后再试。',
+  AppLocale.rommSystemFetchFailedToStart: '无法获取 {system} 的 RomM 元数据：{error}',
 };

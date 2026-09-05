@@ -1347,4 +1347,35 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommFetchMetadataPartial:
       '{count} kolom ditulis, tetapi {media} gambar gagal diunduh',
   AppLocale.rommFetchMetadataFailed: 'Gagal mengambil metadata dari RomM',
+||||||| parent of 42d930a (feat(romm): per-system "Fetch metadata from RomM" pass with progress and summary)
+
+  // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
+  AppLocale.rommSystemFetchAction: 'Ambil metadata dari RomM',
+  AppLocale.rommSystemFetchActionSubtitle:
+      'Isi yang kosong atau ganti metadata dan gambar untuk semua game tertaut di sistem ini',
+  AppLocale.rommSystemFetchRequiresConnection:
+      'Hubungkan ke RomM untuk mengaktifkan tindakan ini',
+  AppLocale.rommSystemFetchRowRunning:
+      'Mengambil {done}/{total} — tekan untuk membatalkan',
+  AppLocale.rommSystemFetchChooserTitle:
+      'Ambil metadata dari RomM untuk {system}',
+  AppLocale.rommSystemFetchModeFillGaps: 'Isi yang kosong (disarankan)',
+  AppLocale.rommSystemFetchModeFillGapsHint:
+      'Hanya kolom kosong dan gambar yang hilang yang ditulis. Data yang ada tetap dipertahankan.',
+  AppLocale.rommSystemFetchModeReplace: 'Ganti semua',
+  AppLocale.rommSystemFetchModeReplaceWarning:
+      'Menimpa semua kolom dan berkas gambar. Deskripsi selain bahasa Inggris dihapus dan RomM tidak menyediakan penerbit.',
+  AppLocale.rommSystemFetchStarted:
+      'Mengambil metadata RomM untuk {system} di latar belakang',
+  AppLocale.rommSystemFetchPreparing:
+      'Menyiapkan pengambilan metadata RomM untuk {system}…',
+  AppLocale.rommSystemFetchProgress:
+      'Mengambil metadata RomM untuk {system}: {done}/{total}',
+  AppLocale.rommSystemFetchSummary:
+      'Metadata RomM untuk {system}: {linked} tertaut, {filled} diisi, {replaced} diganti, {unlinked} tidak tertaut dilewati, {notFound} tidak ditemukan, {failed} gagal',
+  AppLocale.rommSystemFetchCancelled: 'Dibatalkan — {summary}',
+  AppLocale.rommSystemFetchBusy:
+      'Pengambilan metadata RomM untuk {system} masih berjalan. Tunggu hingga selesai, lalu coba lagi.',
+  AppLocale.rommSystemFetchFailedToStart:
+      'Tidak dapat mengambil metadata RomM untuk {system}: {error}',
 };

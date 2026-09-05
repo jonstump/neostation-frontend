@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
@@ -11,16 +12,23 @@ import 'package:provider/provider.dart';
 import '../constants/system_folder_names.dart';
 import '../models/core_emulator_model.dart';
 import '../models/database_game_model.dart';
+import '../models/romm_metadata_fetch.dart';
 import '../models/standalone_emulator_model.dart';
 import '../themes/corner_radii.dart';
 import 'system_emulator_settings_dialog/models/emulator_list_item.dart';
 import '../models/system_model.dart';
+import '../providers/file_provider.dart';
+import '../providers/romm_provider.dart';
+import '../providers/scraping_provider.dart';
 import '../providers/sqlite_config_provider.dart';
 import '../providers/sqlite_database_provider.dart';
 import '../repositories/system_repository.dart';
 import '../repositories/emulator_repository.dart';
 import '../repositories/game_repository.dart';
+import '../repositories/romm_save_map_repository.dart';
 import '../services/config_service.dart';
+import '../services/global_notification_service.dart';
+import '../services/romm/romm_metadata_fetch.dart';
 import 'package:neostation/services/logger_service.dart';
 import '../utils/gamepad_nav.dart';
 import '../services/game_service.dart' show GamepadNavigationManager;
@@ -35,11 +43,13 @@ import '../utils/image_utils.dart';
 import '../widgets/core_footer.dart';
 import '../services/permission_service.dart';
 import '../widgets/tv_directory_picker.dart';
+import 'romm_system_fetch_mode_dialog.dart';
 
 part 'system_emulator_settings_dialog/gamepad_nav.dart';
 part 'system_emulator_settings_dialog/row_builders.dart';
 part 'system_emulator_settings_dialog/chrome.dart';
 part 'system_emulator_settings_dialog/tabs.dart';
+part 'system_emulator_settings_dialog/romm_fetch.dart';
 
 /// Steam-style dialog to configure emulators/cores for a system
 class SystemEmulatorSettingsDialog extends StatefulWidget {
@@ -80,7 +90,8 @@ class _SystemEmulatorSettingsDialogState
   int _emulatorActionIndex = 0;
   // 0: Prefer filename, 1: Hide ext, 2: (), 3: [], 4: Recursive (only when
   // [_offersRecursiveScan]), 5: Show subfolders (only when
-  // [_offersSubfolderView]).
+  // [_offersSubfolderView]), then "Fetch metadata from RomM" at
+  // [_rommFetchIndex] (only when [_offersRommFetch]).
   late int _totalGeneralItems;
   late List<GlobalKey> _generalItemKeys;
   late List<GlobalKey> _appearanceItemKeys;
@@ -121,7 +132,10 @@ class _SystemEmulatorSettingsDialogState
     // collection's id has no `app_systems` row for the setting to be written
     // against at all.
     _totalGeneralItems =
-        4 + (_offersRecursiveScan ? 1 : 0) + (_offersSubfolderView ? 1 : 0);
+        4 +
+        (_offersRecursiveScan ? 1 : 0) +
+        (_offersSubfolderView ? 1 : 0) +
+        (_offersRommFetch ? 1 : 0);
 
     _generalScrollController = ScrollController();
     _hiddenScrollController = ScrollController();
@@ -356,6 +370,21 @@ class _SystemEmulatorSettingsDialogState
   bool get _offersSubfolderView =>
       !SystemFolderNames.subfolderViewExcluded.contains(_system.folderName) &&
       !SystemFolderNames.isCollection(_system.folderName);
+
+  /// Whether this system offers the "Fetch metadata from RomM" row.
+  ///
+  /// Only a hardware system has games of its own to link: the aggregate
+  /// libraries would fetch every system's games under the wrong folder, and
+  /// the Android apps grid has no ROMs to link at all.
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
+  bool get _offersRommFetch =>
+      !SystemFolderNames.isAggregate(_system.folderName) &&
+      _system.folderName != 'android';
+
+  /// General-tab index of the RomM fetch row — always the last row, so the
+  /// existing indices are untouched whichever optional rows are offered.
+  int get _rommFetchIndex =>
+      4 + (_offersRecursiveScan ? 1 : 0) + (_offersSubfolderView ? 1 : 0);
 
   // ── Hidden games ──────────────────────────────────────────────────────────
 

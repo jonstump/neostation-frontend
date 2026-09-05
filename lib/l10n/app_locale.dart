@@ -1338,6 +1338,32 @@ mixin AppLocale {
   static const String searchLinkToRomm = 'search_link_to_romm';
   static const String rommLinkPickerCleanedQuery =
       'romm_link_picker_cleaned_query';
+  // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
+  static const String rommSystemFetchAction = 'romm_system_fetch_action';
+  static const String rommSystemFetchActionSubtitle =
+      'romm_system_fetch_action_subtitle';
+  static const String rommSystemFetchRequiresConnection =
+      'romm_system_fetch_requires_connection';
+  static const String rommSystemFetchRowRunning =
+      'romm_system_fetch_row_running';
+  static const String rommSystemFetchChooserTitle =
+      'romm_system_fetch_chooser_title';
+  static const String rommSystemFetchModeFillGaps =
+      'romm_system_fetch_mode_fill_gaps';
+  static const String rommSystemFetchModeFillGapsHint =
+      'romm_system_fetch_mode_fill_gaps_hint';
+  static const String rommSystemFetchModeReplace =
+      'romm_system_fetch_mode_replace';
+  static const String rommSystemFetchModeReplaceWarning =
+      'romm_system_fetch_mode_replace_warning';
+  static const String rommSystemFetchStarted = 'romm_system_fetch_started';
+  static const String rommSystemFetchPreparing = 'romm_system_fetch_preparing';
+  static const String rommSystemFetchProgress = 'romm_system_fetch_progress';
+  static const String rommSystemFetchSummary = 'romm_system_fetch_summary';
+  static const String rommSystemFetchCancelled = 'romm_system_fetch_cancelled';
+  static const String rommSystemFetchBusy = 'romm_system_fetch_busy';
+  static const String rommSystemFetchFailedToStart =
+      'romm_system_fetch_failed_to_start';
 
   // SPEC-0005 REQ "Per-Game Fetch Action" — Manage tab fetch row, mode
   // chooser, and outcome notifications

@@ -233,10 +233,11 @@ class RommBulkSyncPlan {
 class RommBulkSync extends ChangeNotifier {
   static final _log = LoggerService.instance;
 
-  /// Simultaneous transfers. One at a time is slow on a large platform; letting
-  /// the whole queue run at once saturates a handheld's wifi and the server.
-  /// Three is a starting point to be tuned against a real server on device.
-  static const int defaultConcurrency = 3;
+  /// Simultaneous transfers — [RommPaging.concurrency], the one definition
+  /// this queue and the per-system metadata pass share. Kept under this name
+  /// for the callers and tests that already read it here.
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
+  static const int defaultConcurrency = RommPaging.concurrency;
 
   /// Rows per enumeration request — [RommPaging.pageSize], the one definition
   /// this walk and the connect-time link pass share. Kept under this name for

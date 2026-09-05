@@ -1347,4 +1347,35 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommFetchMetadataPartial:
       'Записано полей: {count}, но не удалось загрузить обложек: {media}',
   AppLocale.rommFetchMetadataFailed: 'Не удалось получить метаданные из RomM',
+||||||| parent of 42d930a (feat(romm): per-system "Fetch metadata from RomM" pass with progress and summary)
+
+  // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
+  AppLocale.rommSystemFetchAction: 'Получить метаданные из RomM',
+  AppLocale.rommSystemFetchActionSubtitle:
+      'Заполнить пробелы или заменить метаданные и обложки для всех привязанных игр этой системы',
+  AppLocale.rommSystemFetchRequiresConnection:
+      'Подключитесь к RomM, чтобы включить это действие',
+  AppLocale.rommSystemFetchRowRunning:
+      'Получение {done}/{total} — нажмите, чтобы отменить',
+  AppLocale.rommSystemFetchChooserTitle:
+      'Получить метаданные из RomM для {system}',
+  AppLocale.rommSystemFetchModeFillGaps: 'Заполнить пробелы (рекомендуется)',
+  AppLocale.rommSystemFetchModeFillGapsHint:
+      'Записываются только пустые поля и отсутствующие обложки. Существующие данные сохраняются.',
+  AppLocale.rommSystemFetchModeReplace: 'Заменить всё',
+  AppLocale.rommSystemFetchModeReplaceWarning:
+      'Перезаписывает все поля и файлы обложек. Описания не на английском языке удаляются, а издателя RomM не предоставляет.',
+  AppLocale.rommSystemFetchStarted:
+      'Метаданные RomM для {system} загружаются в фоновом режиме',
+  AppLocale.rommSystemFetchPreparing:
+      'Подготовка загрузки метаданных RomM для {system}…',
+  AppLocale.rommSystemFetchProgress:
+      'Загрузка метаданных RomM для {system}: {done}/{total}',
+  AppLocale.rommSystemFetchSummary:
+      'Метаданные RomM для {system}: привязано {linked}, заполнено {filled}, заменено {replaced}, пропущено без привязки {unlinked}, не найдено {notFound}, с ошибкой {failed}',
+  AppLocale.rommSystemFetchCancelled: 'Отменено — {summary}',
+  AppLocale.rommSystemFetchBusy:
+      'Загрузка метаданных RomM для {system} уже выполняется. Дождитесь её завершения и попробуйте снова.',
+  AppLocale.rommSystemFetchFailedToStart:
+      'Не удалось получить метаданные RomM для {system}: {error}',
 };

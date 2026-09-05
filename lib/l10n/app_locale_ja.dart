@@ -1220,4 +1220,30 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommFetchMetadataPartial:
       '{count} 項目を書き込みましたが、{media} 点のアートワークのダウンロードに失敗しました',
   AppLocale.rommFetchMetadataFailed: 'RomM からのメタデータ取得に失敗しました',
+||||||| parent of 42d930a (feat(romm): per-system "Fetch metadata from RomM" pass with progress and summary)
+
+  // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
+  AppLocale.rommSystemFetchAction: 'RomM からメタデータを取得',
+  AppLocale.rommSystemFetchActionSubtitle:
+      'このシステムのリンク済みゲームすべてについて、メタデータとアートワークの不足分を補うか、すべて置き換えます',
+  AppLocale.rommSystemFetchRequiresConnection: 'この操作を有効にするには RomM に接続してください',
+  AppLocale.rommSystemFetchRowRunning: '取得中 {done}/{total} — 押すとキャンセル',
+  AppLocale.rommSystemFetchChooserTitle: '{system} のメタデータを RomM から取得',
+  AppLocale.rommSystemFetchModeFillGaps: '不足分を補う（推奨）',
+  AppLocale.rommSystemFetchModeFillGapsHint:
+      '空の項目と不足しているアートワークのみを書き込みます。既存のデータは保持されます。',
+  AppLocale.rommSystemFetchModeReplace: 'すべて置き換える',
+  AppLocale.rommSystemFetchModeReplaceWarning:
+      'すべての項目とアートワークファイルを上書きします。英語以外の説明文は消去され、RomM はパブリッシャー情報を提供しません。',
+  AppLocale.rommSystemFetchStarted: '{system} の RomM メタデータをバックグラウンドで取得しています',
+  AppLocale.rommSystemFetchPreparing: '{system} の RomM メタデータ取得を準備しています…',
+  AppLocale.rommSystemFetchProgress:
+      '{system} の RomM メタデータを取得中: {done}/{total}',
+  AppLocale.rommSystemFetchSummary:
+      '{system} の RomM メタデータ: リンク済み {linked}、補完 {filled}、置き換え {replaced}、未リンクのためスキップ {unlinked}、見つからず {notFound}、失敗 {failed}',
+  AppLocale.rommSystemFetchCancelled: 'キャンセルしました — {summary}',
+  AppLocale.rommSystemFetchBusy:
+      '{system} の RomM メタデータ取得がすでに実行中です。完了を待ってからもう一度お試しください。',
+  AppLocale.rommSystemFetchFailedToStart:
+      '{system} の RomM メタデータを取得できませんでした: {error}',
 };
