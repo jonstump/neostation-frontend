@@ -1251,7 +1251,7 @@ const Map<String, dynamic> appLocaleFr = {
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
   AppLocale.esdeResetConfirmBody:
-      'Cela supprime toutes les métadonnées et tous les liens de médias importés depuis ES-DE ou depuis vos dossiers de ROMs, et efface le dossier ES-DE sélectionné. Vos jeux et fichiers ROM ne sont pas affectés.',
+      'Cela supprime toutes les métadonnées et tous les liens de médias importés depuis ES-DE ou depuis vos dossiers de ROMs, efface les médias répliqués depuis des dossiers Android vers le stockage de l\'application, et efface le dossier ES-DE sélectionné. Vos jeux et fichiers ROM ne sont pas affectés.',
   AppLocale.esdeImportNotEsdeFolder:
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
@@ -1340,4 +1340,22 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.rommLinkFailed: 'Échec de la liaison avec RomM',
   AppLocale.rommUnlinked: 'Dissocié de RomM',
   AppLocale.rommUnlinkFailed: 'Impossible de dissocier de RomM',
+  // SPEC-0003 SAF mirror summary
+  AppLocale.inFolderImportAlreadyRunning:
+      'Une autre importation est encore en cours. Attendez qu\'elle se termine, puis réessayez.',
+  AppLocale.inFolderImportCancelled:
+      'Importation annulée. Les métadonnées et les médias copiés avant l\'arrêt ont été conservés.',
+  AppLocale.inFolderImportBudgetRefused:
+      'Espace libre insuffisant pour répliquer les médias : {required} nécessaires, {available} libres. Les métadonnées ont tout de même été importées.',
+  AppLocale.inFolderSummarySafSystemsMirrored: 'Systèmes répliqués depuis SAF',
+  AppLocale.inFolderSummaryFilesCopied: 'Fichiers de médias copiés',
+  AppLocale.inFolderSummaryFilesSkippedUnchanged: 'inchangés ignorés',
+  AppLocale.inFolderSummaryFilesFailed: 'échoués',
+  AppLocale.inFolderSummaryBytesCopied: 'Données copiées',
+  AppLocale.inFolderSummarySystemsListingFailed:
+      'Dossiers système illisibles via SAF',
+  AppLocale.esdeResetBusy:
+      'Impossible de réinitialiser pendant une importation. Attendez qu\'elle se termine, puis réessayez.',
+  AppLocale.esdeResetMirrorsRemoved:
+      'dossiers de médias répliqués supprimés : {count}',
 };

@@ -1221,7 +1221,7 @@ const Map<String, dynamic> appLocalePt = {
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
   AppLocale.esdeResetConfirmBody:
-      'Isto remove todos os metadados e links de mídia importados do ES-DE ou das suas pastas de ROMs e limpa a pasta ES-DE selecionada. Seus jogos e arquivos ROM não são afetados.',
+      'Isto remove todos os metadados e links de mídia importados do ES-DE ou das suas pastas de ROMs, apaga as mídias espelhadas de pastas do Android para o armazenamento do app e limpa a pasta ES-DE selecionada. Seus jogos e arquivos ROM não são afetados.',
   AppLocale.esdeImportNotEsdeFolder:
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
@@ -1309,4 +1309,22 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.rommLinkFailed: 'Falha ao vincular ao RomM',
   AppLocale.rommUnlinked: 'Desvinculado do RomM',
   AppLocale.rommUnlinkFailed: 'Não foi possível desvincular do RomM',
+  // SPEC-0003 SAF mirror summary
+  AppLocale.inFolderImportAlreadyRunning:
+      'Outra importação ainda está em andamento. Aguarde a conclusão e tente novamente.',
+  AppLocale.inFolderImportCancelled:
+      'Importação cancelada. Os metadados e as mídias copiadas antes da interrupção foram mantidos.',
+  AppLocale.inFolderImportBudgetRefused:
+      'Espaço livre insuficiente para espelhar as mídias: {required} necessários, {available} livres. Os metadados foram importados mesmo assim.',
+  AppLocale.inFolderSummarySafSystemsMirrored: 'Sistemas espelhados do SAF',
+  AppLocale.inFolderSummaryFilesCopied: 'Arquivos de mídia copiados',
+  AppLocale.inFolderSummaryFilesSkippedUnchanged: 'inalterados ignorados',
+  AppLocale.inFolderSummaryFilesFailed: 'com falha',
+  AppLocale.inFolderSummaryBytesCopied: 'Dados copiados',
+  AppLocale.inFolderSummarySystemsListingFailed:
+      'Pastas de sistema ilegíveis via SAF',
+  AppLocale.esdeResetBusy:
+      'Não é possível redefinir enquanto uma importação está em andamento. Aguarde a conclusão e tente novamente.',
+  AppLocale.esdeResetMirrorsRemoved:
+      'pastas de mídia espelhada removidas: {count}',
 };

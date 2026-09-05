@@ -1097,7 +1097,7 @@ const Map<String, dynamic> appLocaleJa = {
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
   AppLocale.esdeResetConfirmBody:
-      'ES-DEまたはROMフォルダーからインポートしたすべてのメタデータとメディアリンクを削除し、選択したES-DEフォルダーをクリアします。ゲームとROMファイルには影響しません。',
+      'ES-DEまたはROMフォルダーからインポートしたすべてのメタデータとメディアリンクを削除し、Androidフォルダーからアプリ内ストレージにミラーしたメディアも削除して、選択したES-DEフォルダーをクリアします。ゲームとROMファイルには影響しません。',
   AppLocale.esdeImportNotEsdeFolder:
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
@@ -1173,4 +1173,19 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommLinkFailed: 'RomM へのリンクに失敗しました',
   AppLocale.rommUnlinked: 'RomM とのリンクを解除しました',
   AppLocale.rommUnlinkFailed: 'RomM とのリンクを解除できませんでした',
+  // SPEC-0003 SAF mirror summary
+  AppLocale.inFolderImportAlreadyRunning:
+      '別のインポートがまだ実行中です。完了を待ってからもう一度お試しください。',
+  AppLocale.inFolderImportCancelled:
+      'インポートをキャンセルしました。停止前にインポートしたメタデータとコピー済みのメディアは保持されます。',
+  AppLocale.inFolderImportBudgetRefused:
+      'メディアをミラーするための空き容量が不足しています: 必要 {required}、空き {available}。メタデータはインポートされました。',
+  AppLocale.inFolderSummarySafSystemsMirrored: 'SAFからミラーしたシステム',
+  AppLocale.inFolderSummaryFilesCopied: 'コピーしたメディアファイル',
+  AppLocale.inFolderSummaryFilesSkippedUnchanged: '未変更のためスキップ',
+  AppLocale.inFolderSummaryFilesFailed: '失敗',
+  AppLocale.inFolderSummaryBytesCopied: 'コピーしたデータ',
+  AppLocale.inFolderSummarySystemsListingFailed: 'SAF経由で読み取れないシステムフォルダー',
+  AppLocale.esdeResetBusy: 'インポートの実行中はリセットできません。完了を待ってからもう一度お試しください。',
+  AppLocale.esdeResetMirrorsRemoved: '削除したミラーメディアフォルダー: {count}',
 };

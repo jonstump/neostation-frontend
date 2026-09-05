@@ -1074,7 +1074,7 @@ const Map<String, dynamic> appLocaleZhHant = {
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
   AppLocale.esdeResetConfirmBody:
-      '這將移除從 ES-DE 或 ROM 資料夾匯入的所有中繼資料與媒體連結,並清除所選的 ES-DE 資料夾。您的遊戲與 ROM 檔案不受影響。',
+      '這將移除從 ES-DE 或 ROM 資料夾匯入的所有中繼資料與媒體連結,刪除從 Android 資料夾鏡像到應用程式儲存空間的媒體,並清除所選的 ES-DE 資料夾。您的遊戲與 ROM 檔案不受影響。',
   AppLocale.esdeImportNotEsdeFolder:
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
@@ -1144,4 +1144,17 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.rommLinkFailed: '連結至 RomM 失敗',
   AppLocale.rommUnlinked: '已取消與 RomM 的連結',
   AppLocale.rommUnlinkFailed: '無法取消與 RomM 的連結',
+  // SPEC-0003 SAF mirror summary
+  AppLocale.inFolderImportAlreadyRunning: '另一個匯入仍在進行中。請等待其完成後再試。',
+  AppLocale.inFolderImportCancelled: '匯入已取消。停止前已匯入的中繼資料與已複製的媒體將保留。',
+  AppLocale.inFolderImportBudgetRefused:
+      '可用空間不足,無法鏡像媒體:需要 {required},可用 {available}。中繼資料仍已匯入。',
+  AppLocale.inFolderSummarySafSystemsMirrored: '從 SAF 鏡像的系統',
+  AppLocale.inFolderSummaryFilesCopied: '已複製的媒體檔案',
+  AppLocale.inFolderSummaryFilesSkippedUnchanged: '未變更已略過',
+  AppLocale.inFolderSummaryFilesFailed: '失敗',
+  AppLocale.inFolderSummaryBytesCopied: '已複製資料',
+  AppLocale.inFolderSummarySystemsListingFailed: '無法透過 SAF 讀取的系統資料夾',
+  AppLocale.esdeResetBusy: '匯入進行中無法重設。請等待其完成後再試。',
+  AppLocale.esdeResetMirrorsRemoved: '已刪除的鏡像媒體資料夾:{count}',
 };

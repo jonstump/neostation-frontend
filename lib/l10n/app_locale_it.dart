@@ -1238,7 +1238,7 @@ const Map<String, dynamic> appLocaleIt = {
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
   AppLocale.esdeResetConfirmBody:
-      'Questo rimuove tutti i metadati e i collegamenti ai media importati da ES-DE o dalle tue cartelle ROM e azzera la cartella ES-DE selezionata. I tuoi giochi e i file ROM non vengono modificati.',
+      'Questo rimuove tutti i metadati e i collegamenti ai media importati da ES-DE o dalle tue cartelle ROM, elimina i media replicati dalle cartelle Android nello spazio dell\'app e azzera la cartella ES-DE selezionata. I tuoi giochi e i file ROM non vengono modificati.',
   AppLocale.esdeImportNotEsdeFolder:
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
@@ -1326,4 +1326,22 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.rommLinkFailed: 'Collegamento a RomM non riuscito',
   AppLocale.rommUnlinked: 'Scollegato da RomM',
   AppLocale.rommUnlinkFailed: 'Impossibile scollegare da RomM',
+  // SPEC-0003 SAF mirror summary
+  AppLocale.inFolderImportAlreadyRunning:
+      'Un\'altra importazione è ancora in corso. Attendi che finisca e riprova.',
+  AppLocale.inFolderImportCancelled:
+      'Importazione annullata. I metadati e i media copiati prima dell\'interruzione sono stati conservati.',
+  AppLocale.inFolderImportBudgetRefused:
+      'Spazio libero insufficiente per replicare i media: servono {required}, liberi {available}. I metadati sono stati comunque importati.',
+  AppLocale.inFolderSummarySafSystemsMirrored: 'Sistemi replicati da SAF',
+  AppLocale.inFolderSummaryFilesCopied: 'File multimediali copiati',
+  AppLocale.inFolderSummaryFilesSkippedUnchanged: 'invariati saltati',
+  AppLocale.inFolderSummaryFilesFailed: 'falliti',
+  AppLocale.inFolderSummaryBytesCopied: 'Dati copiati',
+  AppLocale.inFolderSummarySystemsListingFailed:
+      'Cartelle di sistema illeggibili via SAF',
+  AppLocale.esdeResetBusy:
+      'Impossibile azzerare mentre un\'importazione è in corso. Attendi che finisca e riprova.',
+  AppLocale.esdeResetMirrorsRemoved:
+      'cartelle di media replicati rimosse: {count}',
 };

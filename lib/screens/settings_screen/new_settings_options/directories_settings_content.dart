@@ -25,6 +25,7 @@ import 'package:neostation/widgets/tv_directory_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/utils/adaptive_scroll.dart';
+import 'package:neostation/utils/byte_size_format.dart';
 import 'in_folder_import_summary.dart';
 import 'settings_title.dart';
 import 'widgets/settings_section_header.dart';
@@ -342,6 +343,8 @@ class DirectoriesSettingsContentState
     final localeEsdeSummarySystems = AppLocale.esdeSummarySystems.getString(
       context,
     );
+    final localeImportAlreadyRunning = AppLocale.inFolderImportAlreadyRunning
+        .getString(context);
 
     setState(() {
       _isImporting = true;
@@ -399,7 +402,15 @@ class DirectoriesSettingsContentState
         progress: null,
       );
     } else if (result != null) {
-      if (!result.gamelistsDirFound) {
+      if (result.refusedAlreadyRunning) {
+        // Another run (e.g. the setup wizard's) still holds the guard.
+        GlobalNotificationService().update(
+          id: notificationId,
+          message: localeImportAlreadyRunning,
+          type: GlobalNotificationType.error,
+          progress: null,
+        );
+      } else if (!result.gamelistsDirFound) {
         // No gamelists/ dir — the picked folder isn't an ES-DE installation.
         GlobalNotificationService().update(
           id: notificationId,
@@ -436,6 +447,7 @@ class DirectoriesSettingsContentState
     final showSummary =
         error == null &&
         result != null &&
+        !result.refusedAlreadyRunning &&
         result.gamelistsDirFound &&
         (result.gamesImported > 0 || result.systemsMatched > 0);
     setState(() {
@@ -470,6 +482,18 @@ class DirectoriesSettingsContentState
     );
     final localeGames = AppLocale.esdeSummaryGames.getString(context);
     final localeSystems = AppLocale.esdeSummarySystems.getString(context);
+    // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Result Reporting"
+    final localeAlreadyRunning = AppLocale.inFolderImportAlreadyRunning
+        .getString(context);
+    final localeCancelled = AppLocale.inFolderImportCancelled.getString(
+      context,
+    );
+    final localeBudgetRefused = AppLocale.inFolderImportBudgetRefused.getString(
+      context,
+    );
+    final localeFilesCopied = AppLocale.inFolderSummaryFilesCopied.getString(
+      context,
+    );
 
     setState(() {
       _isImporting = true;
@@ -527,7 +551,37 @@ class DirectoriesSettingsContentState
         progress: null,
       );
     } else if (result != null) {
+      // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Result Reporting"
       switch (inFolderSummaryKind(result)) {
+        case InFolderSummaryKind.refusedAlreadyRunning:
+          GlobalNotificationService().update(
+            id: notificationId,
+            message: localeAlreadyRunning,
+            type: GlobalNotificationType.error,
+            progress: null,
+          );
+        case InFolderSummaryKind.cancelled:
+          // The headline is a full sentence, so the tally goes on its own
+          // line; the file count only means something for a SAF run.
+          GlobalNotificationService().update(
+            id: notificationId,
+            message: [
+              localeCancelled,
+              inFolderResultHasSafActivity(result)
+                  ? '${result.gamesImported} $localeGames, '
+                        '${result.safFilesCopied} $localeFilesCopied'
+                  : '${result.gamesImported} $localeGames',
+            ].join('\n'),
+            type: GlobalNotificationType.info,
+            progress: null,
+          );
+        case InFolderSummaryKind.budgetRefused:
+          GlobalNotificationService().update(
+            id: notificationId,
+            message: _budgetRefusedText(localeBudgetRefused, result),
+            type: GlobalNotificationType.error,
+            progress: null,
+          );
         case InFolderSummaryKind.foldersSkippedSaf:
           GlobalNotificationService().update(
             id: notificationId,
@@ -569,11 +623,14 @@ class DirectoriesSettingsContentState
     // Unlike the ES-DE path, every completed in-folder run keeps its summary:
     // a skipped-SAF or no-gamelists outcome is exactly what the user needs to
     // see explained, not a zeroed box to hide.
+    // A refused start is not a run: the notification says why, and the last
+    // real summary is not worth replacing with it.
+    final refused = result?.refusedAlreadyRunning ?? false;
     setState(() {
       _isImporting = false;
-      _lastEsdeResult = error == null ? result : null;
+      _lastEsdeResult = error == null && !refused ? result : null;
     });
-    if (error != null || result == null) return;
+    if (error != null || result == null || refused) return;
 
     // Controller-dismissable summary (A or B closes it); the inline panel
     // stays as the persistent record until the next import or reset.
@@ -588,30 +645,99 @@ class DirectoriesSettingsContentState
 
   /// Summary body for an in-folder result, shared by the inline panel and
   /// the completion dialog. Branches on [inFolderSummaryKind] so an all-SAF
-  /// run is never worded as "no gamelists found".
+  /// run is never worded as "no gamelists found", a cancel or a budget
+  /// refusal gets its own headline above the counts, and a refused start
+  /// shows no counts at all.
+  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Result Reporting"
   String _inFolderSummaryText(EsdeImportResult r) {
     switch (inFolderSummaryKind(r)) {
+      case InFolderSummaryKind.refusedAlreadyRunning:
+        return AppLocale.inFolderImportAlreadyRunning.getString(context);
       case InFolderSummaryKind.foldersSkippedSaf:
         return AppLocale.inFolderImportFoldersSkippedSaf
             .getString(context)
             .replaceFirst('{count}', '${r.foldersSkippedSaf}');
       case InFolderSummaryKind.noGamelistsFound:
         return AppLocale.inFolderImportNoGamelists.getString(context);
+      case InFolderSummaryKind.cancelled:
+        return [
+          AppLocale.inFolderImportCancelled.getString(context),
+          ..._inFolderCountLines(r),
+        ].join('\n');
+      case InFolderSummaryKind.budgetRefused:
+        return [
+          _budgetRefusedText(
+            AppLocale.inFolderImportBudgetRefused.getString(context),
+            r,
+          ),
+          ..._inFolderCountLines(r, includeBudgetLine: false),
+        ].join('\n');
       case InFolderSummaryKind.counts:
-        final lines = <String>[
-          '${AppLocale.inFolderSummarySystemsFound.getString(context)}: ${r.systemsFound}   '
-              '${AppLocale.esdeSummarySystemsMatched.getString(context)}: ${r.systemsMatched}   '
-              '${AppLocale.esdeSummaryUnmatched.getString(context)}: ${r.systemsUnmatched}   '
-              '${AppLocale.esdeSummarySkipped.getString(context)}: ${r.systemsSkipped}',
-          '${AppLocale.esdeSummaryGamesImported.getString(context)}: ${r.gamesImported}   '
-              '${AppLocale.esdeSummaryNoRomMatch.getString(context)}: ${r.gamesUnmatched}',
-          '${AppLocale.inFolderSummaryMediaOnlyLinked.getString(context)}: ${r.mediaOnlyLinked}',
-          '${AppLocale.esdeSummaryStatsUpdated.getString(context)}: ${r.statsUpdated}',
-          if (r.foldersSkippedSaf > 0)
-            '${AppLocale.inFolderSummaryFoldersSkippedSaf.getString(context)}: ${r.foldersSkippedSaf}',
-        ];
-        return lines.join('\n');
+        return _inFolderCountLines(r).join('\n');
     }
+  }
+
+  /// The per-count lines of an in-folder summary. SAF mirror tallies appear
+  /// only when the run touched SAF at all; the budget line only when a
+  /// refusal happened and is not already the headline.
+  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Result Reporting"
+  List<String> _inFolderCountLines(
+    EsdeImportResult r, {
+    bool includeBudgetLine = true,
+  }) {
+    final lines = <String>[
+      '${AppLocale.inFolderSummarySystemsFound.getString(context)}: ${r.systemsFound}   '
+          '${AppLocale.esdeSummarySystemsMatched.getString(context)}: ${r.systemsMatched}   '
+          '${AppLocale.esdeSummaryUnmatched.getString(context)}: ${r.systemsUnmatched}   '
+          '${AppLocale.esdeSummarySkipped.getString(context)}: ${r.systemsSkipped}',
+      '${AppLocale.esdeSummaryGamesImported.getString(context)}: ${r.gamesImported}   '
+          '${AppLocale.esdeSummaryNoRomMatch.getString(context)}: ${r.gamesUnmatched}',
+      '${AppLocale.inFolderSummaryMediaOnlyLinked.getString(context)}: ${r.mediaOnlyLinked}',
+      '${AppLocale.esdeSummaryStatsUpdated.getString(context)}: ${r.statsUpdated}',
+      if (r.foldersSkippedSaf > 0)
+        '${AppLocale.inFolderSummaryFoldersSkippedSaf.getString(context)}: ${r.foldersSkippedSaf}',
+    ];
+    if (inFolderResultHasSafActivity(r)) {
+      lines.add(
+        '${AppLocale.inFolderSummarySafSystemsMirrored.getString(context)}: ${r.safSystemsMirrored}',
+      );
+      lines.add(
+        '${AppLocale.inFolderSummaryFilesCopied.getString(context)}: ${r.safFilesCopied}   '
+        '${AppLocale.inFolderSummaryFilesSkippedUnchanged.getString(context)}: ${r.safFilesSkippedUnchanged}   '
+        '${AppLocale.inFolderSummaryFilesFailed.getString(context)}: ${r.safFilesFailed}',
+      );
+      lines.add(
+        '${AppLocale.inFolderSummaryBytesCopied.getString(context)}: '
+        '${formatByteSize(r.safBytesCopied)}',
+      );
+      if (r.safSystemsListingFailed > 0) {
+        lines.add(
+          '${AppLocale.inFolderSummarySystemsListingFailed.getString(context)}: ${r.safSystemsListingFailed}',
+        );
+      }
+      if (includeBudgetLine && r.safBudgetRefused) {
+        lines.add(
+          _budgetRefusedText(
+            AppLocale.inFolderImportBudgetRefused.getString(context),
+            r,
+          ),
+        );
+      }
+    }
+    return lines;
+  }
+
+  /// Fills the budget-refused template with the required and available byte
+  /// counts. The available reading can be missing when the volume could not
+  /// be measured; a dash stands in rather than a misleading zero.
+  static String _budgetRefusedText(String template, EsdeImportResult r) {
+    final available = r.safBudgetAvailableBytes;
+    return template
+        .replaceFirst('{required}', formatByteSize(r.safBudgetRequiredBytes))
+        .replaceFirst(
+          '{available}',
+          available == null ? '\u2014' : formatByteSize(available),
+        );
   }
 
   Future<void> _resetEsdeImport() async {
@@ -627,7 +753,8 @@ class DirectoriesSettingsContentState
     if (!confirmed || !mounted) return;
 
     try {
-      final cleared = await EsdeImportService.reset();
+      // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Reset and Re-import"
+      final outcome = await EsdeImportService.resetDetailed();
       // Fully disconnect ES-DE: also clear the selected folder so the section
       // returns to its initial "Select ES-DE Folder" state. Goes through the
       // provider (not the DB directly) so the cached config + UI update too.
@@ -637,11 +764,26 @@ class DirectoriesSettingsContentState
       if (mounted) await context.read<FileProvider>().refreshEsde();
       if (!mounted) return;
       setState(() => _lastEsdeResult = null);
+      // Recorded mirrors and swept orphans alike: every folder that went.
+      final mirrorsLine = outcome.directoriesRemoved > 0
+          ? ' \u00b7 ${AppLocale.esdeResetMirrorsRemoved.getString(context).replaceFirst('{count}', '${outcome.directoriesRemoved}')}'
+          : '';
       AppNotification.showNotification(
         context,
-        '${AppLocale.esdeResetComplete.getString(context)} ($cleared)',
+        '${AppLocale.esdeResetComplete.getString(context)} '
+        '(${outcome.metadataRowsDeleted})$mirrorsLine',
         type: NotificationType.info,
       );
+    } on EsdeImportBusyException {
+      // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Concurrency Safety"
+      _log.w('ES-DE reset refused: an import is running');
+      if (mounted) {
+        AppNotification.showNotification(
+          context,
+          AppLocale.esdeResetBusy.getString(context),
+          type: NotificationType.error,
+        );
+      }
     } catch (e) {
       _log.e('ES-DE reset failed: $e');
       if (mounted) {
