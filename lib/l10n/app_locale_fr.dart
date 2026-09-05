@@ -1358,4 +1358,7 @@ const Map<String, dynamic> appLocaleFr = {
       'Impossible de réinitialiser pendant une importation. Attendez qu\'elle se termine, puis réessayez.',
   AppLocale.esdeResetMirrorsRemoved:
       'dossiers de médias répliqués supprimés : {count}',
+
+  // SPEC-0004 REQ "Search Screen Entry" — link action on search results
+  AppLocale.searchLinkToRomm: 'Lier à RomM',
 };

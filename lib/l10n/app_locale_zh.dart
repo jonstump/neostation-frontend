@@ -1156,4 +1156,7 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.inFolderSummarySystemsListingFailed: '无法通过 SAF 读取的系统文件夹',
   AppLocale.esdeResetBusy: '导入进行中无法重置。请等待其完成后再试。',
   AppLocale.esdeResetMirrorsRemoved: '已删除的镜像媒体文件夹:{count}',
+
+  // SPEC-0004 REQ "Search Screen Entry" — link action on search results
+  AppLocale.searchLinkToRomm: '链接到 RomM',
 };

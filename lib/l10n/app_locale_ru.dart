@@ -1313,4 +1313,7 @@ const Map<String, dynamic> appLocaleRu = {
       'Нельзя выполнить сброс, пока идёт импорт. Дождитесь его завершения и попробуйте снова.',
   AppLocale.esdeResetMirrorsRemoved:
       'удалено папок зеркалированных медиа: {count}',
+
+  // SPEC-0004 REQ "Search Screen Entry" — link action on search results
+  AppLocale.searchLinkToRomm: 'Связать с RomM',
 };

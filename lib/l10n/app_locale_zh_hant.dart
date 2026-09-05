@@ -1157,4 +1157,7 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.inFolderSummarySystemsListingFailed: '無法透過 SAF 讀取的系統資料夾',
   AppLocale.esdeResetBusy: '匯入進行中無法重設。請等待其完成後再試。',
   AppLocale.esdeResetMirrorsRemoved: '已刪除的鏡像媒體資料夾:{count}',
+
+  // SPEC-0004 REQ "Search Screen Entry" — link action on search results
+  AppLocale.searchLinkToRomm: '連結至 RomM',
 };

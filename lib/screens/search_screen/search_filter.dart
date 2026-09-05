@@ -579,3 +579,33 @@ T? cycleFilterValue<T>(List<T> options, T? current, int delta) {
   if (next < 0) next += len;
   return next == 0 ? null : options[next - 1];
 }
+
+/// Ordered choices offered when a search result is selected.
+///
+/// [download] only ever appears for a RomM result that isn't on this device
+/// yet; once it is downloaded a remote result offers the same [goTo] / [play]
+/// as a local one, plus [link], which opens the manual RomM link picker
+/// pre-selected on that result.
+enum SearchResultAction { goTo, play, download, link }
+
+/// The action list for a selected result, in D-pad order.
+///
+/// A local row offers Go-to-game and Play. A remote row that maps back to a
+/// local game ([hasLocal]) offers the same two first — so the existing focus
+/// order is unchanged — and then Link; one that doesn't offers Download only.
+// Governing: ADR-0004 (manual link provenance), SPEC-0004 REQ "Search Screen Entry"
+List<SearchResultAction> searchResultActionsFor({
+  required bool isRemote,
+  required bool hasLocal,
+}) {
+  if (!isRemote) {
+    return const [SearchResultAction.goTo, SearchResultAction.play];
+  }
+  return hasLocal
+      ? const [
+          SearchResultAction.goTo,
+          SearchResultAction.play,
+          SearchResultAction.link,
+        ]
+      : const [SearchResultAction.download];
+}

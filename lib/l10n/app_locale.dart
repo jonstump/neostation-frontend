@@ -1334,6 +1334,8 @@ mixin AppLocale {
       'in_folder_summary_systems_listing_failed';
   static const String esdeResetBusy = 'esde_reset_busy';
   static const String esdeResetMirrorsRemoved = 'esde_reset_mirrors_removed';
+  // SPEC-0004 REQ "Search Screen Entry" — link action on search results
+  static const String searchLinkToRomm = 'search_link_to_romm';
 
   // ==========================================================================
   // Localization Maps

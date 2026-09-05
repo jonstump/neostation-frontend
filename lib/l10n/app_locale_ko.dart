@@ -1198,4 +1198,7 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.esdeResetBusy:
       '가져오기가 실행 중인 동안에는 초기화할 수 없습니다. 완료될 때까지 기다린 후 다시 시도하세요.',
   AppLocale.esdeResetMirrorsRemoved: '제거한 미러 미디어 폴더: {count}',
+
+  // SPEC-0004 REQ "Search Screen Entry" — link action on search results
+  AppLocale.searchLinkToRomm: 'RomM에 연결',
 };

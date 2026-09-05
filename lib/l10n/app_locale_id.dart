@@ -1313,4 +1313,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.esdeResetBusy:
       'Tidak dapat mereset saat impor sedang berjalan. Tunggu hingga selesai, lalu coba lagi.',
   AppLocale.esdeResetMirrorsRemoved: 'folder media salinan dihapus: {count}',
+
+  // SPEC-0004 REQ "Search Screen Entry" — link action on search results
+  AppLocale.searchLinkToRomm: 'Tautkan ke RomM',
 };
