@@ -54,8 +54,8 @@ Constraints from the repo rules: prefer Dart over Kotlin for new behaviour, keep
 
 ### Reset deletes by prefix, never by column value alone
 
-**Choice**: Reset deletes a system's mirror only when its recorded `esde_media_root` starts with the resolved `imported_media` root, then clears the column for all systems as before.
-**Rationale**: The column may hold a real platform folder from SPEC-0002; deleting that would destroy user files. The prefix check makes the deletion provably scoped.
+**Choice**: Reset deletes a system's mirror only when its recorded `esde_media_root` starts with the resolved `imported_media` root, then sweeps every remaining child of that root (never the root itself), then clears the column for all systems as before.
+**Rationale**: The column may hold a real platform folder from SPEC-0002; deleting that would destroy user files, so the recorded-root pass is prefix-checked. The root itself is importer-owned by design, so sweeping its children after the recorded pass removes orphaned mirrors (a copy whose root write failed, or a root overwritten by a later real-path import) with no additional risk.
 
 ### One import at a time, cancellable between files
 

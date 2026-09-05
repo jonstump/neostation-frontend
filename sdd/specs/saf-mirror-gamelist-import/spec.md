@@ -107,12 +107,12 @@ Before copying a system's media, the importer SHALL sum the sizes of the files i
 
 ### Requirement: Reset and Re-import
 
-The existing import reset SHALL delete the mirror directory of every system whose `esde_media_root` lies under `<user data>/imported_media/` and then clear the column, in addition to its SPEC-0002 behaviour. Reset MUST NOT delete anything outside `<user data>/imported_media/` and MUST NOT touch the SAF tree. Re-running a SAF import after reset MUST rebuild the mirror.
+The existing import reset SHALL delete the mirror directory of every system whose `esde_media_root` lies under `<user data>/imported_media/`, then sweep every remaining child of that importer-owned root so orphaned mirrors are removed too, and then clear the column, in addition to its SPEC-0002 behaviour. Reset MUST NOT delete the root itself or anything outside `<user data>/imported_media/` and MUST NOT touch the SAF tree. Re-running a SAF import after reset MUST rebuild the mirror.
 
 #### Scenario: Reset removes the mirror
 
 - **WHEN** the user runs the import reset after a SAF import
-- **THEN** `<user data>/imported_media/snes/` is removed, the column is cleared, and the ROM folder is unchanged
+- **THEN** `<user data>/imported_media/snes/` is removed, any other child of `imported_media/` is removed, the column is cleared, and the ROM folder is unchanged
 
 #### Scenario: Real-path root untouched by reset deletion
 
