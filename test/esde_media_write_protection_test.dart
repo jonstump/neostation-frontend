@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/providers/file_provider.dart';
+import 'package:neostation/services/esde_import_service.dart';
 import 'package:path/path.dart' as path;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -170,6 +171,110 @@ void main() {
         );
       },
     );
+  });
+
+  group('import is read-only', () {
+    final dbHelper = DatabaseTestHelper();
+    late dynamic db;
+    late Directory tempDir;
+
+    setUp(() async {
+      db = await dbHelper.setUp();
+      tempDir = await Directory.systemTemp.createTemp('neostation_ro_test');
+      await db.execute(
+        "INSERT INTO app_systems (id, real_name, folder_name, screenscraper_id) VALUES ('snes', 'SNES', 'snes', 4)",
+      );
+      await db.execute(
+        "INSERT INTO app_systems (id, real_name, folder_name, screenscraper_id) VALUES ('nes', 'NES', 'nes', 3)",
+      );
+      await db.execute(
+        "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('sonic.smc', '/roms/snes/sonic.smc', 'snes')",
+      );
+    });
+
+    tearDown(() async {
+      await dbHelper.tearDown();
+      if (await tempDir.exists()) {
+        await tempDir.delete(recursive: true);
+      }
+    });
+
+    /// Every entry under [root] (files with their contents, directories as
+    /// markers), keyed by relative path, so a create, modify, or delete
+    /// anywhere in the tree changes the snapshot.
+    Map<String, String> snapshot(Directory root) {
+      final out = <String, String>{};
+      for (final entity in root.listSync(recursive: true)) {
+        final rel = path.relative(entity.path, from: root.path);
+        out[rel] = entity is File ? 'file:${entity.readAsStringSync()}' : 'dir';
+      }
+      return out;
+    }
+
+    // The platform folder is the user's ROM folder: the importer references
+    // its media in place and never writes there.
+    // Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ "Read-Only Media Reference"
+    test('in-folder import leaves the platform folder untouched', () async {
+      final romFolder = Directory(path.join(tempDir.path, 'roms'));
+      final snes = Directory(path.join(romFolder.path, 'snes'));
+      await Directory(path.join(snes.path, 'covers')).create(recursive: true);
+      await Directory(path.join(snes.path, 'screenshots')).create();
+      await File(path.join(snes.path, 'sonic.smc')).writeAsString('rom');
+      await File(path.join(snes.path, 'gamelist.xml')).writeAsString(
+        '<gameList><game><path>./sonic.smc</path><name>Sonic</name>'
+        '<image>./screenshots/sonic.png</image></game></gameList>',
+      );
+      await File(
+        path.join(snes.path, 'covers', 'sonic.png'),
+      ).writeAsString('cover');
+      await File(
+        path.join(snes.path, 'screenshots', 'sonic.png'),
+      ).writeAsString('shot');
+      // A media-only sibling system is linked too, and must be as untouched.
+      final nesCovers = Directory(path.join(romFolder.path, 'nes', 'covers'));
+      await nesCovers.create(recursive: true);
+      await File(path.join(nesCovers.path, 'mario.png')).writeAsString('art');
+
+      final before = snapshot(romFolder);
+
+      final result = await EsdeImportService.importInFolder([romFolder.path]);
+      // The run must have done real work, or the assertion proves nothing.
+      expect(result.gamesImported, 1);
+      expect(result.mediaOnlyLinked, 1);
+
+      expect(snapshot(romFolder), equals(before));
+      final roots = await db.rawQuery(
+        'SELECT app_system_id, esde_media_root FROM user_system_settings ORDER BY app_system_id',
+      );
+      expect(roots.map((r) => r['esde_media_root']), [
+        path.join(romFolder.path, 'nes'),
+        snes.path,
+      ]);
+    });
+
+    test('ES-DE root import leaves the ES-DE folder untouched', () async {
+      final esdeRoot = Directory(path.join(tempDir.path, 'ES-DE'));
+      await Directory(
+        path.join(esdeRoot.path, 'gamelists', 'snes'),
+      ).create(recursive: true);
+      await File(
+        path.join(esdeRoot.path, 'gamelists', 'snes', 'gamelist.xml'),
+      ).writeAsString(
+        '<gameList><game><path>./sonic.smc</path><name>Sonic</name></game></gameList>',
+      );
+      final covers = Directory(
+        path.join(esdeRoot.path, 'downloaded_media', 'snes', 'covers'),
+      );
+      await covers.create(recursive: true);
+      await File(path.join(covers.path, 'sonic.png')).writeAsString('cover');
+
+      final before = snapshot(esdeRoot);
+
+      final result = await EsdeImportService.import(esdeRoot.path);
+      expect(result.gamesImported, 1);
+
+      expect(snapshot(esdeRoot), equals(before));
+    });
   });
 
   group('ES-DE paths cannot leak to new call sites', () {

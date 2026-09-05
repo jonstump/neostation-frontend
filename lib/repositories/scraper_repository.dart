@@ -881,9 +881,7 @@ class ScraperRepository {
   /// folder-name form) is left exactly as it is: the two columns are
   /// independent and [FileProvider] prefers the absolute root when both are
   /// set. Pass null to clear a previously recorded root.
-  ///
-  /// Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ
-  /// "Per-System Media Root", REQ "Database Operation Standards"
+  // Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ "Per-System Media Root", REQ "Database Operation Standards"
   static Future<bool> recordEsdeMediaRoot(
     String appSystemId,
     String? mediaRoot,
@@ -921,6 +919,23 @@ class ScraperRepository {
     } catch (e) {
       _log.e('Error recording media root for system "$appSystemId": $e');
       return false;
+    }
+  }
+
+  /// Clears `esde_media_root` on every system that has one, so the read-time
+  /// media fallback for in-folder imports stops. Returns the number of rows
+  /// changed. `esde_media_dir` is untouched; the ES-DE reset clears it itself.
+  // Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ "Fill-Gaps Merge and Provenance"
+  static Future<int> clearEsdeMediaRoots() async {
+    try {
+      final db = await SqliteService.getDatabase();
+      return await db.update('user_system_settings', {
+        'esde_media_root': null,
+        'updated_at': DateTime.now().toIso8601String(),
+      }, where: 'esde_media_root IS NOT NULL');
+    } catch (e) {
+      _log.e('Error clearing in-folder media roots: $e');
+      return 0;
     }
   }
 

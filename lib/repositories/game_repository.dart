@@ -408,6 +408,14 @@ class GameRepository {
     String ratio,
   ) => SqliteService.updateBox2dAspectRatio(systemId, filename, ratio);
 
+  /// Immediate subdirectories of each ROM folder, keyed by ROM folder and
+  /// then by lowercased subdirectory name, exactly as the ROM scanner
+  /// enumerates them (plain paths and SAF trees alike). Services consume the
+  /// scanner's listing through this pass-through rather than the datasource.
+  static Future<Map<String, Map<String, String>>> getExistingSubdirectories(
+    List<String> romFolders,
+  ) => SqliteDatabaseService.getExistingSubdirectories(romFolders);
+
   /// Strips the last file extension from a filename.
   static String _stripExtension(String name) {
     final dot = name.lastIndexOf('.');
