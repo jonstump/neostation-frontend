@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../models/romm_rom.dart';
 import '../models/romm_rom_page.dart';
 import '../services/logger_service.dart';
+import '../services/romm/romm_paging.dart';
 import 'romm_provider.dart';
 
 /// Fetches one page of the source being synced. Offset/limit paging only — the
@@ -237,16 +238,15 @@ class RommBulkSync extends ChangeNotifier {
   /// Three is a starting point to be tuned against a real server on device.
   static const int defaultConcurrency = 3;
 
-  /// Rows per enumeration request. Larger than the browse page size (50): this
-  /// pass is a means to an end, not something the user scrolls, so the round
-  /// trips matter more than the latency of any one of them.
-  static const int defaultPageSize = 500;
+  /// Rows per enumeration request — [RommPaging.pageSize], the one definition
+  /// this walk and the connect-time link pass share. Kept under this name for
+  /// the callers and tests that already read it here.
+  // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Connect-Time Link Pass"
+  static const int defaultPageSize = RommPaging.pageSize;
 
-  /// Hard stop on the enumeration loop, in pages. A server that keeps returning
-  /// full pages (a `total` that never agrees with the rows, a filter the server
-  /// ignores) would otherwise page forever. 500 × 500 = 250k ROMs, far past any
-  /// real library.
-  static const int _maxPages = 500;
+  /// Hard stop on the enumeration loop, in pages — [RommPaging.maxPages],
+  /// shared with the link pass for the same reason as [defaultPageSize].
+  static const int maxPages = RommPaging.maxPages;
 
   RommBulkSyncPhase _phase = RommBulkSyncPhase.idle;
   String _sourceLabel = '';
@@ -608,7 +608,7 @@ class RommBulkSync extends ChangeNotifier {
     int pageSize,
   ) async {
     var offset = 0;
-    for (var page = 0; page < _maxPages; page++) {
+    for (var page = 0; page < maxPages; page++) {
       if (_cancelRequested) return;
 
       final RommRomPage result;
@@ -644,7 +644,7 @@ class RommBulkSync extends ChangeNotifier {
       if (_enumerateTotal > 0 && offset >= _enumerateTotal) return;
     }
     _log.w(
-      'RomM bulk sync: enumeration hit the $_maxPages-page cap for '
+      'RomM bulk sync: enumeration hit the $maxPages-page cap for '
       '"$_sourceLabel" — syncing the ${_queue.length} ROMs found so far',
     );
   }

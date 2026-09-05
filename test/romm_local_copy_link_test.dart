@@ -133,6 +133,45 @@ void main() {
       expect(copy?.filename, 'Game (USA).m3u');
     });
 
+    test('a copy the badge probe found is not probed for again', () async {
+      // The disk is the witness: once isDownloadedCached has looked, deleting
+      // the file must not change what findLocalCopy hands the link path —
+      // a second probe would notice, a memoised copy does not.
+      final file = await put('snes', 'a.sfc');
+      final provider = _PinnedSystem(_snes);
+      final rom = _rom(1, 'a.sfc');
+
+      expect(await provider.isDownloadedCached(rom, romFolders), isTrue);
+      await file.delete();
+
+      final copy = await provider.findLocalCopy(rom, romFolders);
+      expect(copy, isNotNull, reason: 'served from the memo, not the disk');
+      expect(copy!.filename, 'a.sfc');
+      expect(await provider.isDownloadedCached(rom, romFolders), isTrue);
+
+      provider.invalidateDownloadedCache();
+      expect(
+        await provider.findLocalCopy(rom, romFolders),
+        isNull,
+        reason: 'invalidation drops the copy along with the flag',
+      );
+      expect(await provider.isDownloadedCached(rom, romFolders), isFalse);
+    });
+
+    test('a miss is not memoised as a copy', () async {
+      final provider = _PinnedSystem(_snes);
+      final rom = _rom(1, 'a.sfc');
+
+      expect(await provider.isDownloadedCached(rom, romFolders), isFalse);
+      await put('snes', 'a.sfc');
+
+      expect(
+        await provider.findLocalCopy(rom, romFolders),
+        isNotNull,
+        reason: 'only hits are memoised; a miss probes again',
+      );
+    });
+
     test('is null when the platform resolves to no local system', () async {
       await put('snes', 'a.sfc');
       final provider = _PinnedSystem(null);
