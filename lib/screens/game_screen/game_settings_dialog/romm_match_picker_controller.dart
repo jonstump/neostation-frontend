@@ -211,8 +211,12 @@ class RommMatchPickerController extends ChangeNotifier {
   ///
   /// A raw query that finds nothing is retried once with its cleaned form
   /// when that differs (see [cleanRomTitle]); the retry is a search like any
-  /// other for the serial guard, so a keystroke in the meantime supersedes
-  /// it. A failed search is not retried here — that is the dialog's retry row.
+  /// other for the serial guard, so a newer search supersedes it. The retry
+  /// is skipped altogether when a keystroke has already queued a debounced
+  /// search: that search is for what the field holds now, and running the
+  /// retry would cancel it and show cleaned results for text the user has
+  /// moved on from. A failed search is not retried here — that is the
+  /// dialog's retry row.
   Future<void> searchNow(String query) => _search(query, isRetry: false);
 
   Future<void> _search(String query, {required bool isRetry}) async {
@@ -229,10 +233,11 @@ class RommMatchPickerController extends ChangeNotifier {
         limit: pageLimit,
       );
       if (_disposed || serial != _requestSerial) return;
-      if (!isRetry && page.items.isEmpty) {
+      // Governing: ADR-0004 (manual link provenance), SPEC-0004 REQ "Link Picker Dialog"
+      final pendingKeystroke = _debounceTimer?.isActive ?? false;
+      if (!isRetry && page.items.isEmpty && !pendingKeystroke) {
         final cleaned = cleanRomTitle(trimmed);
         if (cleaned != trimmed) {
-          // Governing: ADR-0004 (manual link provenance), SPEC-0004 REQ "Link Picker Dialog"
           _log.i(
             'RomM link picker: no results for "$trimmed", '
             'retrying with "$cleaned"',
@@ -240,6 +245,11 @@ class RommMatchPickerController extends ChangeNotifier {
           await _search(cleaned, isRetry: true);
           return;
         }
+      } else if (!isRetry && page.items.isEmpty) {
+        _log.i(
+          'RomM link picker: no results for "$trimmed", '
+          'skipping the cleaned retry — a newer search is pending',
+        );
       }
       _results = List.unmodifiable(_withPreselected(page.items));
       _lastError = null;

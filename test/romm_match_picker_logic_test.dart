@@ -491,5 +491,45 @@ void main() {
       expect(c.queryWasCleaned, isFalse);
       c.dispose();
     });
+
+    test(
+      'a keystroke during the raw request wins over the cleaned retry',
+      () async {
+        final fakes = _Fakes();
+        final raw = Completer<RommRomPage>();
+        fakes.answer = (search) {
+          if (search == 'Zelda (Europe)') return raw.future;
+          return Future.value(
+            RommRomPage(
+              items: search == 'Chrono' ? [_rom(7, 'ct.sfc')] : const [],
+            ),
+          );
+        };
+        final c = fakes.controller(debounce: const Duration(milliseconds: 30));
+
+        final rawSearch = c.searchNow('Zelda (Europe)');
+        // The user keeps typing while the raw request is in flight...
+        c.onQueryChanged('Chrono');
+        // ...and the empty raw response lands before the debounce fires.
+        raw.complete(const RommRomPage(items: []));
+        await rawSearch;
+
+        // The cleaned retry never ran, so nothing is marked as cleaned.
+        expect(fakes.searches.map((s) => s.search), ['Zelda (Europe)']);
+        expect(c.queryWasCleaned, isFalse);
+        expect(c.cleanedQuery, isNull);
+
+        // The pending search still fires for the text the field holds.
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+        expect(fakes.searches.map((s) => s.search), [
+          'Zelda (Europe)',
+          'Chrono',
+        ]);
+        expect(c.status, RommMatchPickerStatus.ready);
+        expect(c.results.map((r) => r.id), [7]);
+        expect(c.queryWasCleaned, isFalse);
+        c.dispose();
+      },
+    );
   });
 }

@@ -109,6 +109,22 @@ void main() {
       expect(cleanRomTitle('Game V2'), 'Game');
       expect(cleanRomTitle('Game (USA) v1.1'), 'Game');
       expect(cleanRomTitle('Game v1.2 Rev 1'), 'Game');
+      expect(cleanRomTitle('Game Rev 1.1 (USA)'), 'Game');
+      expect(cleanRomTitle('Game Rev 2'), 'Game');
+    });
+
+    test('keeps a last word that merely starts with "rev"', () {
+      expect(cleanRomTitle('Dance Dance Revolution'), 'Dance Dance Revolution');
+      expect(
+        cleanRomTitle('Resident Evil Revelations'),
+        'Resident Evil Revelations',
+      );
+      expect(cleanRomTitle('Shadow Revenge'), 'Shadow Revenge');
+      expect(
+        cleanRomTitle('Resident Evil - Revelations (USA)'),
+        'Resident Evil - Revelations',
+      );
+      expect(cleanRomTitle('Game Rev AB'), 'Game Rev AB');
     });
 
     test('keeps numbers and numerals that belong to the title', () {

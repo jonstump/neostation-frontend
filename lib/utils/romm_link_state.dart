@@ -48,11 +48,15 @@ final RegExp _innermostParens = RegExp(r'\([^()]*\)');
 final RegExp _innermostBrackets = RegExp(r'\[[^\[\]]*\]');
 final RegExp _whitespaceRun = RegExp(r'\s+');
 
-/// A trailing `Rev 1` / `Rev A` / `v1.2` token that sits outside any
-/// brackets. The digit requirement keeps roman numerals (`Final Fantasy VII`)
-/// and a bare trailing `3` (`Super Mario Bros. 3`) intact.
+/// A trailing `Rev 1` / `Rev 1.1` / `Rev A` / `v1.2` token that sits outside
+/// any brackets. The revision token is bounded to digits (dotted allowed) or
+/// a single letter, so a last word that merely starts with "rev"
+/// (`Dance Dance Revolution`, `Resident Evil Revelations`) is a title word,
+/// not a tag; the version token is digit-only, which keeps roman numerals
+/// (`Final Fantasy VII`, `Gran Turismo V`) and a bare trailing `3`
+/// (`Super Mario Bros. 3`) intact.
 final RegExp _trailingRevision = RegExp(
-  r'\s+(?:rev\s*[a-z0-9]+|v\d+(?:\.\d+)*)$',
+  r'\s+(?:rev\s*(?:\d+(?:\.\d+)*|[a-z])|v\d+(?:\.\d+)*)$',
   caseSensitive: false,
 );
 
