@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/models/game_model.dart';
@@ -274,6 +275,103 @@ void main() {
       expect(result.gamesImported, 1);
 
       expect(snapshot(esdeRoot), equals(before));
+    });
+
+    // A SAF tree can only be touched through the importer's three read-only
+    // overrides; the fake records every call, so any write, create, move, or
+    // delete would show up as an unexpected op — and the service source is
+    // checked for the mutating SAF calls it must never reference.
+    // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Media Mirror"
+    test('SAF in-folder import issues only read-only SAF calls', () async {
+      const treeUri =
+          'content://com.android.externalstorage.documents/tree/primary%3Aroms';
+      const snesUri = '$treeUri/document/primary%3Aroms%2Fsnes';
+      const gamelistUri = '$snesUri%2Fgamelist.xml';
+      const coversUri = '$snesUri%2Fcovers';
+      final listings = <String, List<Map<String, dynamic>>>{
+        treeUri: [
+          {'name': 'snes', 'uri': snesUri, 'isDirectory': true, 'size': 0},
+        ],
+        snesUri: [
+          {
+            'name': 'gamelist.xml',
+            'uri': gamelistUri,
+            'isDirectory': false,
+            'size': 80,
+          },
+          {'name': 'covers', 'uri': coversUri, 'isDirectory': true, 'size': 0},
+        ],
+        coversUri: [
+          {
+            'name': 'sonic.png',
+            'uri': '$coversUri%2Fsonic.png',
+            'isDirectory': false,
+            'size': 3,
+          },
+        ],
+      };
+      final calls = <String>[];
+      EsdeImportService.safRomFolderResolverOverride = (_) async => null;
+      EsdeImportService.safHasPermissionOverride = (uri) async {
+        calls.add('hasPermission');
+        return true;
+      };
+      EsdeImportService.safListFilesOverride = (uri) async {
+        calls.add('listFiles');
+        return listings[uri] ?? const [];
+      };
+      EsdeImportService.safReadFileOverride = (uri) async {
+        calls.add('readFile');
+        return uri == gamelistUri
+            ? Uint8List.fromList(
+                '<gameList><game><path>./sonic.smc</path><name>Sonic</name>'
+                        '</game></gameList>'
+                    .codeUnits,
+              )
+            : null;
+      };
+      addTearDown(() {
+        EsdeImportService.safRomFolderResolverOverride = null;
+        EsdeImportService.safHasPermissionOverride = null;
+        EsdeImportService.safListFilesOverride = null;
+        EsdeImportService.safReadFileOverride = null;
+      });
+
+      final result = await EsdeImportService.importInFolder([treeUri]);
+      // The run must have done real work, or the assertion proves nothing.
+      expect(result.gamesImported, 1);
+      expect(result.systemsImportedViaSaf, 1);
+
+      expect(calls, isNotEmpty);
+      const readOnlyOps = {'hasPermission', 'listFiles', 'readFile'};
+      expect(
+        calls.where((c) => !readOnlyOps.contains(c)),
+        isEmpty,
+        reason: 'a SAF import may only list, read, and check grants',
+      );
+      // No media root for a SAF system until the mirror provides one.
+      final roots = await db.rawQuery(
+        'SELECT esde_media_root FROM user_system_settings',
+      );
+      expect(roots, isEmpty);
+
+      // The importer must not even reference a mutating SAF call.
+      final source = File(
+        'lib/services/esde_import_service.dart',
+      ).readAsStringSync();
+      for (final mutator in const [
+        'SafDirectoryService.createDirectory',
+        'SafDirectoryService.moveFile',
+        'SafDirectoryService.writeTextFile',
+        'SafDirectoryService.deleteFile',
+        'SafDirectoryService.releasePermission',
+      ]) {
+        expect(
+          source.contains(mutator),
+          isFalse,
+          reason: 'the importer is read-only toward SAF; found $mutator',
+        );
+      }
     });
   });
 

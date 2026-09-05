@@ -10,7 +10,52 @@ import '../repositories/game_repository.dart';
 import '../repositories/scraper_repository.dart';
 import 'logger_service.dart';
 import 'permission_service.dart';
+import 'saf_directory_service.dart';
 import 'user_data_location_service.dart';
+
+/// Which path the in-folder importer took for one configured ROM folder.
+// Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Real-Path Precedence"
+enum EsdeImportPathKind {
+  /// Resolved to a readable real path and imported per SPEC-0002.
+  real,
+
+  /// A `content://` tree with no readable real path, discovered over SAF.
+  saf,
+
+  /// A `content://` tree that could not even be listed (lost grant, SAF
+  /// unavailable on this platform); counted in
+  /// [EsdeImportResult.foldersSkippedSaf].
+  skippedSaf,
+}
+
+/// Per-folder record of the path the in-folder importer used, so the summary
+/// can say which folders were read directly and which went over SAF.
+class EsdeImportFolderOutcome {
+  /// The ROM folder exactly as configured (a plain path or a `content://` URI).
+  final String folder;
+
+  final EsdeImportPathKind kind;
+
+  const EsdeImportFolderOutcome({required this.folder, required this.kind});
+
+  @override
+  String toString() => 'EsdeImportFolderOutcome($folder: ${kind.name})';
+}
+
+/// A SAF operation the importer could not perform: the tree is unreadable
+/// (no persisted grant, SAF unavailable off-Android) or a document read
+/// returned nothing. Sentinel so callers can tell an access failure apart
+/// from a parse failure when isolating one system.
+// Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Error Handling Standards"
+class EsdeSafAccessException implements Exception {
+  final String uri;
+  final String reason;
+
+  const EsdeSafAccessException(this.uri, this.reason);
+
+  @override
+  String toString() => 'EsdeSafAccessException(uri=$uri reason=$reason)';
+}
 
 /// Summary of an ES-DE import run, surfaced to the settings UI.
 class EsdeImportResult {
@@ -58,6 +103,21 @@ class EsdeImportResult {
   /// the ES-DE "not an ES-DE folder" outcome.
   final bool noInFolderGamelistsFound;
 
+  /// In-folder mode only: one entry per configured ROM folder saying which
+  /// path it took (real, SAF, or skipped). Empty for ES-DE root runs.
+  final List<EsdeImportFolderOutcome> folderOutcomes;
+
+  /// In-folder mode only: systems whose `gamelist.xml` was read over SAF
+  /// (a subset of [systemsMatched]). These get no media root until the SAF
+  /// media mirror records one.
+  final int systemsImportedViaSaf;
+
+  /// In-folder mode only: SAF subfolders that resolve to a system and carry a
+  /// mapped media category folder but no `gamelist.xml`. Not linked — there
+  /// is no real path to record until the media mirror exists — so they are
+  /// counted here for the mirror step to act on.
+  final int safMediaOnlyPending;
+
   const EsdeImportResult({
     this.systemsMatched = 0,
     this.systemsUnmatched = 0,
@@ -71,6 +131,9 @@ class EsdeImportResult {
     this.foldersSkippedSaf = 0,
     this.mediaOnlyLinked = 0,
     this.noInFolderGamelistsFound = false,
+    this.folderOutcomes = const [],
+    this.systemsImportedViaSaf = 0,
+    this.safMediaOnlyPending = 0,
   });
 
   EsdeImportResult _add({
@@ -84,6 +147,9 @@ class EsdeImportResult {
     int foldersSkippedSaf = 0,
     int mediaOnlyLinked = 0,
     bool? noInFolderGamelistsFound,
+    List<EsdeImportFolderOutcome> folderOutcomes = const [],
+    int systemsImportedViaSaf = 0,
+    int safMediaOnlyPending = 0,
   }) {
     return EsdeImportResult(
       systemsMatched: this.systemsMatched + systemsMatched,
@@ -99,6 +165,11 @@ class EsdeImportResult {
       mediaOnlyLinked: this.mediaOnlyLinked + mediaOnlyLinked,
       noInFolderGamelistsFound:
           noInFolderGamelistsFound ?? this.noInFolderGamelistsFound,
+      folderOutcomes: folderOutcomes.isEmpty
+          ? this.folderOutcomes
+          : List.unmodifiable([...this.folderOutcomes, ...folderOutcomes]),
+      systemsImportedViaSaf: this.systemsImportedViaSaf + systemsImportedViaSaf,
+      safMediaOnlyPending: this.safMediaOnlyPending + safMediaOnlyPending,
     );
   }
 }
@@ -113,18 +184,32 @@ enum GamelistSourceMode {
   /// `<romfolder>/<system>/gamelist.xml` with media in sibling category
   /// folders of the platform folder; recorded as `esde_media_root`.
   inFolder,
+
+  /// The in-folder layout inside a SAF `content://` tree with no readable
+  /// real path: `gamelist.xml` is read as bytes over SAF and the category
+  /// folders are known only as URIs. No media root is recorded until the
+  /// media mirror provides a real directory.
+  saf,
 }
 
 /// One importable gamelist and the layout it was found in. Discovery (ES-DE
-/// root or in-folder) produces these; the shared importer core consumes only
-/// them, so parsing, matching, merge, and provenance know nothing about layout.
+/// root, in-folder, or SAF) produces these; the shared importer core consumes
+/// only them, so parsing, matching, merge, and provenance know nothing about
+/// layout. A source is backed by either a filesystem [gamelistFile] or a SAF
+/// [gamelistUri]; the core reads whichever is set and parses the same bytes.
 // Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ "In-Folder Gamelist Discovery"
+// Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Gamelist Read Over SAF"
 class GamelistSource {
-  /// The `gamelist.xml` to parse.
-  final File gamelistFile;
+  /// The `gamelist.xml` to parse; null for a SAF source.
+  final File? gamelistFile;
+
+  /// SAF mode: the `content://` document URI of `gamelist.xml`; null for a
+  /// filesystem source.
+  final String? gamelistUri;
 
   /// ES-DE mode: the global media root (`downloaded_media` or the
   /// `MediaDirectory` override). In-folder mode: the absolute platform folder.
+  /// SAF mode: the platform folder's `content://` URI.
   final String mediaRoot;
 
   /// The system folder name as found on disk (`snes`, `segacd`, …); resolved
@@ -133,17 +218,43 @@ class GamelistSource {
 
   final GamelistSourceMode mode;
 
+  /// SAF mode: mapped media category folders seen in the platform folder's
+  /// one listing, lowercased category name → `content://` URI. Empty for
+  /// filesystem sources, which stat category folders on demand.
+  final Map<String, String> safCategoryDirs;
+
   const GamelistSource({
-    required this.gamelistFile,
+    this.gamelistFile,
+    this.gamelistUri,
     required this.mediaRoot,
     required this.systemFolderName,
     required this.mode,
-  });
+    this.safCategoryDirs = const {},
+  }) : assert(
+         (gamelistFile == null) != (gamelistUri == null),
+         'exactly one of gamelistFile / gamelistUri must be set',
+       );
 
-  /// Directory holding this system's `<category>/` media folders.
+  /// A gamelist discovered inside a SAF tree: [gamelistUri] is the document
+  /// to read, [folderUri] the platform folder it sits in.
+  const GamelistSource.saf({
+    required String this.gamelistUri,
+    required String folderUri,
+    required this.systemFolderName,
+    this.safCategoryDirs = const {},
+  }) : gamelistFile = null,
+       mediaRoot = folderUri,
+       mode = GamelistSourceMode.saf;
+
+  /// Where the gamelist lives, for logging: a path or a `content://` URI.
+  String get location => gamelistFile?.path ?? gamelistUri!;
+
+  /// Directory holding this system's `<category>/` media folders. For a SAF
+  /// source this is a `content://` URI that `dart:io` cannot stat, so the
+  /// duplicate-entry media probe finds nothing and keeps the first entry.
   String get systemMediaDir => switch (mode) {
     GamelistSourceMode.esdeRoot => path.join(mediaRoot, systemFolderName),
-    GamelistSourceMode.inFolder => mediaRoot,
+    GamelistSourceMode.inFolder || GamelistSourceMode.saf => mediaRoot,
   };
 }
 
@@ -259,12 +370,17 @@ class EsdeImportService {
   /// listing, and subfolder names resolve through the same folder-alias table,
   /// so the importer sees exactly the system set the library does.
   ///
-  /// Only ROM folders that resolve to a real filesystem path are read: a SAF
-  /// `content://` folder with no readable real path is counted in
+  /// A ROM folder that resolves to a readable real filesystem path is read
+  /// exactly as before. A SAF `content://` folder with no readable real path
+  /// is discovered over SAF instead: its subfolders are listed once each,
+  /// `gamelist.xml` bytes are read through SAF into the same parser, and no
+  /// media root is recorded (the media mirror does that). Only a folder that
+  /// cannot be listed at all (lost grant, SAF unavailable) is counted in
   /// [EsdeImportResult.foldersSkippedSaf], logged, and skipped — never fatal.
   ///
   /// [onProgress] is invoked as `(fraction 0..1, currentSystemLabel)`.
   // Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ "In-Folder Gamelist Discovery"
+  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "SAF Discovery"
   static Future<EsdeImportResult> importInFolder(
     List<String> romFolders, {
     void Function(double progress, String label)? onProgress,
@@ -272,18 +388,30 @@ class EsdeImportService {
     var result = const EsdeImportResult(mode: GamelistSourceMode.inFolder);
     _mediaIndexCache.clear();
 
+    // Real path first: a folder SPEC-0002 can read is imported per SPEC-0002
+    // with no SAF involvement; only folders it would have skipped go to SAF.
     // Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ "Real-Path Scope"
+    // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Real-Path Precedence"
     final realFolders = <String>[];
+    final safFolders = <String>[];
     for (final folder in romFolders) {
       final real = await _resolveRomFolderPath(folder);
       if (real == null) {
-        _log.w(
-          'in-folder import: skipped ROM folder uri=$folder '
-          'reason=no readable real path (SAF tree without all-files access)',
+        _log.i(
+          'in-folder import: ROM folder has no readable real path, '
+          'discovering over SAF uri=$folder',
         );
-        result = result._add(foldersSkippedSaf: 1);
+        if (!safFolders.contains(folder)) safFolders.add(folder);
         continue;
       }
+      result = result._add(
+        folderOutcomes: [
+          EsdeImportFolderOutcome(
+            folder: folder,
+            kind: EsdeImportPathKind.real,
+          ),
+        ],
+      );
       if (!realFolders.contains(real)) realFolders.add(real);
     }
 
@@ -315,6 +443,65 @@ class EsdeImportService {
         }
       }
     }
+
+    // SAF branch: the same shape as above, but every fact comes from one
+    // listing per folder because there is no per-document exists primitive.
+    // A folder that cannot be listed keeps the SPEC-0002 skipped outcome.
+    // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "SAF Discovery"
+    final safMediaOnlyCandidates = <({String name, String uri})>[];
+    for (final folderUri in safFolders) {
+      final ({
+        List<GamelistSource> sources,
+        List<({String name, String uri})> mediaOnly,
+      })
+      discovered;
+      try {
+        discovered = await _discoverSafFolder(folderUri);
+      } on EsdeSafAccessException catch (e) {
+        _log.w(
+          'in-folder import: skipped ROM folder uri=${e.uri} '
+          'reason=${e.reason}',
+        );
+        result = result._add(
+          foldersSkippedSaf: 1,
+          folderOutcomes: [
+            EsdeImportFolderOutcome(
+              folder: folderUri,
+              kind: EsdeImportPathKind.skippedSaf,
+            ),
+          ],
+        );
+        continue;
+      } catch (e) {
+        // A listing error the SAF service did not classify: the folder is
+        // unreadable for this run, which is the skipped outcome, not fatal.
+        _log.e(
+          'in-folder import: skipped ROM folder uri=$folderUri '
+          'reason=SAF listing failed: $e',
+        );
+        result = result._add(
+          foldersSkippedSaf: 1,
+          folderOutcomes: [
+            EsdeImportFolderOutcome(
+              folder: folderUri,
+              kind: EsdeImportPathKind.skippedSaf,
+            ),
+          ],
+        );
+        continue;
+      }
+      sources.addAll(discovered.sources);
+      safMediaOnlyCandidates.addAll(discovered.mediaOnly);
+      result = result._add(
+        folderOutcomes: [
+          EsdeImportFolderOutcome(
+            folder: folderUri,
+            kind: EsdeImportPathKind.saf,
+          ),
+        ],
+      );
+    }
+
     result = result._add(
       systemsFound: sources.length,
       noInFolderGamelistsFound: sources.isEmpty,
@@ -322,7 +509,8 @@ class EsdeImportService {
     if (sources.isEmpty) {
       _log.w(
         'in-folder import: no <system>/gamelist.xml found '
-        'folders=${realFolders.length} skippedSaf=${result.foldersSkippedSaf}',
+        'folders=${realFolders.length} safFolders=${safFolders.length} '
+        'skippedSaf=${result.foldersSkippedSaf}',
       );
     }
 
@@ -364,6 +552,9 @@ class EsdeImportService {
       if (result.systemsMatched > matchedBefore) {
         await _recordMediaLocation(source, appSystemId);
         importedSystemIds.add(appSystemId);
+        if (source.mode == GamelistSourceMode.saf) {
+          result = result._add(systemsImportedViaSaf: 1);
+        }
       }
     }
 
@@ -373,16 +564,189 @@ class EsdeImportService {
     );
     result = result._add(mediaOnlyLinked: linked);
 
+    final pending = await _countSafMediaOnlySystems(
+      safMediaOnlyCandidates,
+      importedSystemIds,
+    );
+    result = result._add(safMediaOnlyPending: pending);
+
     onProgress?.call(1.0, '');
     _log.i(
       'in-folder import done: folders=${realFolders.length} '
+      'safFolders=${safFolders.length} '
       'skippedSaf=${result.foldersSkippedSaf} '
       'systems found=${result.systemsFound} matched=${result.systemsMatched} '
+      'viaSaf=${result.systemsImportedViaSaf} '
       'unmatched=${result.systemsUnmatched} skipped=${result.systemsSkipped}, '
       'games imported=${result.gamesImported} noRomMatch=${result.gamesUnmatched}, '
-      'stats updated=${result.statsUpdated} mediaOnlyLinked=${result.mediaOnlyLinked}',
+      'stats updated=${result.statsUpdated} mediaOnlyLinked=${result.mediaOnlyLinked} '
+      'safMediaOnlyPending=${result.safMediaOnlyPending}',
     );
     return result;
+  }
+
+  // ── SAF operations ──────────────────────────────────────────────────────
+  // The importer touches the SAF tree through these three wrappers only, all
+  // read-only, so a test can substitute a recording fake with no platform
+  // channel and prove nothing else was ever called.
+
+  /// Lists one SAF directory; stands in for [SafDirectoryService.listFiles].
+  @visibleForTesting
+  static Future<List<Map<String, dynamic>>> Function(String uri)?
+  safListFilesOverride;
+
+  /// Reads one SAF document; stands in for [SafDirectoryService.readFile].
+  @visibleForTesting
+  static Future<Uint8List?> Function(String uri)? safReadFileOverride;
+
+  /// Checks a persisted grant; stands in for
+  /// [SafDirectoryService.hasPermission].
+  @visibleForTesting
+  static Future<bool> Function(String uri)? safHasPermissionOverride;
+
+  static Future<List<Map<String, dynamic>>> _safListFiles(String uri) {
+    final override = safListFilesOverride;
+    if (override != null) return override(uri);
+    if (!Platform.isAndroid) {
+      // Off Android the service answers every listing with an empty list,
+      // which would read as an empty tree rather than the truth: this
+      // platform cannot open a content:// tree at all.
+      throw EsdeSafAccessException(uri, 'SAF is unavailable on this platform');
+    }
+    return SafDirectoryService.listFiles(uri);
+  }
+
+  static Future<Uint8List?> _safReadFile(String uri) {
+    final override = safReadFileOverride;
+    if (override != null) return override(uri);
+    if (!Platform.isAndroid) {
+      throw EsdeSafAccessException(uri, 'SAF is unavailable on this platform');
+    }
+    return SafDirectoryService.readFile(uri);
+  }
+
+  static Future<bool> _safHasPermission(String uri) {
+    final override = safHasPermissionOverride;
+    if (override != null) return override(uri);
+    return SafDirectoryService.hasPermission(uri);
+  }
+
+  /// Discovers the importable systems inside one SAF ROM folder [folderUri]:
+  /// one listing of the root gives the system subfolders, one listing of each
+  /// subfolder tells whether it holds `gamelist.xml` and which mapped media
+  /// category folders sit beside it. Never lists deeper and never probes a
+  /// single document, because SAF has no cheap exists check.
+  ///
+  /// Throws [EsdeSafAccessException] when the root itself cannot be read (no
+  /// persisted grant, listing failure) so the caller can count the folder as
+  /// skipped. A subfolder that fails to list is logged and left out; the
+  /// other subfolders still import.
+  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "SAF Discovery"
+  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Error Handling Standards"
+  static Future<
+    ({
+      List<GamelistSource> sources,
+      List<({String name, String uri})> mediaOnly,
+    })
+  >
+  _discoverSafFolder(String folderUri) async {
+    if (!await _safHasPermission(folderUri)) {
+      throw EsdeSafAccessException(folderUri, 'no persisted SAF grant');
+    }
+
+    // The same filter the ROM scanner's SAF listing applies: immediate
+    // directories, keyed by lowercased name, in a stable order.
+    final rootChildren = await _safListFiles(folderUri);
+    final subfolders = <({String name, String uri})>[];
+    for (final child in rootChildren) {
+      if (child['isDirectory'] != true) continue;
+      final name = child['name']?.toString() ?? '';
+      final uri = child['uri']?.toString() ?? '';
+      if (name.isEmpty || uri.isEmpty) continue;
+      subfolders.add((name: name, uri: uri));
+    }
+    subfolders.sort(
+      (a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()),
+    );
+
+    final sources = <GamelistSource>[];
+    final mediaOnly = <({String name, String uri})>[];
+    for (final sub in subfolders) {
+      List<Map<String, dynamic>> children;
+      try {
+        children = await _safListFiles(sub.uri);
+      } catch (e) {
+        _log.w(
+          'in-folder import: cannot list SAF system folder '
+          'folder=${sub.name} uri=${sub.uri} error=$e',
+        );
+        continue;
+      }
+
+      String? gamelistUri;
+      final categoryDirs = <String, String>{};
+      for (final child in children) {
+        final name = child['name']?.toString() ?? '';
+        final uri = child['uri']?.toString() ?? '';
+        if (name.isEmpty || uri.isEmpty) continue;
+        final lower = name.toLowerCase();
+        if (child['isDirectory'] == true) {
+          if (_inFolderMediaCategories.contains(lower)) {
+            categoryDirs.putIfAbsent(lower, () => uri);
+          }
+        } else if (lower == 'gamelist.xml') {
+          gamelistUri ??= uri;
+        }
+      }
+
+      if (gamelistUri != null) {
+        sources.add(
+          GamelistSource.saf(
+            gamelistUri: gamelistUri,
+            folderUri: sub.uri,
+            systemFolderName: sub.name,
+            safCategoryDirs: Map.unmodifiable(categoryDirs),
+          ),
+        );
+      } else if (categoryDirs.isNotEmpty) {
+        mediaOnly.add(sub);
+      }
+    }
+    _log.i(
+      'in-folder import: SAF discovery uri=$folderUri '
+      'subfolders=${subfolders.length} gamelists=${sources.length} '
+      'mediaOnly=${mediaOnly.length}',
+    );
+    return (sources: sources, mediaOnly: mediaOnly);
+  }
+
+  /// SAF counterpart of [_linkInFolderMediaOnlySystems] that only counts: a
+  /// SAF platform subfolder with mapped category folders but no gamelist
+  /// resolves to a system yet has no real directory to record as its media
+  /// root, so it is reported as pending for the media mirror rather than
+  /// linked. Whether its category folders actually hold files is left to the
+  /// mirror, which lists them anyway; listing them here would be a second
+  /// pass over the tree for a count alone.
+  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "SAF Discovery"
+  static Future<int> _countSafMediaOnlySystems(
+    List<({String name, String uri})> candidates,
+    Set<String> importedSystemIds,
+  ) async {
+    var pending = 0;
+    for (final candidate in candidates) {
+      final system = await ScraperRepository.resolveSystemByFolderName(
+        candidate.name,
+      );
+      if (system == null) continue;
+      final appSystemId = system['app_system_id']!;
+      if (importedSystemIds.contains(appSystemId)) continue;
+      pending++;
+      _log.i(
+        'in-folder import: SAF art-only system folder=${candidate.name} '
+        'uri=${candidate.uri} system=$appSystemId left for the media mirror',
+      );
+    }
+    return pending;
   }
 
   /// Resolves a SAF `content://` ROM folder to a real filesystem path, or null
@@ -699,7 +1063,36 @@ class EsdeImportService {
             'system=$appSystemId root=${source.mediaRoot}',
           );
         }
+      // A content:// folder is not a directory the media resolver can stat,
+      // so nothing is recorded here; the media mirror records its own
+      // real directory once it has copied the category folders.
+      // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Mirror Media Root"
+      case GamelistSourceMode.saf:
+        _log.i(
+          'in-folder import: no media root recorded for SAF system '
+          'system=$appSystemId folder=${source.mediaRoot} '
+          'categories=${source.safCategoryDirs.keys.join(',')} '
+          '(pending media mirror)',
+        );
     }
+  }
+
+  /// The raw `gamelist.xml` bytes for [source]: a whole-file SAF read for a
+  /// SAF source, a plain file read otherwise. Both feed the same parser.
+  ///
+  /// Throws [EsdeSafAccessException] when the SAF read yields nothing, so the
+  /// caller's isolation logs the URI and counts the system as skipped.
+  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Gamelist Read Over SAF"
+  static Future<Uint8List> _readGamelistBytes(GamelistSource source) async {
+    final uri = source.gamelistUri;
+    if (uri != null) {
+      final bytes = await _safReadFile(uri);
+      if (bytes == null) {
+        throw EsdeSafAccessException(uri, 'SAF read returned no data');
+      }
+      return bytes;
+    }
+    return source.gamelistFile!.readAsBytes();
   }
 
   static Future<EsdeImportResult> _importSystem({
@@ -710,7 +1103,6 @@ class EsdeImportService {
     void Function(double fraction)? onGameProgress,
   }) async {
     var result = accumulator;
-    final gamelistFile = source.gamelistFile;
     // Parsed as a fragment, not a document: when the user picks a non-default
     // emulator for a system, ES-DE writes an `<alternativeEmulator>` element as
     // a SECOND root alongside `<gameList>`. That is invalid XML which ES-DE's
@@ -721,13 +1113,19 @@ class EsdeImportService {
       // Decoded leniently: gamelist.xml is declared UTF-8 but ES-DE happily
       // writes whatever bytes a scraper handed it, and a single bad byte in
       // one <desc> would otherwise throw away the whole system's metadata.
+      // The bytes come from a file or a SAF document; from here on the
+      // source's layout no longer matters.
+      // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Gamelist Read Over SAF"
       doc = XmlDocumentFragment.parse(
-        utf8.decode(await gamelistFile.readAsBytes(), allowMalformed: true),
+        utf8.decode(await _readGamelistBytes(source), allowMalformed: true),
       );
     } catch (e) {
+      // One unreadable or unparseable gamelist costs only its own system:
+      // counted as skipped with its location, and the run moves on.
+      // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Error Handling Standards"
       _log.e(
         'gamelist import: skipped system=${source.systemFolderName} '
-        'mode=${source.mode.name} file=${gamelistFile.path} '
+        'mode=${source.mode.name} file=${source.location} '
         'reason=could not read or parse gamelist: $e',
       );
       return result._add(systemsSkipped: 1);
@@ -1091,6 +1489,13 @@ class EsdeImportService {
   @visibleForTesting
   static String mediaSubdirForTest(String normalizedPath) =>
       _mediaSubdir(normalizedPath);
+
+  /// Runs SAF discovery on one ROM folder and returns the gamelist sources it
+  /// found, so a test can inspect the category folders each source carries.
+  @visibleForTesting
+  static Future<List<GamelistSource>> discoverSafSourcesForTest(
+    String folderUri,
+  ) async => (await _discoverSafFolder(folderUri)).sources;
 
   @visibleForTesting
   static List<XmlElement> selectGamesForTest(
