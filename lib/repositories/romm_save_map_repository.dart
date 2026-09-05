@@ -135,8 +135,9 @@ class RommSaveMapRepository {
   /// the row was written, false when a manual row was kept (or on error,
   /// which is logged).
   ///
-  /// [source] must be [RommLinkSource.download] or [RommLinkSource.auto];
-  /// a manual write goes through [putManualMapping], which has no guard.
+  /// Only [RommLinkSource.download] replaces; [RommLinkSource.auto] is
+  /// routed to [putMappingIfAbsent] and [RommLinkSource.manual] to
+  /// [putManualMapping], which has no guard.
   // Governing: ADR-0004 (manual link provenance), SPEC-0004 REQ "Manual Rows Are Never Replaced by Automatic Writers"
   static Future<bool> putMapping({
     required String romname,
@@ -147,6 +148,18 @@ class RommSaveMapRepository {
   }) async {
     if (source == RommLinkSource.manual) {
       return putManualMapping(
+        romname: romname,
+        systemFolder: systemFolder,
+        rommRomId: rommRomId,
+        fsName: fsName,
+      );
+    }
+    // An automatic writer never replaces anything (SPEC-0001 "Existing
+    // Mappings Are Never Overwritten"); only the download path re-targets a
+    // non-manual row. Route `auto` to the insert-if-absent write so a future
+    // caller cannot overwrite a download row by picking the wrong source.
+    if (source == RommLinkSource.auto) {
+      return putMappingIfAbsent(
         romname: romname,
         systemFolder: systemFolder,
         rommRomId: rommRomId,

@@ -636,6 +636,45 @@ void main() {
       expect((await rowFor('Other.sfc', 'snes'))['link_source'], 'auto');
     });
 
+    test(
+      'putMapping with source auto never replaces an existing row',
+      () async {
+        await RommSaveMapRepository.putMapping(
+          romname: 'Game.sfc',
+          systemFolder: 'snes',
+          rommRomId: 12,
+          source: RommLinkSource.download,
+        );
+        final written = await RommSaveMapRepository.putMapping(
+          romname: 'Game.sfc',
+          systemFolder: 'snes',
+          rommRomId: 40,
+          source: RommLinkSource.auto,
+        );
+        expect(written, isFalse);
+        final row = await RommSaveMapRepository.getMapping('Game.sfc', 'snes');
+        expect(row?.rommRomId, 12);
+        expect(row?.source, RommLinkSource.download);
+      },
+    );
+
+    test('a re-download over an auto row rewrites link_source', () async {
+      await RommSaveMapRepository.putMappingIfAbsent(
+        romname: 'Game.sfc',
+        systemFolder: 'snes',
+        rommRomId: 12,
+      );
+      await RommSaveMapRepository.putMapping(
+        romname: 'Game.sfc',
+        systemFolder: 'snes',
+        rommRomId: 40,
+        source: RommLinkSource.download,
+      );
+      final row = await RommSaveMapRepository.getMapping('Game.sfc', 'snes');
+      expect(row?.rommRomId, 40);
+      expect(row?.source, RommLinkSource.download);
+    });
+
     test('putManualMapping writes link_source = manual', () async {
       expect(
         await RommSaveMapRepository.putManualMapping(
