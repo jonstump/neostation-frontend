@@ -533,6 +533,13 @@ extension _Tabs on _SystemEmulatorSettingsDialogState {
             enabled: _system.recursiveScan,
           ),
         ],
+        if (_offersRommFetch) ...[
+          SizedBox(height: 4.r),
+          _buildRommFetchItem(
+            index: _rommFetchIndex,
+            key: _generalItemKeys[_rommFetchIndex],
+          ),
+        ],
       ],
     );
   }

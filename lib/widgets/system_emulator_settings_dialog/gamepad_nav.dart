@@ -207,6 +207,9 @@ extension _GamepadNav on _SystemEmulatorSettingsDialogState {
         if (_system.recursiveScan) {
           _toggleSubfolderView(!_system.subfolderView);
         }
+      } else if (_offersRommFetch && _generalIndex == _rommFetchIndex) {
+        // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
+        _activateRommFetch();
       }
     } else if (_currentTab == 2) {
       if (_appearanceIndex == 0) {
