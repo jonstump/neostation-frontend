@@ -1265,4 +1265,5 @@ const Map<String, dynamic> appLocaleKo = {
       '{system}의 RomM 메타데이터 가져오기가 이미 실행 중입니다. 완료될 때까지 기다린 후 다시 시도하세요.',
   AppLocale.rommSystemFetchFailedToStart:
       '{system}의 RomM 메타데이터를 가져올 수 없습니다: {error}',
+  AppLocale.scrapeFetchingFromRomm: 'RomM에서 메타데이터를 가져오는 중…',
 };

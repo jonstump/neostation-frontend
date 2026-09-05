@@ -1430,4 +1430,5 @@ const Map<String, dynamic> appLocaleDe = {
       'Für {system} läuft bereits ein RomM-Metadatenabruf. Warte, bis er abgeschlossen ist, und versuche es erneut.',
   AppLocale.rommSystemFetchFailedToStart:
       'RomM-Metadaten für {system} konnten nicht abgerufen werden: {error}',
+  AppLocale.scrapeFetchingFromRomm: 'Metadaten werden von RomM abgerufen…',
 };
