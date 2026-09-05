@@ -1258,6 +1258,28 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
   @override
   GameSyncState? getGameSyncState(String gameId) => _gameSyncStates[gameId];
 
+  /// Forgets the cached sync state for one game so the next status computation
+  /// starts from scratch.
+  ///
+  /// Called after a link path writes an `app_romm_rom_map` row for a game that
+  /// was already on the device. Until then [_syncGame] found no rom id and
+  /// cached [GameSyncStatus.disabled] — the grey cloud — and nothing would
+  /// recompute it before a restart. Dropping the entry (and notifying, so the
+  /// badge re-asks) lets the link show without one.
+  ///
+  /// The "downloaded" memo on the browse side is invalidated too, through its
+  /// owner: the new row is also what [RommProvider]'s existing-file probe uses
+  /// to recognise a multi-disc game by its recorded playlist name, so a stale
+  /// memo could keep reporting a freshly linked game as not downloaded. That
+  /// call is a wholesale, no-op-when-empty clear, so repeated invalidations are
+  /// cheap.
+  // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Sync Status Refresh After Linking"
+  void invalidateGameSyncState(String romname) {
+    final removed = _gameSyncStates.remove(romname) != null;
+    _browse.invalidateDownloadedCache();
+    if (removed && !_disposed) notifyListeners();
+  }
+
   @override
   Future<SyncResult> syncGameSavesBeforeLaunch(
     GameModel game, {

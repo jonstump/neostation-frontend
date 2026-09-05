@@ -33,6 +33,18 @@ class RommRomIdIndex {
   bool get isEmpty => _byKey.isEmpty;
 }
 
+/// One row to link, for [RommSaveMapRepository.putMappingsIfAbsent].
+///
+/// [romname] is the library's canonical on-disk filename (the spelling the
+/// sync layer looks games up by), [systemFolder] the local system folder, and
+/// [fsName] the server-side name the link was made from.
+typedef RommSaveMapEntry = ({
+  String romname,
+  String systemFolder,
+  int rommRomId,
+  String? fsName,
+});
+
 /// Repository for the RomM save-sync mapping table (`app_romm_rom_map`).
 ///
 /// Links a local game (its [romname] within a [systemFolder]) to the RomM ROM
@@ -62,6 +74,91 @@ class RommSaveMapRepository {
       _log.e('Error saving RomM rom map ($romname/$systemFolder): $e');
     }
   }
+
+  /// Links a local game to a RomM ROM only when no row exists for it yet.
+  ///
+  /// Returns true when a row was written, false when the `(romname,
+  /// systemFolder)` key already held a mapping — which is left exactly as it
+  /// was, even if it points at a different ROM. This is the write the link
+  /// paths for pre-existing ROMs use: unlike [putMapping], which the download
+  /// path legitimately uses to re-target a re-downloaded ROM, a link inferred
+  /// from a filename must never clobber a row somebody else wrote (a future
+  /// manual picker, or a download that finished first). The boolean is what
+  /// gives callers their "linked" versus "already linked" counts.
+  // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Existing Mappings Are Never Overwritten"
+  static Future<bool> putMappingIfAbsent({
+    required String romname,
+    required String systemFolder,
+    required int rommRomId,
+    String? fsName,
+  }) async {
+    final inserted = await putMappingsIfAbsent([
+      (
+        romname: romname,
+        systemFolder: systemFolder,
+        rommRomId: rommRomId,
+        fsName: fsName,
+      ),
+    ]);
+    return inserted == 1;
+  }
+
+  /// Batch form of [putMappingIfAbsent]; returns how many rows were inserted.
+  ///
+  /// For the connect-time link pass, which has a page's worth of matches for
+  /// one platform and wants them written in one round trip. All inserts run in
+  /// a single transaction so a failure part-way leaves the table as it was,
+  /// and each is a parameterized `INSERT OR IGNORE` — existing rows are
+  /// skipped, never replaced.
+  ///
+  /// The count comes from SQLite's per-statement change counter rather than
+  /// the inserted rowid: an ignored insert leaves `last_insert_rowid()` at
+  /// whatever the previous insert set it to, so the rowid can't tell "written"
+  /// from "skipped", while `changes()` is 0 for a skipped row and 1 for a
+  /// written one. The adapter's `rawUpdate` reads that counter immediately
+  /// after executing the statement, which is why the insert goes through it.
+  ///
+  /// Returns 0 on error (logged), which reads as "nothing linked" to callers.
+  // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Database Operation Standards"
+  static Future<int> putMappingsIfAbsent(List<RommSaveMapEntry> entries) async {
+    if (entries.isEmpty) return 0;
+    try {
+      final db = await SqliteService.getDatabase();
+      final now = DateTime.now().toIso8601String();
+      return await db.transaction((txn) async {
+        final batch = txn.batch();
+        for (final e in entries) {
+          batch.rawUpdate(_insertIfAbsentSql, [
+            e.romname,
+            e.systemFolder,
+            e.rommRomId,
+            e.fsName,
+            now,
+          ]);
+        }
+        final results = await batch.commit();
+        var inserted = 0;
+        for (final changed in results) {
+          if (changed is int && changed > 0) inserted++;
+        }
+        return inserted;
+      });
+    } catch (e) {
+      _log.e(
+        'Error linking ${entries.length} RomM rom map row(s) '
+        '(first: ${entries.first.romname}/${entries.first.systemFolder}): $e',
+      );
+      return 0;
+    }
+  }
+
+  /// Parameterized insert-if-absent for [putMappingsIfAbsent]. `OR IGNORE`
+  /// resolves the `(romname, system_folder)` primary-key conflict by skipping
+  /// the new row, leaving the existing one untouched.
+  static const String _insertIfAbsentSql =
+      'INSERT OR IGNORE INTO app_romm_rom_map '
+      '(romname, system_folder, romm_rom_id, romm_fs_name, updated_at) '
+      'VALUES (?, ?, ?, ?, ?)';
 
   /// Returns the on-disk indexed name (`romname`) recorded for [rommRomId]
   /// within [systemFolder], or null if that ROM hasn't been downloaded here.
