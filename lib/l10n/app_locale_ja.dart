@@ -1191,4 +1191,7 @@ const Map<String, dynamic> appLocaleJa = {
 
   // SPEC-0004 REQ "Search Screen Entry" — link action on search results
   AppLocale.searchLinkToRomm: 'RomM にリンク',
+
+  // SPEC-0004 REQ "Link Picker Dialog" — results are for the cleaned query
+  AppLocale.rommLinkPickerCleanedQuery: '「{query}」の検索結果を表示中',
 };

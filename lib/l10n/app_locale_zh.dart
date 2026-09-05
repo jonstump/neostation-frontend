@@ -1159,4 +1159,7 @@ const Map<String, dynamic> appLocaleZh = {
 
   // SPEC-0004 REQ "Search Screen Entry" — link action on search results
   AppLocale.searchLinkToRomm: '链接到 RomM',
+
+  // SPEC-0004 REQ "Link Picker Dialog" — results are for the cleaned query
+  AppLocale.rommLinkPickerCleanedQuery: '正在显示“{query}”的结果',
 };

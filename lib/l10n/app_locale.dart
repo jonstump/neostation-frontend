@@ -1336,6 +1336,8 @@ mixin AppLocale {
   static const String esdeResetMirrorsRemoved = 'esde_reset_mirrors_removed';
   // SPEC-0004 REQ "Search Screen Entry" — link action on search results
   static const String searchLinkToRomm = 'search_link_to_romm';
+  static const String rommLinkPickerCleanedQuery =
+      'romm_link_picker_cleaned_query';
 
   // ==========================================================================
   // Localization Maps
