@@ -1333,4 +1333,31 @@ const Map<String, dynamic> appLocalePt = {
 
   // SPEC-0004 REQ "Link Picker Dialog" — results are for the cleaned query
   AppLocale.rommLinkPickerCleanedQuery: 'Mostrando resultados para “{query}”',
+
+  // SPEC-0005 REQ "Per-Game Fetch Action" — Manage tab fetch row, mode
+  // chooser, and outcome notifications
+  AppLocale.rommFetchMetadataRow: 'Obter metadados do RomM',
+  AppLocale.rommFetchMetadataRowSubtitle:
+      'Preencher ou substituir os metadados e as imagens deste jogo a partir do RomM',
+  AppLocale.rommFetchMetadataRowNotLinked: 'Vincule este jogo ao RomM primeiro',
+  AppLocale.rommFetchMetadataAction: 'Obter',
+  AppLocale.rommFetchMetadataChooserTitle: 'Obter metadados do RomM',
+  AppLocale.rommFetchMetadataFillGapsOption: 'Preencher lacunas (recomendado)',
+  AppLocale.rommFetchMetadataFillGapsDescription:
+      'Grava apenas os campos vazios e as imagens ausentes. Tudo o que você já tem é mantido.',
+  AppLocale.rommFetchMetadataReplaceOption: 'Substituir tudo',
+  AppLocale.rommFetchMetadataReplaceDescription:
+      'Sobrescreve todos os campos e imagens com os dados do RomM. As descrições que não estão em inglês são apagadas e a editora fica vazia, pois o RomM não os fornece.',
+  AppLocale.rommFetchMetadataInProgress: 'Obtendo do RomM…',
+  AppLocale.rommFetchMetadataFilled:
+      '{count} campos e {media} imagens preenchidos a partir do RomM',
+  AppLocale.rommFetchMetadataReplaced:
+      '{count} campos e {media} imagens substituídos a partir do RomM',
+  AppLocale.rommFetchMetadataNothingToFill:
+      'Nada a preencher: este jogo já tem tudo o que o RomM fornece',
+  AppLocale.rommFetchMetadataNotFound:
+      'Não encontrado no RomM: a ROM vinculada não existe mais lá',
+  AppLocale.rommFetchMetadataPartial:
+      '{count} campos gravados, mas {media} imagens não puderam ser baixadas',
+  AppLocale.rommFetchMetadataFailed: 'Falha ao obter os metadados do RomM',
 };

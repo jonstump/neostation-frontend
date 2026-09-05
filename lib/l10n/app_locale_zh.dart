@@ -1162,4 +1162,24 @@ const Map<String, dynamic> appLocaleZh = {
 
   // SPEC-0004 REQ "Link Picker Dialog" — results are for the cleaned query
   AppLocale.rommLinkPickerCleanedQuery: '正在显示“{query}”的结果',
+
+  // SPEC-0005 REQ "Per-Game Fetch Action" — Manage tab fetch row, mode
+  // chooser, and outcome notifications
+  AppLocale.rommFetchMetadataRow: '从 RomM 获取元数据',
+  AppLocale.rommFetchMetadataRowSubtitle: '从 RomM 补全或替换此游戏的元数据和封面图',
+  AppLocale.rommFetchMetadataRowNotLinked: '请先将此游戏链接到 RomM',
+  AppLocale.rommFetchMetadataAction: '获取',
+  AppLocale.rommFetchMetadataChooserTitle: '从 RomM 获取元数据',
+  AppLocale.rommFetchMetadataFillGapsOption: '补全缺失（推荐）',
+  AppLocale.rommFetchMetadataFillGapsDescription: '仅写入空白字段和缺失的封面图，已有内容全部保留。',
+  AppLocale.rommFetchMetadataReplaceOption: '全部替换',
+  AppLocale.rommFetchMetadataReplaceDescription:
+      '用 RomM 的数据覆盖所有字段和封面图。非英文简介将被清空，发行商将留空，因为 RomM 不提供这些内容。',
+  AppLocale.rommFetchMetadataInProgress: '正在从 RomM 获取…',
+  AppLocale.rommFetchMetadataFilled: '已从 RomM 补全 {count} 个字段和 {media} 张封面图',
+  AppLocale.rommFetchMetadataReplaced: '已从 RomM 替换 {count} 个字段和 {media} 张封面图',
+  AppLocale.rommFetchMetadataNothingToFill: '无需补全：此游戏已拥有 RomM 提供的全部内容',
+  AppLocale.rommFetchMetadataNotFound: '在 RomM 上未找到：链接的 ROM 已不存在',
+  AppLocale.rommFetchMetadataPartial: '已写入 {count} 个字段，但 {media} 张封面图下载失败',
+  AppLocale.rommFetchMetadataFailed: '从 RomM 获取元数据失败',
 };

@@ -1304,4 +1304,31 @@ const Map<String, dynamic> appLocaleEn = {
 
   // SPEC-0004 REQ "Link Picker Dialog" — results are for the cleaned query
   AppLocale.rommLinkPickerCleanedQuery: 'Showing results for “{query}”',
+
+  // SPEC-0005 REQ "Per-Game Fetch Action" — Manage tab fetch row, mode
+  // chooser, and outcome notifications
+  AppLocale.rommFetchMetadataRow: 'Fetch metadata from RomM',
+  AppLocale.rommFetchMetadataRowSubtitle:
+      'Fill in or replace this game\'s metadata and artwork from RomM',
+  AppLocale.rommFetchMetadataRowNotLinked: 'Link this game to RomM first',
+  AppLocale.rommFetchMetadataAction: 'Fetch',
+  AppLocale.rommFetchMetadataChooserTitle: 'Fetch metadata from RomM',
+  AppLocale.rommFetchMetadataFillGapsOption: 'Fill gaps (recommended)',
+  AppLocale.rommFetchMetadataFillGapsDescription:
+      'Writes only empty fields and missing artwork. Everything you already have is kept.',
+  AppLocale.rommFetchMetadataReplaceOption: 'Replace all',
+  AppLocale.rommFetchMetadataReplaceDescription:
+      'Overwrites every field and artwork with RomM\'s data. Non-English descriptions are cleared and the publisher is left empty, since RomM does not provide them.',
+  AppLocale.rommFetchMetadataInProgress: 'Fetching from RomM…',
+  AppLocale.rommFetchMetadataFilled:
+      'Filled {count} fields and {media} artwork from RomM',
+  AppLocale.rommFetchMetadataReplaced:
+      'Replaced {count} fields and {media} artwork from RomM',
+  AppLocale.rommFetchMetadataNothingToFill:
+      'Nothing to fill: this game already has everything RomM provides',
+  AppLocale.rommFetchMetadataNotFound:
+      'Not found on RomM: the linked ROM no longer exists there',
+  AppLocale.rommFetchMetadataPartial:
+      'Wrote {count} fields, but {media} artwork failed to download',
+  AppLocale.rommFetchMetadataFailed: 'Fetching metadata from RomM failed',
 };

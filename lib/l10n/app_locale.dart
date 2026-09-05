@@ -1339,6 +1339,36 @@ mixin AppLocale {
   static const String rommLinkPickerCleanedQuery =
       'romm_link_picker_cleaned_query';
 
+  // SPEC-0005 REQ "Per-Game Fetch Action" — Manage tab fetch row, mode
+  // chooser, and outcome notifications
+  static const String rommFetchMetadataRow = 'romm_fetch_metadata_row';
+  static const String rommFetchMetadataRowSubtitle =
+      'romm_fetch_metadata_row_subtitle';
+  static const String rommFetchMetadataRowNotLinked =
+      'romm_fetch_metadata_row_not_linked';
+  static const String rommFetchMetadataAction = 'romm_fetch_metadata_action';
+  static const String rommFetchMetadataChooserTitle =
+      'romm_fetch_metadata_chooser_title';
+  static const String rommFetchMetadataFillGapsOption =
+      'romm_fetch_metadata_fill_gaps_option';
+  static const String rommFetchMetadataFillGapsDescription =
+      'romm_fetch_metadata_fill_gaps_description';
+  static const String rommFetchMetadataReplaceOption =
+      'romm_fetch_metadata_replace_option';
+  static const String rommFetchMetadataReplaceDescription =
+      'romm_fetch_metadata_replace_description';
+  static const String rommFetchMetadataInProgress =
+      'romm_fetch_metadata_in_progress';
+  static const String rommFetchMetadataFilled = 'romm_fetch_metadata_filled';
+  static const String rommFetchMetadataReplaced =
+      'romm_fetch_metadata_replaced';
+  static const String rommFetchMetadataNothingToFill =
+      'romm_fetch_metadata_nothing_to_fill';
+  static const String rommFetchMetadataNotFound =
+      'romm_fetch_metadata_not_found';
+  static const String rommFetchMetadataPartial = 'romm_fetch_metadata_partial';
+  static const String rommFetchMetadataFailed = 'romm_fetch_metadata_failed';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================

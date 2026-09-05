@@ -1319,4 +1319,32 @@ const Map<String, dynamic> appLocaleRu = {
 
   // SPEC-0004 REQ "Link Picker Dialog" — results are for the cleaned query
   AppLocale.rommLinkPickerCleanedQuery: 'Результаты для «{query}»',
+
+  // SPEC-0005 REQ "Per-Game Fetch Action" — Manage tab fetch row, mode
+  // chooser, and outcome notifications
+  AppLocale.rommFetchMetadataRow: 'Получить метаданные из RomM',
+  AppLocale.rommFetchMetadataRowSubtitle:
+      'Дополнить или заменить метаданные и обложки этой игры из RomM',
+  AppLocale.rommFetchMetadataRowNotLinked: 'Сначала свяжите эту игру с RomM',
+  AppLocale.rommFetchMetadataAction: 'Получить',
+  AppLocale.rommFetchMetadataChooserTitle: 'Получить метаданные из RomM',
+  AppLocale.rommFetchMetadataFillGapsOption:
+      'Заполнить пробелы (рекомендуется)',
+  AppLocale.rommFetchMetadataFillGapsDescription:
+      'Записывает только пустые поля и недостающие обложки. Всё, что уже есть, сохраняется.',
+  AppLocale.rommFetchMetadataReplaceOption: 'Заменить всё',
+  AppLocale.rommFetchMetadataReplaceDescription:
+      'Перезаписывает все поля и обложки данными из RomM. Описания не на английском языке удаляются, а издатель остаётся пустым, поскольку RomM их не предоставляет.',
+  AppLocale.rommFetchMetadataInProgress: 'Получение из RomM…',
+  AppLocale.rommFetchMetadataFilled:
+      'Из RomM заполнено полей: {count}, обложек: {media}',
+  AppLocale.rommFetchMetadataReplaced:
+      'Из RomM заменено полей: {count}, обложек: {media}',
+  AppLocale.rommFetchMetadataNothingToFill:
+      'Нечего заполнять: у этой игры уже есть всё, что предоставляет RomM',
+  AppLocale.rommFetchMetadataNotFound:
+      'Не найдено в RomM: связанный ROM там больше не существует',
+  AppLocale.rommFetchMetadataPartial:
+      'Записано полей: {count}, но не удалось загрузить обложек: {media}',
+  AppLocale.rommFetchMetadataFailed: 'Не удалось получить метаданные из RomM',
 };

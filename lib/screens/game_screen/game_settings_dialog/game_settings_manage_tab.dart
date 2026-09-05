@@ -4,6 +4,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/models/game_model.dart';
+import 'package:neostation/models/romm_metadata_fetch.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/providers/neo_sync_provider.dart';
@@ -13,7 +14,11 @@ import 'package:neostation/providers/sqlite_database_provider.dart';
 import 'package:neostation/repositories/game_repository.dart';
 import 'package:neostation/repositories/romm_save_map_repository.dart';
 import 'package:neostation/repositories/system_repository.dart';
+import 'package:neostation/screens/game_screen/game_settings_dialog/game_settings_manage_layout.dart';
+import 'package:neostation/screens/game_screen/game_settings_dialog/romm_fetch_mode_dialog.dart';
 import 'package:neostation/screens/game_screen/game_settings_dialog/romm_match_picker_dialog.dart';
+import 'package:neostation/screens/game_screen/my_games_carousel.dart';
+import 'package:neostation/screens/game_screen/my_games_grid.dart';
 import 'package:neostation/utils/enabled_index_nav.dart';
 import 'package:neostation/screens/settings_screen/new_settings_options/widgets/setting_row.dart';
 import 'package:neostation/services/logger_service.dart';
@@ -21,7 +26,9 @@ import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/sync/i_sync_provider.dart';
 import 'package:neostation/sync/providers/romm_provider.dart';
 import 'package:neostation/sync/sync_manager.dart';
+import 'package:neostation/utils/artwork_cache.dart';
 import 'package:neostation/utils/game_utils.dart';
+import 'package:neostation/utils/romm_fetch_metadata_message.dart';
 import 'package:neostation/utils/romm_link_state.dart';
 import 'package:neostation/widgets/confirm_action_dialog.dart';
 import 'package:neostation/widgets/custom_notification.dart';
@@ -31,8 +38,8 @@ import 'package:provider/provider.dart';
 
 /// Manage tab for [GameSettingsDialog]: cloud sync, grid size/style,
 /// play-time reset, hiding the game, permanent game deletion, and the game's
-/// RomM link (state line, link picker, unlink). View mode is selected from the
-/// game view itself (X button), not here.
+/// RomM link (state line, link picker, unlink, metadata fetch). View mode is
+/// selected from the game view itself (X button), not here.
 class GameSettingsManageTab extends StatefulWidget {
   final GameModel game;
   final SystemModel system;
@@ -69,6 +76,7 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
   bool _isHiding = false;
   bool _isDeleting = false;
   bool _isUnlinkingRomm = false;
+  bool _isFetchingRommMetadata = false;
 
   /// Whether RomM is connected, read from the provider on every build; the
   /// link row is only enabled (and reachable) while it is.
@@ -87,15 +95,16 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
   GlobalKey _itemKey(int navIndex) =>
       _itemKeys.putIfAbsent(navIndex, () => GlobalKey());
 
-  // Navigation layout. Indices are fixed so focus doesn't jump around when
-  // cloud sync visibility or the grid options change.
-  int get _cloudSyncIdx => 0;
-  int get _playTimeIdx => 1;
-  int get _hideIdx => 2;
-  int get _deleteIdx => 3;
-  int get _linkRommIdx => 4;
-  int get _unlinkRommIdx => 5;
-  int get _totalItems => 6;
+  // Navigation layout. Indices are fixed (see [ManageTabLayout]) so focus
+  // doesn't jump around when cloud sync visibility or the grid options change.
+  int get _cloudSyncIdx => ManageTabLayout.cloudSync;
+  int get _playTimeIdx => ManageTabLayout.playTime;
+  int get _hideIdx => ManageTabLayout.hide;
+  int get _deleteIdx => ManageTabLayout.delete;
+  int get _linkRommIdx => ManageTabLayout.linkRomm;
+  int get _unlinkRommIdx => ManageTabLayout.unlinkRomm;
+  int get _fetchRommMetadataIdx => ManageTabLayout.fetchRommMetadata;
+  int get _totalItems => ManageTabLayout.total;
 
   bool get _showCloudSync => widget.syncProvider?.isAuthenticated == true;
 
@@ -118,13 +127,16 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
     super.dispose();
   }
 
+  /// Whether the fetch row is enabled: linked and connected.
+  bool get _canFetchRommMetadata => _rommMapping != null && _rommConnected;
+
   /// Returns whether [idx] can receive focus in the current state.
-  bool _isEnabledIndex(int idx) {
-    if (idx == _cloudSyncIdx && !_showCloudSync) return false;
-    if (idx == _linkRommIdx && !_rommConnected) return false;
-    if (idx == _unlinkRommIdx && _rommMapping == null) return false;
-    return idx >= 0 && idx < _totalItems;
-  }
+  bool _isEnabledIndex(int idx) => ManageTabLayout.isEnabled(
+    idx,
+    showCloudSync: _showCloudSync,
+    rommConnected: _rommConnected,
+    hasRommLink: _rommMapping != null,
+  );
 
   // Clamp at the ends like the other tabs (no wrap); just skip disabled rows.
   int _previousEnabledIndex() =>
@@ -171,6 +183,8 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
       _openRommPicker();
     } else if (idx == _unlinkRommIdx) {
       _confirmUnlinkRomm();
+    } else if (idx == _fetchRommMetadataIdx) {
+      _confirmFetchRommMetadata();
     }
   }
 
@@ -534,6 +548,105 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
     }
   }
 
+  // ── RomM metadata fetch ─────────────────────────────────────────────────
+
+  /// Opens the mode chooser and runs the fetch with what was picked; B in the
+  /// chooser cancels without touching the game.
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-Game Fetch Action"
+  Future<void> _confirmFetchRommMetadata() async {
+    if (!_canFetchRommMetadata || _isFetchingRommMetadata) return;
+    SfxService().playNavSound();
+    final mode = await RommFetchModeDialog.show(context);
+    if (mode == null || !mounted) return;
+    await _fetchRommMetadata(mode);
+  }
+
+  /// Runs the writer once in [mode], then refreshes the artwork caches the
+  /// way Force Rescrape does (`evictScrapedArtwork` + the grid and carousel
+  /// caches + `onGameUpdated`, which re-reads the row) so the card shows the
+  /// new text and art at once, and reports the outcome. Re-entry is blocked
+  /// while a fetch is in flight; the provider never throws, so a failure
+  /// arrives as an outcome and is reported the same way.
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-Game Fetch Action"
+  Future<void> _fetchRommMetadata(RommMetadataMode mode) async {
+    if (_isFetchingRommMetadata) return;
+    setState(() => _isFetchingRommMetadata = true);
+
+    // Read before the awaits: the dialog can be gone by the time this ends.
+    final rommProvider = context.read<RommProvider>();
+    final artworkPaths = scrapedArtworkPaths(
+      widget.game,
+      _targetSystemFolder,
+      widget.fileProvider,
+    );
+
+    try {
+      final system = await _targetSystem();
+      if (system == null) {
+        // Not silent: the user pressed the row, so say why nothing happened.
+        _log.w(
+          'RomM metadata fetch skipped: system not found '
+          'folder=$_targetSystemFolder rom=${widget.game.romname}',
+        );
+        if (mounted) {
+          AppNotification.showNotification(
+            context,
+            AppLocale.rommFetchMetadataFailed.getString(context),
+            type: NotificationType.error,
+          );
+        }
+        return;
+      }
+
+      final outcome = await rommProvider.fetchMetadata(
+        game: widget.game,
+        system: system,
+        mode: mode,
+        fileProvider: widget.fileProvider,
+      );
+      _log.i(
+        'RomM metadata fetch ($mode) for $_targetSystemFolder/'
+        '${widget.game.romname}: $outcome',
+      );
+
+      if (outcome.wroteSomething) {
+        // Bust cached artwork so the fresh media shows up everywhere.
+        await evictScrapedArtwork(artworkPaths);
+        GamesGrid.evictArtworkCaches(artworkPaths);
+        GamesCarousel.evictArtworkCaches(artworkPaths);
+        widget.onGameUpdated?.call();
+      }
+
+      if (!mounted) return;
+      final message = rommFetchMetadataMessageFor(outcome);
+      AppNotification.showNotification(
+        context,
+        message.format((key) => key.getString(context)),
+        type: switch (message.tone) {
+          RommFetchMetadataTone.success => NotificationType.success,
+          RommFetchMetadataTone.info => NotificationType.info,
+          RommFetchMetadataTone.error => NotificationType.error,
+        },
+      );
+    } catch (e, st) {
+      _log.e(
+        'RomM metadata fetch failed ($mode, $_targetSystemFolder/'
+        '${widget.game.romname})',
+        error: e,
+        stackTrace: st,
+      );
+      if (mounted) {
+        AppNotification.showNotification(
+          context,
+          AppLocale.rommFetchMetadataFailed.getString(context),
+          type: NotificationType.error,
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isFetchingRommMetadata = false);
+    }
+  }
+
   // ── Build helpers ───────────────────────────────────────────────────────
 
   /// The small trailing button the RomM rows use, greyed while [enabled] is
@@ -878,6 +991,49 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
             )
           else
             SizedBox.shrink(key: _itemKey(_unlinkRommIdx)),
+
+          SizedBox(height: 12.r),
+
+          // Fetch metadata from RomM: enabled only while linked and
+          // connected, otherwise greyed and skipped by the D-pad.
+          // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-Game Fetch Action"
+          GestureDetector(
+            onTap: () {
+              if (!_canFetchRommMetadata) return;
+              setState(() => _selectedIndex = _fetchRommMetadataIdx);
+              _confirmFetchRommMetadata();
+            },
+            child: Opacity(
+              opacity: _canFetchRommMetadata ? 1.0 : 0.5,
+              child: SettingRow(
+                key: _itemKey(_fetchRommMetadataIdx),
+                focused: _selectedIndex == _fetchRommMetadataIdx,
+                title: AppLocale.rommFetchMetadataRow.getString(context),
+                subtitle: _isFetchingRommMetadata
+                    ? AppLocale.rommFetchMetadataInProgress.getString(context)
+                    : !_rommConnected
+                    ? AppLocale.rommNotConnected.getString(context)
+                    : !hasRommLink
+                    ? AppLocale.rommFetchMetadataRowNotLinked.getString(context)
+                    : AppLocale.rommFetchMetadataRowSubtitle.getString(context),
+                trailing: _isFetchingRommMetadata
+                    ? SizedBox(
+                        width: 20.r,
+                        height: 20.r,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: theme.colorScheme.primary,
+                        ),
+                      )
+                    : _actionChip(
+                        theme,
+                        AppLocale.rommFetchMetadataAction.getString(context),
+                        color: theme.colorScheme.primary,
+                        enabled: _canFetchRommMetadata,
+                      ),
+              ),
+            ),
+          ),
         ],
       ),
     );

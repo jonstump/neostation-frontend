@@ -256,8 +256,13 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
   }
 
   /// B leaves the text field first, and only closes the dialog once the field
-  /// is no longer focused — the app-wide way out of text entry.
+  /// is no longer focused — the app-wide way out of text entry. While a
+  /// confirm is in flight B is ignored: the link row is already written and
+  /// the fill-gaps fetch is running, so popping `false` here would tell the
+  /// Manage tab nothing changed when it did.
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Fill Gaps On Link Confirm"
   void _handleBack() {
+    if (_isConfirming) return;
     if (_queryFocus.hasFocus) {
       _queryFocus.unfocus();
       return;
