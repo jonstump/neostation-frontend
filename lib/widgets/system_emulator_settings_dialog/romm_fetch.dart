@@ -249,7 +249,7 @@ class _RommFetchStrings {
   final String progressTemplate;
   final String summaryTemplate;
   final String cancelledTemplate;
-  final String busy;
+  final String busyTemplate;
   final String failedToStartTemplate;
 
   const _RommFetchStrings({
@@ -258,7 +258,7 @@ class _RommFetchStrings {
     required this.progressTemplate,
     required this.summaryTemplate,
     required this.cancelledTemplate,
-    required this.busy,
+    required this.busyTemplate,
     required this.failedToStartTemplate,
   });
 
@@ -278,14 +278,16 @@ class _RommFetchStrings {
           .getString(context)
           .replaceFirst('{system}', name),
       cancelledTemplate: AppLocale.rommSystemFetchCancelled.getString(context),
-      busy: AppLocale.rommSystemFetchBusy
-          .getString(context)
-          .replaceFirst('{system}', name),
+      busyTemplate: AppLocale.rommSystemFetchBusy.getString(context),
       failedToStartTemplate: AppLocale.rommSystemFetchFailedToStart
           .getString(context)
           .replaceFirst('{system}', name),
     );
   }
+
+  /// Names the system whose pass is still running, not the one refused.
+  String busy(String runningSystem) =>
+      busyTemplate.replaceFirst('{system}', runningSystem);
 
   String progress(int done, int total) => progressTemplate
       .replaceFirst('{done}', '$done')
@@ -334,6 +336,10 @@ Future<void> _runRommFetchDetached({
       indexedName: target.indexedName,
       mode: mode,
     ),
+    // A disconnect mid-pass would otherwise fail every remaining game
+    // against the cleared config; stop between games instead.
+    // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
+    shouldStop: () => !romm.isConnected,
     onProgress: (done, total) => notifications.update(
       id: notificationId,
       message: strings.progress(done, total),
@@ -376,7 +382,7 @@ Future<void> _runRommFetchDetached({
     log.w('$e');
     notifications.update(
       id: notificationId,
-      message: strings.busy,
+      message: strings.busy(e.runningSystemFolder),
       type: GlobalNotificationType.error,
       progress: null,
     );

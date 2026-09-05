@@ -379,7 +379,7 @@ class _SystemEmulatorSettingsDialogState
   // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
   bool get _offersRommFetch =>
       !SystemFolderNames.isAggregate(_system.folderName) &&
-      _system.folderName != 'android';
+      _system.folderName != SystemFolderNames.android;
 
   /// General-tab index of the RomM fetch row — always the last row, so the
   /// existing indices are untouched whichever optional rows are offered.
