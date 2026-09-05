@@ -5,7 +5,6 @@ import '../models/rom_fingerprint.dart';
 import '../services/credential_store.dart';
 import 'package:neostation/services/logger_service.dart';
 
-
 /// Where a system's imported gamelist media lives, as recorded in
 /// `user_system_settings`. Exactly one of the two locations is meaningful per
 /// system: [esdeMediaDir] is an ES-DE `downloaded_media` subfolder *name*
@@ -59,7 +58,6 @@ enum MetadataSource {
     return null;
   }
 }
-
 
 class MetadataTransferResult {
   final String appSystemId;

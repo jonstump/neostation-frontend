@@ -1305,4 +1305,30 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommUnlinkFailed: 'RomM とのリンクを解除できませんでした',
   // Link action on search results
   AppLocale.searchLinkToRomm: 'RomM にリンク',
+
+  // SPEC-0005 REQ "Per-Game Fetch Action" — Manage tab fetch row, mode
+  // chooser, and outcome notifications
+  AppLocale.rommFetchMetadataRow: 'RomM からメタデータを取得',
+  AppLocale.rommFetchMetadataRowSubtitle:
+      'このゲームのメタデータとアートワークを RomM から補完または置き換えます',
+  AppLocale.rommFetchMetadataRowNotLinked: '先にこのゲームを RomM にリンクしてください',
+  AppLocale.rommFetchMetadataAction: '取得',
+  AppLocale.rommFetchMetadataChooserTitle: 'RomM からメタデータを取得',
+  AppLocale.rommFetchMetadataFillGapsOption: '不足分を補完（推奨）',
+  AppLocale.rommFetchMetadataFillGapsDescription:
+      '空の項目と不足しているアートワークのみ書き込みます。既存のものはそのまま残ります。',
+  AppLocale.rommFetchMetadataReplaceOption: 'すべて置き換え',
+  AppLocale.rommFetchMetadataReplaceDescription:
+      'すべての項目とアートワークを RomM のデータで上書きします。英語以外の説明は消去され、パブリッシャーは空になります（RomM が提供していないため）。',
+  AppLocale.rommFetchMetadataInProgress: 'RomM から取得中…',
+  AppLocale.rommFetchMetadataFilled:
+      'RomM から {count} 項目と {media} 点のアートワークを補完しました',
+  AppLocale.rommFetchMetadataReplaced:
+      'RomM から {count} 項目と {media} 点のアートワークを置き換えました',
+  AppLocale.rommFetchMetadataNothingToFill:
+      '補完するものはありません: このゲームには RomM が提供する情報がすべて揃っています',
+  AppLocale.rommFetchMetadataNotFound: 'RomM に見つかりません: リンクされた ROM はもう存在しません',
+  AppLocale.rommFetchMetadataPartial:
+      '{count} 項目を書き込みましたが、{media} 点のアートワークのダウンロードに失敗しました',
+  AppLocale.rommFetchMetadataFailed: 'RomM からのメタデータ取得に失敗しました',
 };
