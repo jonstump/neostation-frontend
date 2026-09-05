@@ -26,7 +26,7 @@ import 'database_test_helper.dart';
 /// games' cached state once per run rather than once per game.
 ///
 /// The linker itself is a recording fake — its algorithm has its own tests —
-/// so nothing here needs a server or a database.
+/// so the linker is faked here, but the real platform loader classifies against app_systems, so a test database is seeded.
 
 class _FakeRommService extends RommService {
   /// What [getPlatforms] answers — after [platformsGate] completes, when one

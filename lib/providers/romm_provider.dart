@@ -1284,7 +1284,11 @@ class RommProvider extends ChangeNotifier {
   /// whose tiles read exactly these finished entries.
   void invalidateDownloadedCache() {
     if (bulkSync.isRunning) return;
-    if (_downloadedByRomId.isEmpty && _downloads.isEmpty) return;
+    if (_downloadedByRomId.isEmpty &&
+        _localCopyByRomId.isEmpty &&
+        _downloads.isEmpty) {
+      return;
+    }
     _downloadedByRomId.clear();
     _localCopyByRomId.clear();
     _downloads.removeWhere(
