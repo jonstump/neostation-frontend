@@ -1,4 +1,6 @@
+import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/repositories/scraper_repository.dart';
@@ -7,6 +9,117 @@ import 'package:path/path.dart' as p;
 import 'package:xml/xml.dart';
 
 import 'database_test_helper.dart';
+
+/// An in-memory SAF tree behind the importer's three read-only overrides.
+/// Records every call so a test can assert exactly how the tree was touched:
+/// one listing per folder, whole-file reads for gamelists only, and nothing
+/// that is not a list, read, or grant check.
+class RecordingSaf {
+  static const treeUri =
+      'content://com.android.externalstorage.documents/tree/primary%3Aroms';
+
+  /// Folder URI → its children, in the `listFiles` map shape.
+  final Map<String, List<Map<String, dynamic>>> listings = {};
+
+  /// Document URI → bytes (`null` models a read the provider refused).
+  final Map<String, Uint8List?> documents = {};
+
+  /// Folder URIs whose listing throws, standing in for a lost grant.
+  final Set<String> failListing = {};
+
+  /// Document URIs whose read throws rather than returning null.
+  final Set<String> failRead = {};
+
+  /// Tree URIs the fake reports no persisted grant for.
+  final Set<String> noPermission = {};
+
+  /// Every call in order, as `op:uri`.
+  final List<String> calls = [];
+
+  /// URI of `<treeUri>/<relativePath>` in the SAF document form.
+  static String uriOf(String relativePath) {
+    if (relativePath.isEmpty) return treeUri;
+    final encoded = Uri.encodeComponent('roms/$relativePath');
+    return '$treeUri/document/primary%3A$encoded';
+  }
+
+  /// Adds a folder at [relativePath] to its parent's listing.
+  String dir(String relativePath) {
+    final uri = uriOf(relativePath);
+    _addChild(relativePath, {
+      'name': p.basename(relativePath),
+      'uri': uri,
+      'isDirectory': true,
+      'size': 0,
+      'lastModified': 0,
+    });
+    listings.putIfAbsent(uri, () => []);
+    return uri;
+  }
+
+  /// Adds a document at [relativePath] holding [content].
+  String file(String relativePath, String content) {
+    final uri = uriOf(relativePath);
+    final bytes = Uint8List.fromList(utf8.encode(content));
+    _addChild(relativePath, {
+      'name': p.basename(relativePath),
+      'uri': uri,
+      'isDirectory': false,
+      'size': bytes.length,
+      'lastModified': 0,
+    });
+    documents[uri] = bytes;
+    return uri;
+  }
+
+  void _addChild(String relativePath, Map<String, dynamic> entry) {
+    final parent = p.dirname(relativePath);
+    final parentUri = uriOf(parent == '.' ? '' : parent);
+    listings.putIfAbsent(parentUri, () => []).add(entry);
+  }
+
+  Future<List<Map<String, dynamic>>> listFiles(String uri) async {
+    calls.add('list:$uri');
+    if (failListing.contains(uri)) {
+      throw StateError('listing refused for $uri');
+    }
+    return listings[uri] ?? const [];
+  }
+
+  Future<Uint8List?> readFile(String uri) async {
+    calls.add('read:$uri');
+    if (failRead.contains(uri)) throw StateError('read refused for $uri');
+    return documents[uri];
+  }
+
+  Future<bool> hasPermission(String uri) async {
+    calls.add('perm:$uri');
+    return !noPermission.contains(uri);
+  }
+
+  Iterable<String> get listedUris =>
+      calls.where((c) => c.startsWith('list:')).map((c) => c.substring(5));
+
+  Iterable<String> get readUris =>
+      calls.where((c) => c.startsWith('read:')).map((c) => c.substring(5));
+
+  /// Routes the importer's SAF operations through this fake; the override
+  /// slots are cleared again by [uninstall].
+  void install() {
+    EsdeImportService.safListFilesOverride = listFiles;
+    EsdeImportService.safReadFileOverride = readFile;
+    EsdeImportService.safHasPermissionOverride = hasPermission;
+    // A content:// tree with no real path is the SAF-branch trigger.
+    EsdeImportService.safRomFolderResolverOverride = (_) async => null;
+  }
+
+  static void uninstall() {
+    EsdeImportService.safListFilesOverride = null;
+    EsdeImportService.safReadFileOverride = null;
+    EsdeImportService.safHasPermissionOverride = null;
+    EsdeImportService.safRomFolderResolverOverride = null;
+  }
+}
 
 void main() {
   group('EsdeImportService pure helpers', () {
@@ -800,6 +913,385 @@ void main() {
         // A skipped system gets no media root: there is nothing to back it.
         expect(await mediaLocation('snes'), isEmpty);
         expect((await mediaLocation('nes'))['esde_media_root'], isNotNull);
+      },
+    );
+  });
+
+  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "SAF Discovery"
+  group('EsdeImportService in-folder mode over SAF', () {
+    final dbHelper = DatabaseTestHelper();
+    late dynamic db;
+    late RecordingSaf saf;
+
+    setUp(() async {
+      db = await dbHelper.setUp();
+      await db.execute(
+        "INSERT INTO app_systems (id, real_name, folder_name, screenscraper_id) VALUES ('snes', 'SNES', 'snes', 4)",
+      );
+      await db.execute(
+        "INSERT INTO app_systems (id, real_name, folder_name, screenscraper_id) VALUES ('nes', 'NES', 'nes', 3)",
+      );
+      saf = RecordingSaf()..install();
+    });
+
+    tearDown(() async {
+      RecordingSaf.uninstall();
+      await dbHelper.tearDown();
+    });
+
+    Future<void> seedRom(String filename, String systemId) => db.execute(
+      "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('$filename', 'content://roms/$systemId/$filename', '$systemId')",
+    );
+
+    Future<Map<String, Object?>> mediaLocation(String systemId) async {
+      final rows = await db.rawQuery(
+        "SELECT esde_media_dir, esde_media_root FROM user_system_settings WHERE app_system_id = '$systemId'",
+      );
+      return rows.isEmpty ? const {} : rows.first;
+    }
+
+    // The same fixture bytes the real-path group parses, so the SAF read is
+    // proven to land in the same parser with the same outcome.
+    const sonicGamelist =
+        '<gameList><game><path>./sonic.smc</path><name>Sonic</name></game></gameList>';
+    const marioGamelist =
+        '<gameList><game><path>./mario.nes</path><name>Mario</name></game></gameList>';
+
+    // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Gamelist Read Over SAF"
+    test(
+      'imports a SAF folder from gamelist bytes with one listing per subfolder',
+      () async {
+        await seedRom('sonic.smc', 'snes');
+        final snesUri = saf.dir('snes');
+        final gamelistUri = saf.file('snes/gamelist.xml', sonicGamelist);
+        saf.file('snes/sonic.smc', 'rom');
+        final coversUri = saf.dir('snes/covers');
+        saf.file('snes/covers/sonic.png', 'png');
+        final shotsUri = saf.dir('snes/screenshots');
+        saf.file('snes/screenshots/sonic.png', 'png');
+        // An unmapped folder is not media evidence and is never listed.
+        saf.dir('snes/manuals');
+
+        final result = await EsdeImportService.importInFolder([
+          RecordingSaf.treeUri,
+        ]);
+
+        expect(result.mode, GamelistSourceMode.inFolder);
+        expect(result.foldersSkippedSaf, 0);
+        expect(result.systemsFound, 1);
+        expect(result.systemsMatched, 1);
+        expect(result.systemsImportedViaSaf, 1);
+        expect(result.systemsSkipped, 0);
+        expect(result.gamesImported, 1);
+        expect(result.noInFolderGamelistsFound, isFalse);
+        expect(result.folderOutcomes.map((o) => o.kind), [
+          EsdeImportPathKind.saf,
+        ]);
+        expect(result.folderOutcomes.single.folder, RecordingSaf.treeUri);
+
+        // Exactly one listing of the root and one of the system folder; no
+        // listing of the category folders and no per-document probe.
+        expect(saf.listedUris, [RecordingSaf.treeUri, snesUri]);
+        expect(saf.listedUris, isNot(contains(coversUri)));
+        expect(saf.listedUris, isNot(contains(shotsUri)));
+        expect(saf.readUris, [gamelistUri]);
+
+        // Metadata lands exactly as the real-path import writes it.
+        final rows = await db.rawQuery(
+          'SELECT app_system_id, filename, real_name, esde_imported FROM user_screenscraper_metadata',
+        );
+        expect(rows.single['app_system_id'], 'snes');
+        expect(rows.single['filename'], 'sonic.smc');
+        expect(rows.single['real_name'], 'Sonic');
+        expect(rows.single['esde_imported'], 1);
+
+        // No media root until the mirror step provides a real directory.
+        expect(await mediaLocation('snes'), isEmpty);
+      },
+    );
+
+    test(
+      'discovers the mapped category folders from the one subfolder listing',
+      () async {
+        final snesUri = saf.dir('snes');
+        final gamelistUri = saf.file('snes/gamelist.xml', sonicGamelist);
+        final coversUri = saf.dir('snes/covers');
+        final shotsUri = saf.dir('snes/screenshots');
+        saf.dir('snes/manuals');
+        saf.dir('snes/Hacks');
+
+        final sources = await EsdeImportService.discoverSafSourcesForTest(
+          RecordingSaf.treeUri,
+        );
+
+        final source = sources.single;
+        expect(source.mode, GamelistSourceMode.saf);
+        expect(source.systemFolderName, 'snes');
+        expect(source.gamelistUri, gamelistUri);
+        expect(source.gamelistFile, isNull);
+        expect(source.mediaRoot, snesUri);
+        expect(source.safCategoryDirs, {
+          'covers': coversUri,
+          'screenshots': shotsUri,
+        });
+        expect(saf.listedUris, [RecordingSaf.treeUri, snesUri]);
+      },
+    );
+
+    test('resolves an alias SAF subfolder to the canonical system', () async {
+      await db.execute(
+        "INSERT INTO app_systems (id, real_name, folder_name, screenscraper_id) VALUES ('scd', 'Sega CD', 'scd', 20)",
+      );
+      await db.execute(
+        "INSERT INTO app_system_folders (system_id, folder_name) VALUES ('scd', 'segacd')",
+      );
+      await seedRom('sonic.chd', 'scd');
+      saf.dir('segacd');
+      saf.file(
+        'segacd/gamelist.xml',
+        '<gameList><game><path>./sonic.chd</path><name>Sonic CD</name></game></gameList>',
+      );
+
+      final result = await EsdeImportService.importInFolder([
+        RecordingSaf.treeUri,
+      ]);
+
+      expect(result.systemsMatched, 1);
+      expect(result.systemsImportedViaSaf, 1);
+      expect(result.gamesImported, 1);
+      final rows = await db.rawQuery(
+        'SELECT app_system_id, real_name FROM user_screenscraper_metadata',
+      );
+      expect(rows.single['app_system_id'], 'scd');
+      expect(rows.single['real_name'], 'Sonic CD');
+    });
+
+    test('reports an empty SAF tree as no gamelists, not as skipped', () async {
+      saf.dir('snes');
+      saf.file('snes/sonic.smc', 'rom');
+      saf.dir('nes');
+
+      final result = await EsdeImportService.importInFolder([
+        RecordingSaf.treeUri,
+      ]);
+
+      expect(result.foldersSkippedSaf, 0);
+      expect(result.noInFolderGamelistsFound, isTrue);
+      expect(result.systemsFound, 0);
+      expect(result.safMediaOnlyPending, 0);
+      expect(result.folderOutcomes.single.kind, EsdeImportPathKind.saf);
+      expect(saf.listedUris, [
+        RecordingSaf.treeUri,
+        RecordingSaf.uriOf('nes'),
+        RecordingSaf.uriOf('snes'),
+      ]);
+      expect(saf.readUris, isEmpty);
+    });
+
+    // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Error Handling Standards"
+    test(
+      'isolates an unreadable SAF gamelist as skipped and imports the rest',
+      () async {
+        await seedRom('sonic.smc', 'snes');
+        await seedRom('mario.nes', 'nes');
+        saf.dir('snes');
+        final snesGamelist = saf.file('snes/gamelist.xml', sonicGamelist);
+        saf.documents[snesGamelist] = null; // provider returned nothing
+        saf.dir('nes');
+        saf.file('nes/gamelist.xml', marioGamelist);
+
+        final result = await EsdeImportService.importInFolder([
+          RecordingSaf.treeUri,
+        ]);
+
+        expect(result.systemsFound, 2);
+        expect(result.systemsSkipped, 1);
+        expect(result.systemsMatched, 1);
+        expect(result.systemsImportedViaSaf, 1);
+        expect(result.gamesImported, 1);
+        expect(result.foldersSkippedSaf, 0);
+        final rows = await db.rawQuery(
+          'SELECT filename FROM user_screenscraper_metadata',
+        );
+        expect(rows.single['filename'], 'mario.nes');
+      },
+    );
+
+    test('isolates a SAF read that throws the same way', () async {
+      await seedRom('sonic.smc', 'snes');
+      await seedRom('mario.nes', 'nes');
+      saf.dir('snes');
+      saf.failRead.add(saf.file('snes/gamelist.xml', sonicGamelist));
+      saf.dir('nes');
+      saf.file('nes/gamelist.xml', marioGamelist);
+
+      final result = await EsdeImportService.importInFolder([
+        RecordingSaf.treeUri,
+      ]);
+
+      expect(result.systemsSkipped, 1);
+      expect(result.systemsMatched, 1);
+      expect(result.gamesImported, 1);
+    });
+
+    // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Real-Path Precedence"
+    test(
+      'imports a real-path folder per SPEC-0002 and a SAF folder over SAF',
+      () async {
+        await seedRom('sonic.smc', 'snes');
+        await seedRom('mario.nes', 'nes');
+        final realFolder = Directory.systemTemp.createTempSync('esde_mixed_');
+        addTearDown(() => realFolder.deleteSync(recursive: true));
+        final nesDir = Directory(p.join(realFolder.path, 'nes'))
+          ..createSync(recursive: true);
+        File(
+          p.join(nesDir.path, 'gamelist.xml'),
+        ).writeAsStringSync(marioGamelist);
+        saf.dir('snes');
+        saf.file('snes/gamelist.xml', sonicGamelist);
+
+        final result = await EsdeImportService.importInFolder([
+          realFolder.path,
+          RecordingSaf.treeUri,
+        ]);
+
+        expect(result.systemsMatched, 2);
+        expect(result.systemsImportedViaSaf, 1);
+        expect(result.gamesImported, 2);
+        expect(result.foldersSkippedSaf, 0);
+        expect(result.folderOutcomes.map((o) => (o.folder, o.kind)).toList(), [
+          (realFolder.path, EsdeImportPathKind.real),
+          (RecordingSaf.treeUri, EsdeImportPathKind.saf),
+        ]);
+        // The real-path system records its platform folder; the SAF system
+        // records nothing until the mirror exists.
+        expect((await mediaLocation('nes'))['esde_media_root'], nesDir.path);
+        expect(await mediaLocation('snes'), isEmpty);
+        // The real-path folder never went near SAF.
+        expect(saf.listedUris, [
+          RecordingSaf.treeUri,
+          RecordingSaf.uriOf('snes'),
+        ]);
+      },
+    );
+
+    test(
+      'counts a SAF folder whose root cannot be listed as skipped',
+      () async {
+        await seedRom('sonic.smc', 'snes');
+        saf.dir('snes');
+        saf.file('snes/gamelist.xml', sonicGamelist);
+        saf.failListing.add(RecordingSaf.treeUri);
+
+        final result = await EsdeImportService.importInFolder([
+          RecordingSaf.treeUri,
+        ]);
+
+        expect(result.foldersSkippedSaf, 1);
+        expect(result.systemsFound, 0);
+        expect(result.noInFolderGamelistsFound, isTrue);
+        expect(
+          result.folderOutcomes.single.kind,
+          EsdeImportPathKind.skippedSaf,
+        );
+        expect(saf.readUris, isEmpty);
+      },
+    );
+
+    test('counts a SAF folder with no persisted grant as skipped', () async {
+      saf.dir('snes');
+      saf.file('snes/gamelist.xml', sonicGamelist);
+      saf.noPermission.add(RecordingSaf.treeUri);
+
+      final result = await EsdeImportService.importInFolder([
+        RecordingSaf.treeUri,
+      ]);
+
+      expect(result.foldersSkippedSaf, 1);
+      expect(result.folderOutcomes.single.kind, EsdeImportPathKind.skippedSaf);
+      // Nothing was listed: the grant check comes first.
+      expect(saf.listedUris, isEmpty);
+    });
+
+    test(
+      'leaves a lost-grant subfolder out and imports its siblings',
+      () async {
+        await seedRom('mario.nes', 'nes');
+        saf.dir('snes');
+        saf.file('snes/gamelist.xml', sonicGamelist);
+        saf.failListing.add(RecordingSaf.uriOf('snes'));
+        saf.dir('nes');
+        saf.file('nes/gamelist.xml', marioGamelist);
+
+        final result = await EsdeImportService.importInFolder([
+          RecordingSaf.treeUri,
+        ]);
+
+        expect(result.foldersSkippedSaf, 0);
+        expect(result.systemsFound, 1);
+        expect(result.systemsMatched, 1);
+        expect(result.gamesImported, 1);
+      },
+    );
+
+    test(
+      'counts a media-only SAF subfolder as pending instead of linking it',
+      () async {
+        await seedRom('sonic.smc', 'snes');
+        saf.dir('snes');
+        saf.file('snes/gamelist.xml', sonicGamelist);
+        // nes: mapped art folder, no gamelist → pending for the mirror.
+        saf.dir('nes');
+        saf.dir('nes/covers');
+        saf.file('nes/covers/mario.png', 'png');
+        // gb: unmapped folder only → not media evidence.
+        await db.execute(
+          "INSERT INTO app_systems (id, real_name, folder_name, screenscraper_id) VALUES ('gb', 'Game Boy', 'gb', 9)",
+        );
+        saf.dir('gb');
+        saf.dir('gb/manuals');
+        // foo: resolves to no system → ignored even with art.
+        saf.dir('foo');
+        saf.dir('foo/covers');
+
+        final result = await EsdeImportService.importInFolder([
+          RecordingSaf.treeUri,
+        ]);
+
+        expect(result.systemsMatched, 1);
+        expect(result.mediaOnlyLinked, 0);
+        expect(result.safMediaOnlyPending, 1);
+        expect(await mediaLocation('nes'), isEmpty);
+        final rows = await db.rawQuery('SELECT * FROM user_system_settings');
+        expect(rows, isEmpty);
+        // Still one listing per system subfolder, none of the category dirs.
+        expect(saf.listedUris, [
+          RecordingSaf.treeUri,
+          RecordingSaf.uriOf('foo'),
+          RecordingSaf.uriOf('gb'),
+          RecordingSaf.uriOf('nes'),
+          RecordingSaf.uriOf('snes'),
+        ]);
+      },
+    );
+
+    test(
+      'off-device with no SAF fake a content:// folder is skipped',
+      () async {
+        // The default wrappers refuse SAF off Android rather than reading an
+        // empty listing as an empty tree, so the SPEC-0002 skip outcome holds.
+        RecordingSaf.uninstall();
+        EsdeImportService.safRomFolderResolverOverride = (_) async => null;
+
+        final result = await EsdeImportService.importInFolder([
+          RecordingSaf.treeUri,
+        ]);
+
+        expect(result.foldersSkippedSaf, 1);
+        expect(
+          result.folderOutcomes.single.kind,
+          EsdeImportPathKind.skippedSaf,
+        );
       },
     );
   });
