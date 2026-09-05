@@ -1,0 +1,619 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:neostation/models/database_game_model.dart';
+import 'package:neostation/models/romm_platform.dart';
+import 'package:neostation/models/romm_rom.dart';
+import 'package:neostation/models/romm_rom_page.dart';
+import 'package:neostation/models/system_model.dart';
+import 'package:neostation/providers/romm_bulk_sync.dart';
+import 'package:neostation/repositories/romm_save_map_repository.dart';
+import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/services/romm/romm_library_linker.dart';
+
+/// The connect-time link pass ([RommLibraryLinker]) against in-memory fakes:
+/// a server of platforms and ROM pages, a scanned library, and a mapping table
+/// with insert-if-absent semantics. No filesystem, no database, no network —
+/// the pass is supposed to need none of them (SPEC-0001 "Connect-Time Link
+/// Pass": match the library index, not the disk).
+
+RommRom _rom(
+  int id, {
+  required int platformId,
+  required String fsName,
+  String slug = 'snes',
+  bool multiFile = false,
+}) => RommRom(
+  id: id,
+  name: fsName,
+  platformId: platformId,
+  platformSlug: slug,
+  fsName: fsName,
+  fsNameNoExt: fsName.contains('.')
+      ? fsName.substring(0, fsName.lastIndexOf('.'))
+      : fsName,
+  fsExtension: fsName.contains('.')
+      ? fsName.substring(fsName.lastIndexOf('.') + 1)
+      : '',
+  hasMultipleFiles: multiFile,
+);
+
+RommPlatform _platform(int id, String slug) =>
+    RommPlatform(id: id, name: slug.toUpperCase(), slug: slug, romCount: 1);
+
+SystemModel _system(String folder, {List<String> aliases = const []}) =>
+    SystemModel(
+      folderName: folder,
+      realName: folder.toUpperCase(),
+      iconImage: '/images/icons/$folder.png',
+      color: '#000000',
+      folders: [folder, ...aliases],
+    );
+
+DatabaseGameModel _game(String filename, String folder) => DatabaseGameModel(
+  filename: filename,
+  romPath: '/roms/$folder/$filename',
+  systemFolderName: folder,
+);
+
+/// The mapping table: `(systemFolder, filename)` → rom id, insert-if-absent.
+class _FakeMap {
+  final Map<String, int> rows = {};
+  final List<List<RommSaveMapEntry>> batches = [];
+
+  static String _key(String folder, String romname) => '$folder\t$romname';
+
+  Future<int> putIfAbsent(List<RommSaveMapEntry> entries) async {
+    batches.add(entries);
+    var inserted = 0;
+    for (final e in entries) {
+      final key = _key(e.systemFolder, e.romname);
+      if (rows.containsKey(key)) continue;
+      rows[key] = e.rommRomId;
+      inserted++;
+    }
+    return inserted;
+  }
+
+  /// Same shape [RommSaveMapRepository.getRomIdIndex] builds — keyed on the
+  /// stored (on-disk) spelling, which is what the linker asks for first.
+  Future<RommRomIdIndex> index() async => RommRomIdIndex(Map.of(rows));
+
+  int? romIdFor(String folder, String filename) => rows[_key(folder, filename)];
+}
+
+/// A RomM server: platforms, their ROMs, and what was asked of it.
+class _FakeServer {
+  final List<RommPlatform> platforms;
+  final Map<int, List<RommRom>> romsByPlatform;
+  final Map<String, SystemModel?> systemBySlug;
+  final Set<int> failingPlatforms;
+
+  /// `platformId@offset` per page request, in order.
+  final List<String> requests = [];
+
+  /// Called before each page is answered, for tests that stop mid-run.
+  void Function()? onFetch;
+
+  _FakeServer({
+    required this.platforms,
+    required this.romsByPlatform,
+    required this.systemBySlug,
+    this.failingPlatforms = const {},
+  });
+
+  Future<List<RommPlatform>> listPlatforms() async => platforms;
+
+  Future<SystemModel?> resolve(RommPlatform platform) async =>
+      systemBySlug[platform.slug];
+
+  Future<RommRomPage> fetchPage({
+    required int platformId,
+    required int limit,
+    required int offset,
+  }) async {
+    requests.add('$platformId@$offset');
+    onFetch?.call();
+    if (failingPlatforms.contains(platformId)) {
+      throw Exception('500 from the server');
+    }
+    final all = romsByPlatform[platformId] ?? const [];
+    final end = (offset + limit).clamp(0, all.length);
+    return RommRomPage(
+      items: all.sublist(offset.clamp(0, all.length), end),
+      total: all.length,
+    );
+  }
+}
+
+RommLibraryLinker _linker(
+  _FakeServer server,
+  _FakeMap map,
+  List<DatabaseGameModel> games, {
+  bool Function()? shouldStop,
+}) => RommLibraryLinker(
+  listPlatforms: server.listPlatforms,
+  resolveSystem: server.resolve,
+  fetchPage: server.fetchPage,
+  listGames: () async => games,
+  loadRomIdIndex: map.index,
+  putMappingsIfAbsent: map.putIfAbsent,
+  shouldStop: shouldStop,
+);
+
+/// The summary lines the pass logged, from the logger's capture.
+List<String> _summaryLines() => LoggerService.instance
+    .takeCapture()
+    .where((l) => l.startsWith('i|RomM link pass'))
+    .toList();
+
+void main() {
+  final snes = _system('snes');
+
+  setUp(() => LoggerService.instance.startCapture());
+  tearDown(() => LoggerService.instance.takeCapture());
+
+  test('paging reuses bulk sync\'s page size', () {
+    expect(RommLibraryLinker.pageSize, RommBulkSync.defaultPageSize);
+  });
+
+  group('linking', () {
+    test('an unlinked game whose filename matches is linked', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes')],
+        romsByPlatform: {
+          1: [
+            _rom(10, platformId: 1, fsName: 'Chrono Trigger (USA).sfc'),
+            _rom(11, platformId: 1, fsName: 'Not Here.sfc'),
+          ],
+        },
+        systemBySlug: {'snes': snes},
+      );
+      final map = _FakeMap();
+      final games = [_game('Chrono Trigger (USA).sfc', 'snes')];
+
+      final summary = await _linker(server, map, games).run();
+
+      expect(map.romIdFor('snes', 'Chrono Trigger (USA).sfc'), 10);
+      expect(map.rows, hasLength(1));
+      expect(summary.rowsAdded, 1);
+      expect(summary.rowsAlreadyPresent, 0);
+      expect(summary.platformsProcessed, 1);
+      expect(summary.romsEnumerated, 2);
+      expect(summary.linkedRomnames, ['Chrono Trigger (USA)']);
+      expect(map.batches.single.single.fsName, 'Chrono Trigger (USA).sfc');
+    });
+
+    test('case differs: linked under the library\'s own spelling', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes')],
+        romsByPlatform: {
+          1: [_rom(10, platformId: 1, fsName: 'Chrono Trigger (USA).sfc')],
+        },
+        systemBySlug: {'snes': snes},
+      );
+      final map = _FakeMap();
+
+      await _linker(server, map, [
+        _game('chrono trigger (usa).sfc', 'snes'),
+      ]).run();
+
+      expect(map.romIdFor('snes', 'chrono trigger (usa).sfc'), 10);
+    });
+
+    test('a multi-disc playlist links to the multi-file ROM', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'psx')],
+        romsByPlatform: {
+          1: [
+            _rom(
+              10,
+              platformId: 1,
+              fsName: 'Final Fantasy VII (USA)',
+              multiFile: true,
+            ),
+          ],
+        },
+        systemBySlug: {'psx': _system('psx')},
+      );
+      final map = _FakeMap();
+
+      await _linker(server, map, [
+        _game('Final Fantasy VII (USA).m3u', 'psx'),
+      ]).run();
+
+      expect(map.romIdFor('psx', 'Final Fantasy VII (USA).m3u'), 10);
+    });
+
+    test('a game the rom-id index already holds is skipped', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes')],
+        romsByPlatform: {
+          1: [
+            _rom(10, platformId: 1, fsName: 'Linked.sfc'),
+            _rom(11, platformId: 1, fsName: 'Unlinked.sfc'),
+          ],
+        },
+        systemBySlug: {'snes': snes},
+      );
+      final map = _FakeMap()..rows['snes\tLinked.sfc'] = 99;
+
+      final summary = await _linker(server, map, [
+        _game('Linked.sfc', 'snes'),
+        _game('Unlinked.sfc', 'snes'),
+      ]).run();
+
+      expect(
+        map.romIdFor('snes', 'Linked.sfc'),
+        99,
+        reason: 'never overwritten',
+      );
+      expect(map.romIdFor('snes', 'Unlinked.sfc'), 11);
+      expect(summary.rowsAdded, 1);
+      expect(summary.rowsAlreadyPresent, 1);
+      expect(summary.linkedRomnames, ['Unlinked']);
+    });
+
+    test('a file under a folder alias of the resolved system links', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'segacd')],
+        romsByPlatform: {
+          1: [_rom(10, platformId: 1, fsName: 'Sonic CD (USA).chd')],
+        },
+        systemBySlug: {
+          'segacd': _system('scd', aliases: ['segacd']),
+        },
+      );
+      final map = _FakeMap();
+
+      final summary = await _linker(server, map, [
+        _game('Sonic CD (USA).chd', 'segacd'),
+      ]).run();
+
+      expect(summary.rowsAdded, 1);
+      expect(
+        map.romIdFor('segacd', 'Sonic CD (USA).chd'),
+        10,
+        reason: 'written under the folder the library row carries',
+      );
+    });
+  });
+
+  group('nothing to link', () {
+    test('every game already linked: no server traffic, zero rows', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes')],
+        romsByPlatform: {
+          1: [_rom(10, platformId: 1, fsName: 'Game.sfc')],
+        },
+        systemBySlug: {'snes': snes},
+      );
+      final map = _FakeMap()..rows['snes\tGame.sfc'] = 10;
+
+      final summary = await _linker(server, map, [
+        _game('Game.sfc', 'snes'),
+      ]).run();
+
+      expect(summary.rowsAdded, 0);
+      expect(server.requests, isEmpty);
+      expect(map.batches, isEmpty);
+      final lines = _summaryLines();
+      expect(lines, hasLength(1));
+      expect(lines.single, contains('0 rows added'));
+    });
+
+    test('an empty library: zero rows', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes')],
+        romsByPlatform: {
+          1: [_rom(10, platformId: 1, fsName: 'Game.sfc')],
+        },
+        systemBySlug: {'snes': snes},
+      );
+      final summary = await _linker(server, _FakeMap(), []).run();
+
+      expect(summary.rowsAdded, 0);
+      expect(server.requests, isEmpty);
+    });
+
+    test('reconnect: a second run adds nothing and writes nothing', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes')],
+        romsByPlatform: {
+          1: [
+            _rom(10, platformId: 1, fsName: 'A.sfc'),
+            _rom(11, platformId: 1, fsName: 'B.sfc'),
+          ],
+        },
+        systemBySlug: {'snes': snes},
+      );
+      final map = _FakeMap();
+      final games = [_game('A.sfc', 'snes'), _game('B.sfc', 'snes')];
+
+      final first = await _linker(server, map, games).run();
+      final second = await _linker(server, map, games).run();
+
+      expect(first.rowsAdded, 2);
+      expect(second.rowsAdded, 0);
+      expect(map.rows, hasLength(2), reason: 'no duplicates');
+      expect(map.batches, hasLength(1), reason: 'the second run wrote nothing');
+    });
+  });
+
+  group('platforms', () {
+    test('an unresolved platform is counted and yields no rows', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes'), _platform(2, 'vectrex')],
+        romsByPlatform: {
+          1: [_rom(10, platformId: 1, fsName: 'A.sfc')],
+          2: [
+            _rom(20, platformId: 2, fsName: 'Mine Storm.vec', slug: 'vectrex'),
+          ],
+        },
+        systemBySlug: {'snes': snes, 'vectrex': null},
+      );
+      final map = _FakeMap();
+
+      final summary = await _linker(server, map, [
+        _game('A.sfc', 'snes'),
+        _game('Mine Storm.vec', 'vectrex'),
+      ]).run();
+
+      expect(summary.platformsUnresolved, 1);
+      expect(summary.unresolvedSlugs, ['vectrex']);
+      expect(summary.platformsProcessed, 1);
+      expect(map.romIdFor('vectrex', 'Mine Storm.vec'), isNull);
+      expect(map.rows, hasLength(1));
+      expect(
+        server.requests.where((r) => r.startsWith('2@')),
+        isEmpty,
+        reason: 'an unresolved platform is not paged',
+      );
+      expect(_summaryLines().single, contains('unresolved: vectrex'));
+    });
+
+    test('two platforms on one system claiming one file is skipped', () async {
+      final genesis = _system('genesis');
+      final server = _FakeServer(
+        platforms: [_platform(1, 'genesis'), _platform(2, 'megadrive')],
+        romsByPlatform: {
+          1: [
+            _rom(10, platformId: 1, fsName: 'Sonic.md', slug: 'genesis'),
+            _rom(
+              11,
+              platformId: 1,
+              fsName: 'Streets of Rage.md',
+              slug: 'genesis',
+            ),
+          ],
+          2: [_rom(20, platformId: 2, fsName: 'Sonic.md', slug: 'megadrive')],
+        },
+        systemBySlug: {'genesis': genesis, 'megadrive': genesis},
+      );
+      final map = _FakeMap();
+
+      final summary = await _linker(server, map, [
+        _game('Sonic.md', 'genesis'),
+        _game('Streets of Rage.md', 'genesis'),
+      ]).run();
+
+      expect(map.romIdFor('genesis', 'Sonic.md'), isNull);
+      expect(map.romIdFor('genesis', 'Streets of Rage.md'), 11);
+      expect(summary.ambiguousSkipped, 1);
+      expect(summary.ambiguities.single.filename, 'Sonic.md');
+      expect(summary.ambiguities.single.romIds, [10, 20]);
+      final line = _summaryLines().single;
+      expect(line, contains('1 ambiguous skipped'));
+      expect(line, contains('genesis/Sonic.md (10, 20)'));
+    });
+
+    test('a failing platform is logged, counted and stepped over', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes'), _platform(2, 'nes')],
+        romsByPlatform: {
+          1: [_rom(10, platformId: 1, fsName: 'A.sfc')],
+          2: [_rom(20, platformId: 2, fsName: 'B.nes', slug: 'nes')],
+        },
+        systemBySlug: {'snes': snes, 'nes': _system('nes')},
+        failingPlatforms: {1},
+      );
+      final map = _FakeMap();
+
+      final summary = await _linker(server, map, [
+        _game('A.sfc', 'snes'),
+        _game('B.nes', 'nes'),
+      ]).run();
+
+      expect(summary.platformFailures, 1);
+      expect(summary.platformsProcessed, 1);
+      expect(map.romIdFor('snes', 'A.sfc'), isNull);
+      expect(map.romIdFor('nes', 'B.nes'), 20);
+      final captured = LoggerService.instance.takeCapture();
+      expect(
+        captured.where((l) => l.startsWith('w|') && l.contains('"snes"')),
+        hasLength(1),
+        reason: 'the platform and the error are named',
+      );
+      expect(
+        captured.where((l) => l.startsWith('i|RomM link pass')),
+        hasLength(1),
+      );
+      expect(captured.last, contains('1 failed'));
+    });
+
+    test('a library or platform listing failure is wrapped', () async {
+      final linker = RommLibraryLinker(
+        listPlatforms: () async => throw Exception('connection refused'),
+        resolveSystem: (_) async => snes,
+        fetchPage: ({required platformId, required limit, required offset}) =>
+            throw UnimplementedError(),
+        listGames: () async => [_game('A.sfc', 'snes')],
+        loadRomIdIndex: () async => const RommRomIdIndex({}),
+        putMappingsIfAbsent: (_) async => 0,
+      );
+
+      await expectLater(
+        linker.run(),
+        throwsA(
+          isA<RommLinkPassException>().having(
+            (e) => e.toString(),
+            'message',
+            allOf(
+              contains('platform enumeration failed'),
+              contains('connection refused'),
+            ),
+          ),
+        ),
+      );
+    });
+  });
+
+  group('cancellation', () {
+    /// Enough ROMs to need more than one page, so there is a "next page
+    /// request" to stop before.
+    List<RommRom> twoPages(int platformId) => [
+      for (var i = 0; i < RommLibraryLinker.pageSize + 1; i++)
+        _rom(1000 + i, platformId: platformId, fsName: 'Game $i.sfc'),
+    ];
+
+    test('a stop between pages writes no further rows', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes')],
+        romsByPlatform: {1: twoPages(1)},
+        systemBySlug: {'snes': snes},
+      );
+      var stop = false;
+      server.onFetch = () => stop = true;
+      final map = _FakeMap();
+
+      final summary = await _linker(server, map, [
+        _game('Game 0.sfc', 'snes'),
+        _game('Game 500.sfc', 'snes'),
+      ], shouldStop: () => stop).run();
+
+      expect(server.requests, ['1@0'], reason: 'no second page request');
+      expect(map.batches, isEmpty);
+      expect(summary.stoppedEarly, isTrue);
+      expect(summary.rowsAdded, 0);
+      expect(_summaryLines().single, startsWith('i|RomM link pass stopped'));
+    });
+
+    test('a stop between platforms keeps what was written', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes'), _platform(2, 'nes')],
+        romsByPlatform: {
+          1: [_rom(10, platformId: 1, fsName: 'A.sfc')],
+          2: [_rom(20, platformId: 2, fsName: 'B.nes', slug: 'nes')],
+        },
+        systemBySlug: {'snes': snes, 'nes': _system('nes')},
+      );
+      final map = _FakeMap();
+      // Disconnect as soon as anything has been written.
+      final summary = await _linker(server, map, [
+        _game('A.sfc', 'snes'),
+        _game('B.nes', 'nes'),
+      ], shouldStop: () => map.rows.isNotEmpty).run();
+
+      expect(map.romIdFor('snes', 'A.sfc'), 10);
+      expect(map.romIdFor('nes', 'B.nes'), isNull);
+      expect(server.requests, ['1@0']);
+      expect(summary.stoppedEarly, isTrue);
+      expect(summary.rowsAdded, 1);
+      expect(summary.platformsProcessed, 1);
+    });
+
+    test('a run while one is in flight is refused', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes')],
+        romsByPlatform: {
+          1: [_rom(10, platformId: 1, fsName: 'A.sfc')],
+        },
+        systemBySlug: {'snes': snes},
+      );
+      final map = _FakeMap();
+      final linker = _linker(server, map, [_game('A.sfc', 'snes')]);
+
+      final first = linker.run();
+      expect(linker.isRunning, isTrue);
+      final second = await linker.run();
+      expect(second.rowsAdded, 0);
+      expect((await first).rowsAdded, 1);
+      expect(linker.isRunning, isFalse);
+    });
+  });
+
+  group('observability', () {
+    test('exactly one summary line, with every count', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes'), _platform(2, 'vectrex')],
+        romsByPlatform: {
+          1: [
+            _rom(10, platformId: 1, fsName: 'A.sfc'),
+            _rom(11, platformId: 1, fsName: 'B.sfc'),
+            _rom(12, platformId: 1, fsName: 'C.sfc'),
+          ],
+        },
+        systemBySlug: {'snes': snes, 'vectrex': null},
+      );
+      final map = _FakeMap()..rows['snes\tB.sfc'] = 11;
+      var now = DateTime(2026, 9, 4, 12, 0, 0);
+      final linker = RommLibraryLinker(
+        listPlatforms: server.listPlatforms,
+        resolveSystem: server.resolve,
+        fetchPage: server.fetchPage,
+        listGames: () async => [
+          _game('A.sfc', 'snes'),
+          _game('B.sfc', 'snes'),
+          _game('Z.sfc', 'snes'),
+        ],
+        loadRomIdIndex: map.index,
+        putMappingsIfAbsent: map.putIfAbsent,
+        clock: () {
+          final t = now;
+          now = now.add(const Duration(milliseconds: 250));
+          return t;
+        },
+      );
+
+      final summary = await linker.run();
+
+      expect(summary.elapsed, const Duration(milliseconds: 250));
+      final lines = _summaryLines();
+      expect(lines, hasLength(1));
+      expect(
+        lines.single,
+        allOf([
+          contains('1 platforms processed'),
+          contains('1 unresolved'),
+          contains('0 failed'),
+          contains('3 ROMs enumerated'),
+          contains('1 rows added'),
+          contains('1 already present'),
+          contains('0 ambiguous skipped'),
+          contains('250 ms'),
+        ]),
+      );
+    });
+
+    test('no per-game line at info level', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes')],
+        romsByPlatform: {
+          1: [
+            for (var i = 0; i < 40; i++)
+              _rom(i, platformId: 1, fsName: '$i.sfc'),
+          ],
+        },
+        systemBySlug: {'snes': snes},
+      );
+
+      await _linker(server, _FakeMap(), [
+        for (var i = 0; i < 40; i += 2) _game('$i.sfc', 'snes'),
+      ]).run();
+
+      final info = LoggerService.instance
+          .takeCapture()
+          .where((l) => l.startsWith('i|'))
+          .toList();
+      expect(info, hasLength(1));
+    });
+  });
+}
