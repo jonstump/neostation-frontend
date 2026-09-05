@@ -1188,4 +1188,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.inFolderSummarySystemsListingFailed: 'SAF経由で読み取れないシステムフォルダー',
   AppLocale.esdeResetBusy: 'インポートの実行中はリセットできません。完了を待ってからもう一度お試しください。',
   AppLocale.esdeResetMirrorsRemoved: '削除したミラーメディアフォルダー: {count}',
+
+  // SPEC-0004 REQ "Search Screen Entry" — link action on search results
+  AppLocale.searchLinkToRomm: 'RomM にリンク',
 };

@@ -1354,4 +1354,7 @@ const Map<String, dynamic> appLocaleDe = {
       'Zurücksetzen nicht möglich, solange ein Import läuft. Warte, bis er abgeschlossen ist, und versuche es dann erneut.',
   AppLocale.esdeResetMirrorsRemoved:
       'entfernte gespiegelte Medienordner: {count}',
+
+  // SPEC-0004 REQ "Search Screen Entry" — link action on search results
+  AppLocale.searchLinkToRomm: 'Mit RomM verknüpfen',
 };

@@ -1298,4 +1298,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.esdeResetBusy:
       'Cannot reset while an import is running. Wait for it to finish, then try again.',
   AppLocale.esdeResetMirrorsRemoved: 'mirrored media folders removed: {count}',
+
+  // SPEC-0004 REQ "Search Screen Entry" — link action on search results
+  AppLocale.searchLinkToRomm: 'Link to RomM',
 };

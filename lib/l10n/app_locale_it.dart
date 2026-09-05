@@ -1344,4 +1344,7 @@ const Map<String, dynamic> appLocaleIt = {
       'Impossibile azzerare mentre un\'importazione è in corso. Attendi che finisca e riprova.',
   AppLocale.esdeResetMirrorsRemoved:
       'cartelle di media replicati rimosse: {count}',
+
+  // SPEC-0004 REQ "Search Screen Entry" — link action on search results
+  AppLocale.searchLinkToRomm: 'Collega a RomM',
 };

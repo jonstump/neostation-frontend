@@ -1327,4 +1327,7 @@ const Map<String, dynamic> appLocalePt = {
       'Não é possível redefinir enquanto uma importação está em andamento. Aguarde a conclusão e tente novamente.',
   AppLocale.esdeResetMirrorsRemoved:
       'pastas de mídia espelhada removidas: {count}',
+
+  // SPEC-0004 REQ "Search Screen Entry" — link action on search results
+  AppLocale.searchLinkToRomm: 'Vincular ao RomM',
 };

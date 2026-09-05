@@ -1347,4 +1347,7 @@ const Map<String, dynamic> appLocaleEs = {
       'No se puede restablecer mientras hay una importación en curso. Espera a que termine y vuelve a intentarlo.',
   AppLocale.esdeResetMirrorsRemoved:
       'carpetas de medios replicados eliminadas: {count}',
+
+  // SPEC-0004 REQ "Search Screen Entry" — link action on search results
+  AppLocale.searchLinkToRomm: 'Vincular con RomM',
 };
