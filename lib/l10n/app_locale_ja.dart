@@ -1097,7 +1097,7 @@ const Map<String, dynamic> appLocaleJa = {
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
   AppLocale.esdeResetConfirmBody:
-      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+      'ES-DEまたはROMフォルダーからインポートしたすべてのメタデータとメディアリンクを削除し、選択したES-DEフォルダーをクリアします。ゲームとROMファイルには影響しません。',
   AppLocale.esdeImportNotEsdeFolder:
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
@@ -1110,6 +1110,16 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.esdeSummaryStatsUpdated: 'お気に入り／統計を更新',
   AppLocale.esdeSummaryGames: 'ゲーム',
   AppLocale.esdeSummarySystems: 'システム',
+  AppLocale.inFolderImport: 'ROMフォルダーからメタデータをインポート',
+  AppLocale.inFolderImportSubtitle: 'ROMフォルダー内のgamelist.xmlとアートワークを使用します',
+  AppLocale.inFolderImporting: 'ROMフォルダーからインポート中',
+  AppLocale.inFolderImportComplete: 'ROMフォルダーからのインポートが完了しました',
+  AppLocale.inFolderImportNoGamelists: 'ROMフォルダー内にgamelist.xmlファイルが見つかりませんでした',
+  AppLocale.inFolderImportFoldersSkippedSaf:
+      '{count}個のROMフォルダーは実パスとしてアクセスできないためスキップされました(Androidの全ファイルアクセスが必要です)',
+  AppLocale.inFolderSummarySystemsFound: '検出されたシステム',
+  AppLocale.inFolderSummaryMediaOnlyLinked: 'メディアのみのシステムをリンク',
+  AppLocale.inFolderSummaryFoldersSkippedSaf: 'スキップされたフォルダー(実パスにアクセス不可)',
   AppLocale.wizardScanComplete: 'スキャン完了',
   AppLocale.wizardTapNextToContinue: '「次へ」をタップして続行',
   AppLocale.wizardEsdeStepTitle: 'ES-DE からインポート',

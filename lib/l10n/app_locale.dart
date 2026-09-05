@@ -1054,6 +1054,20 @@ mixin AppLocale {
   static const String esdeSummaryStatsUpdated = 'esde_summary_stats_updated';
   static const String esdeSummaryGames = 'esde_summary_games';
   static const String esdeSummarySystems = 'esde_summary_systems';
+  static const String inFolderImport = 'in_folder_import';
+  static const String inFolderImportSubtitle = 'in_folder_import_subtitle';
+  static const String inFolderImporting = 'in_folder_importing';
+  static const String inFolderImportComplete = 'in_folder_import_complete';
+  static const String inFolderImportNoGamelists =
+      'in_folder_import_no_gamelists';
+  static const String inFolderImportFoldersSkippedSaf =
+      'in_folder_import_folders_skipped_saf';
+  static const String inFolderSummarySystemsFound =
+      'in_folder_summary_systems_found';
+  static const String inFolderSummaryMediaOnlyLinked =
+      'in_folder_summary_media_only_linked';
+  static const String inFolderSummaryFoldersSkippedSaf =
+      'in_folder_summary_folders_skipped_saf';
   // Setup wizard: ES-DE import & system art pack steps.
   static const String wizardScanComplete = 'wizard_scan_complete';
   static const String wizardTapNextToContinue = 'wizard_tap_next_to_continue';

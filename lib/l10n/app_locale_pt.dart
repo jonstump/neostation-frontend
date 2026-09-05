@@ -1221,7 +1221,7 @@ const Map<String, dynamic> appLocalePt = {
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
   AppLocale.esdeResetConfirmBody:
-      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+      'Isto remove todos os metadados e links de mídia importados do ES-DE ou das suas pastas de ROMs e limpa a pasta ES-DE selecionada. Seus jogos e arquivos ROM não são afetados.',
   AppLocale.esdeImportNotEsdeFolder:
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
@@ -1234,6 +1234,20 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.esdeSummaryStatsUpdated: 'Favoritos / estatísticas atualizados',
   AppLocale.esdeSummaryGames: 'jogos',
   AppLocale.esdeSummarySystems: 'sistemas',
+  AppLocale.inFolderImport: 'Importar metadados das pastas de ROMs',
+  AppLocale.inFolderImportSubtitle:
+      'Usar os arquivos gamelist.xml e as imagens encontrados dentro das suas pastas de ROMs',
+  AppLocale.inFolderImporting: 'Importando das pastas de ROMs',
+  AppLocale.inFolderImportComplete: 'Importação das pastas de ROMs concluída',
+  AppLocale.inFolderImportNoGamelists:
+      'Nenhum arquivo gamelist.xml foi encontrado nas suas pastas de ROMs',
+  AppLocale.inFolderImportFoldersSkippedSaf:
+      '{count} pastas de ROMs foram ignoradas porque não são acessíveis como caminhos reais (acesso a todos os arquivos necessário no Android)',
+  AppLocale.inFolderSummarySystemsFound: 'Sistemas encontrados',
+  AppLocale.inFolderSummaryMediaOnlyLinked:
+      'Sistemas somente com mídia vinculados',
+  AppLocale.inFolderSummaryFoldersSkippedSaf:
+      'Pastas ignoradas (sem acesso ao caminho real)',
   AppLocale.wizardScanComplete: 'Análise concluída',
   AppLocale.wizardTapNextToContinue: 'Toque em Avançar para continuar',
   AppLocale.wizardEsdeStepTitle: 'Importar do ES-DE',

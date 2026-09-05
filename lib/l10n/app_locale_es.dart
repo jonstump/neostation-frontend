@@ -1240,7 +1240,7 @@ const Map<String, dynamic> appLocaleEs = {
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
   AppLocale.esdeResetConfirmBody:
-      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+      'Esto elimina todos los metadatos y enlaces de medios importados desde ES-DE o desde tus carpetas de ROMs, y borra la carpeta ES-DE seleccionada. Tus juegos y archivos ROM no se ven afectados.',
   AppLocale.esdeImportNotEsdeFolder:
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
@@ -1253,6 +1253,21 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.esdeSummaryStatsUpdated: 'Favoritos / estadísticas actualizados',
   AppLocale.esdeSummaryGames: 'juegos',
   AppLocale.esdeSummarySystems: 'sistemas',
+  AppLocale.inFolderImport: 'Importar metadatos desde las carpetas de ROMs',
+  AppLocale.inFolderImportSubtitle:
+      'Usar los archivos gamelist.xml y las imágenes que hay dentro de tus carpetas de ROMs',
+  AppLocale.inFolderImporting: 'Importando desde las carpetas de ROMs',
+  AppLocale.inFolderImportComplete:
+      'Importación desde carpetas de ROMs completada',
+  AppLocale.inFolderImportNoGamelists:
+      'No se encontraron archivos gamelist.xml en tus carpetas de ROMs',
+  AppLocale.inFolderImportFoldersSkippedSaf:
+      'Se omitieron {count} carpetas de ROMs porque no son accesibles como rutas reales (se requiere acceso a todos los archivos en Android)',
+  AppLocale.inFolderSummarySystemsFound: 'Sistemas encontrados',
+  AppLocale.inFolderSummaryMediaOnlyLinked:
+      'Sistemas solo con medios vinculados',
+  AppLocale.inFolderSummaryFoldersSkippedSaf:
+      'Carpetas omitidas (sin acceso a ruta real)',
   AppLocale.wizardScanComplete: 'Análisis completado',
   AppLocale.wizardTapNextToContinue: 'Toca Siguiente para continuar',
   AppLocale.wizardEsdeStepTitle: 'Importar desde ES-DE',

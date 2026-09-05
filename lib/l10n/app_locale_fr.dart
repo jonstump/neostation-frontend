@@ -1251,7 +1251,7 @@ const Map<String, dynamic> appLocaleFr = {
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
   AppLocale.esdeResetConfirmBody:
-      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+      'Cela supprime toutes les métadonnées et tous les liens de médias importés depuis ES-DE ou depuis vos dossiers de ROMs, et efface le dossier ES-DE sélectionné. Vos jeux et fichiers ROM ne sont pas affectés.',
   AppLocale.esdeImportNotEsdeFolder:
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
@@ -1264,6 +1264,21 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.esdeSummaryStatsUpdated: 'Favoris / statistiques mis à jour',
   AppLocale.esdeSummaryGames: 'jeux',
   AppLocale.esdeSummarySystems: 'systèmes',
+  AppLocale.inFolderImport:
+      'Importer les métadonnées depuis les dossiers de ROMs',
+  AppLocale.inFolderImportSubtitle:
+      'Utiliser les fichiers gamelist.xml et les visuels présents dans vos dossiers de ROMs',
+  AppLocale.inFolderImporting: 'Import depuis les dossiers de ROMs en cours',
+  AppLocale.inFolderImportComplete:
+      'Import depuis les dossiers de ROMs terminé',
+  AppLocale.inFolderImportNoGamelists:
+      'Aucun fichier gamelist.xml trouvé dans vos dossiers de ROMs',
+  AppLocale.inFolderImportFoldersSkippedSaf:
+      '{count} dossiers de ROMs ont été ignorés car ils ne sont pas accessibles comme chemins réels (accès à tous les fichiers requis sur Android)',
+  AppLocale.inFolderSummarySystemsFound: 'Systèmes trouvés',
+  AppLocale.inFolderSummaryMediaOnlyLinked: 'Systèmes avec médias seuls liés',
+  AppLocale.inFolderSummaryFoldersSkippedSaf:
+      'Dossiers ignorés (pas d\'accès au chemin réel)',
   AppLocale.wizardScanComplete: 'Analyse terminée',
   AppLocale.wizardTapNextToContinue: 'Appuyez sur Suivant pour continuer',
   AppLocale.wizardEsdeStepTitle: 'Importer depuis ES-DE',
