@@ -6,7 +6,9 @@ import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../models/game_model.dart';
 import '../models/romm_collection.dart';
+import '../models/romm_metadata_fetch.dart';
 import '../models/romm_platform.dart';
 import '../models/romm_rom.dart';
 import '../models/system_model.dart';
@@ -1206,33 +1208,77 @@ class RommProvider extends ChangeNotifier {
     return written;
   }
 
-  /// Imports RomM's metadata and artwork for a linked [copy] of [rom], but
-  /// only when the local game has no metadata row at all.
+  /// Fills the metadata and artwork gaps of a linked [copy] of [rom] from
+  /// RomM — the browser's "already downloaded" confirm.
   ///
-  /// The browser path's counterpart to the import a download performs. Gated
-  /// on "no row" rather than "not fully scraped" so a game the user scraped,
-  /// edited, or imported from ES-DE is never replaced — the same fill-gaps
-  /// posture as the ES-DE importer, and [ScraperRepository.saveGameMetadata]
-  /// is a whole-row replace. Returns true when an import ran. Arms the
-  /// debounced settle on success so the library picks up the new art without
-  /// a manual rescan, exactly as a download does.
-  // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Link on Already Downloaded"
-  Future<bool> importMetadataIfMissing(
+  /// The browser path's counterpart to the import a download performs, in
+  /// fill-gaps mode: a game the user scraped, edited, or imported from ES-DE
+  /// keeps every populated column and every existing file, and only what is
+  /// empty or missing is written (the old "no metadata row at all" gate is
+  /// gone). Arms the debounced settle when something was written so the
+  /// library picks up the new art without a manual rescan, exactly as a
+  /// download does. Never throws; see [RommMetadataOutcome].
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Fill Gaps On Link Confirm"
+  Future<RommMetadataOutcome> fillMetadataGaps(
     RommRom rom,
     RommLocalCopy copy,
     FileProvider fileProvider,
   ) async {
-    final sysId = copy.system.id ?? '';
-    if (sysId.isEmpty) return false;
-    final existing = await ScraperRepository.getGameMetadata(
-      sysId,
-      copy.filename,
+    final outcome = await fetchMetadataForRomId(
+      romId: rom.id,
+      rom: rom,
+      system: copy.system,
+      fileProvider: fileProvider,
+      indexedName: copy.filename,
+      mode: RommMetadataMode.fillGaps,
     );
-    if (existing != null) return false;
-    await _importMetadata(rom, copy.system, fileProvider, copy.filename);
-    _downloadedSystems[copy.system.folderName] = copy.system;
+    if (outcome.wroteSomething) scheduleLibraryRefresh(copy.system);
+    return outcome;
+  }
+
+  /// Fetches RomM's metadata and artwork for a linked [game] in [mode].
+  ///
+  /// The row is keyed by the map row's stored `romname` — the on-disk
+  /// filename with extension the scan indexes as `user_roms.filename`, the
+  /// same key the download path writes — not by [GameModel.romname], which is
+  /// extension-stripped and would file a second row beside the one
+  /// `getGameMetadata` reads. A game without a map row fails with
+  /// [RommMetadataFetchException.notLinked]. Never throws.
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "RomM Metadata Writer With Two Modes"
+  Future<RommMetadataOutcome> fetchMetadata({
+    required GameModel game,
+    required SystemModel system,
+    required RommMetadataMode mode,
+    required FileProvider fileProvider,
+  }) async {
+    final link = await RommSaveMapRepository.getMapping(
+      game.romname,
+      system.folderName,
+    );
+    if (link == null) {
+      _log.w(
+        'RomM metadata fetch: game not linked '
+        '(system=${system.folderName}, romname=${game.romname})',
+      );
+      return RommMetadataOutcome.failed(
+        RommMetadataFetchException.notLinked(game.romname),
+      );
+    }
+    return fetchMetadataForRomId(
+      romId: link.rommRomId,
+      system: system,
+      fileProvider: fileProvider,
+      indexedName: link.romname,
+      mode: mode,
+    );
+  }
+
+  /// Arms the debounced library settle for [system] — the rescan and list
+  /// refresh a completed download triggers — so metadata or art written
+  /// outside a download shows without a manual rescan.
+  void scheduleLibraryRefresh(SystemModel system) {
+    _downloadedSystems[system.folderName] = system;
     _scheduleSettle();
-    return true;
   }
 
   /// True when a file named after [rom] already exists in a configured folder.
@@ -1443,9 +1489,17 @@ class RommProvider extends ChangeNotifier {
       }
     }
 
-    // Best-effort metadata + cover import from RomM (never fails the download).
+    // Best-effort metadata + cover import from RomM (never fails the download):
+    // a download owns its game, so it replaces whatever the row held.
     if (fileProvider != null) {
-      await _importMetadata(rom, system, fileProvider, indexedName);
+      await fetchMetadataForRomId(
+        romId: rom.id,
+        rom: rom,
+        system: system,
+        fileProvider: fileProvider,
+        indexedName: indexedName,
+        mode: RommMetadataMode.replace,
+      );
     }
 
     tracker.status = RommDownloadStatus.completed;
@@ -1664,139 +1718,365 @@ class RommProvider extends ChangeNotifier {
     }
   }
 
-  /// Imports RomM's metadata + cover art for [rom] into the same tables/media
-  /// folders the ScreenScraper integration uses, so the library shows game info
-  /// and box art without a separate scrape. Keyed by filename + system id, so
-  /// it links up when the scan later creates the user_roms row.
+  /// The one RomM metadata writer, behind [fetchMetadata], [fillMetadataGaps]
+  /// and download completion: reads `/api/roms/{id}` once, maps it, and
+  /// writes the columns and media in [mode].
   ///
-  /// [indexedName] is the on-disk filename the scan will record (the playlist
-  /// for an unpacked multi-disc ROM, otherwise the fsName). The metadata row is
+  /// [indexedName] is the on-disk filename the scan records (the playlist for
+  /// an unpacked multi-disc ROM, otherwise the fsName). The metadata row is
   /// matched to the scanned game by exact filename, so it must use this name.
-  Future<void> _importMetadata(
+  /// [rom] is the list entry when the caller holds one; otherwise the detail
+  /// stands in for it (same JSON shape).
+  ///
+  /// Never throws. A failure before the columns are written is a
+  /// [RommMetadataOutcomeKind.failed] outcome carrying a
+  /// [RommMetadataFetchException]; a media failure after them keeps the
+  /// columns and reports [RommMetadataOutcomeKind.partial]. Public so the
+  /// per-system pass can fetch from a rom-id index without a [GameModel].
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "RomM Metadata Writer With Two Modes"
+  Future<RommMetadataOutcome> fetchMetadataForRomId({
+    required int romId,
+    required SystemModel system,
+    required FileProvider fileProvider,
+    required String indexedName,
+    required RommMetadataMode mode,
+    RommRom? rom,
+  }) async {
+    final Map<String, dynamic>? detail;
+    try {
+      detail = await service.getRomDetail(romId);
+    } catch (e, st) {
+      return _metadataFailure(
+        stage: 'detail',
+        romId: romId,
+        indexedName: indexedName,
+        cause: e,
+        stackTrace: st,
+      );
+    }
+    if (detail == null) {
+      _log.i(
+        'RomM metadata fetch: no detail '
+        '(rom=$romId, system=${system.folderName}, filename=$indexedName)',
+      );
+      return const RommMetadataOutcome.notFound();
+    }
+
+    // app_system_id is a FK to app_systems(id); refuse rather than silently
+    // fail the insert if the resolved system somehow has no id.
+    final sysId = system.id ?? '';
+    if (sysId.isEmpty) {
+      return _metadataFailure(
+        stage: 'columns',
+        romId: romId,
+        indexedName: indexedName,
+        cause: StateError('system ${system.folderName} has no id'),
+      );
+    }
+
+    final RommRom entry;
+    final Map<String, dynamic> metadata;
+    try {
+      entry = rom ?? RommRom.fromJson(detail);
+      metadata = rommMetadataColumns(
+        detail,
+        indexedName: indexedName,
+        name: entry.name,
+      );
+    } catch (e, st) {
+      return _metadataFailure(
+        stage: 'detail',
+        romId: romId,
+        indexedName: indexedName,
+        cause: e,
+        stackTrace: st,
+      );
+    }
+
+    // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "RomM Metadata Writer With Two Modes"
+    int columnsWritten;
+    try {
+      switch (mode) {
+        case RommMetadataMode.fillGaps:
+          // The pure builder says what a fill-gaps write would touch (for
+          // the count); the repository re-reads and applies it.
+          final row = await ScraperRepository.getGameMetadata(
+            sysId,
+            indexedName,
+          );
+          final planned = ScraperRepository.buildFillGapsMetadataWrite(
+            appSystemId: sysId,
+            filename: indexedName,
+            row: row,
+            incoming: metadata,
+            source: MetadataSource.romm,
+            insertFullyScraped: true,
+          );
+          if (planned == null) {
+            columnsWritten = 0;
+          } else {
+            columnsWritten = planned.keys
+                .where((k) => !_metadataBookkeepingColumns.contains(k))
+                .length;
+            final ok = await ScraperRepository.mergeFillGapsMetadata(
+              sysId,
+              indexedName,
+              metadata,
+              source: MetadataSource.romm,
+              insertFullyScraped: true,
+            );
+            if (!ok) {
+              return _metadataFailure(
+                stage: 'columns',
+                romId: romId,
+                indexedName: indexedName,
+                cause: StateError('fill-gaps write refused by repository'),
+              );
+            }
+          }
+        case RommMetadataMode.replace:
+          // saveGameMetadata adds its bookkeeping to the map it is handed, so
+          // count first.
+          columnsWritten = metadata.keys.where((k) => k != 'filename').length;
+          final ok = await ScraperRepository.saveGameMetadata(
+            metadata,
+            sysId,
+            source: MetadataSource.romm,
+            isFullyScraped: true,
+          );
+          if (!ok) {
+            return _metadataFailure(
+              stage: 'columns',
+              romId: romId,
+              indexedName: indexedName,
+              cause: StateError('replace write refused by repository'),
+            );
+          }
+      }
+    } catch (e, st) {
+      return _metadataFailure(
+        stage: 'columns',
+        romId: romId,
+        indexedName: indexedName,
+        cause: e,
+        stackTrace: st,
+      );
+    }
+
+    final media = await _saveRommMediaSet(
+      detail,
+      entry,
+      system,
+      indexedName,
+      fileProvider,
+      skipExisting: mode == RommMetadataMode.fillGaps,
+    );
+    final kind = media.failed > 0
+        ? RommMetadataOutcomeKind.partial
+        : mode == RommMetadataMode.fillGaps
+        ? RommMetadataOutcomeKind.filled
+        : RommMetadataOutcomeKind.replaced;
+    final outcome = RommMetadataOutcome(
+      kind: kind,
+      columnsWritten: columnsWritten,
+      mediaWritten: media.written,
+      mediaSkipped: media.skipped,
+      mediaFailed: media.failed,
+      error: media.failed > 0
+          ? RommMetadataFetchException(
+              stage: 'media',
+              romId: romId,
+              filename: indexedName,
+              cause: media.firstError,
+            )
+          : null,
+    );
+    _log.i(
+      'RomM metadata fetch: kind=${kind.name} mode=${mode.name} rom=$romId '
+      'system=${system.folderName} filename=$indexedName '
+      'columns=$columnsWritten media_written=${media.written} '
+      'media_skipped=${media.skipped} media_failed=${media.failed}',
+    );
+    return outcome;
+  }
+
+  /// Logs a fetch that stopped before its columns were written and wraps the
+  /// cause with where it happened, so the caller can tell the stages apart.
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Error Handling Standards"
+  RommMetadataOutcome _metadataFailure({
+    required String stage,
+    required int romId,
+    required String indexedName,
+    required Object cause,
+    StackTrace? stackTrace,
+  }) {
+    final error = RommMetadataFetchException(
+      stage: stage,
+      romId: romId,
+      filename: indexedName,
+      cause: cause,
+    );
+    _log.e(
+      'RomM metadata fetch failed: stage=$stage rom=$romId '
+      'filename=$indexedName',
+      error: cause,
+      stackTrace: stackTrace,
+    );
+    return RommMetadataOutcome.failed(error);
+  }
+
+  /// Columns a write carries that are not metadata the user sees: the row
+  /// key, scrape state, provenance, and the timestamp.
+  static const Set<String> _metadataBookkeepingColumns = {
+    'app_system_id',
+    'filename',
+    'is_fully_scraped',
+    'metadata_source',
+    'updated_at',
+  };
+
+  /// Maps a RomM ROM [detail] onto `user_screenscraper_metadata` columns,
+  /// keyed by [indexedName]. Pure.
+  ///
+  /// `summary` → `description_en` only (RomM has no other languages);
+  /// `metadatum.genres` joined; `metadatum.companies` → `developer` (RomM has a
+  /// flat company list, so `publisher` is never written); `player_count`;
+  /// `first_release_date` epoch ms → `YYYY-MM-DD`; `average_rating` on RomM's
+  /// 0–100 scale → `rating` on the app's 0–20 scale, one decimal. Absent or
+  /// empty values are left out rather than written blank.
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "RomM Metadata Writer With Two Modes"
+  @visibleForTesting
+  static Map<String, dynamic> rommMetadataColumns(
+    Map<String, dynamic> detail, {
+    required String indexedName,
+    String? name,
+  }) {
+    final md =
+        (detail['metadatum'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final realName = name ?? detail['name']?.toString();
+
+    final metadata = <String, dynamic>{
+      'filename': indexedName,
+      if (realName != null && realName.isNotEmpty) 'real_name': realName,
+    };
+    final summary = detail['summary']?.toString();
+    if (summary != null && summary.isNotEmpty) {
+      metadata['description_en'] = summary;
+    }
+    final genres = (md['genres'] as List?)?.whereType<String>().toList();
+    if (genres != null && genres.isNotEmpty) {
+      metadata['genre'] = genres.join(', ');
+    }
+    final companies = (md['companies'] as List?)?.whereType<String>().toList();
+    if (companies != null && companies.isNotEmpty) {
+      metadata['developer'] = companies.join(', ');
+    }
+    final players = md['player_count']?.toString();
+    if (players != null && players.isNotEmpty) {
+      metadata['players'] = players;
+    }
+    final frd = md['first_release_date'];
+    if (frd is num) {
+      final dt = DateTime.fromMillisecondsSinceEpoch(frd.toInt(), isUtc: true);
+      final y = dt.year.toString().padLeft(4, '0');
+      final m = dt.month.toString().padLeft(2, '0');
+      final d = dt.day.toString().padLeft(2, '0');
+      metadata['release_date'] = '$y-$m-$d';
+    }
+    // RomM averages its providers' ratings onto 0–100; the app (following
+    // ScreenScraper) stores 0–20. 85 → 17.0.
+    // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "RomM Metadata Writer With Two Modes"
+    final rating = md['average_rating'];
+    if (rating is num) {
+      final scaled = (rating.toDouble() / 5).clamp(0.0, 20.0);
+      metadata['rating'] = (scaled * 10).round() / 10;
+    }
+    return metadata;
+  }
+
+  /// Writes the media set for [detail] — cover, fan art, wheel, screenshot,
+  /// video — into the folders the library reads, counting what happened to
+  /// each type. Failures are per type: one dead URL or unwritable folder
+  /// never costs the types queued behind it.
+  ///
+  /// RomM caches ScreenScraper's media set per ROM; each type maps onto the
+  /// media folder the library UI reads it from. The library card layers a
+  /// wheel/logo (foreground) over a fanart/screenshot (background), so
+  /// populating all of these gives a proper card rather than a bare box.
+  Future<_RommMediaSetResult> _saveRommMediaSet(
+    Map<String, dynamic> detail,
     RommRom rom,
     SystemModel system,
-    FileProvider fileProvider,
     String indexedName,
-  ) async {
-    try {
-      final detail = await _service.getRomDetail(rom.id);
-      if (detail == null) return;
-      final md =
-          (detail['metadatum'] as Map?)?.cast<String, dynamic>() ?? const {};
+    FileProvider fileProvider, {
+    required bool skipExisting,
+  }) async {
+    final ss =
+        (detail['ss_metadata'] as Map?)?.cast<String, dynamic>() ?? const {};
+    final results = <_RommMediaWrite>[];
 
-      final metadata = <String, dynamic>{
-        'filename': indexedName,
-        'real_name': rom.name,
-      };
-      final summary = detail['summary']?.toString();
-      if (summary != null && summary.isNotEmpty) {
-        metadata['description_en'] = summary;
-      }
-      final genres = (md['genres'] as List?)?.whereType<String>().toList();
-      if (genres != null && genres.isNotEmpty) {
-        metadata['genre'] = genres.join(', ');
-      }
-      // RomM has a flat company list (no dev/publisher split).
-      final companies = (md['companies'] as List?)
-          ?.whereType<String>()
-          .toList();
-      if (companies != null && companies.isNotEmpty) {
-        metadata['developer'] = companies.join(', ');
-      }
-      final players = md['player_count']?.toString();
-      if (players != null && players.isNotEmpty) {
-        metadata['players'] = players;
-      }
-      final frd = md['first_release_date'];
-      if (frd is num) {
-        final dt = DateTime.fromMillisecondsSinceEpoch(
-          frd.toInt(),
-          isUtc: true,
-        );
-        final y = dt.year.toString().padLeft(4, '0');
-        final m = dt.month.toString().padLeft(2, '0');
-        final d = dt.day.toString().padLeft(2, '0');
-        metadata['release_date'] = '$y-$m-$d';
-      }
-
-      // app_system_id is a FK to app_systems(id); skip rather than silently
-      // fail the insert if the resolved system somehow has no id.
-      final sysId = system.id ?? '';
-      if (sysId.isEmpty) {
-        _log.w(
-          'RomM metadata import: no system id for ${rom.fsName}, skipping',
-        );
-      } else {
-        await ScraperRepository.saveGameMetadata(
-          metadata,
-          sysId,
-          source: MetadataSource.romm,
-          isFullyScraped: true,
-        );
-      }
-
-      // Artwork import. RomM caches ScreenScraper's media set per ROM; each type
-      // maps onto the media folder the library UI reads it from. The library
-      // card layers a wheel/logo (foreground) over a fanart/screenshot
-      // (background), so populating all of these gives a proper card rather than
-      // a bare box.
-      final ss =
-          (detail['ss_metadata'] as Map?)?.cast<String, dynamic>() ?? const {};
-
-      // Cover -> box2d (the box art proper), taken from the first source that
-      // actually yields an image. `path_cover_*` is RomM's own cached copy;
-      // `url_cover` is the metadata provider's original, and is exactly what
-      // the RomM browse grid draws. A library RomM holds no cached cover file
-      // for therefore showed box art in the browser while the download saved
-      // none — reading the same sources here keeps the two in step, so whatever
-      // the browser can draw, a download keeps.
-      final coverSources = <String?>[
-        detail['path_cover_large']?.toString(),
-        detail['path_cover_small']?.toString(),
-        _service.coverUrl(rom),
-      ];
+    // Cover -> box2d (the box art proper), taken from the first source that
+    // actually yields an image. `path_cover_*` is RomM's own cached copy;
+    // `url_cover` is the metadata provider's original, and is exactly what
+    // the RomM browse grid draws. A library RomM holds no cached cover file
+    // for therefore showed box art in the browser while the download saved
+    // none — reading the same sources here keeps the two in step, so whatever
+    // the browser can draw, a download keeps.
+    final coverSources = <String?>[
+      detail['path_cover_large']?.toString(),
+      detail['path_cover_small']?.toString(),
+      service.coverUrl(rom),
+    ];
+    results.add(
       await _saveRommMedia(
         coverSources,
         'box2d',
         system,
         indexedName,
         fileProvider,
-      );
+        skipExisting: skipExisting,
+      ),
+    );
 
-      // Fanart -> fanarts (card/detail background). When RomM has no cached
-      // fanart, the cover doubles as the background so the card is never blank.
-      final fanartPath = _rommResourcePath(ss['fanart_path']);
+    // Fanart -> fanarts (card/detail background). When RomM has no cached
+    // fanart, the cover doubles as the background so the card is never blank.
+    final fanartPath = _rommResourcePath(ss['fanart_path']);
+    results.add(
       await _saveRommMedia(
         [fanartPath, ...coverSources],
         'fanarts',
         system,
         indexedName,
         fileProvider,
-      );
+        skipExisting: skipExisting,
+      ),
+    );
 
-      // Logo -> wheels (the logo overlaid on the card foreground). RomM's
-      // `logo_*` IS ScreenScraper's `wheel` media (its url carries
-      // `media=wheel`), which is what every `wheels/` consumer expects: a
-      // transparent logo layered over the fanart. `marquee_*` is SS's
-      // `screenmarquee` — an opaque arcade banner that would render as a solid
-      // rectangle over the background — so it is only a last resort.
-      final wheelPath =
-          _rommResourcePath(ss['logo_path']) ??
-          _rommResourcePath(ss['marquee_path']);
+    // Logo -> wheels (the logo overlaid on the card foreground). RomM's
+    // `logo_*` IS ScreenScraper's `wheel` media (its url carries
+    // `media=wheel`), which is what every `wheels/` consumer expects: a
+    // transparent logo layered over the fanart. `marquee_*` is SS's
+    // `screenmarquee` — an opaque arcade banner that would render as a solid
+    // rectangle over the background — so it is only a last resort.
+    final wheelPath =
+        _rommResourcePath(ss['logo_path']) ??
+        _rommResourcePath(ss['marquee_path']);
+    results.add(
       await _saveRommMedia(
         [wheelPath],
         'wheels',
         system,
         indexedName,
         fileProvider,
-      );
+        skipExisting: skipExisting,
+      ),
+    );
 
-      // Screenshot -> screenshots (background fallback + detail view).
-      final screenshots =
-          (detail['merged_screenshots'] as List?)
-              ?.whereType<String>()
-              .toList() ??
-          const <String>[];
+    // Screenshot -> screenshots (background fallback + detail view).
+    final screenshots =
+        (detail['merged_screenshots'] as List?)?.whereType<String>().toList() ??
+        const <String>[];
+    results.add(
       await _saveRommMedia(
         [
           if (screenshots.isNotEmpty) screenshots.first,
@@ -1806,16 +2086,19 @@ class RommProvider extends ChangeNotifier {
         system,
         indexedName,
         fileProvider,
-      );
+        skipExisting: skipExisting,
+      ),
+    );
 
-      // Video -> videos, when RomM has a cached clip. Many ROMs only carry a
-      // YouTube id (no downloadable file), in which case there is nothing to
-      // fetch and this is skipped.
-      final videoPath =
-          _rommResourcePath(ss['video_path']) ??
-          _rommResourcePath(detail['path_video']);
-      if (videoPath != null) {
-        final vext = videoPath.toLowerCase().contains('.webm') ? 'webm' : 'mp4';
+    // Video -> videos, when RomM has a cached clip. Many ROMs only carry a
+    // YouTube id (no downloadable file), in which case there is nothing to
+    // fetch and this is skipped.
+    final videoPath =
+        _rommResourcePath(ss['video_path']) ??
+        _rommResourcePath(detail['path_video']);
+    if (videoPath != null) {
+      final vext = videoPath.toLowerCase().contains('.webm') ? 'webm' : 'mp4';
+      results.add(
         await _saveRommMedia(
           [videoPath],
           'videos',
@@ -1824,11 +2107,24 @@ class RommProvider extends ChangeNotifier {
           fileProvider,
           forcedExt: vext,
           siblingExts: const ['mp4', 'webm'],
-        );
-      }
-    } catch (e) {
-      _log.e('RomM metadata import failed: $e');
+          skipExisting: skipExisting,
+        ),
+      );
     }
+
+    return (
+      written: results
+          .where((r) => r.kind == _RommMediaWriteKind.written)
+          .length,
+      skipped: results
+          .where((r) => r.kind == _RommMediaWriteKind.skipped)
+          .length,
+      failed: results.where((r) => r.kind == _RommMediaWriteKind.failed).length,
+      firstError: results
+          .where((r) => r.kind == _RommMediaWriteKind.failed)
+          .map((r) => r.error)
+          .firstOrNull,
+    );
   }
 
   /// Resolves a RomM `ss_metadata` `*_path` value to a server path fetchable by
@@ -1848,8 +2144,12 @@ class RommProvider extends ChangeNotifier {
   /// extension from the actual bytes (RomM serves JPEG even from `*.png` paths
   /// and the library's lookup is extension-sensitive) unless [forcedExt] is
   /// given. Removes stale variants in [siblingExts] so
-  /// `getImagePath`/`getVideoPath` resolve this one. No-op when every source is
-  /// empty or fetches nothing.
+  /// `getImagePath`/`getVideoPath` resolve this one. Writes nothing when every
+  /// source is empty or fetches nothing.
+  ///
+  /// With [skipExisting] a file already at the destination under [forcedExt]
+  /// or any of [siblingExts] — the same candidates the library's lookup
+  /// probes — is left alone and nothing is fetched.
   ///
   /// Sources are tried in order because RomM's cached copy and the metadata
   /// provider's original are the same artwork from two places, and a given
@@ -1857,8 +2157,10 @@ class RommProvider extends ChangeNotifier {
   ///
   /// Failures are contained here rather than at the call site: the media types
   /// are independent, and a single unwritable folder or dead URL must not cost
-  /// the caller every type queued behind it.
-  Future<void> _saveRommMedia(
+  /// the caller every type queued behind it. They are logged with the URL that
+  /// was being fetched and reported back as [_RommMediaWriteKind.failed].
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Error Handling Standards"
+  Future<_RommMediaWrite> _saveRommMedia(
     List<String?> sources,
     String folder,
     SystemModel system,
@@ -1866,20 +2168,41 @@ class RommProvider extends ChangeNotifier {
     FileProvider fileProvider, {
     String? forcedExt,
     List<String> siblingExts = const ['png', 'jpg', 'webp'],
+    bool skipExisting = false,
   }) async {
+    String? attempted;
     try {
+      if (skipExisting) {
+        for (final ext in {?forcedExt, ...siblingExts}) {
+          final existing = File(
+            fileProvider.getMediaPath(
+              system.folderName,
+              folder,
+              indexedName,
+              ext,
+            ),
+          );
+          if (await existing.exists()) {
+            return const _RommMediaWrite(_RommMediaWriteKind.skipped);
+          }
+        }
+      }
+
       Uint8List? bytes;
       for (final source in sources) {
         if (source == null || source.isEmpty) continue;
+        attempted = source;
         // A video's bytes are not an image, so only art is content-checked.
-        bytes = await _service.fetchImageBytes(
+        bytes = await service.fetchImageBytes(
           source,
           requireImage: forcedExt == null,
         );
         if (bytes != null && bytes.isNotEmpty) break;
         bytes = null;
       }
-      if (bytes == null) return;
+      if (bytes == null) {
+        return const _RommMediaWrite(_RommMediaWriteKind.none);
+      }
 
       final ext = forcedExt ?? _mediaExtensionFor(bytes);
       final dest = fileProvider.getMediaPath(
@@ -1903,8 +2226,15 @@ class RommProvider extends ChangeNotifier {
         );
         if (await stale.exists()) await stale.delete();
       }
-    } catch (e) {
-      _log.e('RomM media import failed for $folder/$indexedName: $e');
+      return const _RommMediaWrite(_RommMediaWriteKind.written);
+    } catch (e, st) {
+      _log.e(
+        'RomM media import failed: type=$folder system=${system.folderName} '
+        'filename=$indexedName url=${attempted ?? '(none)'}',
+        error: e,
+        stackTrace: st,
+      );
+      return _RommMediaWrite(_RommMediaWriteKind.failed, error: e);
     }
   }
 
@@ -2053,3 +2383,19 @@ class RommLocalCopy {
     return lastDot != -1 ? filename.substring(0, lastDot) : filename;
   }
 }
+
+/// What [RommProvider._saveRommMedia] did for one media type.
+enum _RommMediaWriteKind { written, skipped, none, failed }
+
+class _RommMediaWrite {
+  final _RommMediaWriteKind kind;
+  final Object? error;
+  const _RommMediaWrite(this.kind, {this.error});
+}
+
+typedef _RommMediaSetResult = ({
+  int written,
+  int skipped,
+  int failed,
+  Object? firstError,
+});

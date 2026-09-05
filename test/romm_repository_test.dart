@@ -935,11 +935,13 @@ void main() {
       );
 
       expect(await RommSaveMapRepository.getMapping('Game.sfc', 'snes'), (
+        romname: 'Game.sfc',
         rommRomId: 12,
         fsName: 'Chrono Trigger.sfc',
         source: RommLinkSource.manual,
       ));
       expect(await RommSaveMapRepository.getMapping('Other.sfc', 'snes'), (
+        romname: 'Other.sfc',
         rommRomId: 13,
         fsName: 'Other.sfc',
         source: RommLinkSource.download,
@@ -953,6 +955,7 @@ void main() {
       );
 
       expect(await RommSaveMapRepository.getMapping('Legacy.sfc', 'snes'), (
+        romname: 'Legacy.sfc',
         rommRomId: 7,
         fsName: null,
         source: RommLinkSource.auto,
@@ -969,6 +972,10 @@ void main() {
       final mapping = await RommSaveMapRepository.getMapping('Game', 'snes');
       expect(mapping?.rommRomId, 12);
       expect(mapping?.source, RommLinkSource.manual);
+      // The stored spelling comes back, not the one asked for: it is the key
+      // the metadata row is filed under.
+      // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "RomM Metadata Writer With Two Modes"
+      expect(mapping?.romname, 'Game.sfc');
       expect(await RommSaveMapRepository.getMapping('Game', 'nes'), isNull);
     });
 

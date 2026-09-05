@@ -473,6 +473,41 @@ void main() {
   });
 
   group('nothing to link', () {
+    // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Fill Gaps On Link Confirm"
+    test('links 400 games without a single detail request', () async {
+      // The linker's whole server surface is [RommLibraryLinker.listPlatforms]
+      // and [RommLibraryLinker.fetchPage]; no detail fetcher can even be
+      // injected. So every request the fake server saw must be a page
+      // request, and the count is a function of the page size, not of the
+      // number of games linked.
+      final roms = [
+        for (var i = 0; i < 400; i++)
+          _rom(1 + i, platformId: 1, fsName: 'Game $i.sfc'),
+      ];
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes')],
+        romsByPlatform: {1: roms},
+        systemBySlug: {'snes': snes},
+      );
+      final map = _FakeMap();
+      final games = [for (final r in roms) _game(r.fsName, 'snes')];
+
+      final summary = await _linker(server, map, games).run();
+
+      expect(summary.rowsAdded, 400);
+      expect(map.rows, hasLength(400));
+      expect(
+        server.requests,
+        everyElement(matches(RegExp(r'^1@\d+$'))),
+        reason: 'page requests only',
+      );
+      expect(
+        server.requests.length,
+        (400 / RommLibraryLinker.pageSize).ceil(),
+        reason: 'one request per page, none per game',
+      );
+    });
+
     test('every game already linked: no server traffic, zero rows', () async {
       final server = _FakeServer(
         platforms: [_platform(1, 'snes')],

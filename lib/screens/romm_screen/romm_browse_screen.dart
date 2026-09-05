@@ -299,10 +299,12 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   /// treat it as a non-RomM game. Writing the row is what the user's confirm
   /// most plausibly means here — there is nothing to download. When a row is
   /// written the user is told so, the game's cached sync status is dropped so
-  /// the badge recomputes without a restart, and RomM's metadata and art are
-  /// imported if the game has none. When the row already existed this is the
-  /// same "already downloaded" no-op it always was.
+  /// the badge recomputes without a restart, and RomM's metadata and art fill
+  /// whatever the game's row and media folders are missing. When the row
+  /// already existed this is the same "already downloaded" no-op it always
+  /// was.
   // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Link on Already Downloaded", REQ "Localized User-Facing Text"
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Fill Gaps On Link Confirm"
   Future<void> _linkLocalCopy(RommRom rom, RommLocalCopy copy) async {
     final fileProvider = context.read<FileProvider>();
     final linked = await _rommProvider.linkLocalCopy(rom, copy);
@@ -318,8 +320,9 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
     );
     _invalidateSyncState(copy.romname);
     // Best-effort and last: a metadata fetch is network work the link itself
-    // doesn't depend on, and the toast has already said what happened.
-    await _rommProvider.importMetadataIfMissing(rom, copy, fileProvider);
+    // doesn't depend on, and the toast has already said what happened. Fill
+    // gaps only — a link confirm never replaces what the game already has.
+    await _rommProvider.fillMetadataGaps(rom, copy, fileProvider);
   }
 
   void _showDownloadedToast() {

@@ -9,7 +9,7 @@ import 'package:neostation/utils/romm_link_state.dart';
 // Governing: ADR-0004 (manual link provenance), SPEC-0004 REQ "Link State Display"
 
 RommSaveMapping _row(RommLinkSource source, {String? fsName}) =>
-    (rommRomId: 12, fsName: fsName, source: source);
+    (romname: 'a.sfc', rommRomId: 12, fsName: fsName, source: source);
 
 void main() {
   group('rommLinkStateOf', () {

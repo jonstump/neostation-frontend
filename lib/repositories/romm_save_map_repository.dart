@@ -37,6 +37,10 @@ enum RommLinkSource {
 
 /// A mapping row as read back by [RommSaveMapRepository.getMapping].
 typedef RommSaveMapping = ({
+  /// The row's stored key: the on-disk filename with extension
+  /// (`user_roms.filename`), whichever spelling the lookup resolved it by.
+  /// It is the key the metadata row is filed under too.
+  String romname,
   int rommRomId,
   String? fsName,
   RommLinkSource source,
@@ -379,7 +383,9 @@ class RommSaveMapRepository {
       final romId = int.tryParse(row['romm_rom_id'].toString());
       if (romId == null) return null;
       final fsName = row['romm_fs_name']?.toString();
+      final stored = row['romname']?.toString() ?? '';
       return (
+        romname: stored.isEmpty ? romname : stored,
         rommRomId: romId,
         fsName: (fsName == null || fsName.isEmpty) ? null : fsName,
         source: RommLinkSource.fromDb(row['link_source']),
