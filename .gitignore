@@ -298,3 +298,4 @@ ROMs/
 
 # Native build scratch from the vendored packages (never committed)
 .cxx/
+.sdd/
