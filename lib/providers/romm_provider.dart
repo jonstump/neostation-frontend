@@ -165,6 +165,14 @@ class RommProvider extends ChangeNotifier {
   /// deletions made outside this app) and by [disconnect].
   final Map<int, bool> _downloadedByRomId = {};
 
+  /// The [RommLocalCopy] behind a `true` in [_downloadedByRomId], so the link
+  /// paths can act on a ROM the badge probe already found without probing the
+  /// disk a second time (two SAF stats per pre-existing ROM on a cold cache,
+  /// which is what bulk sync used to pay). Only hits are kept — a miss has
+  /// nothing to link — and it lives and dies with [_downloadedByRomId].
+  // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Link on Already Downloaded"
+  final Map<int, RommLocalCopy> _localCopyByRomId = {};
+
   // ── Getters ────────────────────────────────────────────────────────────────
   RommConnectionStatus get status => _status;
   bool get isConnected => _status == RommConnectionStatus.connected;
@@ -174,6 +182,23 @@ class RommProvider extends ChangeNotifier {
 
   List<RommPlatform> get platforms => List.unmodifiable(_platforms);
   bool get loadingPlatforms => _loadingPlatforms;
+
+  /// [loadingPlatforms] under the name the sync layer's guards read it by.
+  /// The link pass checks it the way it checks [isConnected], so it reads as
+  /// a state, not a progress flag.
+  // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Pass Observability"
+  bool get isLoadingPlatforms => _loadingPlatforms;
+
+  /// Completes when the platform load in flight finishes — immediately when
+  /// none is. [loadPlatforms] is a no-op while one is running, so a caller
+  /// that needs the *result* (the link pass) awaits this first rather than
+  /// reading an empty list and reporting nothing to do.
+  // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Pass Observability"
+  Future<void> get platformsLoaded =>
+      _platformsLoad?.future ?? Future<void>.value();
+
+  /// The load [loadPlatforms] is running, for [platformsLoaded].
+  Completer<void>? _platformsLoad;
 
   List<RommCollection> get collections => List.unmodifiable(_collections);
   bool get loadingCollections => _loadingCollections;
@@ -472,6 +497,7 @@ class RommProvider extends ChangeNotifier {
     _systemByPlatformId.clear();
     _unsupportedPlatformIds.clear();
     _downloadedByRomId.clear();
+    _localCopyByRomId.clear();
     _lastPersistedAccessToken = null;
     notifyListeners();
   }
@@ -483,6 +509,7 @@ class RommProvider extends ChangeNotifier {
     if (_loadingPlatforms) return;
     if (_platforms.isNotEmpty && !force) return;
     _loadingPlatforms = true;
+    final load = _platformsLoad = Completer<void>();
     _lastError = null;
     notifyListeners();
     try {
@@ -501,6 +528,8 @@ class RommProvider extends ChangeNotifier {
       _lastError = 'Failed to load platforms: $e';
     } finally {
       _loadingPlatforms = false;
+      _platformsLoad = null;
+      load.complete();
       notifyListeners();
     }
   }
@@ -714,6 +743,24 @@ class RommProvider extends ChangeNotifier {
       (index[system.realName] ??= <int>[]).add(platform.id);
     }
     return index;
+  }
+
+  /// Local system for a RomM platform, for callers that have a platform and
+  /// not a ROM (the connect-time link pass).
+  ///
+  /// Reads the per-platform cache but, unlike [resolveSystem], never writes a
+  /// null into it: [SystemRepository.getSystemByFolderName] answers null for
+  /// an unreadable or still-loading system table as readily as for a platform
+  /// with no match, and a null pinned during that window would leave the
+  /// platform unlinkable until the next connect. A hit is cached, so a
+  /// platform that failed to resolve once is simply asked again next time.
+  // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Filename Equivalence Rule"
+  Future<SystemModel?> systemForPlatform(RommPlatform platform) async {
+    final cached = _systemByPlatformId[platform.id];
+    if (cached != null) return cached;
+    final system = await _systemForPlatform(platform);
+    if (system != null) _systemByPlatformId[platform.id] = system;
+    return system;
   }
 
   /// Local system for a RomM platform, using the same slug/alias candidates
@@ -1121,9 +1168,16 @@ class RommProvider extends ChangeNotifier {
     RommRom rom,
     List<String> romFolders,
   ) async {
+    // A copy the badge probe already found is handed back as-is: bulk sync
+    // asks [isDownloadedCached] and then this for every on-disk ROM, and the
+    // second look must not be a second disk probe.
+    final cached = _localCopyByRomId[rom.id];
+    if (cached != null) return cached;
     final system = await resolveSystem(rom);
     if (system == null) return null;
-    return _existingRomFile(system, rom, romFolders);
+    final copy = await _existingRomFile(system, rom, romFolders);
+    if (copy != null) _localCopyByRomId[rom.id] = copy;
+    return copy;
   }
 
   /// Writes the `app_romm_rom_map` row linking [copy] to [rom], unless one
@@ -1194,10 +1248,14 @@ class RommProvider extends ChangeNotifier {
   /// it. Use this from tile widgets so recycling a tile back into view doesn't
   /// re-run the sqlite3 read + filesystem stats — the storm behind the "list
   /// can't keep up" jank on large platforms.
+  ///
+  /// Probes through [findLocalCopy], so a hit also memoises the copy itself
+  /// and the link that follows it costs no second look at the disk.
+  // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Link on Already Downloaded"
   Future<bool> isDownloadedCached(RommRom rom, List<String> romFolders) async {
     final cached = _downloadedByRomId[rom.id];
     if (cached != null) return cached;
-    final result = await isDownloaded(rom, romFolders);
+    final result = await findLocalCopy(rom, romFolders) != null;
     _downloadedByRomId[rom.id] = result;
     return result;
   }
@@ -1228,6 +1286,7 @@ class RommProvider extends ChangeNotifier {
     if (bulkSync.isRunning) return;
     if (_downloadedByRomId.isEmpty && _downloads.isEmpty) return;
     _downloadedByRomId.clear();
+    _localCopyByRomId.clear();
     _downloads.removeWhere(
       (_, d) => d.status != RommDownloadStatus.downloading,
     );
@@ -1253,6 +1312,7 @@ class RommProvider extends ChangeNotifier {
     );
     if (romId == null) return;
     _downloadedByRomId.remove(romId);
+    _localCopyByRomId.remove(romId);
     // A transfer still running owns its own entry: dropping it here would
     // strand the progress UI and the completion handler that follows it.
     final download = _downloads[romId];

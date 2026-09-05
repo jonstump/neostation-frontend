@@ -26,7 +26,6 @@ import 'package:neostation/models/neo_sync_models.dart';
 import 'package:neostation/models/romm_asset.dart';
 import 'package:neostation/models/romm_platform.dart';
 import 'package:neostation/models/romm_rom.dart';
-import 'package:neostation/models/system_model.dart';
 import 'package:neostation/providers/neo_sync_provider.dart';
 import 'package:neostation/repositories/emulator_repository.dart';
 import 'package:neostation/repositories/game_repository.dart';
@@ -1708,8 +1707,8 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
   /// the map through their repositories, and a stop check tied to this
   /// provider's lifetime.
   RommLibraryLinker _buildLinker() => RommLibraryLinker(
-    listPlatforms: _listPlatforms,
-    resolveSystem: _resolveSystemForPlatform,
+    listPlatforms: listPlatformsForLinkPass,
+    resolveSystem: _browse.systemForPlatform,
     fetchPage: ({required platformId, required limit, required offset}) => _svc
         .getRomsPage(platformIds: [platformId], limit: limit, offset: offset),
     listGames: GameRepository.getAllGames,
@@ -1723,38 +1722,35 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
   /// Going through [RommProvider.loadPlatforms] rather than the service means
   /// the list is shared with the browse screen (a no-op when it already
   /// loaded it) and, more to the point, that its support classification has
-  /// run — which warms the per-platform system cache [_resolveSystemForPlatform]
-  /// reads and lets it try each platform's `fs_slug`. The provider swallows a
-  /// failed load into [RommProvider.lastError], which is surfaced here as an
-  /// error so the pass reports it rather than reading "no platforms".
-  Future<List<RommPlatform>> _listPlatforms() async {
+  /// run — which warms the per-platform system cache
+  /// [RommProvider.systemForPlatform] reads and lets it try each platform's
+  /// `fs_slug`. The provider swallows a failed load into
+  /// [RommProvider.lastError], which is surfaced here as an error so the pass
+  /// reports it rather than reading "no platforms".
+  ///
+  /// A load already in flight (the browse screen opened just before the pass
+  /// fired) is awaited, not raced: `loadPlatforms` returns at once while one
+  /// is running, and the pass would otherwise read an empty list and report
+  /// "0 platforms processed, complete" with nothing to say why. Should the
+  /// list still be empty and loading after that (a forced reload started
+  /// underneath us), the pass fails with that as its named reason.
+  // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Pass Observability"
+  @visibleForTesting
+  Future<List<RommPlatform>> listPlatformsForLinkPass() async {
+    if (_browse.isLoadingPlatforms) {
+      _log.i('RomM link pass waiting: the platform list is still loading');
+      await _browse.platformsLoaded;
+    }
     await _browse.loadPlatforms();
     final platforms = _browse.platforms;
     if (platforms.isEmpty && _browse.lastError != null) {
       throw StateError(_browse.lastError!);
     }
+    if (platforms.isEmpty && _browse.isLoadingPlatforms) {
+      throw StateError('the platform list is still loading');
+    }
     return platforms;
   }
-
-  /// Local system for a RomM platform, through the same slug and alias
-  /// resolution the browse grid uses for a ROM ([RommProvider.resolveSystem]).
-  ///
-  /// That method takes a ROM because every caller before this one had one;
-  /// it only reads the platform-level fields, so a stand-in ROM carrying the
-  /// platform's id and slug asks exactly the same question — and hits the
-  /// same per-platform cache.
-  Future<SystemModel?> _resolveSystemForPlatform(RommPlatform platform) =>
-      _browse.resolveSystem(
-        RommRom(
-          id: 0,
-          name: platform.name,
-          platformId: platform.id,
-          platformSlug: platform.slug,
-          fsName: '',
-          fsNameNoExt: '',
-          fsExtension: '',
-        ),
-      );
 
   /// Folds playtime recorded on other devices into the local totals.
   ///

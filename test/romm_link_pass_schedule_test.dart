@@ -1,7 +1,11 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:neostation/models/database_game_model.dart';
+import 'package:neostation/models/romm_platform.dart';
+import 'package:neostation/models/romm_rom.dart';
 import 'package:neostation/models/romm_rom_page.dart';
+import 'package:neostation/models/system_model.dart';
 import 'package:neostation/models/sync_models.dart';
 import 'package:neostation/providers/neo_sync_provider.dart';
 import 'package:neostation/providers/romm_provider.dart';
@@ -13,6 +17,8 @@ import 'package:neostation/services/romm_service.dart';
 import 'package:neostation/sync/providers/romm_provider.dart';
 import 'package:neostation/sync/sync_manager.dart';
 
+import 'database_test_helper.dart';
+
 /// How [RomMSyncProvider] schedules the connect-time link pass (SPEC-0001
 /// "Pass Scheduling and Guards" / "Concurrency Safety"): after a disconnected
 /// → connected transition it runs before the pending-upload sweep, under the
@@ -23,14 +29,30 @@ import 'package:neostation/sync/sync_manager.dart';
 /// so nothing here needs a server or a database.
 
 class _FakeRommService extends RommService {
+  /// What [getPlatforms] answers — after [platformsGate] completes, when one
+  /// is set, so a test can hold a platform load open.
+  List<RommPlatform> platforms = const [];
+  Completer<void>? platformsGate;
+
   @override
   bool get playtimeSyncAvailable => false;
+
+  @override
+  Future<List<RommPlatform>> getPlatforms() async {
+    final gate = platformsGate;
+    if (gate != null) await gate.future;
+    return platforms;
+  }
 }
 
 class _FakeBrowse extends RommProvider {
   final RommService fakeService;
   bool connected = false;
   int cacheInvalidations = 0;
+
+  /// Reports "loading" with nothing in flight and an empty list, the state
+  /// left behind when a forced reload starts under the pass.
+  bool stuckLoading = false;
 
   _FakeBrowse(this.fakeService);
 
@@ -39,6 +61,15 @@ class _FakeBrowse extends RommProvider {
 
   @override
   RommService get service => fakeService;
+
+  @override
+  bool get isLoadingPlatforms => stuckLoading || super.isLoadingPlatforms;
+
+  @override
+  Future<void> loadPlatforms({bool force = false}) {
+    if (stuckLoading) return Future.value();
+    return super.loadPlatforms(force: force);
+  }
 
   @override
   void invalidateDownloadedCache() => cacheInvalidations++;
@@ -109,33 +140,81 @@ class _RecordingProvider extends RomMSyncProvider {
   }
 }
 
+const _snes = SystemModel(
+  folderName: 'snes',
+  realName: 'SNES',
+  iconImage: '',
+  color: '#000000',
+  folders: ['snes'],
+);
+
 void main() {
+  // The real platform load classifies platforms against the systems table,
+  // so the tests that let it run need a database — an empty one will do.
+  final helper = DatabaseTestHelper();
   late _FakeBrowse browse;
   late List<String> events;
   late _FakeLinker linker;
   late _RecordingProvider provider;
 
-  setUp(() {
+  /// A real linker over in-memory fakes whose platform list comes from the
+  /// provider's own lister — the seam under test. One unlinked local game,
+  /// one server ROM named the same, so a run that sees the platform links it.
+  RommLibraryLinker realLinker() => RommLibraryLinker(
+    listPlatforms: () => provider.listPlatformsForLinkPass(),
+    resolveSystem: (_) async => _snes,
+    fetchPage: ({required platformId, required limit, required offset}) async =>
+        RommRomPage(
+          items: [
+            RommRom(
+              id: 10,
+              name: 'Game',
+              platformId: platformId,
+              platformSlug: 'snes',
+              fsName: 'Game.sfc',
+              fsNameNoExt: 'Game',
+              fsExtension: 'sfc',
+            ),
+          ],
+          total: 1,
+        ),
+    listGames: () async => [
+      DatabaseGameModel(
+        filename: 'Game.sfc',
+        romPath: '/roms/snes/Game.sfc',
+        systemFolderName: 'snes',
+      ),
+    ],
+    loadRomIdIndex: () async => const RommRomIdIndex({}),
+    putMappingsIfAbsent: (entries) async => entries.length,
+  );
+
+  setUp(() async {
+    await helper.setUp();
     browse = _FakeBrowse(_FakeRommService());
     events = [];
     linker = _FakeLinker(events);
     LoggerService.instance.startCapture();
   });
 
-  tearDown(() {
+  tearDown(() async {
     LoggerService.instance.takeCapture();
     SyncManager.instance.unregister(RomMSyncProvider.kProviderId);
     provider.dispose();
+    await helper.tearDown();
   });
 
   /// Builds the provider and makes RomM the active save provider, so the
   /// sweep half of the connect-time work is not gated off.
-  Future<void> build({bool autoSweep = true}) async {
+  Future<void> build({
+    bool autoSweep = true,
+    RommLibraryLinker? withLinker,
+  }) async {
     provider = _RecordingProvider(
       browse,
       NeoSyncProvider(NeoSyncService()),
       events: events,
-      linker: linker,
+      linker: withLinker ?? linker,
       autoSweep: autoSweep,
     );
     SyncManager.instance.register(provider);
@@ -269,6 +348,57 @@ void main() {
       expect(await provider.linkLibrary(), isNull);
       expect(linker.runs, 0);
     });
+
+    // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Pass Observability"
+    test('a platform load in flight is awaited, not raced', () async {
+      final svc = browse.fakeService as _FakeRommService;
+      svc.platforms = [
+        const RommPlatform(id: 1, name: 'SNES', slug: 'snes', romCount: 1),
+      ];
+      svc.platformsGate = Completer<void>();
+      await build(autoSweep: false, withLinker: realLinker());
+      browse.connected = true;
+
+      // The browse screen's load, still waiting on the server.
+      final load = browse.loadPlatforms();
+      expect(browse.isLoadingPlatforms, isTrue);
+
+      final pass = provider.linkLibrary();
+      await pumpEventQueue();
+      expect(
+        LoggerService.instance.takeCapture(),
+        contains(
+          'i|RomM link pass waiting: the platform list is still loading',
+        ),
+      );
+
+      svc.platformsGate!.complete();
+      await load;
+      final summary = await pass;
+
+      expect(summary, isNotNull);
+      expect(summary!.platformsProcessed, 1);
+      expect(summary.rowsAdded, 1, reason: 'the pass saw the loaded list');
+    });
+
+    test(
+      'a list still loading after the wait fails the pass by name',
+      () async {
+        await build(autoSweep: false, withLinker: realLinker());
+        browse.connected = true;
+        browse.stuckLoading = true;
+
+        expect(await provider.linkLibrary(), isNull);
+
+        expect(
+          LoggerService.instance.takeCapture(),
+          contains(
+            'w|RomM link pass failed: platform enumeration failed: '
+            'Bad state: the platform list is still loading',
+          ),
+        );
+      },
+    );
 
     test('a dispose mid-pass is not followed by a sweep', () async {
       await build();

@@ -8,6 +8,7 @@ import 'package:neostation/providers/romm_bulk_sync.dart';
 import 'package:neostation/repositories/romm_save_map_repository.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/romm/romm_library_linker.dart';
+import 'package:neostation/services/romm/romm_paging.dart';
 
 /// The connect-time link pass ([RommLibraryLinker]) against in-memory fakes:
 /// a server of platforms and ROM pages, a scanned library, and a mapping table
@@ -158,8 +159,12 @@ void main() {
   setUp(() => LoggerService.instance.startCapture());
   tearDown(() => LoggerService.instance.takeCapture());
 
-  test('paging reuses bulk sync\'s page size', () {
+  // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Connect-Time Link Pass"
+  test('paging reuses bulk sync\'s page size and cap, from one definition', () {
     expect(RommLibraryLinker.pageSize, RommBulkSync.defaultPageSize);
+    expect(RommLibraryLinker.pageCap, RommBulkSync.maxPages);
+    expect(RommLibraryLinker.pageSize, RommPaging.pageSize);
+    expect(RommLibraryLinker.pageCap, RommPaging.maxPages);
   });
 
   group('linking', () {
@@ -257,6 +262,67 @@ void main() {
       expect(summary.rowsAdded, 1);
       expect(summary.rowsAlreadyPresent, 1);
       expect(summary.linkedRomnames, ['Unlinked']);
+    });
+
+    // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Existing Mappings Are Never Overwritten"
+    test('a row pointing at a different ROM is kept and reported', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes')],
+        romsByPlatform: {
+          1: [_rom(40, platformId: 1, fsName: 'Game.sfc')],
+        },
+        systemBySlug: {'snes': snes},
+      );
+      final map = _FakeMap()..rows['snes\tGame.sfc'] = 12;
+
+      final summary = await _linker(server, map, [
+        _game('Game.sfc', 'snes'),
+        _game('Other.sfc', 'snes'),
+      ]).run();
+
+      expect(map.romIdFor('snes', 'Game.sfc'), 12, reason: 'never overwritten');
+      expect(summary.rowsAdded, 0);
+      expect(summary.rowsAlreadyPresent, 1);
+      expect(summary.conflictCount, 1);
+      final conflict = summary.conflicts.single;
+      expect(conflict.systemFolder, 'snes');
+      expect(conflict.filename, 'Game.sfc');
+      expect(conflict.existingRomId, 12);
+      expect(conflict.matchedRomId, 40);
+
+      final lines = LoggerService.instance.takeCapture();
+      expect(
+        lines.where((l) => l.startsWith('i|RomM link pass')).single,
+        contains('1 conflicting'),
+      );
+      expect(
+        lines.where((l) => l.startsWith('w|')).single,
+        allOf([
+          contains('snes/Game.sfc'),
+          contains('rom 12'),
+          contains('rom 40'),
+        ]),
+      );
+    });
+
+    test('a row the pass agrees with is no conflict', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes')],
+        romsByPlatform: {
+          1: [_rom(12, platformId: 1, fsName: 'Game.sfc')],
+        },
+        systemBySlug: {'snes': snes},
+      );
+      final map = _FakeMap()..rows['snes\tGame.sfc'] = 12;
+
+      final summary = await _linker(server, map, [
+        _game('Game.sfc', 'snes'),
+        _game('Other.sfc', 'snes'),
+      ]).run();
+
+      expect(summary.rowsAlreadyPresent, 1);
+      expect(summary.conflicts, isEmpty);
+      expect(_summaryLines().single, contains('0 conflicting'));
     });
 
     test('a file under a folder alias of the resolved system links', () async {
@@ -552,6 +618,36 @@ void main() {
       expect(summary.rowsAdded, 1);
     });
 
+    // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Filename Equivalence Rule"
+    test(
+      'a platform that resolved to nothing is asked again next run',
+      () async {
+        // The resolver answers null once (the systems table unreadable for a
+        // moment) and then resolves. Nothing about the first run may pin the
+        // platform to "unresolved" for the second.
+        final server = _FakeServer(
+          platforms: [_platform(1, 'snes')],
+          romsByPlatform: {
+            1: [_rom(10, platformId: 1, fsName: 'Game.sfc')],
+          },
+          systemBySlug: {'snes': null},
+        );
+        final map = _FakeMap();
+        final linker = _linker(server, map, [_game('Game.sfc', 'snes')]);
+
+        final first = await linker.run();
+        expect(first.platformsUnresolved, 1);
+        expect(first.rowsAdded, 0);
+
+        server.systemBySlug['snes'] = snes;
+        final second = await linker.run();
+
+        expect(second.platformsUnresolved, 0);
+        expect(second.rowsAdded, 1);
+        expect(map.romIdFor('snes', 'Game.sfc'), 10);
+      },
+    );
+
     test('a throwing system resolver is wrapped, not thrown raw', () async {
       final linker = RommLibraryLinker(
         listPlatforms: () async => [_platform(1, 'snes')],
@@ -722,6 +818,7 @@ void main() {
           contains('1 rows added'),
           contains('1 already present'),
           contains('0 ambiguous skipped'),
+          contains('0 conflicting'),
           contains('250 ms'),
         ]),
       );

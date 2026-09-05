@@ -5,10 +5,10 @@ import '../../models/romm_platform.dart';
 import '../../models/romm_rom.dart';
 import '../../models/romm_rom_page.dart';
 import '../../models/system_model.dart';
-import '../../providers/romm_bulk_sync.dart';
 import '../../repositories/romm_save_map_repository.dart';
 import '../../utils/romm_local_matcher.dart';
 import '../logger_service.dart';
+import 'romm_paging.dart';
 
 /// Lists the server's platforms (the ones with ROMs on them).
 typedef RommPlatformLister = Future<List<RommPlatform>> Function();
@@ -19,7 +19,7 @@ typedef RommPlatformResolver =
     Future<SystemModel?> Function(RommPlatform platform);
 
 /// One page of a platform's ROMs. Offset/limit paging only, like
-/// [RommPageFetcher]; the platform is bound per call because the pass walks
+/// `RommPageFetcher`; the platform is bound per call because the pass walks
 /// several.
 typedef RommPlatformPageFetcher =
     Future<RommRomPage> Function({
@@ -64,6 +64,40 @@ class RommLinkAmbiguity {
   String toString() => '$systemFolder/$filename (${romIds.join(', ')})';
 }
 
+/// A local file whose existing mapping row points at a different RomM ROM
+/// than the one the pass matched it to.
+///
+/// The row is left exactly as it was — rows are never overwritten — but the
+/// disagreement is worth a line: it is either a server whose ids changed
+/// (a re-scan, a migration) or two ROMs on one system sharing a filename,
+/// and either way the user's saves are following the *old* id.
+// Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Existing Mappings Are Never Overwritten"
+@immutable
+class RommLinkConflict {
+  /// The on-disk filename, as indexed.
+  final String filename;
+
+  /// The system folder the file was indexed under.
+  final String systemFolder;
+
+  /// The RomM ROM id the existing row points at.
+  final int existingRomId;
+
+  /// The RomM ROM id this pass matched the file to.
+  final int matchedRomId;
+
+  const RommLinkConflict({
+    required this.filename,
+    required this.systemFolder,
+    required this.existingRomId,
+    required this.matchedRomId,
+  });
+
+  @override
+  String toString() =>
+      '$systemFolder/$filename (row $existingRomId, matched $matchedRomId)';
+}
+
 /// What one run of [RommLibraryLinker] did.
 ///
 /// Everything the single summary log line reports, kept as a value so the
@@ -101,6 +135,11 @@ class RommLinkPassSummary {
   /// Local files skipped because more than one ROM matched them.
   final List<RommLinkAmbiguity> ambiguities;
 
+  /// Of [rowsAlreadyPresent], the files whose row points at a ROM other than
+  /// the one this pass matched. Counted there too — the row *is* present and
+  /// was left alone — and named here so the disagreement is visible.
+  final List<RommLinkConflict> conflicts;
+
   /// Slugs of the unresolved platforms — the signal that says which alias to
   /// add, so the summary names them rather than only counting.
   final List<String> unresolvedSlugs;
@@ -124,6 +163,7 @@ class RommLinkPassSummary {
     this.rowsAdded = 0,
     this.rowsAlreadyPresent = 0,
     this.ambiguities = const [],
+    this.conflicts = const [],
     this.unresolvedSlugs = const [],
     this.stoppedEarly = false,
     this.elapsed = Duration.zero,
@@ -131,6 +171,8 @@ class RommLinkPassSummary {
   });
 
   int get ambiguousSkipped => ambiguities.length;
+
+  int get conflictCount => conflicts.length;
 }
 
 /// The connect-time pass that links a pre-existing local library to the RomM
@@ -143,7 +185,7 @@ class RommLinkPassSummary {
 /// the *scanned library index* — never the filesystem, so a multi-thousand
 /// game Android library costs no SAF reads — and writes the missing rows.
 ///
-/// Dependencies are injected in the style of [RommBulkSync.run] so the
+/// Dependencies are injected in the style of `RommBulkSync.run` so the
 /// algorithm is testable with in-memory fakes and stays out of the sync
 /// provider, which only owns its schedule and guards. The pass is idempotent:
 /// it writes through insert-if-absent, never overwrites, and a second run over
@@ -158,18 +200,20 @@ class RommLinkPassSummary {
 class RommLibraryLinker {
   static final _defaultLog = LoggerService.instance;
 
-  /// Rows per page — bulk sync's enumeration size, shared on purpose so the
-  /// two server walks cost the same.
-  static const int pageSize = RommBulkSync.defaultPageSize;
+  /// Rows per page — bulk sync's enumeration size, from the one definition
+  /// both walks read ([RommPaging]) so they cost the same.
+  // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Connect-Time Link Pass"
+  static const int pageSize = RommPaging.pageSize;
 
-  /// Hard stop on the paging loop per platform, in pages. Mirrors bulk sync's
-  /// enumeration cap (`RommBulkSync._maxPages`, private there): a server that
-  /// keeps returning full pages would otherwise page forever. 500 × 500 =
-  /// 250k ROMs per platform, far past any real library.
-  static const int pageCap = 500;
+  /// Hard stop on the paging loop per platform, in pages — bulk sync's cap,
+  /// from the same definition. See [RommPaging.maxPages] for why.
+  static const int pageCap = RommPaging.maxPages;
 
   /// Most ambiguities named in the summary line; the rest are counted.
   static const int _ambiguityLogLimit = 20;
+
+  /// Most conflicts given their own warning; the rest are counted.
+  static const int _conflictLogLimit = 20;
 
   final RommPlatformLister _listPlatforms;
   final RommPlatformResolver _resolveSystem;
@@ -273,6 +317,7 @@ class RommLibraryLinker {
     var added = 0, alreadyPresent = 0, groupsSkipped = 0;
     var stopped = false;
     final ambiguities = <RommLinkAmbiguity>[];
+    final conflicts = <RommLinkConflict>[];
     final linked = <String>[];
 
     for (final group in groups.values) {
@@ -344,9 +389,26 @@ class RommLibraryLinker {
         final game = entry.key;
         final roms = entry.value;
         // A row that already exists is never touched, so whether the match is
-        // ambiguous is moot for it.
-        if (game.linked) {
+        // ambiguous is moot for it. A row pointing somewhere none of this
+        // pass's matches do is recorded, not corrected: the user's saves are
+        // attached to the id in the row, and swapping it silently would move
+        // them to a ROM the server may have renumbered underneath us.
+        // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Existing Mappings Are Never Overwritten"
+        final existingRomId = game.existingRomId;
+        if (existingRomId != null) {
           alreadyPresent++;
+          if (!roms.containsKey(existingRomId)) {
+            for (final matchedRomId in roms.keys.toList()..sort()) {
+              conflicts.add(
+                RommLinkConflict(
+                  filename: game.filename,
+                  systemFolder: game.systemFolder,
+                  existingRomId: existingRomId,
+                  matchedRomId: matchedRomId,
+                ),
+              );
+            }
+          }
           continue;
         }
         // Two ROMs claiming one file: guessing would attach the user's saves
@@ -395,6 +457,7 @@ class RommLibraryLinker {
       rowsAdded: added,
       rowsAlreadyPresent: alreadyPresent,
       ambiguities: ambiguities,
+      conflicts: conflicts,
       unresolvedSlugs: unresolvedSlugs,
       stoppedEarly: stopped,
       elapsed: _clock().difference(started),
@@ -493,6 +556,7 @@ class RommLibraryLinker {
       '${s.rowsAdded} rows added, '
       '${s.rowsAlreadyPresent} already present, '
       '${s.ambiguousSkipped} ambiguous skipped, '
+      '${s.conflictCount} conflicting, '
       '${s.elapsed.inMilliseconds} ms',
     );
     if (s.unresolvedSlugs.isNotEmpty) {
@@ -505,6 +569,23 @@ class RommLibraryLinker {
       if (hidden > 0) buffer.write(' (+$hidden more)');
     }
     _log.i(buffer.toString());
+    // The conflicting pairs get their own warning, one per file: the summary
+    // line counts them, but which row disagrees with which match is what a
+    // user reading the log needs to act on.
+    // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Existing Mappings Are Never Overwritten"
+    if (s.conflicts.isNotEmpty) {
+      for (final conflict in s.conflicts.take(_conflictLogLimit)) {
+        _log.w(
+          'RomM link pass left ${conflict.systemFolder}/${conflict.filename} '
+          'on rom ${conflict.existingRomId}: this pass matched it to rom '
+          '${conflict.matchedRomId}, existing rows are never overwritten',
+        );
+      }
+      final hidden = s.conflicts.length - _conflictLogLimit;
+      if (hidden > 0) {
+        _log.w('RomM link pass left $hidden more conflicting rows unchanged');
+      }
+    }
   }
 }
 
@@ -545,15 +626,20 @@ class _LocalGame {
   /// The system folder the row carries, exactly as stored.
   final String systemFolder;
 
-  /// Already had a mapping row when the pass started.
-  final bool linked;
+  /// The RomM ROM id of the mapping row the file already had when the pass
+  /// started, or null when it had none. Kept as the id rather than a flag so
+  /// a match that disagrees with the row can be reported.
+  final int? existingRomId;
 
   const _LocalGame({
     required this.filename,
     required this.romname,
     required this.systemFolder,
-    required this.linked,
+    required this.existingRomId,
   });
+
+  /// Already had a mapping row when the pass started.
+  bool get linked => existingRomId != null;
 
   @override
   bool operator ==(Object other) =>
@@ -594,15 +680,15 @@ class _LocalIndex {
       if (byKey.containsKey(key)) continue;
       // The map is written with the on-disk name but read by either spelling
       // (see RommSaveMapRepository.getRomIdIndex), so ask both ways.
-      final linked =
-          romIds.lookup(filename, folder) != null ||
-          romIds.lookup(game.romname, folder) != null;
-      if (!linked) unlinked++;
+      final existingRomId =
+          romIds.lookup(filename, folder) ??
+          romIds.lookup(game.romname, folder);
+      if (existingRomId == null) unlinked++;
       byKey[key] = _LocalGame(
         filename: filename,
         romname: game.romname,
         systemFolder: folder,
-        linked: linked,
+        existingRomId: existingRomId,
       );
     }
     return _LocalIndex._(byKey, unlinked);
