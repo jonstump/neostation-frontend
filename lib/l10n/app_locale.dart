@@ -1314,6 +1314,27 @@ mixin AppLocale {
   static const String rommUnlinked = 'romm_unlinked';
   static const String rommUnlinkFailed = 'romm_unlink_failed';
 
+  // SPEC-0003 SAF mirror summary
+  static const String inFolderImportAlreadyRunning =
+      'in_folder_import_already_running';
+  static const String inFolderImportCancelled = 'in_folder_import_cancelled';
+  static const String inFolderImportBudgetRefused =
+      'in_folder_import_budget_refused';
+  static const String inFolderSummarySafSystemsMirrored =
+      'in_folder_summary_saf_systems_mirrored';
+  static const String inFolderSummaryFilesCopied =
+      'in_folder_summary_files_copied';
+  static const String inFolderSummaryFilesSkippedUnchanged =
+      'in_folder_summary_files_skipped_unchanged';
+  static const String inFolderSummaryFilesFailed =
+      'in_folder_summary_files_failed';
+  static const String inFolderSummaryBytesCopied =
+      'in_folder_summary_bytes_copied';
+  static const String inFolderSummarySystemsListingFailed =
+      'in_folder_summary_systems_listing_failed';
+  static const String esdeResetBusy = 'esde_reset_busy';
+  static const String esdeResetMirrorsRemoved = 'esde_reset_mirrors_removed';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================

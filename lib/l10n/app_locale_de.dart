@@ -1246,7 +1246,7 @@ const Map<String, dynamic> appLocaleDe = {
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
   AppLocale.esdeResetConfirmBody:
-      'Entfernt alle aus ES-DE oder aus deinen ROM-Ordnern importierten Metadaten und Medienverknüpfungen und setzt den ausgewählten ES-DE-Ordner zurück. Deine Spiele und ROM-Dateien sind nicht betroffen.',
+      'Entfernt alle aus ES-DE oder aus deinen ROM-Ordnern importierten Metadaten und Medienverknüpfungen, löscht alle aus Android-Ordnern in den App-Speicher gespiegelten Medien und setzt den ausgewählten ES-DE-Ordner zurück. Deine Spiele und ROM-Dateien sind nicht betroffen.',
   AppLocale.esdeImportNotEsdeFolder:
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
@@ -1336,4 +1336,22 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.rommUnlinked: 'Verknüpfung mit RomM aufgehoben',
   AppLocale.rommUnlinkFailed:
       'Verknüpfung mit RomM konnte nicht entfernt werden',
+  // SPEC-0003 SAF mirror summary
+  AppLocale.inFolderImportAlreadyRunning:
+      'Ein anderer Import läuft noch. Warte, bis er abgeschlossen ist, und versuche es dann erneut.',
+  AppLocale.inFolderImportCancelled:
+      'Import abgebrochen. Vor dem Abbruch importierte Metadaten und kopierte Medien wurden behalten.',
+  AppLocale.inFolderImportBudgetRefused:
+      'Nicht genug freier Speicher zum Spiegeln der Medien: {required} benötigt, {available} frei. Metadaten wurden trotzdem importiert.',
+  AppLocale.inFolderSummarySafSystemsMirrored: 'Aus SAF gespiegelte Systeme',
+  AppLocale.inFolderSummaryFilesCopied: 'Mediendateien kopiert',
+  AppLocale.inFolderSummaryFilesSkippedUnchanged: 'unverändert übersprungen',
+  AppLocale.inFolderSummaryFilesFailed: 'fehlgeschlagen',
+  AppLocale.inFolderSummaryBytesCopied: 'Kopierte Daten',
+  AppLocale.inFolderSummarySystemsListingFailed:
+      'Über SAF nicht lesbare Systemordner',
+  AppLocale.esdeResetBusy:
+      'Zurücksetzen nicht möglich, solange ein Import läuft. Warte, bis er abgeschlossen ist, und versuche es dann erneut.',
+  AppLocale.esdeResetMirrorsRemoved:
+      'entfernte gespiegelte Medienordner: {count}',
 };

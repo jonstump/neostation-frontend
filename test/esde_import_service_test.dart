@@ -266,6 +266,85 @@ void main() {
     });
   });
 
+  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Reset and Re-import"
+  group('isUnderMirrorRoot', () {
+    final root = p.join(p.separator, 'data', 'imported_media');
+
+    test('a system directory under the root is inside', () {
+      expect(
+        EsdeImportService.isUnderMirrorRoot(p.join(root, 'snes'), root),
+        isTrue,
+      );
+      expect(
+        EsdeImportService.isUnderMirrorRoot(
+          p.join(root, 'snes', 'covers'),
+          root,
+        ),
+        isTrue,
+      );
+    });
+
+    test('the root itself and a trailing separator are not inside', () {
+      expect(EsdeImportService.isUnderMirrorRoot(root, root), isFalse);
+      expect(
+        EsdeImportService.isUnderMirrorRoot('$root${p.separator}', root),
+        isFalse,
+      );
+      expect(
+        EsdeImportService.isUnderMirrorRoot(
+          p.join(root, 'snes'),
+          '$root${p.separator}',
+        ),
+        isTrue,
+      );
+    });
+
+    test('a prefix look-alike sibling is outside', () {
+      expect(
+        EsdeImportService.isUnderMirrorRoot(p.join('${root}2', 'snes'), root),
+        isFalse,
+      );
+      expect(
+        EsdeImportService.isUnderMirrorRoot(
+          p.join(p.separator, 'data', 'imported_media_old', 'snes'),
+          root,
+        ),
+        isFalse,
+      );
+    });
+
+    test('a real platform folder and a content URI are outside', () {
+      expect(
+        EsdeImportService.isUnderMirrorRoot(
+          p.join(p.separator, 'storage', 'roms', 'snes'),
+          root,
+        ),
+        isFalse,
+      );
+      expect(
+        EsdeImportService.isUnderMirrorRoot('content://tree/snes', root),
+        isFalse,
+      );
+    });
+
+    test('a dot-dot escape is normalized before the check', () {
+      expect(
+        EsdeImportService.isUnderMirrorRoot(
+          p.join(root, 'snes', '..', '..', 'media'),
+          root,
+        ),
+        isFalse,
+      );
+      expect(
+        EsdeImportService.isUnderMirrorRoot(
+          p.join(root, 'snes', '..', 'nes'),
+          root,
+        ),
+        isTrue,
+      );
+    });
+  });
+
   group('resolveMediaRoot', () {
     late Directory root;
 
@@ -880,9 +959,31 @@ void main() {
       expect((await mediaLocation('snes'))['esde_media_root'], isNotNull);
       expect((await mediaLocation('nes'))['esde_media_root'], isNotNull);
 
-      final deleted = await EsdeImportService.reset();
+      final filesBefore =
+          romA
+              .listSync(recursive: true)
+              .whereType<File>()
+              .map((f) => f.path)
+              .toList()
+            ..sort();
 
-      expect(deleted, 1);
+      final outcome = await EsdeImportService.resetDetailed();
+
+      expect(outcome.metadataRowsDeleted, 1);
+      expect(outcome.mediaRootsCleared, 2);
+      // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Reset and Re-import"
+      // Both roots point at real platform folders, outside the mirror
+      // prefix: the column is cleared but nothing on disk is touched.
+      expect(outcome.mirrorsRemoved, 0);
+      final filesAfter =
+          romA
+              .listSync(recursive: true)
+              .whereType<File>()
+              .map((f) => f.path)
+              .toList()
+            ..sort();
+      expect(filesAfter, filesBefore);
+      expect(File(p.join(nesCovers.path, 'mario.png')).existsSync(), isTrue);
       final roots = await db.rawQuery(
         'SELECT app_system_id FROM user_system_settings WHERE esde_media_root IS NOT NULL',
       );
@@ -891,6 +992,7 @@ void main() {
         'SELECT * FROM user_screenscraper_metadata',
       );
       expect(meta, isEmpty);
+      expect(await EsdeImportService.reset(), 0);
     });
 
     test(
@@ -1464,6 +1566,8 @@ void main() {
         expect(result.systemsFound, 1);
         expect(result.systemsMatched, 1);
         expect(result.gamesImported, 1);
+        // The unreadable subfolder is counted, not just logged.
+        expect(result.safSystemsListingFailed, 1);
       },
     );
 
@@ -1536,6 +1640,126 @@ void main() {
         expect(await mediaLocation('nes'), isEmpty);
       },
     );
+
+    // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Reset and Re-import"
+    group('reset', () {
+      Future<void> seedSnesMirror() async {
+        await seedRom('sonic.smc', 'snes');
+        saf.dir('snes');
+        saf.file('snes/gamelist.xml', sonicGamelist);
+        saf.dir('snes/covers');
+        saf.file('snes/covers/sonic.png', 'png');
+      }
+
+      test('removes the mirror directory and clears the column', () async {
+        await seedSnesMirror();
+        final first = await EsdeImportService.importInFolder([
+          RecordingSaf.treeUri,
+        ]);
+        expect(first.safFilesCopied, 1);
+        expect(mirrored(), [p.join('snes', 'covers', 'sonic.png')]);
+        final safListingsBefore = Map.of(saf.listings);
+        final safDocsBefore = Map.of(saf.documents);
+        saf.calls.clear();
+
+        final outcome = await EsdeImportService.resetDetailed();
+
+        expect(outcome.mirrorsRemoved, 1);
+        expect(outcome.mediaRootsCleared, 1);
+        expect(outcome.metadataRowsDeleted, 1);
+        expect(Directory(p.join(mirrorRoot, 'snes')).existsSync(), isFalse);
+        expect(mirrored(), isEmpty);
+        expect((await mediaLocation('snes'))['esde_media_root'], isNull);
+        // The SAF tree was neither read nor written: no call of any kind.
+        expect(saf.calls, isEmpty);
+        expect(saf.listings, safListingsBefore);
+        expect(saf.documents, safDocsBefore);
+      });
+
+      test('deletes only roots under the mirror prefix', () async {
+        await seedSnesMirror();
+        await seedRom('mario.nes', 'nes');
+        await EsdeImportService.importInFolder([RecordingSaf.treeUri]);
+        // A sibling of the mirror root that shares its name as a prefix,
+        // and a real platform folder recorded per SPEC-0002: neither may go.
+        final lookalike = Directory('${mirrorRoot}2')..createSync();
+        File(p.join(lookalike.path, 'keep.png')).writeAsStringSync('x');
+        final realRoot = Directory(p.join(userData.path, 'platform', 'nes'))
+          ..createSync(recursive: true);
+        File(p.join(realRoot.path, 'mario.png')).writeAsStringSync('x');
+        await ScraperRepository.recordEsdeMediaRoot('nes', realRoot.path);
+        // A stray directory under the mirror root that no system points at
+        // is left alone too: deletion is by recorded root, not by sweep.
+        final stray = Directory(p.join(mirrorRoot, 'gb'))..createSync();
+        File(p.join(stray.path, 'stray.png')).writeAsStringSync('x');
+
+        final outcome = await EsdeImportService.resetDetailed();
+
+        expect(outcome.mirrorsRemoved, 1);
+        expect(Directory(p.join(mirrorRoot, 'snes')).existsSync(), isFalse);
+        expect(File(p.join(lookalike.path, 'keep.png')).existsSync(), isTrue);
+        expect(File(p.join(realRoot.path, 'mario.png')).existsSync(), isTrue);
+        expect(File(p.join(stray.path, 'stray.png')).existsSync(), isTrue);
+        expect(Directory(mirrorRoot).existsSync(), isTrue);
+        expect((await mediaLocation('nes'))['esde_media_root'], isNull);
+        expect((await mediaLocation('snes'))['esde_media_root'], isNull);
+      });
+
+      test('never deletes the mirror root itself', () async {
+        await seedSnesMirror();
+        await EsdeImportService.importInFolder([RecordingSaf.treeUri]);
+        // A root recorded as the mirror root exactly, or as a content://
+        // URI, is a column value to clear, not a directory to remove.
+        await ScraperRepository.recordEsdeMediaRoot('snes', mirrorRoot);
+        await ScraperRepository.recordEsdeMediaRoot(
+          'nes',
+          RecordingSaf.uriOf('nes'),
+        );
+        saf.calls.clear();
+
+        final outcome = await EsdeImportService.resetDetailed();
+
+        expect(outcome.mirrorsRemoved, 0);
+        expect(Directory(mirrorRoot).existsSync(), isTrue);
+        expect(mirrored(), [p.join('snes', 'covers', 'sonic.png')]);
+        expect(saf.calls, isEmpty);
+        expect((await mediaLocation('snes'))['esde_media_root'], isNull);
+        expect((await mediaLocation('nes'))['esde_media_root'], isNull);
+      });
+
+      test('a re-import after reset rebuilds the mirror', () async {
+        await seedSnesMirror();
+        await EsdeImportService.importInFolder([RecordingSaf.treeUri]);
+        await EsdeImportService.reset();
+        expect(mirrored(), isEmpty);
+        saf.calls.clear();
+
+        final again = await EsdeImportService.importInFolder([
+          RecordingSaf.treeUri,
+        ]);
+
+        // Copied afresh, not size-skipped: the mirror really was gone.
+        expect(again.safFilesCopied, 1);
+        expect(again.safFilesSkippedUnchanged, 0);
+        expect(again.safSystemsMirrored, 1);
+        expect(again.gamesImported, 1);
+        expect(saf.rangeCalls, isNotEmpty);
+        expect(mirrored(), [p.join('snes', 'covers', 'sonic.png')]);
+        expect(
+          (await mediaLocation('snes'))['esde_media_root'],
+          p.join(mirrorRoot, 'snes'),
+        );
+      });
+
+      test('reset with nothing recorded removes nothing', () async {
+        final outcome = await EsdeImportService.resetDetailed();
+        expect(outcome, isA<EsdeResetResult>());
+        expect(outcome.mirrorsRemoved, 0);
+        expect(outcome.mediaRootsCleared, 0);
+        expect(outcome.metadataRowsDeleted, 0);
+        expect(saf.calls, isEmpty);
+      });
+    });
 
     test(
       'off-device with no SAF fake a content:// folder is skipped',

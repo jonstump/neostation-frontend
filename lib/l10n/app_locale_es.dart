@@ -1240,7 +1240,7 @@ const Map<String, dynamic> appLocaleEs = {
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
   AppLocale.esdeResetConfirmBody:
-      'Esto elimina todos los metadatos y enlaces de medios importados desde ES-DE o desde tus carpetas de ROMs, y borra la carpeta ES-DE seleccionada. Tus juegos y archivos ROM no se ven afectados.',
+      'Esto elimina todos los metadatos y enlaces de medios importados desde ES-DE o desde tus carpetas de ROMs, borra los medios replicados desde carpetas de Android al almacenamiento de la app y borra la carpeta ES-DE seleccionada. Tus juegos y archivos ROM no se ven afectados.',
   AppLocale.esdeImportNotEsdeFolder:
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
@@ -1329,4 +1329,22 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.rommLinkFailed: 'No se pudo vincular con RomM',
   AppLocale.rommUnlinked: 'Desvinculado de RomM',
   AppLocale.rommUnlinkFailed: 'No se pudo desvincular de RomM',
+  // SPEC-0003 SAF mirror summary
+  AppLocale.inFolderImportAlreadyRunning:
+      'Otra importación sigue en curso. Espera a que termine y vuelve a intentarlo.',
+  AppLocale.inFolderImportCancelled:
+      'Importación cancelada. Se conservaron los metadatos y los medios copiados antes de detenerla.',
+  AppLocale.inFolderImportBudgetRefused:
+      'No hay suficiente espacio libre para replicar los medios: se necesitan {required}, hay {available} libres. Los metadatos se importaron de todos modos.',
+  AppLocale.inFolderSummarySafSystemsMirrored: 'Sistemas replicados desde SAF',
+  AppLocale.inFolderSummaryFilesCopied: 'Archivos de medios copiados',
+  AppLocale.inFolderSummaryFilesSkippedUnchanged: 'sin cambios omitidos',
+  AppLocale.inFolderSummaryFilesFailed: 'fallidos',
+  AppLocale.inFolderSummaryBytesCopied: 'Datos copiados',
+  AppLocale.inFolderSummarySystemsListingFailed:
+      'Carpetas de sistema ilegibles por SAF',
+  AppLocale.esdeResetBusy:
+      'No se puede restablecer mientras hay una importación en curso. Espera a que termine y vuelve a intentarlo.',
+  AppLocale.esdeResetMirrorsRemoved:
+      'carpetas de medios replicados eliminadas: {count}',
 };

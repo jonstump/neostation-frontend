@@ -1083,7 +1083,7 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.esdeResetSubtitle: '다시 가져올 수 있도록 가져온 메타데이터와 미디어 연결을 제거합니다',
   AppLocale.esdeResetComplete: 'ES-DE 가져오기 재설정',
   AppLocale.esdeResetConfirmBody:
-      'ES-DE 또는 ROM 폴더에서 가져온 모든 메타데이터와 미디어 링크를 제거하고, 선택한 ES-DE 폴더 설정을 초기화합니다. 게임과 ROM 파일에는 영향을 주지 않습니다.',
+      'ES-DE 또는 ROM 폴더에서 가져온 모든 메타데이터와 미디어 링크를 제거하고, Android 폴더에서 앱 저장소로 미러링한 미디어를 삭제하며, 선택한 ES-DE 폴더 설정을 초기화합니다. 게임과 ROM 파일에는 영향을 주지 않습니다.',
   AppLocale.esdeImportNotEsdeFolder: '이 폴더는 ES-DE 설치 폴더가 아닙니다(gamelists 없음)',
   AppLocale.esdeImportNothingFound: '가져올 일치하는 시스템이나 게임이 없습니다',
   AppLocale.esdeSummarySystemsMatched: '일치한 시스템',
@@ -1182,4 +1182,20 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommLinkFailed: 'RomM 연결에 실패했습니다',
   AppLocale.rommUnlinked: 'RomM 연결이 해제되었습니다',
   AppLocale.rommUnlinkFailed: 'RomM 연결을 해제할 수 없습니다',
+  // SPEC-0003 SAF mirror summary
+  AppLocale.inFolderImportAlreadyRunning:
+      '다른 가져오기가 아직 실행 중입니다. 완료될 때까지 기다린 후 다시 시도하세요.',
+  AppLocale.inFolderImportCancelled:
+      '가져오기가 취소되었습니다. 중지 전에 가져온 메타데이터와 복사된 미디어는 유지됩니다.',
+  AppLocale.inFolderImportBudgetRefused:
+      '미디어를 미러링할 여유 공간이 부족합니다: {required} 필요, {available} 남음. 메타데이터는 가져왔습니다.',
+  AppLocale.inFolderSummarySafSystemsMirrored: 'SAF에서 미러링한 시스템',
+  AppLocale.inFolderSummaryFilesCopied: '복사한 미디어 파일',
+  AppLocale.inFolderSummaryFilesSkippedUnchanged: '변경 없음 건너뜀',
+  AppLocale.inFolderSummaryFilesFailed: '실패',
+  AppLocale.inFolderSummaryBytesCopied: '복사한 데이터',
+  AppLocale.inFolderSummarySystemsListingFailed: 'SAF로 읽을 수 없는 시스템 폴더',
+  AppLocale.esdeResetBusy:
+      '가져오기가 실행 중인 동안에는 초기화할 수 없습니다. 완료될 때까지 기다린 후 다시 시도하세요.',
+  AppLocale.esdeResetMirrorsRemoved: '제거한 미러 미디어 폴더: {count}',
 };

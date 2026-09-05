@@ -1210,7 +1210,7 @@ const Map<String, dynamic> appLocaleRu = {
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
   AppLocale.esdeResetConfirmBody:
-      'Будут удалены все метаданные и ссылки на медиа, импортированные из ES-DE или из ваших папок с ROM, а выбранная папка ES-DE будет сброшена. Ваши игры и файлы ROM не затрагиваются.',
+      'Будут удалены все метаданные и ссылки на медиа, импортированные из ES-DE или из ваших папок с ROM, медиа, зеркалированные из папок Android в хранилище приложения, а выбранная папка ES-DE будет сброшена. Ваши игры и файлы ROM не затрагиваются.',
   AppLocale.esdeImportNotEsdeFolder:
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
@@ -1295,4 +1295,22 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommLinkFailed: 'Не удалось связать с RomM',
   AppLocale.rommUnlinked: 'Связь с RomM удалена',
   AppLocale.rommUnlinkFailed: 'Не удалось отвязать от RomM',
+  // SPEC-0003 SAF mirror summary
+  AppLocale.inFolderImportAlreadyRunning:
+      'Другой импорт ещё выполняется. Дождитесь его завершения и попробуйте снова.',
+  AppLocale.inFolderImportCancelled:
+      'Импорт отменён. Метаданные и медиа, скопированные до остановки, сохранены.',
+  AppLocale.inFolderImportBudgetRefused:
+      'Недостаточно свободного места для зеркалирования медиа: требуется {required}, свободно {available}. Метаданные всё же импортированы.',
+  AppLocale.inFolderSummarySafSystemsMirrored: 'Систем зеркалировано из SAF',
+  AppLocale.inFolderSummaryFilesCopied: 'Скопировано медиафайлов',
+  AppLocale.inFolderSummaryFilesSkippedUnchanged: 'пропущено без изменений',
+  AppLocale.inFolderSummaryFilesFailed: 'с ошибкой',
+  AppLocale.inFolderSummaryBytesCopied: 'Скопировано данных',
+  AppLocale.inFolderSummarySystemsListingFailed:
+      'Папок систем не прочитано через SAF',
+  AppLocale.esdeResetBusy:
+      'Нельзя выполнить сброс, пока идёт импорт. Дождитесь его завершения и попробуйте снова.',
+  AppLocale.esdeResetMirrorsRemoved:
+      'удалено папок зеркалированных медиа: {count}',
 };

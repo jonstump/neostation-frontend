@@ -1211,7 +1211,7 @@ const Map<String, dynamic> appLocaleId = {
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
   AppLocale.esdeResetConfirmBody:
-      'Ini menghapus semua metadata dan tautan media yang diimpor dari ES-DE atau dari folder ROM Anda, serta mengosongkan folder ES-DE yang dipilih. Game dan file ROM Anda tidak terpengaruh.',
+      'Ini menghapus semua metadata dan tautan media yang diimpor dari ES-DE atau dari folder ROM Anda, menghapus media yang disalin dari folder Android ke penyimpanan aplikasi, serta mengosongkan folder ES-DE yang dipilih. Game dan file ROM Anda tidak terpengaruh.',
   AppLocale.esdeImportNotEsdeFolder:
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
@@ -1296,4 +1296,21 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommLinkFailed: 'Gagal menautkan ke RomM',
   AppLocale.rommUnlinked: 'Tautan ke RomM dilepas',
   AppLocale.rommUnlinkFailed: 'Tidak dapat memutus tautan dari RomM',
+  // SPEC-0003 SAF mirror summary
+  AppLocale.inFolderImportAlreadyRunning:
+      'Impor lain masih berjalan. Tunggu hingga selesai, lalu coba lagi.',
+  AppLocale.inFolderImportCancelled:
+      'Impor dibatalkan. Metadata dan media yang disalin sebelum dihentikan tetap disimpan.',
+  AppLocale.inFolderImportBudgetRefused:
+      'Ruang kosong tidak cukup untuk menyalin media: perlu {required}, tersedia {available}. Metadata tetap diimpor.',
+  AppLocale.inFolderSummarySafSystemsMirrored: 'Sistem yang disalin dari SAF',
+  AppLocale.inFolderSummaryFilesCopied: 'File media disalin',
+  AppLocale.inFolderSummaryFilesSkippedUnchanged: 'tidak berubah dilewati',
+  AppLocale.inFolderSummaryFilesFailed: 'gagal',
+  AppLocale.inFolderSummaryBytesCopied: 'Data disalin',
+  AppLocale.inFolderSummarySystemsListingFailed:
+      'Folder sistem tidak terbaca lewat SAF',
+  AppLocale.esdeResetBusy:
+      'Tidak dapat mereset saat impor sedang berjalan. Tunggu hingga selesai, lalu coba lagi.',
+  AppLocale.esdeResetMirrorsRemoved: 'folder media salinan dihapus: {count}',
 };

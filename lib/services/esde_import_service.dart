@@ -73,6 +73,31 @@ class EsdeImportBusyException implements Exception {
   String toString() => 'EsdeImportBusyException(an import is already running)';
 }
 
+/// What [EsdeImportService.resetDetailed] removed, so the settings screen can
+/// say how many SAF mirror directories went along with the metadata rows.
+// Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Reset and Re-import"
+class EsdeResetResult {
+  /// Metadata rows the import created that reset deleted.
+  final int metadataRowsDeleted;
+
+  /// `esde_media_root` values cleared.
+  final int mediaRootsCleared;
+
+  /// Mirror directories under `<user data>/imported_media/` deleted.
+  final int mirrorsRemoved;
+
+  const EsdeResetResult({
+    this.metadataRowsDeleted = 0,
+    this.mediaRootsCleared = 0,
+    this.mirrorsRemoved = 0,
+  });
+
+  @override
+  String toString() =>
+      'EsdeResetResult(rows=$metadataRowsDeleted roots=$mediaRootsCleared '
+      'mirrors=$mirrorsRemoved)';
+}
+
 /// Summary of an ES-DE import run, surfaced to the settings UI.
 class EsdeImportResult {
   /// Number of ES-DE system folders matched to a NeoStation system.
@@ -165,6 +190,11 @@ class EsdeImportResult {
   /// refusal happened; null when no refusal occurred.
   final int? safBudgetAvailableBytes;
 
+  /// In-folder mode only: SAF system subfolders left out because their own
+  /// listing failed (lost grant, provider error) while the ROM folder's root
+  /// listing succeeded. Each one is logged with its URI.
+  final int safSystemsListingFailed;
+
   /// The run was stopped by the caller's `shouldStop` between files; the
   /// work done so far is kept and the rest was not attempted.
   final bool cancelled;
@@ -196,6 +226,7 @@ class EsdeImportResult {
     this.safBudgetRefused = false,
     this.safBudgetRequiredBytes = 0,
     this.safBudgetAvailableBytes,
+    this.safSystemsListingFailed = 0,
     this.cancelled = false,
     this.refusedAlreadyRunning = false,
   });
@@ -222,6 +253,7 @@ class EsdeImportResult {
     bool safBudgetRefused = false,
     int safBudgetRequiredBytes = 0,
     int? safBudgetAvailableBytes,
+    int safSystemsListingFailed = 0,
     bool cancelled = false,
   }) {
     return EsdeImportResult(
@@ -258,6 +290,8 @@ class EsdeImportResult {
       // bytes are summed across refused systems.
       safBudgetAvailableBytes:
           this.safBudgetAvailableBytes ?? safBudgetAvailableBytes,
+      safSystemsListingFailed:
+          this.safSystemsListingFailed + safSystemsListingFailed,
       cancelled: this.cancelled || cancelled,
       refusedAlreadyRunning: refusedAlreadyRunning,
     );
@@ -668,6 +702,7 @@ class EsdeImportService {
       final ({
         List<GamelistSource> sources,
         List<_SafMediaOnlyCandidate> mediaOnly,
+        int listingFailed,
       })
       discovered;
       try {
@@ -708,6 +743,7 @@ class EsdeImportService {
       sources.addAll(discovered.sources);
       safMediaOnlyCandidates.addAll(discovered.mediaOnly);
       result = result._add(
+        safSystemsListingFailed: discovered.listingFailed,
         folderOutcomes: [
           EsdeImportFolderOutcome(
             folder: folderUri,
@@ -1040,12 +1076,16 @@ class EsdeImportService {
   ///
   /// Throws [EsdeSafAccessException] when the root itself cannot be read (no
   /// persisted grant, listing failure) so the caller can count the folder as
-  /// skipped. A subfolder that fails to list is logged and left out; the
-  /// other subfolders still import.
+  /// skipped. A subfolder that fails to list is logged, counted in
+  /// `listingFailed`, and left out; the other subfolders still import.
   // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "SAF Discovery"
   // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Error Handling Standards"
   static Future<
-    ({List<GamelistSource> sources, List<_SafMediaOnlyCandidate> mediaOnly})
+    ({
+      List<GamelistSource> sources,
+      List<_SafMediaOnlyCandidate> mediaOnly,
+      int listingFailed,
+    })
   >
   _discoverSafFolder(String folderUri, String? mirrorRoot) async {
     if (!await _safHasPermission(folderUri)) {
@@ -1069,6 +1109,7 @@ class EsdeImportService {
 
     final sources = <GamelistSource>[];
     final mediaOnly = <_SafMediaOnlyCandidate>[];
+    var listingFailed = 0;
     for (final sub in subfolders) {
       List<Map<String, dynamic>> children;
       try {
@@ -1078,6 +1119,7 @@ class EsdeImportService {
           'in-folder import: cannot list SAF system folder '
           'folder=${sub.name} uri=${sub.uri} error=$e',
         );
+        listingFailed++;
         continue;
       }
 
@@ -1122,9 +1164,13 @@ class EsdeImportService {
     _log.i(
       'in-folder import: SAF discovery uri=$folderUri '
       'subfolders=${subfolders.length} gamelists=${sources.length} '
-      'mediaOnly=${mediaOnly.length}',
+      'mediaOnly=${mediaOnly.length} listingFailed=$listingFailed',
     );
-    return (sources: sources, mediaOnly: mediaOnly);
+    return (
+      sources: sources,
+      mediaOnly: mediaOnly,
+      listingFailed: listingFailed,
+    );
   }
 
   /// Resolves a SAF `content://` ROM folder to a real filesystem path, or null
@@ -1184,16 +1230,28 @@ class EsdeImportService {
   /// last-played are left untouched (indistinguishable from the user's own).
   /// Both discovery modes share the provenance flag, so one reset clears the
   /// rows of either; the in-folder `esde_media_root` is cleared alongside
-  /// `esde_media_dir`. Returns the number of metadata rows removed. Throws
+  /// `esde_media_dir`. SAF mirror directories recorded as media roots under
+  /// `<user data>/imported_media/` are deleted first (see [resetDetailed]).
+  /// Returns the number of metadata rows removed. Throws
   /// [EsdeImportBusyException] while an import is running.
   // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Concurrency Safety"
-  static Future<int> reset() => _guarded(
+  static Future<int> reset() async =>
+      (await resetDetailed()).metadataRowsDeleted;
+
+  /// [reset] with the full tally: metadata rows, media roots cleared, and
+  /// SAF mirror directories removed. Throws [EsdeImportBusyException] while
+  /// an import is running.
+  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Reset and Re-import"
+  static Future<EsdeResetResult> resetDetailed() => _guarded(
     'reset',
     _reset,
     refused: () => throw const EsdeImportBusyException(),
   );
 
-  static Future<int> _reset() async {
+  static Future<EsdeResetResult> _reset() async {
+    // Mirrors go first: the prefix check reads `esde_media_root`, which the
+    // column clear below wipes.
+    final mirrorsRemoved = await _deleteMirrorDirectories();
     final db = await SqliteService.getDatabase();
     final deleted = await db.delete(
       'user_screenscraper_metadata',
@@ -1206,9 +1264,79 @@ class EsdeImportService {
     final rootsCleared = await ScraperRepository.clearEsdeMediaRoots();
     _log.i(
       'ES-DE reset: cleared $deleted metadata rows, media dirs, '
-      'and $rootsCleared in-folder media roots',
+      '$rootsCleared in-folder media roots, and removed $mirrorsRemoved '
+      'SAF mirror directories',
     );
-    return deleted;
+    return EsdeResetResult(
+      metadataRowsDeleted: deleted,
+      mediaRootsCleared: rootsCleared,
+      mirrorsRemoved: mirrorsRemoved,
+    );
+  }
+
+  /// Deletes the mirror directory of every system whose recorded
+  /// `esde_media_root` lies strictly under the resolved `imported_media`
+  /// root. The check is on the normalized path prefix, never on the column
+  /// value alone: a real platform folder from SPEC-0002, a `content://` URI,
+  /// or the mirror root itself is never deleted. No SAF call is made here;
+  /// the SAF tree is only ever read by the importer. Returns the number of
+  /// directories removed; a directory that fails to delete is logged and
+  /// skipped so the column clear still runs.
+  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Reset and Re-import"
+  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Error Handling Standards"
+  static Future<int> _deleteMirrorDirectories() async {
+    final mirrorRoot = await _resolveMirrorRoot();
+    if (mirrorRoot == null) {
+      _log.w(
+        'ES-DE reset: mirror root unresolved, no mirror directories removed',
+      );
+      return 0;
+    }
+    final normalizedRoot = path.normalize(mirrorRoot);
+    final locations = await ScraperRepository.getEsdeMediaLocations();
+    var removed = 0;
+    for (final location in locations) {
+      final root = location.esdeMediaRoot;
+      if (root == null || root.contains('://')) continue;
+      final candidate = path.normalize(root);
+      if (!isUnderMirrorRoot(candidate, normalizedRoot)) {
+        _log.d(
+          'ES-DE reset: media root outside the mirror prefix, kept '
+          'system=${location.folderName} root=$candidate',
+        );
+        continue;
+      }
+      final dir = Directory(candidate);
+      if (!dir.existsSync()) continue;
+      try {
+        dir.deleteSync(recursive: true);
+        removed++;
+        _log.i(
+          'ES-DE reset: removed mirror system=${location.folderName} '
+          'dir=$candidate',
+        );
+      } catch (e) {
+        _log.e(
+          'ES-DE reset: failed to remove mirror system=${location.folderName} '
+          'dir=$candidate error=$e',
+        );
+      }
+    }
+    return removed;
+  }
+
+  /// True when [candidate] is strictly inside [mirrorRoot] (both normalized):
+  /// the root itself, its siblings, and prefix look-alikes such as
+  /// `imported_media2` are all outside. Exposed so the check can be tested
+  /// without a database.
+  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Reset and Re-import"
+  @visibleForTesting
+  static bool isUnderMirrorRoot(String candidate, String mirrorRoot) {
+    if (candidate.startsWith('content://')) return false;
+    final root = path.normalize(mirrorRoot);
+    final child = path.normalize(candidate);
+    if (path.equals(root, child)) return false;
+    return path.isWithin(root, child);
   }
 
   /// Default media folder name inside an ES-DE application folder.

@@ -1197,7 +1197,7 @@ const Map<String, dynamic> appLocaleEn = {
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
   AppLocale.esdeResetConfirmBody:
-      'This removes all metadata and media links imported from ES-DE or from your ROM folders, and clears the selected ES-DE folder. Your games and ROM files are not affected.',
+      'This removes all metadata and media links imported from ES-DE or from your ROM folders, deletes any media mirrored from Android folders into app storage, and clears the selected ES-DE folder. Your games and ROM files are not affected.',
   AppLocale.esdeImportNotEsdeFolder:
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
@@ -1281,4 +1281,21 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rommLinkFailed: 'Linking to RomM failed',
   AppLocale.rommUnlinked: 'Unlinked from RomM',
   AppLocale.rommUnlinkFailed: 'Could not unlink from RomM',
+  // SPEC-0003 SAF mirror summary
+  AppLocale.inFolderImportAlreadyRunning:
+      'Another import is still running. Wait for it to finish, then try again.',
+  AppLocale.inFolderImportCancelled:
+      'Import cancelled. Metadata and media copied before the stop were kept.',
+  AppLocale.inFolderImportBudgetRefused:
+      'Not enough free space to mirror media: {required} needed, {available} free. Metadata was still imported.',
+  AppLocale.inFolderSummarySafSystemsMirrored: 'Systems mirrored from SAF',
+  AppLocale.inFolderSummaryFilesCopied: 'Media files copied',
+  AppLocale.inFolderSummaryFilesSkippedUnchanged: 'unchanged skipped',
+  AppLocale.inFolderSummaryFilesFailed: 'failed',
+  AppLocale.inFolderSummaryBytesCopied: 'Data copied',
+  AppLocale.inFolderSummarySystemsListingFailed:
+      'System folders unreadable over SAF',
+  AppLocale.esdeResetBusy:
+      'Cannot reset while an import is running. Wait for it to finish, then try again.',
+  AppLocale.esdeResetMirrorsRemoved: 'mirrored media folders removed: {count}',
 };
