@@ -583,6 +583,57 @@ void main() {
         );
       },
     );
+
+    // The manual picker lets two local games in one system share a rom id.
+    // Unlinking one must delete that game's row only, not every row with the
+    // same id.
+    // Governing: ADR-0004 (manual link provenance), SPEC-0004 REQ "Unlink Action"
+    test(
+      'removeMapping leaves a sibling linked to the same rom id alone',
+      () async {
+        await RommSaveMapRepository.putMapping(
+          source: RommLinkSource.download,
+          romname: 'A.sfc',
+          systemFolder: 'snes',
+          rommRomId: 12,
+        );
+        await RommSaveMapRepository.putManualMapping(
+          romname: 'B.sfc',
+          systemFolder: 'snes',
+          rommRomId: 12,
+        );
+
+        expect(await RommSaveMapRepository.removeMapping('A.sfc', 'snes'), 12);
+        expect(await RommSaveMapRepository.getMapping('A.sfc', 'snes'), isNull);
+        final sibling = await RommSaveMapRepository.getMapping('B.sfc', 'snes');
+        expect(sibling?.rommRomId, 12);
+        expect(sibling?.source, RommLinkSource.manual);
+      },
+    );
+
+    // Governing: ADR-0004 (manual link provenance), SPEC-0004 REQ "Unlink Action"
+    test(
+      'removeMapping via the stripped romname removes only the resolved row',
+      () async {
+        await RommSaveMapRepository.putMapping(
+          source: RommLinkSource.download,
+          romname: 'A.sfc',
+          systemFolder: 'snes',
+          rommRomId: 12,
+        );
+        await RommSaveMapRepository.putMapping(
+          source: RommLinkSource.download,
+          romname: 'B.sfc',
+          systemFolder: 'snes',
+          rommRomId: 12,
+        );
+
+        expect(await RommSaveMapRepository.removeMapping('A', 'snes'), 12);
+        expect(await RommSaveMapRepository.getRommRomId('A', 'snes'), isNull);
+        expect(await RommSaveMapRepository.getRommRomId('B', 'snes'), 12);
+        expect(await RommSaveMapRepository.getRommRomId('B.sfc', 'snes'), 12);
+      },
+    );
   });
 
   // Governing: ADR-0004 (manual link provenance), SPEC-0004 REQ "Link Provenance Column"
