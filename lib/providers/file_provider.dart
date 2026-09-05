@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:neostation/data/datasources/sqlite_service.dart';
+import 'package:neostation/repositories/scraper_repository.dart';
 import 'package:neostation/repositories/system_repository.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
@@ -55,9 +56,17 @@ class FileProvider extends ChangeNotifier {
   /// having to re-run the import.
   String? _esdeMediaRoot;
 
-  /// NeoStation system folder name -> ES-DE media subfolder name, captured
-  /// during ES-DE import (a folder under [_esdeMediaRoot]).
-  Map<String, String> _esdeSystemDirs = {};
+  /// NeoStation system folder name -> absolute media root for that system,
+  /// resolved per system from the imported-media location the import
+  /// recorded: an in-folder import stores the platform folder itself
+  /// (`esde_media_root`, [_SystemMediaRoot.inFolder] true), an ES-DE import
+  /// stores a folder name under [_esdeMediaRoot] (`esde_media_dir`).
+  /// Candidates are built as `<media root>/<category>/[<subdir>/]<stem>.<ext>`
+  /// from this map alone.
+  ///
+  /// Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ
+  /// "Per-System Media Root"
+  Map<String, _SystemMediaRoot> _esdeSystemMediaRoots = {};
 
   /// "systemFolder\u0000romBase" -> ES-DE media subfolder (the ROM's directory
   /// relative to the system folder). Only populated for ROMs that live in a
@@ -82,12 +91,33 @@ class FileProvider extends ChangeNotifier {
   /// slot they read worst of all — NeoStation draws the wheel on top of the
   /// full-bleed background, so the logo lands twice on a letterboxed collage.
   /// A missing slot is preferred over art that misrepresents it.
+  ///
+  /// The same map serves in-folder (RomM / Batocera) platform folders, whose
+  /// media folders use the ES-DE names; see [_inFolderExtraCategories] for the
+  /// RomM-only additions. Folders outside both maps (`manuals`, `backcovers`,
+  /// `bezels`, `physicalmedia`, …) are never consulted.
+  ///
+  /// Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ "Media
+  /// Category Mapping"
   static const Map<String, List<String>> _esdeMediaCategories = {
     'box2d': ['covers', '3dboxes'],
     'wheels': ['marquees'],
     'screenshots': ['screenshots', 'titlescreens'],
     'fanarts': ['fanart'],
     'videos': ['videos'],
+  };
+
+  /// Extra categories tried for in-folder systems only, after every entry of
+  /// [_esdeMediaCategories] for the same type: RomM's generic `images` folder
+  /// is a last-resort screenshot source and `thumbnails` a last-resort box-art
+  /// source. ES-DE never writes either, so ES-DE systems skip them and their
+  /// candidate lists stay exactly as they were.
+  ///
+  /// Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ "Media
+  /// Category Mapping"
+  static const Map<String, List<String>> _inFolderExtraCategories = {
+    'box2d': ['thumbnails'],
+    'screenshots': ['images'],
   };
 
   /// Image extensions ES-DE writes into `downloaded_media`.
@@ -439,8 +469,17 @@ class FileProvider extends ChangeNotifier {
     return path.join(_mediaPath!, mediaFolder);
   }
 
-  /// Loads ES-DE fallback configuration (root path + per-system media dirs)
-  /// from the database. Safe to call repeatedly.
+  /// Loads imported-media fallback configuration (the ES-DE root path plus a
+  /// media root per system) from the database. Safe to call repeatedly.
+  ///
+  /// Each system's media root is `esde_media_root` when the import recorded an
+  /// absolute one (in-folder layout), else `<ES-DE media root>/<esde_media_dir>`
+  /// when the global ES-DE root is configured. Only the folder-name form needs
+  /// the ES-DE root path setting: a system with an absolute root resolves even
+  /// when that setting is empty.
+  ///
+  /// Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ
+  /// "Per-System Media Root"
   Future<void> _loadEsdeConfig() async {
     try {
       final db = await SqliteService.getDatabase();
@@ -459,24 +498,23 @@ class FileProvider extends ChangeNotifier {
           ? null
           : EsdeImportService.resolveMediaRoot(_esdeRoot!);
 
-      final map = <String, String>{};
-      if (_esdeRoot != null) {
-        final rows = await db.rawQuery('''
-          SELECT s.folder_name AS folder_name, ss.esde_media_dir AS esde_media_dir
-          FROM user_system_settings ss
-          JOIN app_systems s ON s.id = ss.app_system_id
-          WHERE ss.esde_media_dir IS NOT NULL AND ss.esde_media_dir != ''
-        ''');
-        for (final r in rows) {
-          final fn = r['folder_name']?.toString();
-          final ed = r['esde_media_dir']?.toString();
-          if (fn != null && ed != null && ed.isNotEmpty) map[fn] = ed;
+      final map = <String, _SystemMediaRoot>{};
+      final globalMediaRoot = _esdeMediaRoot;
+      for (final loc in await ScraperRepository.getEsdeMediaLocations()) {
+        final absoluteRoot = loc.esdeMediaRoot;
+        if (absoluteRoot != null) {
+          map[loc.folderName] = (root: absoluteRoot, inFolder: true);
+        } else if (globalMediaRoot != null && loc.esdeMediaDir != null) {
+          map[loc.folderName] = (
+            root: path.join(globalMediaRoot, loc.esdeMediaDir!),
+            inFolder: false,
+          );
         }
       }
-      _esdeSystemDirs = map;
+      _esdeSystemMediaRoots = map;
 
       final subdirs = <String, String>{};
-      if (_esdeRoot != null) {
+      if (map.isNotEmpty) {
         final rows = await db.rawQuery('''
           SELECT s.folder_name AS folder_name, m.filename AS filename,
                  m.esde_media_subdir AS subdir
@@ -499,7 +537,7 @@ class FileProvider extends ChangeNotifier {
     } catch (e) {
       _esdeRoot = null;
       _esdeMediaRoot = null;
-      _esdeSystemDirs = {};
+      _esdeSystemMediaRoots = {};
       _esdeMediaSubdirs = {};
     }
   }
@@ -511,31 +549,39 @@ class FileProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Candidate read-time fallback paths for a media asset inside the user's
-  /// ES-DE `downloaded_media` tree, most-preferred first, or empty if ES-DE is
-  /// not configured for this system / media type. Does NOT check existence —
+  /// Candidate read-time fallback paths for a media asset inside the system's
+  /// imported media root (an ES-DE `downloaded_media/<system>` tree or an
+  /// in-folder platform folder), most-preferred first, or empty if no media
+  /// root is recorded for this system / media type. Does NOT check existence —
   /// the caller stats them in order.
   ///
-  /// Candidates cover every ES-DE category mapped to [imageType] and every
-  /// extension ES-DE writes. When the import recorded a media subfolder for
-  /// this ROM the subfolder is tried first, then the category root: ES-DE can
-  /// list one ROM filename in several subfolders and only one of them is
-  /// recorded, so the root is where the art often actually sits.
+  /// Candidates are `<media root>/<category>/[<subdir>/]<stem>.<ext>` for every
+  /// category mapped to [imageType] and every extension ES-DE writes. When the
+  /// import recorded a media subfolder for this ROM the subfolder is tried
+  /// first, then the category root: ES-DE can list one ROM filename in several
+  /// subfolders and only one of them is recorded, so the root is where the art
+  /// often actually sits.
   ///
   /// If [extensions] is provided, it overrides the default image extensions
   /// with the provided list (e.g., video extensions for video lookups).
+  ///
+  /// Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ
+  /// "Per-System Media Root", REQ "Media Category Mapping"
   List<String> getEsdeMediaCandidates(
     String systemFolderName,
     String imageType,
     String romName, [
     List<String>? extensions,
   ]) {
-    final mediaRoot = _esdeMediaRoot;
-    if (mediaRoot == null) return const [];
-    final esdeDir = _esdeSystemDirs[systemFolderName];
-    if (esdeDir == null) return const [];
-    final categories = _esdeMediaCategories[imageType];
-    if (categories == null) return const [];
+    final systemRoot = _esdeSystemMediaRoots[systemFolderName];
+    if (systemRoot == null) return const [];
+    final mediaRoot = systemRoot.root;
+    final baseCategories = _esdeMediaCategories[imageType];
+    if (baseCategories == null) return const [];
+    final categories = <String>[
+      ...baseCategories,
+      if (systemRoot.inFolder) ...?_inFolderExtraCategories[imageType],
+    ];
     final baseName = _stripRomExtension(romName, systemFolderName);
     final subdir =
         _esdeMediaSubdirs[_esdeSubdirKey(systemFolderName, baseName)];
@@ -553,7 +599,6 @@ class FileProvider extends ChangeNotifier {
           candidates.add(
             path.joinAll([
               mediaRoot,
-              esdeDir,
               category,
               if (sub.isNotEmpty) sub,
               '$baseName.$extension',
@@ -590,9 +635,14 @@ class FileProvider extends ChangeNotifier {
     _documentsPath = null;
     _esdeRoot = null;
     _esdeMediaRoot = null;
-    _esdeSystemDirs = {};
+    _esdeSystemMediaRoots = {};
     _esdeMediaSubdirs = {};
     _isInitialized = false;
     notifyListeners();
   }
 }
+
+/// One system's resolved media root: [root] is absolute; [inFolder] is true
+/// when it came from `esde_media_root` (a RomM / Batocera platform folder)
+/// rather than an ES-DE folder name joined under the global media root.
+typedef _SystemMediaRoot = ({String root, bool inFolder});

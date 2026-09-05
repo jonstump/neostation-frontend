@@ -606,6 +606,9 @@ class SqliteMigrations {
       case 156:
         await _migrateToVersion156(db);
         break;
+      case 157:
+        await _migrateToVersion157(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -6953,6 +6956,39 @@ class SqliteMigrations {
       _log.i('Migration v156 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v156: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v157: Adds `user_system_settings.esde_media_root`, the
+  /// per-system absolute media root for gamelist imports found inside a ROM
+  /// platform folder (RomM / Batocera layouts).
+  ///
+  /// ES-DE systems keep using `esde_media_dir` (a folder name joined under the
+  /// global ES-DE media root); this column is null for them, so existing rows
+  /// resolve media exactly as before. In-folder systems store the absolute
+  /// platform folder here and leave `esde_media_dir` null. Nullable and
+  /// guarded by `PRAGMA table_info`, so a re-run is a no-op.
+  ///
+  /// Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ "Schema
+  /// Migration"
+  static Future<void> _migrateToVersion157(Database db) async {
+    _log.i('Migration v157: Adding esde_media_root to user_system_settings');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_system_settings)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('esde_media_root')) {
+        db.execute(
+          'ALTER TABLE user_system_settings ADD COLUMN esde_media_root TEXT',
+        );
+        _log.i('Column esde_media_root added via v157');
+      } else {
+        _log.i('Column esde_media_root already exists');
+      }
+      _log.i('Migration v157 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v157: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

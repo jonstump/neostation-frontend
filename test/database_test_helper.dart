@@ -238,6 +238,7 @@ class DatabaseTestHelper {
         custom_background_path TEXT,
         custom_logo_path TEXT,
         esde_media_dir TEXT,
+        esde_media_root TEXT,
         updated_at TEXT
       )
     ''');
