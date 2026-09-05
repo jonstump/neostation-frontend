@@ -1256,4 +1256,29 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.noHiddenGames: 'No hidden games',
   AppLocale.noHiddenGamesSubtitle:
       'Hide a game from its own settings and it appears here.',
+  AppLocale.rommLinkRow: 'Link to RomM',
+  AppLocale.rommLinkRowSubtitle:
+      'Search the RomM library and pick the ROM this game is',
+  AppLocale.rommLinkAction: 'Link',
+  AppLocale.rommUnlinkRow: 'Unlink from RomM',
+  AppLocale.rommUnlinkRowSubtitle:
+      'Remove the link; a later connect may link it again by filename',
+  AppLocale.rommUnlinkAction: 'Unlink',
+  AppLocale.rommUnlinkConfirmTitle: 'Unlink from RomM?',
+  AppLocale.rommUnlinkConfirmBody:
+      'Saves for this game stop syncing with {name}.',
+  AppLocale.rommLinkStateNotLinked: 'Not linked to RomM',
+  AppLocale.rommLinkStateAuto: 'Linked automatically to {name}',
+  AppLocale.rommLinkStateManual: 'Linked manually to {name}',
+  AppLocale.rommLinkPickerTitle: 'Link to a RomM ROM',
+  AppLocale.rommLinkPickerSearchHint: 'Search the RomM library',
+  AppLocale.rommLinkPickerLoading: 'Searching…',
+  AppLocale.rommLinkPickerNoResults: 'No matching ROMs found.',
+  AppLocale.rommLinkPickerError: 'Search failed. Select to retry.',
+  AppLocale.rommLinkPickerUnscoped:
+      'No RomM platform matches this system, so every platform is searched.',
+  AppLocale.rommLinkSaved: 'Linked to {name}',
+  AppLocale.rommLinkFailed: 'Linking to RomM failed',
+  AppLocale.rommUnlinked: 'Unlinked from RomM',
+  AppLocale.rommUnlinkFailed: 'Could not unlink from RomM',
 };

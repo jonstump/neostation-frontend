@@ -1300,4 +1300,30 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.noHiddenGames: 'Nessun gioco nascosto',
   AppLocale.noHiddenGamesSubtitle:
       'Nascondi un gioco dalle sue impostazioni e comparirà qui.',
+  AppLocale.rommLinkRow: 'Collega a RomM',
+  AppLocale.rommLinkRowSubtitle:
+      'Cerca nella libreria RomM e scegli la ROM corrispondente a questo gioco',
+  AppLocale.rommLinkAction: 'Collega',
+  AppLocale.rommUnlinkRow: 'Scollega da RomM',
+  AppLocale.rommUnlinkRowSubtitle:
+      'Rimuove il collegamento; una connessione successiva può ricollegarlo in base al nome del file',
+  AppLocale.rommUnlinkAction: 'Scollega',
+  AppLocale.rommUnlinkConfirmTitle: 'Scollegare da RomM?',
+  AppLocale.rommUnlinkConfirmBody:
+      'I salvataggi di questo gioco non verranno più sincronizzati con {name}.',
+  AppLocale.rommLinkStateNotLinked: 'Non collegato a RomM',
+  AppLocale.rommLinkStateAuto: 'Collegato automaticamente a {name}',
+  AppLocale.rommLinkStateManual: 'Collegato manualmente a {name}',
+  AppLocale.rommLinkPickerTitle: 'Collega a una ROM di RomM',
+  AppLocale.rommLinkPickerSearchHint: 'Cerca nella libreria RomM',
+  AppLocale.rommLinkPickerLoading: 'Ricerca in corso…',
+  AppLocale.rommLinkPickerNoResults: 'Nessuna ROM corrispondente.',
+  AppLocale.rommLinkPickerError:
+      'Ricerca non riuscita. Seleziona per riprovare.',
+  AppLocale.rommLinkPickerUnscoped:
+      'Nessuna piattaforma RomM corrisponde a questo sistema, quindi la ricerca copre tutte le piattaforme.',
+  AppLocale.rommLinkSaved: 'Collegato a {name}',
+  AppLocale.rommLinkFailed: 'Collegamento a RomM non riuscito',
+  AppLocale.rommUnlinked: 'Scollegato da RomM',
+  AppLocale.rommUnlinkFailed: 'Impossibile scollegare da RomM',
 };
