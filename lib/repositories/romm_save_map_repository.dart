@@ -441,21 +441,30 @@ class RommSaveMapRepository {
   /// Deleting a game locally has to unlink it, or the row outlives the file:
   /// save sync would keep targeting that `rom_id`, and a later scan of an
   /// unrelated game that happens to share the name would inherit the link.
-  /// Resolution goes through [getRommRomId] so the extension-stripped callers
-  /// (see [_romIdByStem]) unlink too, then deletes by id within the system —
-  /// matching whichever spelling of the name the row was written with.
+  /// Resolution goes through [_findRow] so the extension-stripped callers
+  /// (see [_romIdByStem]) unlink too, then deletes that one row by its stored
+  /// `(romname, system_folder)` key — the spelling the row was written with,
+  /// not the one the caller passed. Deleting by rom id instead would also take
+  /// out any sibling in the same system linked to the same id, which the
+  /// manual picker makes legitimate (a renamed duplicate linked by hand, or a
+  /// download after a manual link).
   ///
   /// Removes the row whatever its [RommLinkSource]: the unlink action is the
   /// user's, and a deleted game's manual link has nothing left to protect.
+  // Governing: ADR-0004 (manual link provenance), SPEC-0004 REQ "Unlink Action"
   static Future<int?> removeMapping(String romname, String systemFolder) async {
     try {
-      final romId = await getRommRomId(romname, systemFolder);
-      if (romId == null) return null;
       final db = await SqliteService.getDatabase();
+      final row = await _findRow(db, romname, systemFolder);
+      if (row == null) return null;
+      final romId = int.tryParse(row['romm_rom_id'].toString());
+      if (romId == null) return null;
+      final storedName = row['romname']?.toString();
+      if (storedName == null) return null;
       await db.delete(
         'app_romm_rom_map',
-        where: 'romm_rom_id = ? AND system_folder = ?',
-        whereArgs: [romId, systemFolder],
+        where: 'romname = ? AND system_folder = ?',
+        whereArgs: [storedName, systemFolder],
       );
       return romId;
     } catch (e) {
