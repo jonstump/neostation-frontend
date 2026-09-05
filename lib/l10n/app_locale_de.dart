@@ -1334,4 +1334,6 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.rommLinkSaved: 'Verknüpft mit {name}',
   AppLocale.rommLinkFailed: 'Verknüpfung mit RomM fehlgeschlagen',
   AppLocale.rommUnlinked: 'Verknüpfung mit RomM aufgehoben',
+  AppLocale.rommUnlinkFailed:
+      'Verknüpfung mit RomM konnte nicht entfernt werden',
 };

@@ -135,7 +135,13 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
 
   void _ensureSelectedIndexEnabled() {
     if (!_isEnabledIndex(_selectedIndex)) {
-      _selectedIndex = _nextEnabledIndex();
+      final next = _nextEnabledIndex();
+      // Nothing enabled below (the row just vanished or was disabled while
+      // selected, e.g. after an unlink): fall back upward so focus never
+      // strands on a row that is not rendered.
+      _selectedIndex = _isEnabledIndex(next) && next != _selectedIndex
+          ? next
+          : _previousEnabledIndex();
     }
   }
 
@@ -505,10 +511,16 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
       _log.i('RomM link: unlinked $systemFolder/$romname by hand');
       await _loadRommLink();
       if (mounted) {
+        // removeMapping swallows DB errors into null, so trust the reloaded
+        // state rather than the call: only report success when the row is
+        // really gone.
+        final unlinked = _rommMapping == null;
         AppNotification.showNotification(
           context,
-          AppLocale.rommUnlinked.getString(context),
-          type: NotificationType.info,
+          unlinked
+              ? AppLocale.rommUnlinked.getString(context)
+              : AppLocale.rommUnlinkFailed.getString(context),
+          type: unlinked ? NotificationType.info : NotificationType.error,
         );
       }
     } catch (e, st) {

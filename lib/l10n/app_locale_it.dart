@@ -1325,4 +1325,5 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.rommLinkSaved: 'Collegato a {name}',
   AppLocale.rommLinkFailed: 'Collegamento a RomM non riuscito',
   AppLocale.rommUnlinked: 'Scollegato da RomM',
+  AppLocale.rommUnlinkFailed: 'Impossibile scollegare da RomM',
 };

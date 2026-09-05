@@ -1142,4 +1142,5 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.rommLinkSaved: '已链接到 {name}',
   AppLocale.rommLinkFailed: '链接到 RomM 失败',
   AppLocale.rommUnlinked: '已取消与 RomM 的链接',
+  AppLocale.rommUnlinkFailed: '无法取消与 RomM 的关联',
 };

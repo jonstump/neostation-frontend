@@ -1172,4 +1172,5 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommLinkSaved: '{name} にリンクしました',
   AppLocale.rommLinkFailed: 'RomM へのリンクに失敗しました',
   AppLocale.rommUnlinked: 'RomM とのリンクを解除しました',
+  AppLocale.rommUnlinkFailed: 'RomM とのリンクを解除できませんでした',
 };

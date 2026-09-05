@@ -1280,4 +1280,5 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rommLinkSaved: 'Linked to {name}',
   AppLocale.rommLinkFailed: 'Linking to RomM failed',
   AppLocale.rommUnlinked: 'Unlinked from RomM',
+  AppLocale.rommUnlinkFailed: 'Could not unlink from RomM',
 };

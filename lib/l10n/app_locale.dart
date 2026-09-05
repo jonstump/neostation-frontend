@@ -1312,6 +1312,7 @@ mixin AppLocale {
   static const String rommLinkSaved = 'romm_link_saved';
   static const String rommLinkFailed = 'romm_link_failed';
   static const String rommUnlinked = 'romm_unlinked';
+  static const String rommUnlinkFailed = 'romm_unlink_failed';
 
   // ==========================================================================
   // Localization Maps

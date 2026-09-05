@@ -1181,4 +1181,5 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommLinkSaved: '{name}에 연결됨',
   AppLocale.rommLinkFailed: 'RomM 연결에 실패했습니다',
   AppLocale.rommUnlinked: 'RomM 연결이 해제되었습니다',
+  AppLocale.rommUnlinkFailed: 'RomM 연결을 해제할 수 없습니다',
 };
