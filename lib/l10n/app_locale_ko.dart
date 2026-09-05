@@ -1272,4 +1272,10 @@ const Map<String, dynamic> appLocaleKo = {
       'RomM에 이 게임의 정보가 없어 ScreenScraper에서 가져왔습니다',
   AppLocale.scrapeFailedWithReason: '게임 정보 가져오기 실패: {reason}',
   AppLocale.scrapeSystemIdMissing: '오류: 시스템 ID가 없습니다.',
+  AppLocale.scrapeSummaryFromRomm: 'RomM에서: {count}',
+  AppLocale.scrapeSummaryFromScreenscraper: 'ScreenScraper에서: {count}',
+  AppLocale.scrapeBulkRommOnlyStarted:
+      'RomM에서만 스크래핑합니다. ScreenScraper가 설정되지 않았습니다',
+  AppLocale.scrapeBulkNoSourceAvailable:
+      '스크래핑을 시작하기 전에 ScreenScraper에 로그인하거나 RomM에 연결하세요',
 };

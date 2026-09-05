@@ -1263,4 +1263,10 @@ const Map<String, dynamic> appLocaleJa = {
       'RomM にはこのゲームのデータがなかったため、ScreenScraper からスクレイピングしました',
   AppLocale.scrapeFailedWithReason: 'スクレイピングに失敗しました: {reason}',
   AppLocale.scrapeSystemIdMissing: 'エラー: システム ID がありません。',
+  AppLocale.scrapeSummaryFromRomm: 'RomM から: {count}',
+  AppLocale.scrapeSummaryFromScreenscraper: 'ScreenScraper から: {count}',
+  AppLocale.scrapeBulkRommOnlyStarted:
+      'RomM のみからスクレイピングします。ScreenScraper は設定されていません',
+  AppLocale.scrapeBulkNoSourceAvailable:
+      'スクレイピングを始める前に ScreenScraper にログインするか RomM に接続してください',
 };

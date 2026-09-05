@@ -24,6 +24,10 @@ enum ThreadProcessingStep {
   /// Downloading missing media assets.
   downloadingImages,
 
+  /// Offering the ROM to RomM before any ScreenScraper work.
+  // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "Bulk Source Chain"
+  fetchingFromRomm,
+
   /// Processing successfully finished.
   completed,
 }

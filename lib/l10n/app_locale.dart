@@ -1416,6 +1416,15 @@ mixin AppLocale {
   static const String scrapeFailedWithReason = 'scrape_failed_with_reason';
   static const String scrapeSystemIdMissing = 'scrape_system_id_missing';
 
+  // SPEC-0006 REQ "Bulk Source Chain" — bulk scrape source counts and gates
+  static const String scrapeSummaryFromRomm = 'scrape_summary_from_romm';
+  static const String scrapeSummaryFromScreenscraper =
+      'scrape_summary_from_screenscraper';
+  static const String scrapeBulkRommOnlyStarted =
+      'scrape_bulk_romm_only_started';
+  static const String scrapeBulkNoSourceAvailable =
+      'scrape_bulk_no_source_available';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================

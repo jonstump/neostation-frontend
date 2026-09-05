@@ -1394,4 +1394,10 @@ const Map<String, dynamic> appLocaleRu = {
       'В RomM ничего нет для этой игры; скрапинг выполнен из ScreenScraper',
   AppLocale.scrapeFailedWithReason: 'Ошибка скрапинга: {reason}',
   AppLocale.scrapeSystemIdMissing: 'Ошибка: отсутствует ID системы.',
+  AppLocale.scrapeSummaryFromRomm: 'Из RomM: {count}',
+  AppLocale.scrapeSummaryFromScreenscraper: 'Из ScreenScraper: {count}',
+  AppLocale.scrapeBulkRommOnlyStarted:
+      'Скрапинг только из RomM; ScreenScraper не настроен',
+  AppLocale.scrapeBulkNoSourceAvailable:
+      'Войдите в ScreenScraper или подключите RomM перед запуском скрапинга',
 };
