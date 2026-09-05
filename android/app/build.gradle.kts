@@ -57,6 +57,12 @@ android {
 
     buildTypes {
         release {
+            // Side-by-side test build: a distinct package id and name so this
+            // APK installs next to the upstream-signed NeoStation instead of
+            // requiring it to be uninstalled. Test branch only — never merge.
+            applicationIdSuffix = ".test"
+            versionNameSuffix = "-test"
+            manifestPlaceholders["appName"] = "NeoStation Test"
             signingConfig = if (hasReleaseSigning) {
                 signingConfigs.getByName("release")
             } else {
