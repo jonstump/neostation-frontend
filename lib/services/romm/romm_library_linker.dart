@@ -82,6 +82,11 @@ class RommLinkPassSummary {
   /// [RommLibraryLinker] on why their partial matches are discarded).
   final int platformFailures;
 
+  /// Multi-platform system groups written nothing because one of their
+  /// platforms failed: the surviving platforms' matches could not be checked
+  /// for ambiguity against the failed one, so none were written.
+  final int groupsSkipped;
+
   /// Server ROMs looked at across every page fetched.
   final int romsEnumerated;
 
@@ -114,6 +119,7 @@ class RommLinkPassSummary {
     this.platformsProcessed = 0,
     this.platformsUnresolved = 0,
     this.platformFailures = 0,
+    this.groupsSkipped = 0,
     this.romsEnumerated = 0,
     this.rowsAdded = 0,
     this.rowsAlreadyPresent = 0,
@@ -207,9 +213,10 @@ class RommLibraryLinker {
   /// Never overlaps with itself: a call while one is running returns an empty
   /// summary immediately (the provider guards this too; here it is the
   /// belt-and-braces). Never throws for a platform's sake — a failing platform
-  /// is logged, counted and stepped over — but a failure to list the library
-  /// or the platforms ends the run, since nothing can be matched without them,
-  /// and is rethrown wrapped with context for the scheduler to log.
+  /// is logged, counted and stepped over — but a failure to list the library,
+  /// the platforms, or to resolve a platform to a system ends the run, since
+  /// nothing can be matched without them, and is rethrown wrapped with
+  /// context for the scheduler to log.
   // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Concurrency Safety"
   Future<RommLinkPassSummary> run() async {
     if (_running) {
@@ -251,7 +258,7 @@ class RommLibraryLinker {
     final groups = <String, _SystemGroup>{};
     final unresolvedSlugs = <String>[];
     for (final platform in platforms) {
-      final system = await _resolveSystem(platform);
+      final system = await _resolveOrThrow(platform);
       if (system == null) {
         unresolvedSlugs.add(platform.slug);
         continue;
@@ -263,7 +270,7 @@ class RommLibraryLinker {
     }
 
     var processed = 0, failures = 0, enumerated = 0;
-    var added = 0, alreadyPresent = 0;
+    var added = 0, alreadyPresent = 0, groupsSkipped = 0;
     var stopped = false;
     final ambiguities = <RommLinkAmbiguity>[];
     final linked = <String>[];
@@ -276,6 +283,7 @@ class RommLibraryLinker {
       // Matches for this system: local file → the distinct ROMs claiming it.
       final claims = <_LocalGame, Map<int, String>>{};
       final aliases = _folderAliases(group.system);
+      var groupFailed = false;
 
       for (final platform in group.platforms) {
         if (_shouldStop()) {
@@ -305,6 +313,7 @@ class RommLibraryLinker {
             // matches cannot be checked for ambiguity; contributing nothing
             // is the only outcome that can't link the wrong ROM.
             failures++;
+            groupFailed = true;
           case _PageResult.stopped:
             stopped = true;
         }
@@ -313,6 +322,21 @@ class RommLibraryLinker {
       // A stop mid-group leaves the group unwritten: the ambiguity check needs
       // every platform in it, and the contract is "no further rows".
       if (stopped) break;
+      // Likewise a failed platform in a multi-platform group: a file the
+      // surviving platforms claim once may also be claimed by a ROM on the
+      // platform that threw, and a guess written now is permanent (rows are
+      // never overwritten). Skipping the whole group keeps the ambiguity
+      // check whole; the next connect retries it. A single-platform group
+      // that failed has nothing to write, so it is not counted here.
+      // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Ambiguous Matches Are Skipped"
+      if (groupFailed && group.platforms.length > 1) {
+        groupsSkipped++;
+        _log.w(
+          'RomM link pass skipped system "${group.system.folderName}": '
+          'a platform in its group failed, so its matches were not written',
+        );
+        continue;
+      }
 
       final entries = <RommSaveMapEntry>[];
       final entryGames = <_LocalGame>[];
@@ -366,6 +390,7 @@ class RommLibraryLinker {
       platformsProcessed: processed,
       platformsUnresolved: unresolvedSlugs.length,
       platformFailures: failures,
+      groupsSkipped: groupsSkipped,
       romsEnumerated: enumerated,
       rowsAdded: added,
       rowsAlreadyPresent: alreadyPresent,
@@ -375,6 +400,18 @@ class RommLibraryLinker {
       elapsed: _clock().difference(started),
       linkedRomnames: linked,
     );
+  }
+
+  /// [_resolveSystem] with its failure wrapped. The resolver reads this
+  /// build's system table; if that fails there is nothing to group by, and
+  /// the scheduler's contract is that a failed run surfaces as one
+  /// [RommLinkPassException], never a raw throw.
+  Future<SystemModel?> _resolveOrThrow(RommPlatform platform) async {
+    try {
+      return await _resolveSystem(platform);
+    } catch (e) {
+      throw RommLinkPassException('platform resolution failed', e);
+    }
   }
 
   /// Pages one platform to completion, handing every ROM to [onRom].
@@ -451,6 +488,7 @@ class RommLibraryLinker {
       '${s.platformsProcessed} platforms processed, '
       '${s.platformsUnresolved} unresolved, '
       '${s.platformFailures} failed, '
+      '${s.groupsSkipped} systems skipped after a failure, '
       '${s.romsEnumerated} ROMs enumerated, '
       '${s.rowsAdded} rows added, '
       '${s.rowsAlreadyPresent} already present, '
@@ -470,9 +508,10 @@ class RommLibraryLinker {
   }
 }
 
-/// Why [RommLibraryLinker.run] could not run at all — the library or the
-/// platform list was unreadable. Per-platform failures are counted, not
-/// thrown; this is for the two inputs nothing can proceed without.
+/// Why [RommLibraryLinker.run] could not run at all — the library, the
+/// platform list, or a platform's system resolution was unreadable.
+/// Per-platform paging failures are counted, not thrown; this is for the
+/// inputs nothing can proceed without.
 class RommLinkPassException implements Exception {
   final String context;
   final Object cause;

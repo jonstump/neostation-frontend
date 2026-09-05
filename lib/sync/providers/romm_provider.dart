@@ -1616,7 +1616,10 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
           return;
         }
         if (_browse.bulkSync.isRunning) {
-          _log.i('RomM upload sweep: skipped, a bulk ROM sync is running');
+          _log.i(
+            'RomM connect-time link pass and upload sweep skipped: '
+            'a bulk ROM sync is running',
+          );
           return;
         }
 
@@ -1668,9 +1671,10 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
   /// linked have their cached sync state dropped in one go, so the badge and
   /// the browse grid see the links without a restart.
   ///
-  /// Never throws: the linker's own failures (library or platform list
-  /// unreadable) are logged here and read as "nothing linked". Returns the
-  /// pass summary, or null when the pass was skipped.
+  /// Never throws: the linker's own failures (library, platform list, or
+  /// platform-to-system resolution unreadable) are logged here and read as
+  /// "nothing linked". Returns the pass summary, or null when the pass was
+  /// skipped.
   // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Pass Scheduling and Guards"
   Future<RommLinkPassSummary?> linkLibrary() async {
     if (!_browse.isConnected) {

@@ -145,6 +145,13 @@ List<String> _summaryLines() => LoggerService.instance
     .where((l) => l.startsWith('i|RomM link pass'))
     .toList();
 
+/// Enough ROMs to need more than one page: a full first page plus one, so
+/// there is a second page request to complete or to stop before.
+List<RommRom> _twoPages(int platformId) => [
+  for (var i = 0; i < RommLibraryLinker.pageSize + 1; i++)
+    _rom(1000 + i, platformId: platformId, fsName: 'Game $i.sfc'),
+];
+
 void main() {
   final snes = _system('snes');
 
@@ -274,6 +281,37 @@ void main() {
         10,
         reason: 'written under the folder the library row carries',
       );
+    });
+
+    test('a platform spanning two pages is paged to the end', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes')],
+        romsByPlatform: {1: _twoPages(1)},
+        systemBySlug: {'snes': snes},
+      );
+      final map = _FakeMap();
+      const last = RommLibraryLinker.pageSize;
+
+      final summary = await _linker(server, map, [
+        _game('Game 0.sfc', 'snes'),
+        _game('Game $last.sfc', 'snes'),
+      ]).run();
+
+      expect(server.requests, [
+        '1@0',
+        '1@${RommLibraryLinker.pageSize}',
+      ], reason: 'the second page is requested at the first page\'s end');
+      expect(map.romIdFor('snes', 'Game 0.sfc'), 1000);
+      expect(
+        map.romIdFor('snes', 'Game $last.sfc'),
+        1000 + last,
+        reason: 'a ROM on the second page links',
+      );
+      expect(map.batches, hasLength(1), reason: 'one write per system group');
+      expect(summary.platformsProcessed, 1);
+      expect(summary.romsEnumerated, RommLibraryLinker.pageSize + 1);
+      expect(summary.rowsAdded, 2);
+      expect(summary.stoppedEarly, isFalse);
     });
   });
 
@@ -439,6 +477,108 @@ void main() {
       expect(captured.last, contains('1 failed'));
     });
 
+    test('a failed platform leaves its whole system group unwritten', () async {
+      // Sonic.md is on both platforms; with megadrive failing, genesis alone
+      // would see it as a single claim and write a guess that never-overwrite
+      // then makes permanent. The group must write nothing.
+      final genesis = _system('genesis');
+      final server = _FakeServer(
+        platforms: [_platform(1, 'genesis'), _platform(2, 'megadrive')],
+        romsByPlatform: {
+          1: [
+            _rom(10, platformId: 1, fsName: 'Sonic.md', slug: 'genesis'),
+            _rom(
+              11,
+              platformId: 1,
+              fsName: 'Streets of Rage.md',
+              slug: 'genesis',
+            ),
+          ],
+          2: [_rom(20, platformId: 2, fsName: 'Sonic.md', slug: 'megadrive')],
+        },
+        systemBySlug: {'genesis': genesis, 'megadrive': genesis},
+        failingPlatforms: {2},
+      );
+      final map = _FakeMap();
+
+      final summary = await _linker(server, map, [
+        _game('Sonic.md', 'genesis'),
+        _game('Streets of Rage.md', 'genesis'),
+      ]).run();
+
+      expect(map.rows, isEmpty);
+      expect(map.batches, isEmpty, reason: 'the group is never written');
+      expect(map.romIdFor('genesis', 'Sonic.md'), isNull);
+      expect(
+        map.romIdFor('genesis', 'Streets of Rage.md'),
+        isNull,
+        reason: 'even the unambiguous survivor waits for the next connect',
+      );
+      expect(summary.platformFailures, 1);
+      expect(summary.platformsProcessed, 1);
+      expect(summary.groupsSkipped, 1);
+      expect(summary.rowsAdded, 0);
+      expect(summary.ambiguousSkipped, 0);
+      expect(summary.linkedRomnames, isEmpty);
+      final captured = LoggerService.instance.takeCapture();
+      expect(
+        captured.where(
+          (l) => l.startsWith('w|') && l.contains('skipped system "genesis"'),
+        ),
+        hasLength(1),
+      );
+      expect(captured.last, contains('1 failed'));
+      expect(captured.last, contains('1 systems skipped after a failure'));
+    });
+
+    test('a failed platform alone on its system skips no group', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes'), _platform(2, 'nes')],
+        romsByPlatform: {
+          1: [_rom(10, platformId: 1, fsName: 'A.sfc')],
+          2: [_rom(20, platformId: 2, fsName: 'B.nes', slug: 'nes')],
+        },
+        systemBySlug: {'snes': snes, 'nes': _system('nes')},
+        failingPlatforms: {1},
+      );
+
+      final summary = await _linker(server, _FakeMap(), [
+        _game('A.sfc', 'snes'),
+        _game('B.nes', 'nes'),
+      ]).run();
+
+      expect(summary.platformFailures, 1);
+      expect(summary.groupsSkipped, 0);
+      expect(summary.rowsAdded, 1);
+    });
+
+    test('a throwing system resolver is wrapped, not thrown raw', () async {
+      final linker = RommLibraryLinker(
+        listPlatforms: () async => [_platform(1, 'snes')],
+        resolveSystem: (_) async => throw StateError('systems table closed'),
+        fetchPage: ({required platformId, required limit, required offset}) =>
+            throw UnimplementedError(),
+        listGames: () async => [_game('A.sfc', 'snes')],
+        loadRomIdIndex: () async => const RommRomIdIndex({}),
+        putMappingsIfAbsent: (_) async => 0,
+      );
+
+      await expectLater(
+        linker.run(),
+        throwsA(
+          isA<RommLinkPassException>().having(
+            (e) => e.toString(),
+            'message',
+            allOf(
+              contains('platform resolution failed'),
+              contains('systems table closed'),
+            ),
+          ),
+        ),
+      );
+      expect(linker.isRunning, isFalse);
+    });
+
     test('a library or platform listing failure is wrapped', () async {
       final linker = RommLibraryLinker(
         listPlatforms: () async => throw Exception('connection refused'),
@@ -467,17 +607,10 @@ void main() {
   });
 
   group('cancellation', () {
-    /// Enough ROMs to need more than one page, so there is a "next page
-    /// request" to stop before.
-    List<RommRom> twoPages(int platformId) => [
-      for (var i = 0; i < RommLibraryLinker.pageSize + 1; i++)
-        _rom(1000 + i, platformId: platformId, fsName: 'Game $i.sfc'),
-    ];
-
     test('a stop between pages writes no further rows', () async {
       final server = _FakeServer(
         platforms: [_platform(1, 'snes')],
-        romsByPlatform: {1: twoPages(1)},
+        romsByPlatform: {1: _twoPages(1)},
         systemBySlug: {'snes': snes},
       );
       var stop = false;
@@ -584,6 +717,7 @@ void main() {
           contains('1 platforms processed'),
           contains('1 unresolved'),
           contains('0 failed'),
+          contains('0 systems skipped after a failure'),
           contains('3 ROMs enumerated'),
           contains('1 rows added'),
           contains('1 already present'),
