@@ -273,10 +273,11 @@ void main() {
     // carrying no metadata row used to lose its art to an A press.
     test('leaves curated metadata alone when a row already exists', () async {
       await put('snes', 'a.sfc');
-      await ScraperRepository.saveGameMetadata({
-        'filename': 'a.sfc',
-        'real_name': 'Curated by hand',
-      }, 'snes');
+      await ScraperRepository.saveGameMetadata(
+        {'filename': 'a.sfc', 'real_name': 'Curated by hand'},
+        'snes',
+        source: MetadataSource.manual,
+      );
       final provider = _PinnedSystem(_snes);
       final rom = _rom(1, 'a.sfc');
       final copy = (await provider.findLocalCopy(rom, romFolders))!;

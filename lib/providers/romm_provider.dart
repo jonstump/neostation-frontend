@@ -2244,6 +2244,7 @@ class RommProvider extends ChangeNotifier {
         await ScraperRepository.saveGameMetadata(
           metadata,
           sysId,
+          source: MetadataSource.romm,
           isFullyScraped: true,
         );
       }
