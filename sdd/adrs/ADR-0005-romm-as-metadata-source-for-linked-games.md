@@ -53,6 +53,7 @@ Chosen option: "Explicit RomM fetch actions with fill-gaps default", because it 
 * Bad, because overwrite mode discards non-English descriptions and the publisher, which RomM cannot provide. The confirmation names that.
 * Bad, because a per-system pass against a homelab server with no throttling is bounded only by the concurrency constant. Acceptable for detail fetches, and the constant is shared with bulk sync.
 * Neutral, because RomM is not selectable inside the ScreenScraper options screen. That screen is account-, region-, and language-shaped around ScreenScraper, and a source selector there would be a larger rework for no extra capability.
+* Revised by ADR-0006 (2026-09-05): RomM is still not selectable on that screen, but every scrape action now tries RomM first and falls back to ScreenScraper.
 
 ### Confirmation
 
