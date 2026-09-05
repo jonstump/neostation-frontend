@@ -561,12 +561,17 @@ class DirectoriesSettingsContentState
             progress: null,
           );
         case InFolderSummaryKind.cancelled:
+          // The headline is a full sentence, so the tally goes on its own
+          // line; the file count only means something for a SAF run.
           GlobalNotificationService().update(
             id: notificationId,
-            message:
-                '$localeCancelled: '
-                '${result.gamesImported} $localeGames, '
-                '${result.safFilesCopied} $localeFilesCopied',
+            message: [
+              localeCancelled,
+              inFolderResultHasSafActivity(result)
+                  ? '${result.gamesImported} $localeGames, '
+                        '${result.safFilesCopied} $localeFilesCopied'
+                  : '${result.gamesImported} $localeGames',
+            ].join('\n'),
             type: GlobalNotificationType.info,
             progress: null,
           );
@@ -759,8 +764,9 @@ class DirectoriesSettingsContentState
       if (mounted) await context.read<FileProvider>().refreshEsde();
       if (!mounted) return;
       setState(() => _lastEsdeResult = null);
-      final mirrorsLine = outcome.mirrorsRemoved > 0
-          ? ' \u00b7 ${AppLocale.esdeResetMirrorsRemoved.getString(context).replaceFirst('{count}', '${outcome.mirrorsRemoved}')}'
+      // Recorded mirrors and swept orphans alike: every folder that went.
+      final mirrorsLine = outcome.directoriesRemoved > 0
+          ? ' \u00b7 ${AppLocale.esdeResetMirrorsRemoved.getString(context).replaceFirst('{count}', '${outcome.directoriesRemoved}')}'
           : '';
       AppNotification.showNotification(
         context,

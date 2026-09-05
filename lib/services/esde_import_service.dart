@@ -83,19 +83,28 @@ class EsdeResetResult {
   /// `esde_media_root` values cleared.
   final int mediaRootsCleared;
 
-  /// Mirror directories under `<user data>/imported_media/` deleted.
+  /// Mirror directories under `<user data>/imported_media/` deleted because
+  /// a system's `esde_media_root` pointed at them.
   final int mirrorsRemoved;
+
+  /// Entries still left directly under `<user data>/imported_media/` after
+  /// the recorded roots went, swept so no orphaned mirror survives a reset.
+  final int orphansRemoved;
 
   const EsdeResetResult({
     this.metadataRowsDeleted = 0,
     this.mediaRootsCleared = 0,
     this.mirrorsRemoved = 0,
+    this.orphansRemoved = 0,
   });
+
+  /// Everything removed from under the mirror root, recorded or orphaned.
+  int get directoriesRemoved => mirrorsRemoved + orphansRemoved;
 
   @override
   String toString() =>
       'EsdeResetResult(rows=$metadataRowsDeleted roots=$mediaRootsCleared '
-      'mirrors=$mirrorsRemoved)';
+      'mirrors=$mirrorsRemoved orphans=$orphansRemoved)';
 }
 
 /// Summary of an ES-DE import run, surfaced to the settings UI.
@@ -1231,7 +1240,8 @@ class EsdeImportService {
   /// Both discovery modes share the provenance flag, so one reset clears the
   /// rows of either; the in-folder `esde_media_root` is cleared alongside
   /// `esde_media_dir`. SAF mirror directories recorded as media roots under
-  /// `<user data>/imported_media/` are deleted first (see [resetDetailed]).
+  /// `<user data>/imported_media/` are deleted first, then whatever else is
+  /// left directly under that root (see [resetDetailed]).
   /// Returns the number of metadata rows removed. Throws
   /// [EsdeImportBusyException] while an import is running.
   // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Concurrency Safety"
@@ -1251,7 +1261,7 @@ class EsdeImportService {
   static Future<EsdeResetResult> _reset() async {
     // Mirrors go first: the prefix check reads `esde_media_root`, which the
     // column clear below wipes.
-    final mirrorsRemoved = await _deleteMirrorDirectories();
+    final (mirrorsRemoved, orphansRemoved) = await _deleteMirrorDirectories();
     final db = await SqliteService.getDatabase();
     final deleted = await db.delete(
       'user_screenscraper_metadata',
@@ -1265,32 +1275,37 @@ class EsdeImportService {
     _log.i(
       'ES-DE reset: cleared $deleted metadata rows, media dirs, '
       '$rootsCleared in-folder media roots, and removed $mirrorsRemoved '
-      'SAF mirror directories',
+      'recorded + $orphansRemoved orphaned SAF mirror directories',
     );
     return EsdeResetResult(
       metadataRowsDeleted: deleted,
       mediaRootsCleared: rootsCleared,
       mirrorsRemoved: mirrorsRemoved,
+      orphansRemoved: orphansRemoved,
     );
   }
 
   /// Deletes the mirror directory of every system whose recorded
   /// `esde_media_root` lies strictly under the resolved `imported_media`
-  /// root. The check is on the normalized path prefix, never on the column
-  /// value alone: a real platform folder from SPEC-0002, a `content://` URI,
-  /// or the mirror root itself is never deleted. No SAF call is made here;
-  /// the SAF tree is only ever read by the importer. Returns the number of
-  /// directories removed; a directory that fails to delete is logged and
-  /// skipped so the column clear still runs.
+  /// root, then sweeps whatever is still left directly under that root: a
+  /// mirror whose root was never recorded, or whose column a later real-path
+  /// import overwrote, is the importer's to remove too. The recorded-root
+  /// check is on the normalized path prefix, never on the column value
+  /// alone: a real platform folder from SPEC-0002, a `content://` URI, or
+  /// the mirror root itself is never deleted, and the sweep only ever
+  /// touches direct children of that root, never the root or anything
+  /// outside it. No SAF call is made here; the SAF tree is only ever read by
+  /// the importer. Returns `(recorded, orphans)` removed; an entry that
+  /// fails to delete is logged and skipped so the column clear still runs.
   // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Reset and Re-import"
   // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Error Handling Standards"
-  static Future<int> _deleteMirrorDirectories() async {
+  static Future<(int, int)> _deleteMirrorDirectories() async {
     final mirrorRoot = await _resolveMirrorRoot();
     if (mirrorRoot == null) {
       _log.w(
         'ES-DE reset: mirror root unresolved, no mirror directories removed',
       );
-      return 0;
+      return (0, 0);
     }
     final normalizedRoot = path.normalize(mirrorRoot);
     final locations = await ScraperRepository.getEsdeMediaLocations();
@@ -1319,6 +1334,44 @@ class EsdeImportService {
         _log.e(
           'ES-DE reset: failed to remove mirror system=${location.folderName} '
           'dir=$candidate error=$e',
+        );
+      }
+    }
+    return (removed, _sweepMirrorRoot(normalizedRoot));
+  }
+
+  /// Removes every entry left directly under [normalizedRoot] (the resolved
+  /// `imported_media` directory) and returns how many went. Only direct
+  /// children are listed, links are not followed, and each path is re-checked
+  /// with [isUnderMirrorRoot] before deletion, so the root itself, its
+  /// siblings, and anything outside it are unreachable from here.
+  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Reset and Re-import"
+  // Governing: ADR-0003 (SAF mirror import), SPEC-0003 REQ "Error Handling Standards"
+  static int _sweepMirrorRoot(String normalizedRoot) {
+    final rootDir = Directory(normalizedRoot);
+    if (!rootDir.existsSync()) return 0;
+    final List<FileSystemEntity> children;
+    try {
+      children = rootDir.listSync(followLinks: false);
+    } catch (e) {
+      _log.e('ES-DE reset: cannot list mirror root $normalizedRoot: $e');
+      return 0;
+    }
+    var removed = 0;
+    for (final child in children) {
+      final candidate = path.normalize(child.path);
+      if (!isUnderMirrorRoot(candidate, normalizedRoot)) {
+        _log.w('ES-DE reset: sweep skipped non-child entry $candidate');
+        continue;
+      }
+      try {
+        child.deleteSync(recursive: true);
+        removed++;
+        _log.i('ES-DE reset: removed orphaned mirror entry $candidate');
+      } catch (e) {
+        _log.e(
+          'ES-DE reset: failed to remove orphaned mirror entry '
+          '$candidate error=$e',
         );
       }
     }

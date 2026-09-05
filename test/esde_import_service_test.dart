@@ -1665,6 +1665,8 @@ void main() {
         final outcome = await EsdeImportService.resetDetailed();
 
         expect(outcome.mirrorsRemoved, 1);
+        expect(outcome.orphansRemoved, 0);
+        expect(outcome.directoriesRemoved, 1);
         expect(outcome.mediaRootsCleared, 1);
         expect(outcome.metadataRowsDeleted, 1);
         expect(Directory(p.join(mirrorRoot, 'snes')).existsSync(), isFalse);
@@ -1676,7 +1678,7 @@ void main() {
         expect(saf.documents, safDocsBefore);
       });
 
-      test('deletes only roots under the mirror prefix', () async {
+      test('deletes only under the mirror prefix, orphans included', () async {
         await seedSnesMirror();
         await seedRom('mario.nes', 'nes');
         await EsdeImportService.importInFolder([RecordingSaf.treeUri]);
@@ -1688,28 +1690,56 @@ void main() {
           ..createSync(recursive: true);
         File(p.join(realRoot.path, 'mario.png')).writeAsStringSync('x');
         await ScraperRepository.recordEsdeMediaRoot('nes', realRoot.path);
-        // A stray directory under the mirror root that no system points at
-        // is left alone too: deletion is by recorded root, not by sweep.
+        // An orphaned mirror under the root that no system points at any
+        // more (its root never recorded, or overwritten by a real-path
+        // import) goes too: the root is importer-owned, so reset sweeps it.
         final stray = Directory(p.join(mirrorRoot, 'gb'))..createSync();
         File(p.join(stray.path, 'stray.png')).writeAsStringSync('x');
+        File(p.join(mirrorRoot, 'loose.png')).writeAsStringSync('x');
 
         final outcome = await EsdeImportService.resetDetailed();
 
         expect(outcome.mirrorsRemoved, 1);
+        expect(outcome.orphansRemoved, 2);
+        expect(outcome.directoriesRemoved, 3);
         expect(Directory(p.join(mirrorRoot, 'snes')).existsSync(), isFalse);
         expect(File(p.join(lookalike.path, 'keep.png')).existsSync(), isTrue);
         expect(File(p.join(realRoot.path, 'mario.png')).existsSync(), isTrue);
-        expect(File(p.join(stray.path, 'stray.png')).existsSync(), isTrue);
+        expect(stray.existsSync(), isFalse);
+        expect(File(p.join(mirrorRoot, 'loose.png')).existsSync(), isFalse);
         expect(Directory(mirrorRoot).existsSync(), isTrue);
+        expect(Directory(mirrorRoot).listSync(), isEmpty);
         expect((await mediaLocation('nes'))['esde_media_root'], isNull);
         expect((await mediaLocation('snes'))['esde_media_root'], isNull);
+      });
+
+      test('the sweep removes a link, never what it points at', () async {
+        await seedSnesMirror();
+        await EsdeImportService.importInFolder([RecordingSaf.treeUri]);
+        // A symlink left under the mirror root pointing outside it: the
+        // link itself is an orphan to remove, its target is not ours.
+        final outside = Directory(p.join(userData.path, 'elsewhere'))
+          ..createSync(recursive: true);
+        File(p.join(outside.path, 'keep.png')).writeAsStringSync('x');
+        final link = Link(p.join(mirrorRoot, 'linked'))
+          ..createSync(outside.path);
+
+        final outcome = await EsdeImportService.resetDetailed();
+
+        expect(outcome.mirrorsRemoved, 1);
+        expect(outcome.orphansRemoved, 1);
+        expect(link.existsSync(), isFalse);
+        expect(File(p.join(outside.path, 'keep.png')).existsSync(), isTrue);
+        expect(Directory(mirrorRoot).existsSync(), isTrue);
       });
 
       test('never deletes the mirror root itself', () async {
         await seedSnesMirror();
         await EsdeImportService.importInFolder([RecordingSaf.treeUri]);
         // A root recorded as the mirror root exactly, or as a content://
-        // URI, is a column value to clear, not a directory to remove.
+        // URI, is a column value to clear, not a directory to remove. The
+        // snes mirror no longer has a recorded root, so the sweep takes it
+        // as an orphan; the root directory itself stays.
         await ScraperRepository.recordEsdeMediaRoot('snes', mirrorRoot);
         await ScraperRepository.recordEsdeMediaRoot(
           'nes',
@@ -1720,8 +1750,9 @@ void main() {
         final outcome = await EsdeImportService.resetDetailed();
 
         expect(outcome.mirrorsRemoved, 0);
+        expect(outcome.orphansRemoved, 1);
         expect(Directory(mirrorRoot).existsSync(), isTrue);
-        expect(mirrored(), [p.join('snes', 'covers', 'sonic.png')]);
+        expect(mirrored(), isEmpty);
         expect(saf.calls, isEmpty);
         expect((await mediaLocation('snes'))['esde_media_root'], isNull);
         expect((await mediaLocation('nes'))['esde_media_root'], isNull);
@@ -1755,6 +1786,7 @@ void main() {
         final outcome = await EsdeImportService.resetDetailed();
         expect(outcome, isA<EsdeResetResult>());
         expect(outcome.mirrorsRemoved, 0);
+        expect(outcome.orphansRemoved, 0);
         expect(outcome.mediaRootsCleared, 0);
         expect(outcome.metadataRowsDeleted, 0);
         expect(saf.calls, isEmpty);
