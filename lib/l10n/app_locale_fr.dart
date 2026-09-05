@@ -1393,4 +1393,34 @@ const Map<String, dynamic> appLocaleFr = {
       '{count} champs écrits, mais {media} visuels n’ont pas pu être téléchargés',
   AppLocale.rommFetchMetadataFailed:
       'Échec de la récupération des métadonnées depuis RomM',
+
+  // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
+  AppLocale.rommSystemFetchAction: 'Récupérer les métadonnées depuis RomM',
+  AppLocale.rommSystemFetchActionSubtitle:
+      'Compléter les manques ou remplacer les métadonnées et les visuels de tous les jeux liés de ce système',
+  AppLocale.rommSystemFetchRequiresConnection:
+      'Connectez-vous à RomM pour activer cette action',
+  AppLocale.rommSystemFetchRowRunning:
+      'Récupération {done}/{total} — appuyez pour annuler',
+  AppLocale.rommSystemFetchChooserTitle:
+      'Récupérer les métadonnées depuis RomM pour {system}',
+  AppLocale.rommSystemFetchModeFillGaps: 'Compléter les manques (recommandé)',
+  AppLocale.rommSystemFetchModeFillGapsHint:
+      'Seuls les champs vides et les visuels manquants sont écrits. Les données existantes sont conservées.',
+  AppLocale.rommSystemFetchModeReplace: 'Tout remplacer',
+  AppLocale.rommSystemFetchModeReplaceWarning:
+      'Écrase tous les champs et fichiers de visuels. Les descriptions non anglaises sont effacées et RomM ne fournit pas d\'éditeur.',
+  AppLocale.rommSystemFetchStarted:
+      'Récupération des métadonnées RomM pour {system} en arrière-plan',
+  AppLocale.rommSystemFetchPreparing:
+      'Préparation de la récupération des métadonnées RomM pour {system}…',
+  AppLocale.rommSystemFetchProgress:
+      'Récupération des métadonnées RomM pour {system} : {done}/{total}',
+  AppLocale.rommSystemFetchSummary:
+      'Métadonnées RomM pour {system} : {linked} liés, {filled} complétés, {replaced} remplacés, {unlinked} non liés ignorés, {notFound} introuvables, {failed} en échec',
+  AppLocale.rommSystemFetchCancelled: 'Annulé — {summary}',
+  AppLocale.rommSystemFetchBusy:
+      'Une récupération de métadonnées RomM est déjà en cours pour {system}. Attendez qu\'elle se termine, puis réessayez.',
+  AppLocale.rommSystemFetchFailedToStart:
+      'Impossible de récupérer les métadonnées RomM pour {system} : {error}',
 };

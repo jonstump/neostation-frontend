@@ -1331,4 +1331,34 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rommFetchMetadataPartial:
       'Wrote {count} fields, but {media} artwork failed to download',
   AppLocale.rommFetchMetadataFailed: 'Fetching metadata from RomM failed',
+
+  // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
+  AppLocale.rommSystemFetchAction: 'Fetch metadata from RomM',
+  AppLocale.rommSystemFetchActionSubtitle:
+      'Fill gaps or replace metadata and artwork for every linked game in this system',
+  AppLocale.rommSystemFetchRequiresConnection:
+      'Connect to RomM to enable this action',
+  AppLocale.rommSystemFetchRowRunning:
+      'Fetching {done}/{total} — press to cancel',
+  AppLocale.rommSystemFetchChooserTitle:
+      'Fetch metadata from RomM for {system}',
+  AppLocale.rommSystemFetchModeFillGaps: 'Fill gaps (recommended)',
+  AppLocale.rommSystemFetchModeFillGapsHint:
+      'Only empty fields and missing artwork are written. Existing data is kept.',
+  AppLocale.rommSystemFetchModeReplace: 'Replace all',
+  AppLocale.rommSystemFetchModeReplaceWarning:
+      'Overwrites every field and artwork file. Non-English descriptions are cleared and RomM does not provide a publisher.',
+  AppLocale.rommSystemFetchStarted:
+      'Fetching RomM metadata for {system} in the background',
+  AppLocale.rommSystemFetchPreparing:
+      'Preparing RomM metadata fetch for {system}…',
+  AppLocale.rommSystemFetchProgress:
+      'Fetching RomM metadata for {system}: {done}/{total}',
+  AppLocale.rommSystemFetchSummary:
+      'RomM metadata for {system}: {linked} linked, {filled} filled, {replaced} replaced, {unlinked} unlinked skipped, {notFound} not found, {failed} failed',
+  AppLocale.rommSystemFetchCancelled: 'Cancelled — {summary}',
+  AppLocale.rommSystemFetchBusy:
+      'A RomM metadata fetch is already running for {system}. Wait for it to finish, then try again.',
+  AppLocale.rommSystemFetchFailedToStart:
+      'Could not fetch RomM metadata for {system}: {error}',
 };

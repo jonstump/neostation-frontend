@@ -1378,4 +1378,34 @@ const Map<String, dynamic> appLocaleIt = {
       '{count} campi scritti, ma {media} immagini non sono state scaricate',
   AppLocale.rommFetchMetadataFailed:
       'Recupero dei metadati da RomM non riuscito',
+
+  // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
+  AppLocale.rommSystemFetchAction: 'Recupera metadati da RomM',
+  AppLocale.rommSystemFetchActionSubtitle:
+      'Completa i campi vuoti o sostituisci metadati e artwork di tutti i giochi collegati di questo sistema',
+  AppLocale.rommSystemFetchRequiresConnection:
+      'Connettiti a RomM per abilitare questa azione',
+  AppLocale.rommSystemFetchRowRunning:
+      'Recupero {done}/{total} — premi per annullare',
+  AppLocale.rommSystemFetchChooserTitle:
+      'Recupera metadati da RomM per {system}',
+  AppLocale.rommSystemFetchModeFillGaps: 'Completa i campi vuoti (consigliato)',
+  AppLocale.rommSystemFetchModeFillGapsHint:
+      'Vengono scritti solo i campi vuoti e gli artwork mancanti. I dati esistenti sono conservati.',
+  AppLocale.rommSystemFetchModeReplace: 'Sostituisci tutto',
+  AppLocale.rommSystemFetchModeReplaceWarning:
+      'Sovrascrive ogni campo e file artwork. Le descrizioni non in inglese vengono cancellate e RomM non fornisce l\'editore.',
+  AppLocale.rommSystemFetchStarted:
+      'Recupero dei metadati RomM per {system} in background',
+  AppLocale.rommSystemFetchPreparing:
+      'Preparazione del recupero dei metadati RomM per {system}…',
+  AppLocale.rommSystemFetchProgress:
+      'Recupero dei metadati RomM per {system}: {done}/{total}',
+  AppLocale.rommSystemFetchSummary:
+      'Metadati RomM per {system}: {linked} collegati, {filled} completati, {replaced} sostituiti, {unlinked} non collegati saltati, {notFound} non trovati, {failed} falliti',
+  AppLocale.rommSystemFetchCancelled: 'Annullato — {summary}',
+  AppLocale.rommSystemFetchBusy:
+      'Un recupero dei metadati RomM è già in corso per {system}. Attendi che finisca e riprova.',
+  AppLocale.rommSystemFetchFailedToStart:
+      'Impossibile recuperare i metadati RomM per {system}: {error}',
 };

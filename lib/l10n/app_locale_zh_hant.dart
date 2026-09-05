@@ -1183,4 +1183,24 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.rommFetchMetadataNotFound: '在 RomM 上找不到：連結的 ROM 已不存在',
   AppLocale.rommFetchMetadataPartial: '已寫入 {count} 個欄位，但 {media} 張封面圖下載失敗',
   AppLocale.rommFetchMetadataFailed: '從 RomM 取得中繼資料失敗',
+
+  // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
+  AppLocale.rommSystemFetchAction: '從 RomM 取得中繼資料',
+  AppLocale.rommSystemFetchActionSubtitle: '為此系統中所有已連結的遊戲填補或取代中繼資料與圖片',
+  AppLocale.rommSystemFetchRequiresConnection: '連線至 RomM 以啟用此操作',
+  AppLocale.rommSystemFetchRowRunning: '正在取得 {done}/{total} — 按下以取消',
+  AppLocale.rommSystemFetchChooserTitle: '從 RomM 取得 {system} 的中繼資料',
+  AppLocale.rommSystemFetchModeFillGaps: '填補空缺（建議）',
+  AppLocale.rommSystemFetchModeFillGapsHint: '僅寫入空白欄位和缺少的圖片，保留現有資料。',
+  AppLocale.rommSystemFetchModeReplace: '全部取代',
+  AppLocale.rommSystemFetchModeReplaceWarning:
+      '覆寫所有欄位和圖片檔案。非英文描述將被清除，且 RomM 不提供發行商資訊。',
+  AppLocale.rommSystemFetchStarted: '正在背景取得 {system} 的 RomM 中繼資料',
+  AppLocale.rommSystemFetchPreparing: '正在準備取得 {system} 的 RomM 中繼資料…',
+  AppLocale.rommSystemFetchProgress: '正在取得 {system} 的 RomM 中繼資料：{done}/{total}',
+  AppLocale.rommSystemFetchSummary:
+      '{system} 的 RomM 中繼資料：已連結 {linked}，已填補 {filled}，已取代 {replaced}，未連結跳過 {unlinked}，找不到 {notFound}，失敗 {failed}',
+  AppLocale.rommSystemFetchCancelled: '已取消 — {summary}',
+  AppLocale.rommSystemFetchBusy: '{system} 的 RomM 中繼資料取得仍在進行中。請等待其完成後再試。',
+  AppLocale.rommSystemFetchFailedToStart: '無法取得 {system} 的 RomM 中繼資料：{error}',
 };

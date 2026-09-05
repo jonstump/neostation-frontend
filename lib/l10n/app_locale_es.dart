@@ -1381,4 +1381,34 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.rommFetchMetadataPartial:
       'Se escribieron {count} campos, pero no se pudieron descargar {media} imágenes',
   AppLocale.rommFetchMetadataFailed: 'Error al obtener los metadatos de RomM',
+
+  // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
+  AppLocale.rommSystemFetchAction: 'Obtener metadatos de RomM',
+  AppLocale.rommSystemFetchActionSubtitle:
+      'Rellenar huecos o reemplazar metadatos y arte de todos los juegos vinculados de este sistema',
+  AppLocale.rommSystemFetchRequiresConnection:
+      'Conéctate a RomM para activar esta acción',
+  AppLocale.rommSystemFetchRowRunning:
+      'Obteniendo {done}/{total} — pulsa para cancelar',
+  AppLocale.rommSystemFetchChooserTitle:
+      'Obtener metadatos de RomM para {system}',
+  AppLocale.rommSystemFetchModeFillGaps: 'Rellenar huecos (recomendado)',
+  AppLocale.rommSystemFetchModeFillGapsHint:
+      'Solo se escriben los campos vacíos y el arte que falta. Los datos existentes se conservan.',
+  AppLocale.rommSystemFetchModeReplace: 'Reemplazar todo',
+  AppLocale.rommSystemFetchModeReplaceWarning:
+      'Sobrescribe todos los campos y archivos de arte. Las descripciones que no estén en inglés se borran y RomM no proporciona editor.',
+  AppLocale.rommSystemFetchStarted:
+      'Obteniendo metadatos de RomM para {system} en segundo plano',
+  AppLocale.rommSystemFetchPreparing:
+      'Preparando la obtención de metadatos de RomM para {system}…',
+  AppLocale.rommSystemFetchProgress:
+      'Obteniendo metadatos de RomM para {system}: {done}/{total}',
+  AppLocale.rommSystemFetchSummary:
+      'Metadatos de RomM para {system}: {linked} vinculados, {filled} rellenados, {replaced} reemplazados, {unlinked} sin vincular omitidos, {notFound} no encontrados, {failed} fallidos',
+  AppLocale.rommSystemFetchCancelled: 'Cancelado — {summary}',
+  AppLocale.rommSystemFetchBusy:
+      'Ya hay una obtención de metadatos de RomM en curso para {system}. Espera a que termine y vuelve a intentarlo.',
+  AppLocale.rommSystemFetchFailedToStart:
+      'No se pudieron obtener los metadatos de RomM para {system}: {error}',
 };

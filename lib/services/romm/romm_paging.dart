@@ -18,4 +18,13 @@ abstract final class RommPaging {
   /// ignores) would otherwise page forever. 500 × 500 = 250k ROMs, far past
   /// any real library.
   static const int maxPages = 500;
+
+  /// Simultaneous server requests for a bulk walk — bulk sync's transfers and
+  /// the per-system metadata pass's detail fetches. One at a time is slow on a
+  /// large platform; the whole queue at once saturates a handheld's wifi and
+  /// the server. Three is a starting point to be tuned against a real server
+  /// on device. Lives here for the same reason as [pageSize]: the metadata
+  /// pass is a service and must not read the constant from the provider.
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
+  static const int concurrency = 3;
 }
