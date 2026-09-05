@@ -87,12 +87,12 @@ void main() {
           success: false,
           source: ScreenScraperService.scrapeSourceScreenscraper,
           rommAttempted: true,
-          message: AppLocale.scrapeNoCredentials,
+          message: AppLocale.scrapeGameNotFound,
         ),
       );
       expect(message.key, AppLocale.scrapeFailedWithReason);
       expect(message.localizedPlaceholders, {
-        'reason': AppLocale.scrapeNoCredentials,
+        'reason': AppLocale.scrapeGameNotFound,
       });
       expect(message.tone, ScrapeResultTone.error);
     });
