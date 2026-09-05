@@ -1350,4 +1350,7 @@ const Map<String, dynamic> appLocaleEs = {
 
   // SPEC-0004 REQ "Search Screen Entry" — link action on search results
   AppLocale.searchLinkToRomm: 'Vincular con RomM',
+
+  // SPEC-0004 REQ "Link Picker Dialog" — results are for the cleaned query
+  AppLocale.rommLinkPickerCleanedQuery: 'Mostrando resultados para «{query}»',
 };

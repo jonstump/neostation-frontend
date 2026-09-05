@@ -82,4 +82,76 @@ void main() {
       expect(rommLinkKeyFor(romPath: '', romname: 'ct-final'), 'ct-final');
     });
   });
+
+  group('cleanRomTitle', () {
+    test('strips region and language tags', () {
+      expect(cleanRomTitle('Chrono Trigger (USA) [EN,FR]'), 'Chrono Trigger');
+    });
+
+    test('strips several tags of both kinds in any order', () {
+      expect(cleanRomTitle('Game [!] (Europe) (En,Fr,De) [T+Eng]'), 'Game');
+    });
+
+    test('strips nested brackets layer by layer', () {
+      expect(cleanRomTitle('Game (USA (Beta [proto]))'), 'Game');
+      expect(cleanRomTitle('Game [Rev (1)] (Japan)'), 'Game');
+    });
+
+    test('strips a bracketed revision', () {
+      expect(cleanRomTitle('Game (USA) (Rev A)'), 'Game');
+      expect(cleanRomTitle('Game (Rev 1)'), 'Game');
+    });
+
+    test('strips a trailing revision or version token outside brackets', () {
+      expect(cleanRomTitle('Game Rev 1'), 'Game');
+      expect(cleanRomTitle('Game Rev A'), 'Game');
+      expect(cleanRomTitle('Game v1.2'), 'Game');
+      expect(cleanRomTitle('Game V2'), 'Game');
+      expect(cleanRomTitle('Game (USA) v1.1'), 'Game');
+      expect(cleanRomTitle('Game v1.2 Rev 1'), 'Game');
+    });
+
+    test('keeps numbers and numerals that belong to the title', () {
+      expect(cleanRomTitle('Super Mario Bros. 3 (USA)'), 'Super Mario Bros. 3');
+      expect(
+        cleanRomTitle('Final Fantasy VII (USA) (Disc 1)'),
+        'Final Fantasy VII',
+      );
+      expect(cleanRomTitle('Sonic the Hedgehog 2'), 'Sonic the Hedgehog 2');
+      expect(cleanRomTitle('Revelations'), 'Revelations');
+      expect(cleanRomTitle('Gran Turismo V'), 'Gran Turismo V');
+    });
+
+    test('keeps a subtitle separator that still joins two parts', () {
+      expect(cleanRomTitle('Game - Subtitle (USA)'), 'Game - Subtitle');
+    });
+
+    test('drops a separator left dangling by the removal', () {
+      expect(cleanRomTitle('Game - (USA)'), 'Game');
+      expect(cleanRomTitle('Game – [EN]'), 'Game');
+    });
+
+    test('collapses whitespace', () {
+      expect(
+        cleanRomTitle('  Chrono   Trigger (USA)   [!]  '),
+        'Chrono Trigger',
+      );
+    });
+
+    test('a name with no tags comes back trimmed and otherwise unchanged', () {
+      expect(cleanRomTitle('ct-final'), 'ct-final');
+      expect(cleanRomTitle('  Chrono Trigger  '), 'Chrono Trigger');
+    });
+
+    test('a name that was only tags returns the trimmed original', () {
+      expect(cleanRomTitle('(USA) [!]'), '(USA) [!]');
+      expect(cleanRomTitle('  [EN,FR] '), '[EN,FR]');
+      expect(cleanRomTitle(''), '');
+    });
+
+    test('unbalanced brackets are left alone', () {
+      expect(cleanRomTitle('Game (USA'), 'Game (USA');
+      expect(cleanRomTitle('Game [EN'), 'Game [EN');
+    });
+  });
 }

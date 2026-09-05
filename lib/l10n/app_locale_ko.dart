@@ -1201,4 +1201,7 @@ const Map<String, dynamic> appLocaleKo = {
 
   // SPEC-0004 REQ "Search Screen Entry" — link action on search results
   AppLocale.searchLinkToRomm: 'RomM에 연결',
+
+  // SPEC-0004 REQ "Link Picker Dialog" — results are for the cleaned query
+  AppLocale.rommLinkPickerCleanedQuery: '“{query}” 검색 결과 표시 중',
 };

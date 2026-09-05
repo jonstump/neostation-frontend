@@ -6,6 +6,7 @@ import 'package:neostation/models/romm_rom.dart';
 import 'package:neostation/models/romm_rom_page.dart';
 import 'package:neostation/repositories/romm_save_map_repository.dart';
 import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/utils/romm_link_state.dart';
 
 /// The server search the picker runs — `RommService.getRomsPage` in the app,
 /// a fake in tests.
@@ -118,6 +119,8 @@ class RommMatchPickerController extends ChangeNotifier {
   RommMatchPickerStatus _status = RommMatchPickerStatus.idle;
   RommMatchSearchException? _lastError;
   int? _currentRomId;
+  String _prefilledQuery = '';
+  String? _cleanedQuery;
   Timer? _debounceTimer;
   int _requestSerial = 0;
   bool _disposed = false;
@@ -136,6 +139,20 @@ class RommMatchPickerController extends ChangeNotifier {
   /// Rom id of the row the game is linked to right now, for the check mark.
   int? get currentRomId => _currentRomId;
 
+  /// The cleaned form of the query [init] was given — what the dialog's field
+  /// should show. Set synchronously at the start of [init], so it can be read
+  /// as soon as [init] has been called.
+  String get prefilledQuery => _prefilledQuery;
+
+  /// True when [results] answer the cleaned form of the user's query rather
+  /// than what they typed — the raw query found nothing and the automatic
+  /// retry ran. Cleared by the next search or by editing the field.
+  bool get queryWasCleaned => _cleanedQuery != null;
+
+  /// The cleaned query [results] are for while [queryWasCleaned]; null
+  /// otherwise.
+  String? get cleanedQuery => _cleanedQuery;
+
   /// Index of [preselected] within [results], or -1.
   int get preselectedIndex {
     final pinned = preselected;
@@ -144,9 +161,12 @@ class RommMatchPickerController extends ChangeNotifier {
   }
 
   /// Resolves the platform scope and the current link, then runs the first
-  /// search for [initialQuery]. Scope resolution failing is logged and leaves
-  /// the search unscoped rather than blocking the picker.
+  /// search for the cleaned form of [initialQuery] (see [cleanRomTitle]) —
+  /// the raw filename's region and language tags are what keeps RomM's name
+  /// search from matching. Scope resolution failing is logged and leaves the
+  /// search unscoped rather than blocking the picker.
   Future<void> init(String initialQuery) async {
+    _prefilledQuery = cleanRomTitle(initialQuery);
     try {
       _platformIds = List.unmodifiable(await platformIdsFor(systemRealName));
     } catch (e, st) {
@@ -170,19 +190,32 @@ class RommMatchPickerController extends ChangeNotifier {
     }
     if (_disposed) return;
     notifyListeners();
-    await searchNow(initialQuery);
+    await searchNow(_prefilledQuery);
   }
 
   /// Schedules a search for [query] after [debounce] of quiet, replacing any
   /// search already scheduled, so a burst of keystrokes costs one request.
+  /// Editing the field also retires the "results are for the cleaned query"
+  /// note, which described the previous results.
   void onQueryChanged(String query) {
     _debounceTimer?.cancel();
+    if (_cleanedQuery != null) {
+      _cleanedQuery = null;
+      if (!_disposed) notifyListeners();
+    }
     _debounceTimer = Timer(debounce, () => searchNow(query));
   }
 
   /// Runs the search immediately (cancelling a pending debounce). A response
   /// that arrives after a newer search started is dropped.
-  Future<void> searchNow(String query) async {
+  ///
+  /// A raw query that finds nothing is retried once with its cleaned form
+  /// when that differs (see [cleanRomTitle]); the retry is a search like any
+  /// other for the serial guard, so a keystroke in the meantime supersedes
+  /// it. A failed search is not retried here — that is the dialog's retry row.
+  Future<void> searchNow(String query) => _search(query, isRetry: false);
+
+  Future<void> _search(String query, {required bool isRetry}) async {
     _debounceTimer?.cancel();
     final serial = ++_requestSerial;
     _status = RommMatchPickerStatus.loading;
@@ -196,8 +229,21 @@ class RommMatchPickerController extends ChangeNotifier {
         limit: pageLimit,
       );
       if (_disposed || serial != _requestSerial) return;
+      if (!isRetry && page.items.isEmpty) {
+        final cleaned = cleanRomTitle(trimmed);
+        if (cleaned != trimmed) {
+          // Governing: ADR-0004 (manual link provenance), SPEC-0004 REQ "Link Picker Dialog"
+          _log.i(
+            'RomM link picker: no results for "$trimmed", '
+            'retrying with "$cleaned"',
+          );
+          await _search(cleaned, isRetry: true);
+          return;
+        }
+      }
       _results = List.unmodifiable(_withPreselected(page.items));
       _lastError = null;
+      _cleanedQuery = isRetry ? trimmed : null;
       _status = RommMatchPickerStatus.ready;
     } catch (e, st) {
       if (_disposed || serial != _requestSerial) return;
@@ -214,6 +260,7 @@ class RommMatchPickerController extends ChangeNotifier {
       );
       _results = const [];
       _lastError = failure;
+      _cleanedQuery = null;
       _status = RommMatchPickerStatus.error;
     }
     notifyListeners();

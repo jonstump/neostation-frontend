@@ -321,4 +321,175 @@ void main() {
       c.dispose();
     });
   });
+
+  group('cleaned queries', () {
+    test('init pre-fills and searches the cleaned title', () async {
+      final fakes = _Fakes();
+      final c = fakes.controller();
+      final initialized = c.init('Chrono Trigger (USA) [EN,FR]');
+      // Readable before the scope resolves, so the field shows it at once.
+      expect(c.prefilledQuery, 'Chrono Trigger');
+      await initialized;
+
+      expect(fakes.searches, hasLength(1));
+      expect(fakes.searches.single.search, 'Chrono Trigger');
+      expect(c.queryWasCleaned, isFalse);
+      expect(c.cleanedQuery, isNull);
+      expect(c.status, RommMatchPickerStatus.ready);
+      c.dispose();
+    });
+
+    test('a raw query with no results is retried once, cleaned', () async {
+      final fakes = _Fakes();
+      fakes.answer = (search) async => RommRomPage(
+        items: search == 'Zelda' ? [_rom(5, 'zelda.sfc')] : const [],
+      );
+      final c = fakes.controller();
+      await c.init('Zelda');
+      fakes.searches.clear();
+      var notifications = 0;
+      c.addListener(() => notifications++);
+
+      await c.searchNow('Zelda (Europe) [!]');
+
+      expect(fakes.searches.map((s) => s.search), [
+        'Zelda (Europe) [!]',
+        'Zelda',
+      ]);
+      expect(fakes.searches.last.platformIds, [3, 7]);
+      expect(c.status, RommMatchPickerStatus.ready);
+      expect(c.results.map((r) => r.id), [5]);
+      expect(c.queryWasCleaned, isTrue);
+      expect(c.cleanedQuery, 'Zelda');
+      expect(notifications, greaterThan(0));
+      c.dispose();
+    });
+
+    test('no retry when the cleaned form equals the raw query', () async {
+      final fakes = _Fakes();
+      fakes.answer = (_) async => const RommRomPage(items: []);
+      final c = fakes.controller();
+
+      await c.searchNow('Zelda');
+
+      expect(fakes.searches, hasLength(1));
+      expect(c.status, RommMatchPickerStatus.ready);
+      expect(c.results, isEmpty);
+      expect(c.queryWasCleaned, isFalse);
+      c.dispose();
+    });
+
+    test('the cleaned retry is never itself retried', () async {
+      final fakes = _Fakes();
+      fakes.answer = (_) async => const RommRomPage(items: []);
+      final c = fakes.controller();
+
+      await c.searchNow('Zelda (Europe)');
+
+      expect(fakes.searches.map((s) => s.search), ['Zelda (Europe)', 'Zelda']);
+      expect(c.status, RommMatchPickerStatus.ready);
+      expect(c.results, isEmpty);
+      // Still marked: the user should know both forms were tried.
+      expect(c.queryWasCleaned, isTrue);
+      expect(c.cleanedQuery, 'Zelda');
+      c.dispose();
+    });
+
+    test('the flag is cleared by the next search', () async {
+      final fakes = _Fakes();
+      fakes.answer = (search) async => RommRomPage(
+        items: search.contains('(') ? const [] : [_rom(5, 'x.sfc')],
+      );
+      final c = fakes.controller();
+
+      await c.searchNow('Zelda (Europe)');
+      expect(c.queryWasCleaned, isTrue);
+
+      await c.searchNow('Chrono');
+      expect(c.queryWasCleaned, isFalse);
+      expect(c.cleanedQuery, isNull);
+      expect(fakes.searches, hasLength(3));
+      c.dispose();
+    });
+
+    test('the flag is cleared as soon as the user edits the field', () async {
+      final fakes = _Fakes();
+      fakes.answer = (search) async => RommRomPage(
+        items: search.contains('(') ? const [] : [_rom(5, 'x.sfc')],
+      );
+      final c = fakes.controller(debounce: const Duration(milliseconds: 30));
+      await c.searchNow('Zelda (Europe)');
+      expect(c.queryWasCleaned, isTrue);
+      var notified = false;
+      c.addListener(() => notified = true);
+
+      c.onQueryChanged('Zelda (Europ');
+
+      expect(c.queryWasCleaned, isFalse);
+      expect(notified, isTrue);
+      await Future<void>.delayed(const Duration(milliseconds: 80));
+      c.dispose();
+    });
+
+    test('a failed search is not retried with the cleaned form', () async {
+      final fakes = _Fakes();
+      fakes.answer = (_) async => throw StateError('connection refused');
+      final c = fakes.controller();
+
+      await c.searchNow('Zelda (Europe)');
+
+      expect(fakes.searches, hasLength(1));
+      expect(c.status, RommMatchPickerStatus.error);
+      expect(c.lastError?.query, 'Zelda (Europe)');
+      expect(c.queryWasCleaned, isFalse);
+      c.dispose();
+    });
+
+    test(
+      'a retry that fails clears the flag and reports the cleaned query',
+      () async {
+        final fakes = _Fakes();
+        fakes.answer = (search) async {
+          if (search == 'Zelda') throw StateError('timeout');
+          return const RommRomPage(items: []);
+        };
+        final c = fakes.controller();
+
+        await c.searchNow('Zelda (Europe)');
+
+        expect(fakes.searches, hasLength(2));
+        expect(c.status, RommMatchPickerStatus.error);
+        expect(c.lastError?.query, 'Zelda');
+        expect(c.queryWasCleaned, isFalse);
+        c.dispose();
+      },
+    );
+
+    test('a retry superseded by a newer search is dropped', () async {
+      final fakes = _Fakes();
+      final retry = Completer<RommRomPage>();
+      fakes.answer = (search) {
+        if (search == 'Zelda') return retry.future;
+        return Future.value(
+          RommRomPage(
+            items: search == 'Chrono' ? [_rom(7, 'ct.sfc')] : const [],
+          ),
+        );
+      };
+      final c = fakes.controller();
+
+      final first = c.searchNow('Zelda (Europe)');
+      // Let the raw search resolve and the retry start.
+      await Future<void>.delayed(Duration.zero);
+      expect(fakes.searches.map((s) => s.search), ['Zelda (Europe)', 'Zelda']);
+
+      await c.searchNow('Chrono');
+      retry.complete(RommRomPage(items: [_rom(5, 'zelda.sfc')]));
+      await first;
+
+      expect(c.results.map((r) => r.id), [7]);
+      expect(c.queryWasCleaned, isFalse);
+      c.dispose();
+    });
+  });
 }

@@ -120,7 +120,6 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
       preselected: widget.preselectedRom,
     )..addListener(_onControllerChanged);
 
-    _queryController.text = _initialQuery();
     _queryFocus.addListener(() {
       if (!mounted) return;
       setState(() => _isFieldFocused = _queryFocus.hasFocus);
@@ -144,7 +143,12 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
       );
     });
 
-    _controller.init(_queryController.text).then((_) {
+    // init cleans the query synchronously before its first await, so the
+    // field can show the cleaned title straight away rather than after the
+    // platform scope resolves.
+    final initialized = _controller.init(_initialQuery());
+    _queryController.text = _controller.prefilledQuery;
+    initialized.then((_) {
       if (!mounted) return;
       final pinned = _controller.preselectedIndex;
       if (pinned >= 0) {
@@ -184,7 +188,8 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
   }
 
   /// The game's extension-stripped filename, or the preselected ROM's name
-  /// when the caller already knows which entry it means.
+  /// when the caller already knows which entry it means. The controller
+  /// strips the release tags before searching.
   String _initialQuery() {
     final pinned = widget.preselectedRom;
     if (pinned != null && pinned.name.isNotEmpty) return pinned.name;
@@ -319,6 +324,10 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
             ],
             SizedBox(height: 10.r),
             _buildSearchField(theme),
+            if (_controller.queryWasCleaned) ...[
+              SizedBox(height: 4.r),
+              _buildCleanedQueryNote(theme),
+            ],
             SizedBox(height: 8.r),
             Flexible(child: _buildResults(theme, platformNames)),
           ],
@@ -378,6 +387,26 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
           ),
         ),
       ],
+    );
+  }
+
+  /// One line under the field while the results answer the cleaned form of
+  /// what the user typed, so it is clear which query they are looking at.
+  Widget _buildCleanedQueryNote(ThemeData theme) {
+    final cleaned = _controller.cleanedQuery ?? '';
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 8.r),
+      child: Text(
+        AppLocale.rommLinkPickerCleanedQuery
+            .getString(context)
+            .replaceFirst('{query}', cleaned),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 9.r,
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
+        ),
+      ),
     );
   }
 
