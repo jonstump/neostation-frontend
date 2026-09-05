@@ -55,12 +55,22 @@ The repository SHALL enforce that a row with `link_source = manual` is never rep
 
 ### Requirement: Link Picker Dialog
 
-The system SHALL provide a "Link to RomM" action in the game settings Manage tab, available only while RomM is connected, that opens a picker dialog registered as its own gamepad navigation layer. The picker MUST pre-fill the search with the game's extension-stripped name, MUST debounce searches against the server's name search scoped to the RomM platform ids that resolve to the game's system, MUST list results with name, platform, and `fs_name`, MUST indicate the currently linked ROM if any, MUST write the mapping as `manual` on confirm and refresh the game's sync state, and MUST close without changes on B. Every element MUST be reachable and operable by D-pad or controller, including the text field and escaping it with B.
+The system SHALL provide a "Link to RomM" action in the game settings Manage tab, available only while RomM is connected, that opens a picker dialog registered as its own gamepad navigation layer. The picker MUST pre-fill the search with a cleaned title derived from the game's extension-stripped name (region, language, revision, and similar bracketed or parenthesised tags removed), MUST fall back to the cleaned title automatically when a raw query returns no results, MUST debounce searches against the server's name search scoped to the RomM platform ids that resolve to the game's system, MUST list results with name, platform, and `fs_name`, MUST indicate the currently linked ROM if any, MUST write the mapping as `manual` on confirm and refresh the game's sync state, and MUST close without changes on B. Every element MUST be reachable and operable by D-pad or controller, including the text field and escaping it with B.
 
 #### Scenario: Link a renamed file
 
 - **WHEN** the user opens the picker for `ct-final.sfc` under `snes`, searches "Chrono Trigger", and confirms the SNES result
 - **THEN** a mapping row is written for `ct-final.sfc` in `snes` with that rom id and source `manual`, and the game's sync status is recomputed
+
+#### Scenario: Tagged filename pre-fill
+
+- **WHEN** the user opens the picker for `Chrono Trigger (USA) [EN,FR].nds`
+- **THEN** the search field is pre-filled with `Chrono Trigger` and the first results are for that title
+
+#### Scenario: Raw query finds nothing
+
+- **WHEN** the user types a query containing tags that yields no results
+- **THEN** the picker retries once with the cleaned form of that query and shows those results, marking that the query was cleaned
 
 #### Scenario: Scoped search
 
