@@ -22,6 +22,7 @@ import 'package:neostation/providers/retro_achievements_provider.dart';
 import 'package:neostation/providers/romm_provider.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/repositories/romm_save_map_repository.dart';
+import 'package:neostation/repositories/system_repository.dart';
 import 'package:neostation/services/romm_service.dart';
 import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/services/game_service.dart';
@@ -957,8 +958,10 @@ class _SearchScreenState extends State<SearchScreen> {
     final folder = dbGame.systemFolderName;
     if (folder == null || folder.isEmpty) return;
 
-    final system = await SqliteService.getSystemByFolderName(folder);
-    if (!mounted) return;
+    // Through the repository (not SqliteService) so an unknown folder is a
+    // null, not an unhandled throw from the datasource.
+    final system = await SystemRepository.getSystemByFolderName(folder);
+    if (!mounted || system == null) return;
 
     final game = GameModel.fromDatabaseModel(dbGame);
     final changed = await RommMatchPickerDialog.show(
