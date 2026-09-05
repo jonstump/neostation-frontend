@@ -1372,4 +1372,10 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rommSystemFetchFailedToStart:
       'Could not fetch RomM metadata for {system}: {error}',
   AppLocale.scrapeFetchingFromRomm: 'Fetching metadata from RomM…',
+  AppLocale.scrapeCompletedFromRomm: 'Scraped from RomM',
+  AppLocale.scrapeCompletedFromScreenscraper: 'Scraped from ScreenScraper',
+  AppLocale.scrapeCompletedFallback:
+      'RomM had nothing for this game; scraped from ScreenScraper',
+  AppLocale.scrapeFailedWithReason: 'Scraping failed: {reason}',
+  AppLocale.scrapeSystemIdMissing: 'Error: system ID is missing.',
 };

@@ -1214,4 +1214,9 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.rommSystemFetchBusy: '{system} 的 RomM 中繼資料取得仍在進行中。請等待其完成後再試。',
   AppLocale.rommSystemFetchFailedToStart: '無法取得 {system} 的 RomM 中繼資料：{error}',
   AppLocale.scrapeFetchingFromRomm: '正在從 RomM 取得元資料…',
+  AppLocale.scrapeCompletedFromRomm: '已從 RomM 抓取',
+  AppLocale.scrapeCompletedFromScreenscraper: '已從 ScreenScraper 抓取',
+  AppLocale.scrapeCompletedFallback: 'RomM 中沒有此遊戲的資料；已從 ScreenScraper 抓取',
+  AppLocale.scrapeFailedWithReason: '抓取失敗：{reason}',
+  AppLocale.scrapeSystemIdMissing: '錯誤：缺少系統 ID。',
 };

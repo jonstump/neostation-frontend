@@ -1408,6 +1408,14 @@ mixin AppLocale {
   // SPEC-0006 REQ "Per-Game Source Chain" — RomM-first scrape progress
   static const String scrapeFetchingFromRomm = 'scrape_fetching_from_romm';
 
+  // SPEC-0006 REQ "Entry Point Consistency" — per-game scrape notifications
+  static const String scrapeCompletedFromRomm = 'scrape_completed_from_romm';
+  static const String scrapeCompletedFromScreenscraper =
+      'scrape_completed_from_screenscraper';
+  static const String scrapeCompletedFallback = 'scrape_completed_fallback';
+  static const String scrapeFailedWithReason = 'scrape_failed_with_reason';
+  static const String scrapeSystemIdMissing = 'scrape_system_id_missing';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================

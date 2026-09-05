@@ -1266,4 +1266,10 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommSystemFetchFailedToStart:
       '{system}의 RomM 메타데이터를 가져올 수 없습니다: {error}',
   AppLocale.scrapeFetchingFromRomm: 'RomM에서 메타데이터를 가져오는 중…',
+  AppLocale.scrapeCompletedFromRomm: 'RomM에서 게임 정보를 가져왔습니다',
+  AppLocale.scrapeCompletedFromScreenscraper: 'ScreenScraper에서 게임 정보를 가져왔습니다',
+  AppLocale.scrapeCompletedFallback:
+      'RomM에 이 게임의 정보가 없어 ScreenScraper에서 가져왔습니다',
+  AppLocale.scrapeFailedWithReason: '게임 정보 가져오기 실패: {reason}',
+  AppLocale.scrapeSystemIdMissing: '오류: 시스템 ID가 없습니다.',
 };

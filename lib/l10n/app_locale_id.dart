@@ -1388,4 +1388,10 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommSystemFetchFailedToStart:
       'Tidak dapat mengambil metadata RomM untuk {system}: {error}',
   AppLocale.scrapeFetchingFromRomm: 'Mengambil metadata dari RomM…',
+  AppLocale.scrapeCompletedFromRomm: 'Data diambil dari RomM',
+  AppLocale.scrapeCompletedFromScreenscraper: 'Data diambil dari ScreenScraper',
+  AppLocale.scrapeCompletedFallback:
+      'RomM tidak memiliki data untuk game ini; data diambil dari ScreenScraper',
+  AppLocale.scrapeFailedWithReason: 'Scraping gagal: {reason}',
+  AppLocale.scrapeSystemIdMissing: 'Kesalahan: ID sistem tidak ada.',
 };

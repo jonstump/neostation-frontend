@@ -1387,4 +1387,11 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommSystemFetchFailedToStart:
       'Не удалось получить метаданные RomM для {system}: {error}',
   AppLocale.scrapeFetchingFromRomm: 'Получение метаданных из RomM…',
+  AppLocale.scrapeCompletedFromRomm: 'Скрапинг выполнен из RomM',
+  AppLocale.scrapeCompletedFromScreenscraper:
+      'Скрапинг выполнен из ScreenScraper',
+  AppLocale.scrapeCompletedFallback:
+      'В RomM ничего нет для этой игры; скрапинг выполнен из ScreenScraper',
+  AppLocale.scrapeFailedWithReason: 'Ошибка скрапинга: {reason}',
+  AppLocale.scrapeSystemIdMissing: 'Ошибка: отсутствует ID системы.',
 };

@@ -10,6 +10,7 @@ import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/providers/file_provider.dart';
+import 'package:neostation/providers/romm_provider.dart';
 import 'package:neostation/repositories/game_repository.dart';
 import 'package:neostation/repositories/scraper_repository.dart';
 import 'package:neostation/repositories/system_repository.dart';
@@ -19,7 +20,9 @@ import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/screenscraper_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/artwork_cache.dart';
+import 'package:neostation/utils/scrape_result_message.dart';
 import 'package:neostation/widgets/custom_notification.dart';
+import 'package:provider/provider.dart';
 
 /// Sub-tabs inside the Scrapping tab of [GameSettingsDialog].
 enum _ScrappingSubTab { data, media }
@@ -251,6 +254,13 @@ class GameSettingsScrappingTabState extends State<GameSettingsScrappingTab> {
   List<String> _artworkPaths() =>
       scrapedArtworkPaths(widget.game, _folder, widget.fileProvider);
 
+  static NotificationType _notificationTypeFor(ScrapeResultTone tone) =>
+      switch (tone) {
+        ScrapeResultTone.success => NotificationType.success,
+        ScrapeResultTone.info => NotificationType.info,
+        ScrapeResultTone.error => NotificationType.error,
+      };
+
   Future<void> _forceRescrape() async {
     if (_isScraping) return;
     final romPath = widget.game.romPath;
@@ -260,6 +270,13 @@ class GameSettingsScrappingTabState extends State<GameSettingsScrappingTab> {
       _isScraping = true;
       _scrapeProgress = 0;
     });
+
+    // RomM goes first when connected; read the step before the first await
+    // so the context is still current.
+    // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "Entry Point Consistency"
+    final rommStep = context.read<RommProvider>().scrapeStep(
+      widget.fileProvider,
+    );
 
     // Resolve the real system (not the favorites/all virtual one).
     SystemModel targetSystem = widget.system;
@@ -284,6 +301,7 @@ class GameSettingsScrappingTabState extends State<GameSettingsScrappingTab> {
         romPath: romPath,
         gameName: widget.game.name,
         forceOverwrite: true,
+        rommStep: rommStep,
         onProgress: (status, progress) {
           if (mounted) setState(() => _scrapeProgress = progress);
         },
@@ -295,15 +313,13 @@ class GameSettingsScrappingTabState extends State<GameSettingsScrappingTab> {
       GamesCarousel.evictArtworkCaches(_artworkPaths());
 
       if (mounted) {
-        final message = result['success'] == true
-            ? 'Scraping completed'
-            : 'Scraping failed: ${result['message'].toString().getString(context)}';
+        // The notification names the source that handled the game.
+        // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "Entry Point Consistency"
+        final message = scrapeResultMessageFor(result);
         AppNotification.showNotification(
           context,
-          message,
-          type: result['success'] == true
-              ? NotificationType.success
-              : NotificationType.error,
+          message.format((key) => key.getString(context)),
+          type: _notificationTypeFor(message.tone),
         );
       }
       if (result['success'] == true) {

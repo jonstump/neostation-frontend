@@ -8,6 +8,7 @@ import '../../../models/system_model.dart';
 import '../../../utils/effective_system.dart';
 import '../../../models/game_model.dart';
 import '../../../providers/file_provider.dart';
+import '../../../providers/romm_provider.dart';
 import '../../../providers/retro_achievements_provider.dart';
 import '../../../sync/i_sync_provider.dart';
 import '../../../models/retro_achievements_game_info.dart';
@@ -16,6 +17,7 @@ import 'package:neostation/services/sfx_service.dart';
 import 'dialogs/ra_match_picker_dialog.dart';
 import '../../../services/retro_achievements_helper.dart';
 import '../../../utils/artwork_cache.dart';
+import '../../../utils/scrape_result_message.dart';
 import '../../../utils/ra_coverage.dart';
 import '../../../utils/gamepad_nav.dart';
 import 'package:flutter/foundation.dart';
@@ -1414,7 +1416,15 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
     _setTab(DetailTab.wheel, persist: false, animate: false);
   }
 
-  /// Orchestrates a metadata acquisition process via ScreenScraperService.
+  static NotificationType _scrapeNotificationTypeFor(ScrapeResultTone tone) =>
+      switch (tone) {
+        ScrapeResultTone.success => NotificationType.success,
+        ScrapeResultTone.info => NotificationType.info,
+        ScrapeResultTone.error => NotificationType.error,
+      };
+
+  /// Orchestrates a metadata acquisition: RomM first when connected, then
+  /// ScreenScraper via ScreenScraperService.
   Future<void> _startSingleGameScrape({bool forceOverwrite = true}) async {
     if (_isScrapingGame) return;
 
@@ -1432,23 +1442,21 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
       if (!mounted) return;
       AppNotification.showNotification(
         context,
-        'Error: System ID is missing.',
+        AppLocale.scrapeSystemIdMissing.getString(context),
         type: NotificationType.error,
       );
       return;
     }
 
-    if (!context.mounted) return;
+    if (!mounted) return;
 
-    if (!await ScreenScraperService.hasSavedCredentials()) {
-      if (!mounted) return;
-      AppNotification.showNotification(
-        context,
-        'Please log in to ScreenScraper in the Scraping tab first.',
-        type: NotificationType.info,
-      );
-      return;
-    }
+    // RomM goes first when connected; the service checks ScreenScraper
+    // credentials only when RomM did not scrape the game, so there is no
+    // credentials pre-check here. Read the step before the next await.
+    // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "Entry Point Consistency"
+    final rommStep = context.read<RommProvider>().scrapeStep(
+      widget.fileProvider,
+    );
 
     setState(() {
       _isScrapingGame = true;
@@ -1480,6 +1488,7 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
         romPath: _game.romPath ?? '',
         gameName: _game.name,
         forceOverwrite: forceOverwrite,
+        rommStep: rommStep,
         onProgress: (statusKey, progress) {
           if (!context.mounted) return;
           final localizedStatus = statusKey.getString(context);
@@ -1497,6 +1506,9 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
       );
 
       if (mounted) {
+        // The notification names the source that handled the game.
+        // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "Entry Point Consistency"
+        final message = scrapeResultMessageFor(result);
         if (result['success'] == true) {
           // Evict every artwork file the scrape may have rewritten — box art
           // included — so the tabs below reload them instead of redrawing the
@@ -1525,15 +1537,15 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
 
             AppNotification.showNotification(
               context,
-              AppLocale.scrapeSuccessful.getString(context),
-              type: NotificationType.success,
+              message.format((key) => key.getString(context)),
+              type: _scrapeNotificationTypeFor(message.tone),
             );
           }
         } else {
           AppNotification.showNotification(
             context,
-            result['message'].toString().getString(context),
-            type: NotificationType.error,
+            message.format((key) => key.getString(context)),
+            type: _scrapeNotificationTypeFor(message.tone),
           );
         }
       }
