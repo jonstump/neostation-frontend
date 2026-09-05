@@ -314,6 +314,137 @@ void main() {
       );
     });
 
+    test(
+      'putMappingIfAbsent inserts when no row exists and reports it',
+      () async {
+        final written = await RommSaveMapRepository.putMappingIfAbsent(
+          romname: 'Chrono Trigger (USA).sfc',
+          systemFolder: 'snes',
+          rommRomId: 42,
+          fsName: 'Chrono Trigger (USA).sfc',
+        );
+
+        expect(written, isTrue);
+        expect(
+          await RommSaveMapRepository.getRommRomId(
+            'Chrono Trigger (USA).sfc',
+            'snes',
+          ),
+          42,
+        );
+        final row = (await db.query('app_romm_rom_map')).single;
+        expect(row['romm_fs_name'], 'Chrono Trigger (USA).sfc');
+      },
+    );
+
+    test('putMappingIfAbsent leaves an existing row untouched and returns '
+        'false', () async {
+      await RommSaveMapRepository.putMapping(
+        romname: 'Game.gba',
+        systemFolder: 'gba',
+        rommRomId: 12,
+        fsName: 'Game.gba',
+      );
+      final before = (await db.query('app_romm_rom_map')).single;
+
+      final written = await RommSaveMapRepository.putMappingIfAbsent(
+        romname: 'Game.gba',
+        systemFolder: 'gba',
+        rommRomId: 40,
+        fsName: 'Other.gba',
+      );
+
+      expect(written, isFalse);
+      final after = (await db.query('app_romm_rom_map')).single;
+      expect(after, before, reason: 'no column of the existing row changes');
+      expect(await RommSaveMapRepository.getRommRomId('Game.gba', 'gba'), 12);
+    });
+
+    test(
+      'putMappingIfAbsent is scoped by system folder like putMapping',
+      () async {
+        await RommSaveMapRepository.putMapping(
+          romname: 'Game.bin',
+          systemFolder: 'genesis',
+          rommRomId: 1,
+        );
+
+        final written = await RommSaveMapRepository.putMappingIfAbsent(
+          romname: 'Game.bin',
+          systemFolder: 'segacd',
+          rommRomId: 2,
+        );
+
+        expect(written, isTrue);
+        expect(
+          await RommSaveMapRepository.getRommRomId('Game.bin', 'genesis'),
+          1,
+        );
+        expect(
+          await RommSaveMapRepository.getRommRomId('Game.bin', 'segacd'),
+          2,
+        );
+      },
+    );
+
+    test('putMappingsIfAbsent counts only the rows it inserted', () async {
+      await RommSaveMapRepository.putMapping(
+        romname: 'Existing.sfc',
+        systemFolder: 'snes',
+        rommRomId: 100,
+      );
+
+      final inserted = await RommSaveMapRepository.putMappingsIfAbsent([
+        (
+          romname: 'New A.sfc',
+          systemFolder: 'snes',
+          rommRomId: 1,
+          fsName: null,
+        ),
+        (
+          romname: 'Existing.sfc',
+          systemFolder: 'snes',
+          rommRomId: 999,
+          fsName: 'Existing.sfc',
+        ),
+        (
+          romname: 'New B.sfc',
+          systemFolder: 'snes',
+          rommRomId: 2,
+          fsName: null,
+        ),
+      ]);
+
+      expect(inserted, 2);
+      expect(await RommSaveMapRepository.getRommRomId('New A.sfc', 'snes'), 1);
+      expect(await RommSaveMapRepository.getRommRomId('New B.sfc', 'snes'), 2);
+      expect(
+        await RommSaveMapRepository.getRommRomId('Existing.sfc', 'snes'),
+        100,
+        reason: 'the batch skips an existing row rather than replacing it',
+      );
+      expect(await db.query('app_romm_rom_map'), hasLength(3));
+    });
+
+    test('putMappingsIfAbsent with nothing to write touches nothing', () async {
+      expect(await RommSaveMapRepository.putMappingsIfAbsent(const []), 0);
+      expect(await db.query('app_romm_rom_map'), isEmpty);
+    });
+
+    test('a duplicate key inside one batch is written once', () async {
+      final inserted = await RommSaveMapRepository.putMappingsIfAbsent([
+        (romname: 'Dup.sfc', systemFolder: 'snes', rommRomId: 5, fsName: null),
+        (romname: 'Dup.sfc', systemFolder: 'snes', rommRomId: 6, fsName: null),
+      ]);
+
+      expect(inserted, 1);
+      expect(
+        await RommSaveMapRepository.getRommRomId('Dup.sfc', 'snes'),
+        5,
+        reason: 'first writer wins; the second is ignored, not replaced',
+      );
+    });
+
     test('putMapping replaces an existing mapping for the same key', () async {
       await RommSaveMapRepository.putMapping(
         romname: 'game.bin',

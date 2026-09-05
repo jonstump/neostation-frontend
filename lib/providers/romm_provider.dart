@@ -19,6 +19,7 @@ import '../services/romm_playtime_service.dart';
 import '../services/romm_service.dart';
 import '../services/storage_space_service.dart';
 import '../services/user_data_location_service.dart';
+import '../utils/romm_local_matcher.dart';
 import 'file_provider.dart';
 import 'romm_bulk_sync.dart';
 
@@ -1039,7 +1040,9 @@ class RommProvider extends ChangeNotifier {
     RommRom rom,
     List<String> romFolders,
   ) async {
-    final candidates = _existingRomNames(rom);
+    // The name rule is shared with the link paths (see RommLocalMatcher) so
+    // the "downloaded" badge and a written link can never disagree.
+    final candidates = RommLocalMatcher.candidateNames(rom);
     // A bundled multi-disc playlist keeps its own arbitrary basename, which the
     // name heuristics above can't reconstruct. If this ROM was downloaded here
     // before, the map recorded the exact on-disk indexed name (the .m3u) — use
@@ -1062,26 +1065,6 @@ class RommProvider extends ChangeNotifier {
       }
     }
     return null;
-  }
-
-  /// On-disk names that mark [rom] as already downloaded in a folder.
-  ///
-  /// A single-file ROM lands as its [RommRom.fsName]. A multi-disc ROM is
-  /// served as a zip that [extractMultiDiscZip] unpacks into disc files plus a
-  /// `.m3u` playlist and then deletes — so the fsName itself never exists on
-  /// disk; only the playlist does. We match the playlist names that extraction
-  /// would produce: the synthesised fallback (`<fsName>.m3u`) and, defensively,
-  /// the extension-replaced variant. (A bundled playlist keeps its own basename
-  /// which we can't predict here, so those re-download; the common synthesised
-  /// case is covered.)
-  List<String> _existingRomNames(RommRom rom) {
-    final names = <String>[rom.fsName];
-    if (rom.isMultiFile) {
-      names.add('${rom.fsName}.m3u');
-      final stem = p.basenameWithoutExtension(rom.fsName);
-      if (stem.isNotEmpty && stem != rom.fsName) names.add('$stem.m3u');
-    }
-    return names;
   }
 
   /// True when a file named after [rom] already exists in a configured folder.
