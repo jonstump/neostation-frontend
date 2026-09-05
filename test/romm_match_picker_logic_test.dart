@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:neostation/models/romm_metadata_fetch.dart';
 import 'package:neostation/models/romm_rom.dart';
 import 'package:neostation/models/romm_rom_page.dart';
 import 'package:neostation/repositories/romm_save_map_repository.dart';
@@ -10,10 +11,13 @@ import 'package:neostation/screens/game_screen/game_settings_dialog/romm_match_p
 /// and "Error Handling Standards") against hand-written fakes: the search is
 /// scoped to the platform ids the system resolves to, a burst of keystrokes
 /// costs one request, confirm writes a manual row keyed by the on-disk
-/// filename and invalidates the game's sync state exactly once, cancelling
-/// writes nothing, and a failed search is reported and retryable.
+/// filename, invalidates the game's sync state exactly once and then runs
+/// exactly one fill-gaps metadata fetch (SPEC-0005 "Fill Gaps On Link
+/// Confirm"), cancelling writes nothing, and a failed search is reported and
+/// retryable.
 
 // Governing: ADR-0004 (manual link provenance), SPEC-0004 REQ "Link Picker Dialog"
+// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Fill Gaps On Link Confirm"
 
 RommRom _rom(int id, String fsName, {int platformId = 1, String? name}) =>
     RommRom(
@@ -40,9 +44,18 @@ class _Fakes {
   final searches = <_SearchCall>[];
   final writes = <_WriteCall>[];
   final invalidations = <String>[];
+  final fetches = <RommRom>[];
+
+  /// Every side effect of confirm, in the order it happened.
+  final events = <String>[];
   List<int> platformIds = const [3, 7];
   RommSaveMapping? mapping;
   bool writeResult = true;
+  bool fetchThrows = false;
+  RommMetadataOutcome fetchOutcome = const RommMetadataOutcome(
+    kind: RommMetadataOutcomeKind.filled,
+    columnsWritten: 1,
+  );
   Future<RommRomPage> Function(String search) answer = (_) async =>
       RommRomPage(items: [_rom(40, 'Chrono Trigger (USA).sfc')]);
 
@@ -82,9 +95,19 @@ class _Fakes {
             rommRomId: rommRomId,
             fsName: fsName,
           ));
+          events.add('write');
           return writeResult;
         },
-    invalidateSyncState: invalidations.add,
+    invalidateSyncState: (romname) {
+      invalidations.add(romname);
+      events.add('invalidate');
+    },
+    fetchMetadata: (rom) async {
+      fetches.add(rom);
+      events.add('fetch');
+      if (fetchThrows) throw StateError('server down');
+      return fetchOutcome;
+    },
     preselected: preselected,
     debounce: debounce,
   );
@@ -123,6 +146,7 @@ void main() {
     test('current link is read for the check mark', () async {
       final fakes = _Fakes()
         ..mapping = (
+          romname: 'ct-final.sfc',
           rommRomId: 12,
           fsName: 'old.sfc',
           source: RommLinkSource.auto,
@@ -207,7 +231,41 @@ void main() {
       },
     );
 
-    test('a refused write invalidates nothing and reports false', () async {
+    // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Fill Gaps On Link Confirm"
+    test(
+      'runs exactly one fill-gaps fetch, after the row is written',
+      () async {
+        final fakes = _Fakes();
+        final c = fakes.controller();
+        await c.init('ct-final');
+
+        final ok = await c.confirm(_rom(40, 'Chrono Trigger (USA).sfc'));
+
+        expect(ok, isTrue);
+        expect(fakes.fetches.map((r) => r.id), [40]);
+        expect(fakes.events, ['write', 'invalidate', 'fetch']);
+        expect(c.lastFetchOutcome?.kind, RommMetadataOutcomeKind.filled);
+        c.dispose();
+      },
+    );
+
+    test(
+      'a fetch that throws is a failed outcome, not a failed link',
+      () async {
+        final fakes = _Fakes()..fetchThrows = true;
+        final c = fakes.controller();
+        await c.init('ct-final');
+
+        expect(await c.confirm(_rom(40, 'x.sfc')), isTrue);
+        expect(fakes.fetches, hasLength(1));
+        expect(c.currentRomId, 40);
+        expect(c.lastFetchOutcome?.kind, RommMetadataOutcomeKind.failed);
+        expect(c.lastFetchOutcome?.error, isA<RommMetadataFetchException>());
+        c.dispose();
+      },
+    );
+
+    test('a refused write invalidates nothing, fetches nothing', () async {
       final fakes = _Fakes()..writeResult = false;
       final c = fakes.controller();
       await c.init('ct-final');
@@ -215,6 +273,8 @@ void main() {
       expect(await c.confirm(_rom(40, 'x.sfc')), isFalse);
       expect(fakes.writes, hasLength(1));
       expect(fakes.invalidations, isEmpty);
+      expect(fakes.fetches, isEmpty);
+      expect(c.lastFetchOutcome, isNull);
       expect(c.currentRomId, isNull);
       c.dispose();
     });
@@ -288,6 +348,7 @@ void main() {
         readMapping: () async => null,
         writeMapping: fakes.controller().writeMapping,
         invalidateSyncState: fakes.invalidations.add,
+        fetchMetadata: fakes.controller().fetchMetadata,
       );
       await c.init('ct-final');
 

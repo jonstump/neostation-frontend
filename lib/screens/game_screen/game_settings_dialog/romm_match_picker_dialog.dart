@@ -6,8 +6,10 @@ import 'package:provider/provider.dart';
 
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/models/game_model.dart';
+import 'package:neostation/models/romm_metadata_fetch.dart';
 import 'package:neostation/models/romm_rom.dart';
 import 'package:neostation/models/system_model.dart';
+import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/providers/romm_provider.dart';
 import 'package:neostation/repositories/romm_save_map_repository.dart';
 import 'package:neostation/screens/game_screen/game_settings_dialog/romm_match_picker_controller.dart';
@@ -92,6 +94,7 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
 
     final rommProvider = context.read<RommProvider>();
     final service = rommProvider.service;
+    final fileProvider = context.read<FileProvider>();
     _controller = RommMatchPickerController(
       linkKey: rommLinkKeyFor(
         romPath: widget.game.romPath,
@@ -117,6 +120,22 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
       ),
       writeMapping: RommSaveMapRepository.putManualMapping,
       invalidateSyncState: _invalidateSyncState,
+      // Fill-gaps only: a hand-picked link must never replace metadata the
+      // user scraped, edited, or imported. Art that landed is picked up by
+      // the same debounced settle a download arms.
+      // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Fill Gaps On Link Confirm"
+      fetchMetadata: (_) async {
+        final outcome = await rommProvider.fetchMetadata(
+          game: widget.game,
+          system: widget.system,
+          mode: RommMetadataMode.fillGaps,
+          fileProvider: fileProvider,
+        );
+        if (outcome.mediaWritten > 0) {
+          rommProvider.scheduleLibraryRefresh(widget.system);
+        }
+        return outcome;
+      },
       preselected: widget.preselectedRom,
     )..addListener(_onControllerChanged);
 
