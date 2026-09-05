@@ -960,6 +960,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommSearch: '検索',
   AppLocale.rommDownloading: 'ダウンロード中...',
   AppLocale.rommDownloaded: 'ダウンロード済み',
+  AppLocale.rommLinked: 'RomM にリンクしました',
   AppLocale.rommDownloadComplete: 'ダウンロード完了',
   AppLocale.rommDownloadFailed: 'ダウンロードに失敗しました',
   AppLocale.rommDownloadCancelled: 'ダウンロードをキャンセルしました',
@@ -976,6 +977,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommSyncConfirmPlan:
       '{count} 本のゲームをダウンロードします（{size}）。時間がかかる場合があります。',
   AppLocale.rommSyncConfirmSkipped: '{count} 本はすでにこのデバイスにあります。',
+  AppLocale.rommSyncConfirmLinked: '{count} 本を RomM にリンクしました。',
   AppLocale.rommSyncConfirmFree: '空き容量 {free}。',
   AppLocale.rommSyncConfirmNoSpace: '空き容量が足りません: {size} 必要ですが、空きは {free} だけです。',
   AppLocale.rommSyncConfirmVolumeFree: '{volume}: {size} 必要、空き容量 {free}。',
@@ -987,6 +989,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommSyncComplete: '{count} 本を同期しました',
   AppLocale.rommSyncCancelled: '同期をキャンセルしました',
   AppLocale.rommSyncNothingToDo: 'すべてダウンロード済みです',
+  AppLocale.rommSyncLinkedCount: '{count} 本を RomM にリンクしました',
   AppLocale.rommSyncFailedCount: '{count} 件が失敗しました',
   AppLocale.searchTitle: '検索',
   AppLocale.searchNameHint: '検索...',

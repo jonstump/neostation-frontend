@@ -1053,6 +1053,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rommSearch: 'Search',
   AppLocale.rommDownloading: 'Downloading...',
   AppLocale.rommDownloaded: 'Downloaded',
+  AppLocale.rommLinked: 'Linked to RomM',
   AppLocale.rommDownloadComplete: 'Download complete',
   AppLocale.rommDownloadFailed: 'Download failed',
   AppLocale.rommDownloadCancelled: 'Download cancelled',
@@ -1069,6 +1070,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rommSyncConfirmPlan:
       'Downloads {count} games ({size}). This can take a long time.',
   AppLocale.rommSyncConfirmSkipped: '{count} already on this device.',
+  AppLocale.rommSyncConfirmLinked: '{count} linked to RomM.',
   AppLocale.rommSyncConfirmFree: '{free} free.',
   AppLocale.rommSyncConfirmNoSpace:
       'Not enough space: needs {size}, only {free} free.',
@@ -1082,6 +1084,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rommSyncComplete: 'Synced {count} games',
   AppLocale.rommSyncCancelled: 'Sync cancelled',
   AppLocale.rommSyncNothingToDo: 'Everything is already downloaded',
+  AppLocale.rommSyncLinkedCount: 'Linked {count} games to RomM',
   AppLocale.rommSyncFailedCount: '{count} failed',
   AppLocale.searchTitle: 'Search',
   AppLocale.searchNameHint: 'Search...',
