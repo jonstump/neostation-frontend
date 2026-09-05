@@ -31,6 +31,8 @@ import '../../providers/sqlite_config_provider.dart';
 import '../../providers/collections_provider.dart';
 import '../../providers/sqlite_database_provider.dart';
 import '../../providers/scraping_provider.dart';
+import '../../providers/neo_sync_provider.dart';
+import '../../repositories/neosync_save_folder_repository.dart';
 import '../../models/system_model.dart';
 import '../../models/game_model.dart';
 import '../../utils/rom_tree.dart';
@@ -283,6 +285,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
   String? _lastGameViewMode; // Memoizes 'gameViewMode' config state.
   bool _isGameLaunching =
       false; // Critical flag to suppress media tasks during transitions.
+  bool _standaloneSyncTriggered = false;
 
   // Task orchestration timers.
   Timer? _saveDetectionTimer;
@@ -358,6 +361,12 @@ class _SystemGamesListState extends State<SystemGamesList> {
     _loadGames();
     _initializeGamepad();
 
+    // When a real system is opened, auto-sync any configured standalone save
+    // folder for it (ARMSX2, DuckStation, ...) so its saves stay current.
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _maybeSyncStandaloneFolders(),
+    );
+
     // Attach persistent listeners to global providers.
     _databaseProvider = context.read<SqliteDatabaseProvider>();
     _databaseProvider.addListener(_onDatabaseUpdated);
@@ -380,6 +389,39 @@ class _SystemGamesListState extends State<SystemGamesList> {
     if (Platform.isAndroid) {
       _secondaryDisplayState = SecondaryDisplayState.instance;
       _secondaryDisplayState!.addListener(_onSecondaryDisplayChanged);
+    }
+  }
+
+  /// Auto-syncs any configured standalone save folder for the opened system.
+  ///
+  /// Runs once per screen instance, only for a real system (not the "All",
+  /// "Favourites" or collection views) and only when NeoSync is authenticated.
+  /// Each configured folder for the system is synced so its standalone
+  /// emulator's saves stay current when the user enters the system.
+  Future<void> _maybeSyncStandaloneFolders() async {
+    if (_standaloneSyncTriggered) return;
+    _standaloneSyncTriggered = true;
+
+    final folderName = widget.system.folderName;
+    if (folderName.isEmpty) {
+      return;
+    }
+
+    try {
+      final folders = await NeoSyncSaveFolderRepository.getFoldersForSystem(
+        folderName,
+      );
+      if (folders.isEmpty) return;
+      if (!mounted) return;
+
+      final provider = context.read<NeoSyncProvider>();
+      if (!provider.isNeoSyncAuthenticated) return;
+
+      for (final entry in folders.entries) {
+        await provider.syncCustomSaveFolder(folderName, entry.key);
+      }
+    } catch (e) {
+      // Non-fatal: a failed auto-sync must never block the games list.
     }
   }
 

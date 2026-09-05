@@ -113,7 +113,7 @@ extension NeoSyncDownload on NeoSyncProvider {
               cloudFile.uploadedAt.isAfter(await localFile.lastModified())) {
             await _downloadCloudFileImpl(cloudFile, localFile);
             _downloadedFiles++;
-            _processedItems.add('Custom save: ${cloudFile.fileName}');
+            _processedItems.add('Standalone save: ${cloudFile.fileName}');
           } else {
             NeoSyncProvider._log.i(
               'Download: shared already current ${cloudFile.fileName}',
@@ -130,7 +130,7 @@ extension NeoSyncDownload on NeoSyncProvider {
         );
         _skippedFiles++;
         _processedItems.add(
-          'Skipped shared cloud file (no custom folder): ${cloudFile.fileName}',
+          'Skipped cloud file (no standalone folder): ${cloudFile.fileName}',
         );
         return;
       }
@@ -371,7 +371,7 @@ extension NeoSyncDownload on NeoSyncProvider {
       );
       _skippedFiles++;
       _processedItems.add(
-        'Skipped shared cloud file (no custom folder): ${cloudFile.fileName}',
+        'Skipped cloud file (no standalone folder): ${cloudFile.fileName}',
       );
       return;
     }

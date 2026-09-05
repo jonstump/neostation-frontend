@@ -470,7 +470,7 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.storageLabel: 'Speicher',
   AppLocale.lastSyncedSave: 'Zuletzt synchronisierter Spielstand',
   AppLocale.saveListMenu: 'Speicherliste',
-  AppLocale.customSaveFoldersMenu: 'Benutzerdefinierte Speicherordner',
+  AppLocale.customSaveFoldersMenu: 'Standalone-Speicherordner',
   AppLocale.updateYourPlanMenu: 'Plan aktualisieren',
   AppLocale.customFoldersSubtitle:
       'Füge einen benutzerdefinierten Ordner von einem eigenständigen Emulator hinzu, damit auch seine Spielstände synchronisiert werden.',
@@ -737,10 +737,8 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.noMottoSet: 'Kein Motto festgelegt',
   AppLocale.contributions: 'Beiträge',
   AppLocale.aotw: 'Erfolg der Woche',
-  AppLocale.players: 'Spieler',
   AppLocale.achievementLabel: 'Erfolg: {title}',
   AppLocale.unlocks: 'Freischaltungen',
-  AppLocale.couldNotLoadAOTW: 'Erfolg der Woche konnte nicht geladen werden',
   AppLocale.recentlyPlayed: 'Zuletzt gespielt',
   AppLocale.achivs: 'Erf.',
   AppLocale.noRecentGames: 'Keine zuletzt gespielten Spiele',
@@ -1090,6 +1088,7 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.rommNoCollections: 'Keine Sammlungen gefunden',
   AppLocale.rommNoRoms: 'Keine ROMs gefunden',
   AppLocale.rommSearch: 'Suchen',
+  AppLocale.rommSearching: 'RomM wird durchsucht...',
   AppLocale.rommDownloading: 'Wird heruntergeladen...',
   AppLocale.rommDownloaded: 'Heruntergeladen',
   AppLocale.rommLinked: 'Mit RomM verknüpft',
@@ -1175,11 +1174,7 @@ const Map<String, dynamic> appLocaleDe = {
 
   AppLocale.raCompletionsLabel: 'Abschlüsse',
   AppLocale.raMasteriesLabel: 'Meisterungen',
-  AppLocale.raEarned: 'Verdient',
-  AppLocale.raOwned: 'Im Besitz',
   AppLocale.raPointsAbbrev: 'Pkt.',
-  AppLocale.raAlreadyEarned: 'Du hast diesen Erfolg bereits verdient',
-  AppLocale.raTapToOpenLocalGame: 'Tippe, um lokale Spieldetails zu öffnen',
   AppLocale.raRecentUnlocks: 'Neueste Freischaltungen',
   AppLocale.raRecentCompletions: 'Neueste Abschlüsse',
   AppLocale.raRecentMasteries: 'Neueste Meisterungen',
@@ -1207,9 +1202,25 @@ const Map<String, dynamic> appLocaleDe = {
       'Keine kürzlichen Freischaltungen in den letzten 30 Tagen',
   AppLocale.raRecentlyPlayedTitle: 'Kürzlich Gespielt',
   AppLocale.raNoRecentlyPlayed: 'Keine kürzlich gespielten Spiele',
+  AppLocale.raAotwNoActive: 'Derzeit kein Erfolg der Woche',
+  AppLocale.raAotwEarnedHardcore: 'Diese Woche verdient · Hardcore',
+  AppLocale.raAotwEarnedCasual: 'Diese Woche verdient · Locker',
+  AppLocale.raAotwEarnedPreviously: 'Vor dieser Woche verdient',
+  AppLocale.raAotwNotEarned: 'Diese Woche nicht verdient',
+  AppLocale.raAotwStatusUnavailable: 'Persönlicher Status nicht verfügbar',
+  AppLocale.raAotwNotInLibrary: 'Nicht in deiner Bibliothek',
+  AppLocale.raAotwWeekStarted: 'Woche begann am {date}',
+  AppLocale.raAotwTrueRatio: 'True Ratio',
+  AppLocale.raAotwParticipation:
+      '{unlocks} von {players} Spielern · {percent} %',
+  AppLocale.raAotwOpenLocalGame: 'Lokales Spiel öffnen',
+  AppLocale.raAotwDownloadFromRomm: 'Von RomM herunterladen',
+  AppLocale.raGamesPlayed: '{count} Spiele gespielt',
+  AppLocale.raAchievementProgress: '{earned}/{total} Erfolge',
+  AppLocale.raRecent30Days: '30 Tage',
 
   // Custom save folders (NeoSync v2)
-  AppLocale.customSaveFoldersTitle: 'Benutzerdefinierte Spielstandordner',
+  AppLocale.customSaveFoldersTitle: 'Standalone-Spielstandordner',
   AppLocale.customSaveFolderPickSystem: 'System auswählen',
   AppLocale.customSaveFolderPickEmulator: 'Emulator auswählen',
   AppLocale.customSaveFolderSelect: 'Ordner auswählen',
@@ -1219,11 +1230,11 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.customSaveFolderInvalid: 'Der ausgewählte Ordner existiert nicht',
   AppLocale.removeCustomFolder: 'Ordner Entfernen',
   AppLocale.removeCustomFolderConfirm:
-      'Diesen benutzerdefinierten Speicherordner entfernen? Lokale Dateien werden nicht gelöscht, nur von der Synchronisierung entkoppelt.',
+      'Diesen Standalone Speicherordner entfernen? Lokale Dateien werden nicht gelöscht, nur von der Synchronisierung entkoppelt.',
   AppLocale.uploadingCustomFolder:
       'Spielstände aus {folder} werden hochgeladen...',
   AppLocale.customFolderUploadComplete:
-      'Benutzerdefinierter Ordner synchronisiert: {uploaded} hochgeladen, {skipped} bereits aktuell',
+      'Standaloner Ordner synchronisiert: {uploaded} hochgeladen, {skipped} bereits aktuell',
   AppLocale.customFolderUploadFailed:
       'Synchronisierung des benutzerdefinierten Ordners fehlgeschlagen',
   AppLocale.customSaveFoldersMigrate:

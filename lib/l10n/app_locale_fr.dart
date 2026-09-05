@@ -475,11 +475,11 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.storageLabel: 'Stockage',
   AppLocale.lastSyncedSave: 'Dernière sauvegarde synchronisée',
   AppLocale.saveListMenu: 'Liste des Sauvegardes',
-  AppLocale.customSaveFoldersMenu: 'Dossiers de Sauvegarde Personnalisés',
+  AppLocale.customSaveFoldersMenu: 'Dossiers de Sauvegarde Standalone',
   AppLocale.updateYourPlanMenu: 'Mettre à Jour Votre Plan',
   AppLocale.customFoldersSubtitle:
       'Ajoutez un dossier personnalisé depuis un émulateur autonome pour synchroniser aussi ses sauvegardes.',
-  AppLocale.noCustomFoldersConfigured: 'Aucun dossier personnalisé configuré',
+  AppLocale.noCustomFoldersConfigured: 'Aucun dossier standalone configuré',
   AppLocale.foldersConfigured: '{count} configurés',
   AppLocale.searchSavesHint: 'Rechercher des sauvegardes...',
   AppLocale.filterAll: 'Tous',
@@ -743,10 +743,8 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.noMottoSet: 'Aucune devise définie',
   AppLocale.contributions: 'Contributions',
   AppLocale.aotw: 'Succès de la Semaine',
-  AppLocale.players: 'joueurs',
   AppLocale.achievementLabel: 'Succès : {title}',
   AppLocale.unlocks: 'déblocages',
-  AppLocale.couldNotLoadAOTW: 'Échec du chargement du Succès de la Semaine',
   AppLocale.recentlyPlayed: 'Joués Récemment',
   AppLocale.achivs: 'Succès',
   AppLocale.noRecentGames: 'Aucun jeu joué récemment',
@@ -1094,6 +1092,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.rommNoCollections: 'Aucune collection trouvée',
   AppLocale.rommNoRoms: 'Aucune ROM trouvée',
   AppLocale.rommSearch: 'Rechercher',
+  AppLocale.rommSearching: 'Recherche dans RomM...',
   AppLocale.rommDownloading: 'Téléchargement...',
   AppLocale.rommDownloaded: 'Téléchargé',
   AppLocale.rommLinked: 'Lié à RomM',
@@ -1178,12 +1177,7 @@ const Map<String, dynamic> appLocaleFr = {
 
   AppLocale.raCompletionsLabel: 'Complétions',
   AppLocale.raMasteriesLabel: 'Maîtrises',
-  AppLocale.raEarned: 'Obtenus',
-  AppLocale.raOwned: 'Possédés',
   AppLocale.raPointsAbbrev: 'pts',
-  AppLocale.raAlreadyEarned: 'Vous avez déjà obtenu ce succès',
-  AppLocale.raTapToOpenLocalGame:
-      'Appuyez pour ouvrir les détails du jeu local',
   AppLocale.raRecentUnlocks: 'Déblocages Récents',
   AppLocale.raRecentCompletions: 'Complétions Récentes',
   AppLocale.raRecentMasteries: 'Maîtrises Récentes',
@@ -1212,9 +1206,25 @@ const Map<String, dynamic> appLocaleFr = {
       'Aucun déblocage récent au cours des 30 derniers jours',
   AppLocale.raRecentlyPlayedTitle: 'Joués Récemment',
   AppLocale.raNoRecentlyPlayed: 'Aucun jeu joué récemment',
+  AppLocale.raAotwNoActive: 'Aucun succès de la semaine en cours',
+  AppLocale.raAotwEarnedHardcore: 'Obtenu cette semaine · Hardcore',
+  AppLocale.raAotwEarnedCasual: 'Obtenu cette semaine · Casual',
+  AppLocale.raAotwEarnedPreviously: 'Obtenu avant cette semaine',
+  AppLocale.raAotwNotEarned: 'Non obtenu cette semaine',
+  AppLocale.raAotwStatusUnavailable: 'Statut personnel indisponible',
+  AppLocale.raAotwNotInLibrary: 'Absent de votre bibliothèque',
+  AppLocale.raAotwWeekStarted: 'Semaine commencée le {date}',
+  AppLocale.raAotwTrueRatio: 'True Ratio',
+  AppLocale.raAotwParticipation:
+      '{unlocks} joueurs sur {players} · {percent} %',
+  AppLocale.raAotwOpenLocalGame: 'Ouvrir le jeu local',
+  AppLocale.raAotwDownloadFromRomm: 'Télécharger depuis RomM',
+  AppLocale.raGamesPlayed: '{count} jeux joués',
+  AppLocale.raAchievementProgress: '{earned}/{total} succès',
+  AppLocale.raRecent30Days: '30 jours',
 
   // Custom save folders (NeoSync v2)
-  AppLocale.customSaveFoldersTitle: 'Dossiers de sauvegarde personnalisés',
+  AppLocale.customSaveFoldersTitle: 'Dossiers de sauvegarde standalone',
   AppLocale.customSaveFolderPickSystem: 'Choisir un système',
   AppLocale.customSaveFolderPickEmulator: 'Choisir un émulateur',
   AppLocale.customSaveFolderSelect: 'Sélectionner un dossier',
@@ -1224,11 +1234,11 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.customSaveFolderInvalid: 'Le dossier sélectionné n\'existe pas',
   AppLocale.removeCustomFolder: 'Supprimer le Dossier',
   AppLocale.removeCustomFolderConfirm:
-      'Supprimer ce dossier de sauvegarde personnalisé ? Ses fichiers locaux ne seront pas supprimés, seulement déliés de la synchronisation.',
+      'Supprimer ce dossier de sauvegarde standalone ? Ses fichiers locaux ne seront pas supprimés, seulement déliés de la synchronisation.',
   AppLocale.uploadingCustomFolder:
       'Téléversement des sauvegardes de {folder}...',
   AppLocale.customFolderUploadComplete:
-      'Dossier personnalisé synchronisé : {uploaded} téléversés, {skipped} déjà à jour',
+      'Dossier standalone synchronisé : {uploaded} téléversés, {skipped} déjà à jour',
   AppLocale.customFolderUploadFailed:
       'Échec de la synchronisation du dossier personnalisé',
   AppLocale.customSaveFoldersMigrate:
