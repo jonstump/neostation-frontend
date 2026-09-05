@@ -190,6 +190,7 @@ When orchestrating multiple SDD plugin skills in a single session (e.g., running
 - **SPEC-0002 Project**: 22 (https://github.com/users/jonstump/projects/22)
 - **SPEC-0003 Project**: 23 (https://github.com/users/jonstump/projects/23)
 - **SPEC-0004 Project**: 24 (https://github.com/users/jonstump/projects/24)
+- **SPEC-0005 Project**: 25 (https://github.com/users/jonstump/projects/25)
 
 #### Fork Rules
 - This repository is a fork of `misobadev/neostation-frontend`. Never open issues or PRs against upstream, and never push to the `upstream` remote (its push URL is disabled). All issues and PRs go to the fork above.
