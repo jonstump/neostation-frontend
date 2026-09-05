@@ -324,6 +324,7 @@ class DatabaseTestHelper {
         is_fully_scraped INTEGER DEFAULT 0,
         esde_media_subdir TEXT,
         esde_imported INTEGER DEFAULT 0,
+        metadata_source TEXT,
         updated_at TEXT,
         UNIQUE(app_system_id, filename)
       )

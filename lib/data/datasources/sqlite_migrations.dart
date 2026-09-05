@@ -614,6 +614,9 @@ class SqliteMigrations {
       case 158:
         await _migrateToVersion158(db);
         break;
+      case 159:
+        await _migrateToVersion159(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -7025,6 +7028,41 @@ class SqliteMigrations {
       _log.i('Migration v158 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v158: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v159: Adds `user_screenscraper_metadata.metadata_source`,
+  /// recording which writer produced a metadata row (`screenscraper`, `romm`,
+  /// `esde`, `steam`, or `manual`).
+  ///
+  /// Existing rows are left null: nothing in the row says which scraper or
+  /// importer wrote it, and no behaviour depends on a guessed value. Fill-gaps
+  /// writers set the column only when they insert a row; whole-row writers set
+  /// it on every write. Nullable and guarded by `PRAGMA table_info`, so a
+  /// re-run is a no-op.
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Metadata Source Provenance"
+  static Future<void> _migrateToVersion159(Database db) async {
+    _log.i(
+      'Migration v159: Adding metadata_source to user_screenscraper_metadata',
+    );
+    try {
+      final tableInfo = db.select(
+        'PRAGMA table_info(user_screenscraper_metadata)',
+      );
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('metadata_source')) {
+        db.execute(
+          'ALTER TABLE user_screenscraper_metadata ADD COLUMN metadata_source TEXT',
+        );
+        _log.i('Column metadata_source added via v159');
+      } else {
+        _log.i('Column metadata_source already exists');
+      }
+      _log.i('Migration v159 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v159: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

@@ -658,6 +658,7 @@ class ScreenScraperService {
       return await ScraperRepository.saveGameMetadata(
         metadata,
         appSystemId,
+        source: MetadataSource.screenscraper,
         isFullyScraped: isFullyScraped,
       );
     } catch (e) {
