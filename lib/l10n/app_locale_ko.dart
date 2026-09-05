@@ -1083,7 +1083,7 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.esdeResetSubtitle: '다시 가져올 수 있도록 가져온 메타데이터와 미디어 연결을 제거합니다',
   AppLocale.esdeResetComplete: 'ES-DE 가져오기 재설정',
   AppLocale.esdeResetConfirmBody:
-      '가져온 모든 ES-DE 메타데이터와 미디어 링크를 제거하고, 선택한 폴더 설정을 초기화합니다. 게임과 ROM 파일에는 영향을 주지 않습니다.',
+      'ES-DE 또는 ROM 폴더에서 가져온 모든 메타데이터와 미디어 링크를 제거하고, 선택한 ES-DE 폴더 설정을 초기화합니다. 게임과 ROM 파일에는 영향을 주지 않습니다.',
   AppLocale.esdeImportNotEsdeFolder: '이 폴더는 ES-DE 설치 폴더가 아닙니다(gamelists 없음)',
   AppLocale.esdeImportNothingFound: '가져올 일치하는 시스템이나 게임이 없습니다',
   AppLocale.esdeSummarySystemsMatched: '일치한 시스템',
@@ -1094,6 +1094,16 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.esdeSummaryStatsUpdated: '즐겨찾기 / 통계 업데이트',
   AppLocale.esdeSummaryGames: '게임',
   AppLocale.esdeSummarySystems: '시스템',
+  AppLocale.inFolderImport: 'ROM 폴더에서 메타데이터 가져오기',
+  AppLocale.inFolderImportSubtitle: 'ROM 폴더 안에 있는 gamelist.xml 파일과 아트워크를 사용합니다',
+  AppLocale.inFolderImporting: 'ROM 폴더에서 가져오는 중',
+  AppLocale.inFolderImportComplete: 'ROM 폴더 가져오기 완료',
+  AppLocale.inFolderImportNoGamelists: 'ROM 폴더에서 gamelist.xml 파일을 찾을 수 없습니다',
+  AppLocale.inFolderImportFoldersSkippedSaf:
+      '{count}개의 ROM 폴더가 실제 경로로 접근할 수 없어 건너뛰었습니다(Android 모든 파일 접근 권한 필요)',
+  AppLocale.inFolderSummarySystemsFound: '발견된 시스템',
+  AppLocale.inFolderSummaryMediaOnlyLinked: '미디어 전용 시스템 연결됨',
+  AppLocale.inFolderSummaryFoldersSkippedSaf: '건너뛴 폴더(실제 경로 접근 불가)',
 
   // Onboarding wizard
   AppLocale.wizardScanComplete: '스캔 완료',

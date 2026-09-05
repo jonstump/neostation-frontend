@@ -1211,7 +1211,7 @@ const Map<String, dynamic> appLocaleId = {
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
   AppLocale.esdeResetConfirmBody:
-      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+      'Ini menghapus semua metadata dan tautan media yang diimpor dari ES-DE atau dari folder ROM Anda, serta mengosongkan folder ES-DE yang dipilih. Game dan file ROM Anda tidak terpengaruh.',
   AppLocale.esdeImportNotEsdeFolder:
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
@@ -1224,6 +1224,19 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.esdeSummaryStatsUpdated: 'Favorit / statistik diperbarui',
   AppLocale.esdeSummaryGames: 'gim',
   AppLocale.esdeSummarySystems: 'sistem',
+  AppLocale.inFolderImport: 'Impor metadata dari folder ROM',
+  AppLocale.inFolderImportSubtitle:
+      'Gunakan file gamelist.xml dan artwork yang ada di dalam folder ROM Anda',
+  AppLocale.inFolderImporting: 'Mengimpor dari folder ROM',
+  AppLocale.inFolderImportComplete: 'Impor dari folder ROM selesai',
+  AppLocale.inFolderImportNoGamelists:
+      'Tidak ada file gamelist.xml yang ditemukan di folder ROM Anda',
+  AppLocale.inFolderImportFoldersSkippedSaf:
+      '{count} folder ROM dilewati karena tidak dapat diakses sebagai path asli (memerlukan akses semua file di Android)',
+  AppLocale.inFolderSummarySystemsFound: 'Sistem ditemukan',
+  AppLocale.inFolderSummaryMediaOnlyLinked: 'Sistem hanya-media yang ditautkan',
+  AppLocale.inFolderSummaryFoldersSkippedSaf:
+      'Folder dilewati (tanpa akses path asli)',
   AppLocale.wizardScanComplete: 'Pemindaian selesai',
   AppLocale.wizardTapNextToContinue: 'Ketuk Berikutnya untuk melanjutkan',
   AppLocale.wizardEsdeStepTitle: 'Impor dari ES-DE',

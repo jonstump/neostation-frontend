@@ -6,6 +6,7 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/widgets/confirm_action_dialog.dart';
+import 'package:neostation/widgets/info_dialog.dart';
 import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/services/esde_import_service.dart';
@@ -24,6 +25,7 @@ import 'package:neostation/widgets/tv_directory_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/utils/adaptive_scroll.dart';
+import 'in_folder_import_summary.dart';
 import 'settings_title.dart';
 import 'widgets/settings_section_header.dart';
 import 'widgets/settings_action_button.dart';
@@ -73,6 +75,10 @@ class DirectoriesSettingsContentState
   double _importProgress = 0.0;
   String _importLabel = '';
   EsdeImportResult? _lastEsdeResult;
+
+  /// True while the running import is the in-folder (ROM folder) one, so
+  /// the shared progress panel can title itself accordingly.
+  bool _importingInFolder = false;
 
   static final _log = LoggerService.instance;
 
@@ -154,6 +160,15 @@ class DirectoriesSettingsContentState
       'subtitle': AppLocale.esdeResetSubtitle,
       'action': 'esde_reset',
     });
+    // In-folder import: gamelist.xml + artwork found inside the ROM folders
+    // themselves (RomM export / Batocera layout). Appended after the ES-DE
+    // rows so their gamepad indices are unchanged; it shares the section's
+    // ROM-folder gate but needs no ES-DE folder.
+    _directoryItems.add({
+      'title': AppLocale.inFolderImport,
+      'subtitle': AppLocale.inFolderImportSubtitle,
+      'action': 'import_rom_folders',
+    });
   }
 
   // Index of the first ES-DE item in [_directoryItems]; used to insert the
@@ -168,6 +183,7 @@ class DirectoriesSettingsContentState
     'esde_select_folder',
     'esde_run_import',
     'esde_reset',
+    'import_rom_folders',
   };
 
   /// Whether an ES-DE action is currently disabled. Requires a ROM directory
@@ -226,6 +242,9 @@ class DirectoriesSettingsContentState
         break;
       case 'esde_reset':
         await _resetEsdeImport();
+        break;
+      case 'import_rom_folders':
+        await _runInFolderImport();
         break;
     }
   }
@@ -326,6 +345,7 @@ class DirectoriesSettingsContentState
 
     setState(() {
       _isImporting = true;
+      _importingInFolder = false;
       _importProgress = 0.0;
       _importLabel = '';
       _lastEsdeResult = null;
@@ -422,6 +442,176 @@ class DirectoriesSettingsContentState
       _isImporting = false;
       _lastEsdeResult = showSummary ? result : null;
     });
+  }
+
+  /// Runs the in-folder import over the configured ROM folders. Mirrors
+  /// [_runEsdeImport]: same inline progress panel and global notification,
+  /// then a summary the user dismisses with A/B. The row is gated on at least
+  /// one ROM folder, so an empty list here is only a defensive no-op.
+  // Governing: ADR-0002 (in-folder gamelist import), SPEC-0002 REQ "Import Entry Point and Results"
+  Future<void> _runInFolderImport() async {
+    if (_isImporting) return;
+    final romFolders = List<String>.from(_currentRomFolders);
+    if (romFolders.isEmpty) return;
+
+    const notificationId = 'in_folder_import_progress';
+
+    // Resolve strings before the async import so the progress callback (which
+    // may run after this screen was left) can use them safely.
+    final localeImporting = AppLocale.inFolderImporting.getString(context);
+    final localeComplete = AppLocale.inFolderImportComplete.getString(context);
+    final localeNoGamelists = AppLocale.inFolderImportNoGamelists.getString(
+      context,
+    );
+    final localeFoldersSkipped = AppLocale.inFolderImportFoldersSkippedSaf
+        .getString(context);
+    final localeNothingFound = AppLocale.esdeImportNothingFound.getString(
+      context,
+    );
+    final localeGames = AppLocale.esdeSummaryGames.getString(context);
+    final localeSystems = AppLocale.esdeSummarySystems.getString(context);
+
+    setState(() {
+      _isImporting = true;
+      _importingInFolder = true;
+      _importProgress = 0.0;
+      _importLabel = '';
+      _lastEsdeResult = null;
+    });
+
+    GlobalNotificationService().show(
+      id: notificationId,
+      message: localeImporting,
+      type: GlobalNotificationType.info,
+      progress: 0,
+      ongoing: true,
+    );
+
+    EsdeImportResult? result;
+    String? error;
+    try {
+      result = await EsdeImportService.importInFolder(
+        romFolders,
+        onProgress: (p, label) {
+          if (mounted) {
+            setState(() {
+              _importProgress = p;
+              _importLabel = label;
+            });
+          }
+          GlobalNotificationService().update(
+            id: notificationId,
+            message: label.isEmpty
+                ? localeImporting
+                : '$localeImporting: $label',
+            type: GlobalNotificationType.info,
+            progress: p,
+            ongoing: true,
+          );
+        },
+      );
+      // Rebuild the fallback map now that esde_media_root rows exist.
+      if (mounted) await context.read<FileProvider>().refreshEsde();
+    } catch (e) {
+      error = e.toString();
+      _log.e('in-folder import failed: $e');
+    }
+
+    // Report the outcome through the global notification so the header
+    // dropdown reflects it even if this screen was left mid-import.
+    if (error != null) {
+      GlobalNotificationService().update(
+        id: notificationId,
+        message: error,
+        type: GlobalNotificationType.error,
+        progress: null,
+      );
+    } else if (result != null) {
+      switch (inFolderSummaryKind(result)) {
+        case InFolderSummaryKind.foldersSkippedSaf:
+          GlobalNotificationService().update(
+            id: notificationId,
+            message: localeFoldersSkipped.replaceFirst(
+              '{count}',
+              '${result.foldersSkippedSaf}',
+            ),
+            type: GlobalNotificationType.error,
+            progress: null,
+          );
+        case InFolderSummaryKind.noGamelistsFound:
+          GlobalNotificationService().update(
+            id: notificationId,
+            message: localeNoGamelists,
+            type: GlobalNotificationType.info,
+            progress: null,
+          );
+        case InFolderSummaryKind.counts:
+          final imported =
+              result.gamesImported > 0 ||
+              result.systemsMatched > 0 ||
+              result.mediaOnlyLinked > 0;
+          GlobalNotificationService().update(
+            id: notificationId,
+            message: imported
+                ? '$localeComplete: '
+                      '${result.gamesImported} $localeGames, '
+                      '${result.systemsMatched} $localeSystems'
+                : localeNothingFound,
+            type: imported
+                ? GlobalNotificationType.success
+                : GlobalNotificationType.info,
+            progress: null,
+          );
+      }
+    }
+
+    if (!mounted) return;
+    // Unlike the ES-DE path, every completed in-folder run keeps its summary:
+    // a skipped-SAF or no-gamelists outcome is exactly what the user needs to
+    // see explained, not a zeroed box to hide.
+    setState(() {
+      _isImporting = false;
+      _lastEsdeResult = error == null ? result : null;
+    });
+    if (error != null || result == null) return;
+
+    // Controller-dismissable summary (A or B closes it); the inline panel
+    // stays as the persistent record until the next import or reset.
+    await InfoDialog.show(
+      context,
+      title: localeComplete,
+      body: _inFolderSummaryText(result),
+      okLabel: AppLocale.ok.getString(context),
+      icon: Symbols.drive_folder_upload_rounded,
+    );
+  }
+
+  /// Summary body for an in-folder result, shared by the inline panel and
+  /// the completion dialog. Branches on [inFolderSummaryKind] so an all-SAF
+  /// run is never worded as "no gamelists found".
+  String _inFolderSummaryText(EsdeImportResult r) {
+    switch (inFolderSummaryKind(r)) {
+      case InFolderSummaryKind.foldersSkippedSaf:
+        return AppLocale.inFolderImportFoldersSkippedSaf
+            .getString(context)
+            .replaceFirst('{count}', '${r.foldersSkippedSaf}');
+      case InFolderSummaryKind.noGamelistsFound:
+        return AppLocale.inFolderImportNoGamelists.getString(context);
+      case InFolderSummaryKind.counts:
+        final lines = <String>[
+          '${AppLocale.inFolderSummarySystemsFound.getString(context)}: ${r.systemsFound}   '
+              '${AppLocale.esdeSummarySystemsMatched.getString(context)}: ${r.systemsMatched}   '
+              '${AppLocale.esdeSummaryUnmatched.getString(context)}: ${r.systemsUnmatched}   '
+              '${AppLocale.esdeSummarySkipped.getString(context)}: ${r.systemsSkipped}',
+          '${AppLocale.esdeSummaryGamesImported.getString(context)}: ${r.gamesImported}   '
+              '${AppLocale.esdeSummaryNoRomMatch.getString(context)}: ${r.gamesUnmatched}',
+          '${AppLocale.inFolderSummaryMediaOnlyLinked.getString(context)}: ${r.mediaOnlyLinked}',
+          '${AppLocale.esdeSummaryStatsUpdated.getString(context)}: ${r.statsUpdated}',
+          if (r.foldersSkippedSaf > 0)
+            '${AppLocale.inFolderSummaryFoldersSkippedSaf.getString(context)}: ${r.foldersSkippedSaf}',
+        ];
+        return lines.join('\n');
+    }
   }
 
   Future<void> _resetEsdeImport() async {
@@ -1077,6 +1267,13 @@ class DirectoriesSettingsContentState
                                           icon: Symbols.restart_alt_rounded,
                                           selected: isSelected,
                                           isDestructive: true,
+                                        )
+                                      else if (item['action'] ==
+                                          'import_rom_folders')
+                                        SettingsActionButton(
+                                          icon: Symbols
+                                              .drive_folder_upload_rounded,
+                                          selected: isSelected,
                                         ),
                                     ],
                                   ),
@@ -1163,6 +1360,8 @@ class DirectoriesSettingsContentState
         return Symbols.download_rounded;
       case 'esde_reset':
         return Symbols.restart_alt_rounded;
+      case 'import_rom_folders':
+        return Symbols.drive_folder_upload_rounded;
       default:
         return Symbols.folder_rounded;
     }
@@ -1221,7 +1420,10 @@ class DirectoriesSettingsContentState
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                AppLocale.esdeImporting.getString(context),
+                (_importingInFolder
+                        ? AppLocale.inFolderImporting
+                        : AppLocale.esdeImporting)
+                    .getString(context),
                 style: theme.textTheme.titleSmall?.copyWith(
                   fontWeight: FontWeight.bold,
                   fontSize: 10.r,
@@ -1271,6 +1473,15 @@ class DirectoriesSettingsContentState
   Widget _buildEsdeResultSummary(ThemeData theme) {
     final r = _lastEsdeResult;
     if (r == null || _isImporting) return const SizedBox.shrink();
+    final inFolder = r.mode == GamelistSourceMode.inFolder;
+    final body = inFolder
+        ? _inFolderSummaryText(r)
+        : '${AppLocale.esdeSummarySystemsMatched.getString(context)}: ${r.systemsMatched}   '
+              '${AppLocale.esdeSummaryUnmatched.getString(context)}: ${r.systemsUnmatched}   '
+              '${AppLocale.esdeSummarySkipped.getString(context)}: ${r.systemsSkipped}\n'
+              '${AppLocale.esdeSummaryGamesImported.getString(context)}: ${r.gamesImported}   '
+              '${AppLocale.esdeSummaryNoRomMatch.getString(context)}: ${r.gamesUnmatched}\n'
+              '${AppLocale.esdeSummaryStatsUpdated.getString(context)}: ${r.statsUpdated}';
     return Container(
       margin: EdgeInsets.only(bottom: 12.r),
       padding: EdgeInsets.all(12.r),
@@ -1282,7 +1493,10 @@ class DirectoriesSettingsContentState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            AppLocale.esdeImportComplete.getString(context),
+            (inFolder
+                    ? AppLocale.inFolderImportComplete
+                    : AppLocale.esdeImportComplete)
+                .getString(context),
             style: theme.textTheme.titleSmall?.copyWith(
               fontWeight: FontWeight.bold,
               fontSize: 11.r,
@@ -1291,12 +1505,7 @@ class DirectoriesSettingsContentState
           ),
           SizedBox(height: 4.r),
           Text(
-            '${AppLocale.esdeSummarySystemsMatched.getString(context)}: ${r.systemsMatched}   '
-            '${AppLocale.esdeSummaryUnmatched.getString(context)}: ${r.systemsUnmatched}   '
-            '${AppLocale.esdeSummarySkipped.getString(context)}: ${r.systemsSkipped}\n'
-            '${AppLocale.esdeSummaryGamesImported.getString(context)}: ${r.gamesImported}   '
-            '${AppLocale.esdeSummaryNoRomMatch.getString(context)}: ${r.gamesUnmatched}\n'
-            '${AppLocale.esdeSummaryStatsUpdated.getString(context)}: ${r.statsUpdated}',
+            body,
             style: theme.textTheme.bodySmall?.copyWith(
               fontSize: 9.5.r,
               color: theme.colorScheme.onSurface.withValues(alpha: 0.7),

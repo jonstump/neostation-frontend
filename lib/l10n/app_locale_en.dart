@@ -1197,7 +1197,7 @@ const Map<String, dynamic> appLocaleEn = {
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
   AppLocale.esdeResetConfirmBody:
-      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+      'This removes all metadata and media links imported from ES-DE or from your ROM folders, and clears the selected ES-DE folder. Your games and ROM files are not affected.',
   AppLocale.esdeImportNotEsdeFolder:
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
@@ -1210,6 +1210,19 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.esdeSummaryStatsUpdated: 'Favorites / stats updated',
   AppLocale.esdeSummaryGames: 'games',
   AppLocale.esdeSummarySystems: 'systems',
+  AppLocale.inFolderImport: 'Import metadata from ROM folders',
+  AppLocale.inFolderImportSubtitle:
+      'Use gamelist.xml files and artwork found inside your ROM folders',
+  AppLocale.inFolderImporting: 'Importing from ROM folders',
+  AppLocale.inFolderImportComplete: 'ROM folder import complete',
+  AppLocale.inFolderImportNoGamelists:
+      'No gamelist.xml files were found in your ROM folders',
+  AppLocale.inFolderImportFoldersSkippedSaf:
+      '{count} ROM folders were skipped because they are not accessible as real paths (Android all-files access required)',
+  AppLocale.inFolderSummarySystemsFound: 'Systems found',
+  AppLocale.inFolderSummaryMediaOnlyLinked: 'Media-only systems linked',
+  AppLocale.inFolderSummaryFoldersSkippedSaf:
+      'Folders skipped (no real path access)',
   AppLocale.wizardScanComplete: 'Scan complete',
   AppLocale.wizardTapNextToContinue: 'Tap Next to continue',
   AppLocale.wizardEsdeStepTitle: 'Import from ES-DE',

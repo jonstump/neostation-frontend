@@ -1074,7 +1074,7 @@ const Map<String, dynamic> appLocaleZhHant = {
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
   AppLocale.esdeResetConfirmBody:
-      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+      '這將移除從 ES-DE 或 ROM 資料夾匯入的所有中繼資料與媒體連結,並清除所選的 ES-DE 資料夾。您的遊戲與 ROM 檔案不受影響。',
   AppLocale.esdeImportNotEsdeFolder:
       'This folder is not an ES-DE installation (no gamelists found)',
   AppLocale.esdeImportNothingFound:
@@ -1087,6 +1087,16 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.esdeSummaryStatsUpdated: '我的最愛 / 統計已更新',
   AppLocale.esdeSummaryGames: '遊戲',
   AppLocale.esdeSummarySystems: '系統',
+  AppLocale.inFolderImport: '從 ROM 資料夾匯入中繼資料',
+  AppLocale.inFolderImportSubtitle: '使用 ROM 資料夾中的 gamelist.xml 檔案與圖片',
+  AppLocale.inFolderImporting: '正在從 ROM 資料夾匯入',
+  AppLocale.inFolderImportComplete: 'ROM 資料夾匯入完成',
+  AppLocale.inFolderImportNoGamelists: '在您的 ROM 資料夾中找不到 gamelist.xml 檔案',
+  AppLocale.inFolderImportFoldersSkippedSaf:
+      '已略過 {count} 個 ROM 資料夾,因為它們無法以真實路徑存取(Android 需要所有檔案存取權限)',
+  AppLocale.inFolderSummarySystemsFound: '找到的系統',
+  AppLocale.inFolderSummaryMediaOnlyLinked: '已連結的僅媒體系統',
+  AppLocale.inFolderSummaryFoldersSkippedSaf: '已略過的資料夾(無真實路徑存取權限)',
   AppLocale.wizardScanComplete: '掃描完成',
   AppLocale.wizardTapNextToContinue: '點按「下一步」繼續',
   AppLocale.wizardEsdeStepTitle: '從 ES-DE 匯入',
