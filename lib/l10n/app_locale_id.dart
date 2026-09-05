@@ -1319,4 +1319,32 @@ const Map<String, dynamic> appLocaleId = {
 
   // SPEC-0004 REQ "Link Picker Dialog" — results are for the cleaned query
   AppLocale.rommLinkPickerCleanedQuery: 'Menampilkan hasil untuk “{query}”',
+
+  // SPEC-0005 REQ "Per-Game Fetch Action" — Manage tab fetch row, mode
+  // chooser, and outcome notifications
+  AppLocale.rommFetchMetadataRow: 'Ambil metadata dari RomM',
+  AppLocale.rommFetchMetadataRowSubtitle:
+      'Lengkapi atau ganti metadata dan gambar game ini dari RomM',
+  AppLocale.rommFetchMetadataRowNotLinked:
+      'Tautkan game ini ke RomM terlebih dahulu',
+  AppLocale.rommFetchMetadataAction: 'Ambil',
+  AppLocale.rommFetchMetadataChooserTitle: 'Ambil metadata dari RomM',
+  AppLocale.rommFetchMetadataFillGapsOption: 'Isi yang kosong (disarankan)',
+  AppLocale.rommFetchMetadataFillGapsDescription:
+      'Hanya menulis kolom kosong dan gambar yang hilang. Semua yang sudah ada tetap dipertahankan.',
+  AppLocale.rommFetchMetadataReplaceOption: 'Ganti semua',
+  AppLocale.rommFetchMetadataReplaceDescription:
+      'Menimpa semua kolom dan gambar dengan data dari RomM. Deskripsi non-Inggris dihapus dan penerbit dibiarkan kosong, karena RomM tidak menyediakannya.',
+  AppLocale.rommFetchMetadataInProgress: 'Mengambil dari RomM…',
+  AppLocale.rommFetchMetadataFilled:
+      '{count} kolom dan {media} gambar diisi dari RomM',
+  AppLocale.rommFetchMetadataReplaced:
+      '{count} kolom dan {media} gambar diganti dari RomM',
+  AppLocale.rommFetchMetadataNothingToFill:
+      'Tidak ada yang perlu diisi: game ini sudah memiliki semua yang disediakan RomM',
+  AppLocale.rommFetchMetadataNotFound:
+      'Tidak ditemukan di RomM: ROM yang tertaut sudah tidak ada di sana',
+  AppLocale.rommFetchMetadataPartial:
+      '{count} kolom ditulis, tetapi {media} gambar gagal diunduh',
+  AppLocale.rommFetchMetadataFailed: 'Gagal mengambil metadata dari RomM',
 };

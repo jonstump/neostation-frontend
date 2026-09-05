@@ -1204,4 +1204,30 @@ const Map<String, dynamic> appLocaleKo = {
 
   // SPEC-0004 REQ "Link Picker Dialog" — results are for the cleaned query
   AppLocale.rommLinkPickerCleanedQuery: '“{query}” 검색 결과 표시 중',
+
+  // SPEC-0005 REQ "Per-Game Fetch Action" — Manage tab fetch row, mode
+  // chooser, and outcome notifications
+  AppLocale.rommFetchMetadataRow: 'RomM에서 메타데이터 가져오기',
+  AppLocale.rommFetchMetadataRowSubtitle:
+      '이 게임의 메타데이터와 아트워크를 RomM에서 채우거나 교체합니다',
+  AppLocale.rommFetchMetadataRowNotLinked: '먼저 이 게임을 RomM에 연결하세요',
+  AppLocale.rommFetchMetadataAction: '가져오기',
+  AppLocale.rommFetchMetadataChooserTitle: 'RomM에서 메타데이터 가져오기',
+  AppLocale.rommFetchMetadataFillGapsOption: '빈 항목 채우기 (권장)',
+  AppLocale.rommFetchMetadataFillGapsDescription:
+      '비어 있는 항목과 없는 아트워크만 기록합니다. 이미 있는 내용은 그대로 유지됩니다.',
+  AppLocale.rommFetchMetadataReplaceOption: '모두 교체',
+  AppLocale.rommFetchMetadataReplaceDescription:
+      '모든 항목과 아트워크를 RomM 데이터로 덮어씁니다. 영어가 아닌 설명은 지워지고 퍼블리셔는 비워집니다. RomM이 제공하지 않기 때문입니다.',
+  AppLocale.rommFetchMetadataInProgress: 'RomM에서 가져오는 중…',
+  AppLocale.rommFetchMetadataFilled: 'RomM에서 항목 {count}개와 아트워크 {media}개를 채웠습니다',
+  AppLocale.rommFetchMetadataReplaced:
+      'RomM에서 항목 {count}개와 아트워크 {media}개를 교체했습니다',
+  AppLocale.rommFetchMetadataNothingToFill:
+      '채울 항목 없음: 이 게임에는 RomM이 제공하는 모든 정보가 이미 있습니다',
+  AppLocale.rommFetchMetadataNotFound:
+      'RomM에서 찾을 수 없음: 연결된 ROM이 더 이상 존재하지 않습니다',
+  AppLocale.rommFetchMetadataPartial:
+      '항목 {count}개를 기록했지만 아트워크 {media}개를 다운로드하지 못했습니다',
+  AppLocale.rommFetchMetadataFailed: 'RomM에서 메타데이터를 가져오지 못했습니다',
 };
