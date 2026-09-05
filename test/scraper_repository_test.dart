@@ -145,10 +145,11 @@ void main() {
     });
 
     test('saveGameMetadata persists metadata', () async {
-      final saved = await ScraperRepository.saveGameMetadata({
-        'filename': 'game.smc',
-        'title': 'Super Game',
-      }, 'snes');
+      final saved = await ScraperRepository.saveGameMetadata(
+        {'filename': 'game.smc', 'title': 'Super Game'},
+        'snes',
+        source: MetadataSource.screenscraper,
+      );
       expect(saved, isTrue);
 
       final rows = await db.rawQuery(

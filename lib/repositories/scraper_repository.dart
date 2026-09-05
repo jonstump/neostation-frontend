@@ -17,6 +17,48 @@ typedef EsdeSystemMediaLocation = ({
   String? esdeMediaRoot,
 });
 
+/// Who wrote a `user_screenscraper_metadata` row — persisted in
+/// `metadata_source`.
+///
+/// Whole-row writers ([ScraperRepository.saveGameMetadata], the Steam upsert)
+/// set it on every write; fill-gaps writers
+/// ([ScraperRepository.buildFillGapsMetadataWrite]) set it only when they
+/// insert a row, so an existing row keeps the source that created it. The
+/// manual metadata editor writes [manual]. Rows written before the column
+/// existed are null and stay null — nothing in the row says who wrote it.
+// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Metadata Source Provenance"
+enum MetadataSource {
+  /// A ScreenScraper scrape (full or partial).
+  screenscraper('screenscraper'),
+
+  /// A RomM metadata import or fetch.
+  romm('romm'),
+
+  /// The ES-DE / in-folder gamelist importer.
+  esde('esde'),
+
+  /// The Steam store scraper.
+  steam('steam'),
+
+  /// The manual metadata editor in the game settings dialog.
+  manual('manual');
+
+  /// The value stored in `metadata_source`.
+  final String dbValue;
+
+  const MetadataSource(this.dbValue);
+
+  /// Decodes a stored value; null and anything unrecognised read as null.
+  static MetadataSource? fromDb(Object? value) {
+    final text = value?.toString();
+    if (text == null) return null;
+    for (final source in values) {
+      if (source.dbValue == text) return source;
+    }
+    return null;
+  }
+}
+
 class MetadataTransferResult {
   final String appSystemId;
   final bool metadataTransferred;
@@ -653,7 +695,8 @@ class ScraperRepository {
 
   /// Partially updates editable metadata [fields] for a game. Only the
   /// provided columns are touched; a minimal row is created when the game
-  /// has no metadata yet. Used by the manual metadata editor.
+  /// has no metadata yet. Used by the manual metadata editor, so any write
+  /// that touches a metadata column records [MetadataSource.manual].
   static Future<bool> updateGameMetadata(
     String appSystemId,
     String filename,
@@ -674,8 +717,14 @@ class ScraperRepository {
         ..remove('app_system_id')
         ..remove('filename')
         ..remove('is_fully_scraped')
-        ..remove('updated_at')
-        ..['updated_at'] = DateTime.now().toIso8601String();
+        ..remove('metadata_source')
+        ..remove('updated_at');
+      // Provenance follows the last hand edit of a metadata column; a call
+      // that strips down to nothing but bookkeeping leaves the source alone.
+      if (values.isNotEmpty) {
+        values['metadata_source'] = MetadataSource.manual.dbValue;
+      }
+      values['updated_at'] = DateTime.now().toIso8601String();
 
       if (existing.isEmpty) {
         values['app_system_id'] = appSystemId;
@@ -702,15 +751,22 @@ class ScraperRepository {
   }
 
   /// Saves the metadata to the local user_screenscraper_metadata table.
+  ///
+  /// A whole-row replace: every column not in [metadata] is reset, and
+  /// `metadata_source` is set to [source] on every write, so the row records
+  /// whoever last replaced it.
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Metadata Source Provenance"
   static Future<bool> saveGameMetadata(
     Map<String, dynamic> metadata,
     String appSystemId, {
+    required MetadataSource source,
     bool isFullyScraped = false,
   }) async {
     try {
       final db = await SqliteService.getDatabase();
       metadata['app_system_id'] = appSystemId;
       metadata['is_fully_scraped'] = isFullyScraped ? 1 : 0;
+      metadata['metadata_source'] = source.dbValue;
       metadata['updated_at'] = DateTime.now().toIso8601String();
 
       await db.insert(
@@ -740,6 +796,58 @@ class ScraperRepository {
     String filename,
     Map<String, dynamic> esde, {
     String? mediaSubdir,
+  }) {
+    return _mergeFillGaps(
+      appSystemId,
+      filename,
+      (row) => buildEsdeMetadataWrite(
+        appSystemId: appSystemId,
+        filename: filename,
+        row: row,
+        esde: esde,
+        mediaSubdir: mediaSubdir,
+      ),
+      label: 'ES-DE',
+    );
+  }
+
+  /// Merges [incoming] metadata from [source] into
+  /// `user_screenscraper_metadata`, writing only columns that are currently
+  /// empty. See [buildFillGapsMetadataWrite] for the precedence rules and what
+  /// an inserted row records.
+  ///
+  /// Returns true if a row was created or at least one column was filled.
+  static Future<bool> mergeFillGapsMetadata(
+    String appSystemId,
+    String filename,
+    Map<String, dynamic> incoming, {
+    required MetadataSource source,
+    bool insertFullyScraped = false,
+  }) {
+    return _mergeFillGaps(
+      appSystemId,
+      filename,
+      (row) => buildFillGapsMetadataWrite(
+        appSystemId: appSystemId,
+        filename: filename,
+        row: row,
+        incoming: incoming,
+        source: source,
+        insertFullyScraped: insertFullyScraped,
+      ),
+      label: source.dbValue,
+    );
+  }
+
+  /// Reads the game's current row, asks [build] for the fill-gaps write, and
+  /// applies it as an insert (no row) or a partial update (existing row), all
+  /// through parameterized statements.
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Database Operation Standards"
+  static Future<bool> _mergeFillGaps(
+    String appSystemId,
+    String filename,
+    Map<String, dynamic>? Function(Map<String, Object?>? row) build, {
+    required String label,
   }) async {
     try {
       final db = await SqliteService.getDatabase();
@@ -751,13 +859,7 @@ class ScraperRepository {
       );
       final row = existing.isNotEmpty ? existing.first : null;
 
-      final toWrite = buildEsdeMetadataWrite(
-        appSystemId: appSystemId,
-        filename: filename,
-        row: row,
-        esde: esde,
-        mediaSubdir: mediaSubdir,
-      );
+      final toWrite = build(row);
       if (toWrite == null) return false;
 
       if (row == null) {
@@ -776,44 +878,62 @@ class ScraperRepository {
       }
       return true;
     } catch (e) {
-      _log.e('Error merging ES-DE metadata: $e');
+      _log.e('Error merging $label metadata: $e');
       return false;
     }
   }
 
-  /// Computes the fill-gaps write for [esde] against [row] — the game's current
-  /// `user_screenscraper_metadata` row, or null when it has none.
+  /// Columns a fill-gaps write never takes from its caller: the row key,
+  /// scrape state, provenance, and the timestamp are decided here.
+  static const Set<String> _fillGapsReservedColumns = {
+    'app_system_id',
+    'filename',
+    'is_fully_scraped',
+    'metadata_source',
+    'updated_at',
+  };
+
+  /// Computes a fill-gaps write for [incoming] against [row] — the game's
+  /// current `user_screenscraper_metadata` row, or null when it has none.
+  ///
+  /// [incoming] maps column names (`real_name`, `description_en`, `rating`, …)
+  /// to candidate values; null / blank candidates are ignored, and only
+  /// columns that are currently null or blank are written. Existing values
+  /// from any source are never overwritten. [alwaysWrite] holds bookkeeping
+  /// columns that go into the write regardless of the row's current value and
+  /// on their own count as something to write.
   ///
   /// Returns null when nothing needs writing. When [row] is null the returned
-  /// map is a complete insert (keys, `is_fully_scraped`, provenance marker);
-  /// otherwise it holds only the columns to update.
+  /// map is a complete insert: the key, `is_fully_scraped` from
+  /// [insertFullyScraped], and `metadata_source` set to [source]. An existing
+  /// row keeps its `is_fully_scraped` and `metadata_source` — the write holds
+  /// only the columns to fill.
   ///
   /// Pure — no database access — so a bulk importer that already has the rows
   /// in hand can reuse the precedence rules and batch the writes itself.
-  static Map<String, dynamic>? buildEsdeMetadataWrite({
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Metadata Source Provenance"
+  static Map<String, dynamic>? buildFillGapsMetadataWrite({
     required String appSystemId,
     required String filename,
     required Map<String, Object?>? row,
-    required Map<String, dynamic> esde,
-    String? mediaSubdir,
+    required Map<String, dynamic> incoming,
+    required MetadataSource source,
+    bool insertFullyScraped = false,
+    Map<String, dynamic>? alwaysWrite,
   }) {
     final toWrite = <String, dynamic>{};
-    esde.forEach((col, val) {
+    incoming.forEach((col, val) {
+      if (_fillGapsReservedColumns.contains(col)) return;
       if (val == null) return;
       if (val is String && val.trim().isEmpty) return;
       final cur = row?[col];
       final curEmpty = cur == null || (cur is String && cur.trim().isEmpty);
       if (curEmpty) toWrite[col] = val;
     });
-
-    // Media subfolder is ES-DE bookkeeping (mirrors the ROM's subfolder inside
-    // downloaded_media), not user-visible metadata — always keep it current so
-    // read-time fallback can resolve nested artwork, even when nothing else
-    // needs filling.
-    if (mediaSubdir != null &&
-        (row == null || row['esde_media_subdir'] != mediaSubdir)) {
-      toWrite['esde_media_subdir'] = mediaSubdir;
-    }
+    alwaysWrite?.forEach((col, val) {
+      if (_fillGapsReservedColumns.contains(col)) return;
+      toWrite[col] = val;
+    });
 
     if (toWrite.isEmpty) return null;
     toWrite['updated_at'] = DateTime.now().toIso8601String();
@@ -821,13 +941,42 @@ class ScraperRepository {
     if (row == null) {
       toWrite['app_system_id'] = appSystemId;
       toWrite['filename'] = filename;
-      toWrite['is_fully_scraped'] = 0;
-      // Provenance marker so reset() can remove ES-DE-created rows without
-      // touching NeoStation's own partially-scraped rows. Only set on insert
-      // (rows the import creates from scratch); gap-fills into pre-existing
-      // NeoStation rows are left unmarked so reset() won't delete them.
-      toWrite['esde_imported'] = 1;
+      toWrite['is_fully_scraped'] = insertFullyScraped ? 1 : 0;
+      toWrite['metadata_source'] = source.dbValue;
     }
+    return toWrite;
+  }
+
+  /// Computes the ES-DE fill-gaps write for [esde] against [row]: the
+  /// [buildFillGapsMetadataWrite] rules with source [MetadataSource.esde],
+  /// plus the importer's own bookkeeping.
+  ///
+  /// The media subfolder mirrors the ROM's subfolder inside `downloaded_media`
+  /// and is not user-visible metadata, so it is always kept current — even
+  /// when nothing else needs filling — so read-time fallback can resolve
+  /// nested artwork. An inserted row is marked `esde_imported` so reset() can
+  /// remove ES-DE-created rows without touching NeoStation's own
+  /// partially-scraped rows; gap-fills into pre-existing rows stay unmarked.
+  static Map<String, dynamic>? buildEsdeMetadataWrite({
+    required String appSystemId,
+    required String filename,
+    required Map<String, Object?>? row,
+    required Map<String, dynamic> esde,
+    String? mediaSubdir,
+  }) {
+    final subdirChanged =
+        mediaSubdir != null &&
+        (row == null || row['esde_media_subdir'] != mediaSubdir);
+    final toWrite = buildFillGapsMetadataWrite(
+      appSystemId: appSystemId,
+      filename: filename,
+      row: row,
+      incoming: esde,
+      source: MetadataSource.esde,
+      alwaysWrite: subdirChanged ? {'esde_media_subdir': mediaSubdir} : null,
+    );
+    if (toWrite == null) return null;
+    if (row == null) toWrite['esde_imported'] = 1;
     return toWrite;
   }
 
@@ -1106,30 +1255,48 @@ class ScraperRepository {
 
   // ── Bulk scraping ─────────────────────────────────────────────────────────
 
+  /// The `new_only` predicate: no metadata row for this system, or one that
+  /// a partial scrape or importer left unfinished. A row any source marked
+  /// fully scraped (including a RomM insert) is skipped.
+  static String _scrapeModeFilter(String scrapeMode) => scrapeMode == 'new_only'
+      ? 'AND (usm.filename IS NULL OR usm.is_fully_scraped = 0)'
+      : '';
+
   /// Returns the count of ROMs eligible for scraping for a given system.
+  ///
+  /// Metadata is joined on the system id as well as the filename, so a row
+  /// for `Game.zip` under one system never hides `Game.zip` under another.
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Cooperation With ScreenScraper"
   static Future<int> getRomCountForScraping(
     String appSystemId,
     String scrapeMode,
   ) async {
     final db = await SqliteService.getDatabase();
     final result = await db.rawQuery(
-      '''SELECT COUNT(*) as count FROM user_roms ur LEFT JOIN user_screenscraper_metadata usm ON ur.filename = usm.filename 
-       WHERE ur.app_system_id = ? ${scrapeMode == 'new_only' ? 'AND (usm.filename IS NULL OR usm.is_fully_scraped = 0)' : ''}''',
+      '''SELECT COUNT(*) as count FROM user_roms ur
+       LEFT JOIN user_screenscraper_metadata usm
+         ON ur.app_system_id = usm.app_system_id AND ur.filename = usm.filename
+       WHERE ur.app_system_id = ? ${_scrapeModeFilter(scrapeMode)}''',
       [appSystemId],
     );
     return int.tryParse(result.first['count']?.toString() ?? '0') ?? 0;
   }
 
   /// Returns the list of ROMs eligible for scraping for a given system.
+  ///
+  /// Same join as [getRomCountForScraping], so the two always agree.
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Cooperation With ScreenScraper"
   static Future<List<Map<String, dynamic>>> getRomsForScraping(
     String appSystemId,
     String scrapeMode,
   ) async {
     final db = await SqliteService.getDatabase();
     return await db.rawQuery(
-      '''SELECT ur.filename, ur.rom_path, ur.title_name, usm.is_fully_scraped 
-       FROM user_roms ur LEFT JOIN user_screenscraper_metadata usm ON ur.filename = usm.filename 
-       WHERE ur.app_system_id = ? ${scrapeMode == 'new_only' ? 'AND (usm.filename IS NULL OR usm.is_fully_scraped = 0)' : ''}''',
+      '''SELECT ur.filename, ur.rom_path, ur.title_name, usm.is_fully_scraped
+       FROM user_roms ur
+       LEFT JOIN user_screenscraper_metadata usm
+         ON ur.app_system_id = usm.app_system_id AND ur.filename = usm.filename
+       WHERE ur.app_system_id = ? ${_scrapeModeFilter(scrapeMode)}''',
       [appSystemId],
     );
   }
@@ -1153,8 +1320,11 @@ class ScraperRepository {
     );
   }
 
+  /// Whole-row replace for the Steam scraper; records
+  /// [MetadataSource.steam] on every write.
   static Future<void> upsertSteamMetadata(Map<String, dynamic> metadata) async {
     final db = await SqliteService.getDatabase();
+    metadata['metadata_source'] = MetadataSource.steam.dbValue;
     await db.insert(
       'user_screenscraper_metadata',
       metadata,

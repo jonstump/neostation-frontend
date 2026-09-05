@@ -229,10 +229,11 @@ void main() {
   group('importMetadataIfMissing', () {
     test('does nothing when the game already has metadata', () async {
       await put('snes', 'a.sfc');
-      await ScraperRepository.saveGameMetadata({
-        'filename': 'a.sfc',
-        'real_name': 'Curated by hand',
-      }, 'snes');
+      await ScraperRepository.saveGameMetadata(
+        {'filename': 'a.sfc', 'real_name': 'Curated by hand'},
+        'snes',
+        source: MetadataSource.manual,
+      );
       final provider = _PinnedSystem(_snes);
       final rom = _rom(1, 'a.sfc');
       final copy = (await provider.findLocalCopy(rom, romFolders))!;
