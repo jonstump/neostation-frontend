@@ -1152,6 +1152,7 @@ mixin AppLocale {
   static const String rommSearch = 'romm_search';
   static const String rommDownloading = 'romm_downloading';
   static const String rommDownloaded = 'romm_downloaded';
+  static const String rommLinked = 'romm_linked';
   static const String rommDownloadComplete = 'romm_download_complete';
   static const String rommDownloadFailed = 'romm_download_failed';
   static const String rommDownloadCancelled = 'romm_download_cancelled';
@@ -1167,6 +1168,7 @@ mixin AppLocale {
   static const String rommSyncConfirmTitle = 'romm_sync_confirm_title';
   static const String rommSyncConfirmPlan = 'romm_sync_confirm_plan';
   static const String rommSyncConfirmSkipped = 'romm_sync_confirm_skipped';
+  static const String rommSyncConfirmLinked = 'romm_sync_confirm_linked';
   static const String rommSyncConfirmFree = 'romm_sync_confirm_free';
   static const String rommSyncConfirmNoSpace = 'romm_sync_confirm_no_space';
   // Per-volume variants of the two above, used when a sync's ROMs land on more
@@ -1182,6 +1184,7 @@ mixin AppLocale {
   static const String rommSyncComplete = 'romm_sync_complete';
   static const String rommSyncCancelled = 'romm_sync_cancelled';
   static const String rommSyncNothingToDo = 'romm_sync_nothing_to_do';
+  static const String rommSyncLinkedCount = 'romm_sync_linked_count';
   static const String rommSyncFailedCount = 'romm_sync_failed_count';
 
   // Library search & filtering.

@@ -971,6 +971,7 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommSearch: '검색',
   AppLocale.rommDownloading: '다운로드 중...',
   AppLocale.rommDownloaded: '다운로드됨',
+  AppLocale.rommLinked: 'RomM에 연결됨',
   AppLocale.rommDownloadComplete: '다운로드 완료',
   AppLocale.rommDownloadFailed: '다운로드 실패',
   AppLocale.rommDownloadCancelled: '다운로드 취소됨',
@@ -987,6 +988,7 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommSyncConfirmPlan:
       '게임 {count}개를 내려받습니다 ({size}). 시간이 오래 걸릴 수 있습니다.',
   AppLocale.rommSyncConfirmSkipped: '{count}개는 이미 이 기기에 있습니다.',
+  AppLocale.rommSyncConfirmLinked: '{count}개를 RomM에 연결했습니다.',
   AppLocale.rommSyncConfirmFree: '여유 공간 {free}.',
   AppLocale.rommSyncConfirmNoSpace:
       '공간이 부족합니다: {size}이(가) 필요하지만 {free}만 남았습니다.',
@@ -1000,6 +1002,7 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommSyncComplete: '게임 {count}개를 동기화했습니다',
   AppLocale.rommSyncCancelled: '동기화가 취소되었습니다',
   AppLocale.rommSyncNothingToDo: '이미 모두 내려받았습니다',
+  AppLocale.rommSyncLinkedCount: '게임 {count}개를 RomM에 연결했습니다',
   AppLocale.rommSyncFailedCount: '{count}개 실패',
   AppLocale.resetPlayTimeConfirm: '플레이 시간 재설정',
   AppLocale.resetPlayTimeConfirmBody:

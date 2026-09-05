@@ -119,15 +119,25 @@ void main() {
       expect(sync.completed, 20);
     });
 
-    test('ROMs already on disk are skipped, not queued', () async {
+    // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Link on Already Downloaded"
+    test('ROMs already on disk are linked and skipped, not queued', () async {
       final all = [for (var i = 0; i < 6; i++) _rom(i)];
       final downloaded = <int>[];
+      final linkedCalls = <int>[];
       final sync = RommBulkSync();
 
       await sync.run(
         sourceLabel: 'SNES',
         fetchPage: _pagesOver(all),
         isDownloaded: (rom) async => rom.id.isEven,
+        // Stands in for `putMappingIfAbsent`: rom 0 already had a row, the
+        // other two on-disk ROMs gain one.
+        link: (rom) async {
+          linkedCalls.add(rom.id);
+          return rom.id == 0
+              ? RommLinkOutcome.alreadyLinked
+              : RommLinkOutcome.linked;
+        },
         download: (rom) async {
           downloaded.add(rom.id);
           return _completed(rom);
@@ -136,9 +146,119 @@ void main() {
       );
 
       expect(downloaded, [1, 3, 5]);
+      expect(linkedCalls, [
+        0,
+        2,
+        4,
+      ], reason: 'every on-disk ROM is offered a link, nothing else is');
       expect(sync.skipped, 3);
+      expect(sync.linked, 2);
+      expect(sync.alreadyLinked, 1);
       expect(sync.total, 3);
       expect(sync.enumerated, 6);
+    });
+
+    test('a linked ROM is never downloaded and fetches no media', () async {
+      // The engine only ever reaches the outside world through the callbacks
+      // it is given: `download` is the sole path to a transfer and to the
+      // metadata/media import that rides on it. A ROM that links must not
+      // reach it, and the linker itself is handed nothing to fetch with.
+      final all = [_rom(1, sizeBytes: 500)];
+      var downloads = 0;
+      var links = 0;
+      final sync = RommBulkSync();
+
+      await sync.run(
+        sourceLabel: 'SNES',
+        fetchPage: _pagesOver(all),
+        isDownloaded: (_) async => true,
+        link: (_) async {
+          links++;
+          return RommLinkOutcome.linked;
+        },
+        download: (rom) async {
+          downloads++;
+          return _completed(rom);
+        },
+        concurrency: 1,
+      );
+
+      expect(links, 1);
+      expect(downloads, 0);
+      expect(sync.total, 0, reason: 'not queued');
+      expect(sync.totalBytes, 0, reason: 'nothing priced for transfer');
+      expect(sync.linked, 1);
+      expect(sync.skipped, 1);
+    });
+
+    test(
+      'without a linker, on-disk ROMs are only counted as skipped',
+      () async {
+        final all = [_rom(1), _rom(2)];
+        final sync = RommBulkSync();
+
+        await sync.run(
+          sourceLabel: 'SNES',
+          fetchPage: _pagesOver(all),
+          isDownloaded: (_) async => true,
+          download: (rom) async => _completed(rom),
+          concurrency: 1,
+        );
+
+        expect(sync.skipped, 2);
+        expect(sync.linked, 0);
+        expect(sync.alreadyLinked, 0);
+      },
+    );
+
+    test('a linker that throws is logged and does not stop the sync', () async {
+      final all = [_rom(1), _rom(2), _rom(3)];
+      final downloaded = <int>[];
+      final sync = RommBulkSync();
+
+      await sync.run(
+        sourceLabel: 'SNES',
+        fetchPage: _pagesOver(all),
+        isDownloaded: (rom) async => rom.id == 2,
+        link: (_) async => throw StateError('db closed'),
+        download: (rom) async {
+          downloaded.add(rom.id);
+          return _completed(rom);
+        },
+        concurrency: 1,
+      );
+
+      expect(downloaded, [1, 3]);
+      expect(sync.skipped, 1);
+      expect(sync.linked, 0);
+      expect(sync.alreadyLinked, 0);
+    });
+
+    test('the plan carries the linked counts', () async {
+      final all = [_rom(1), _rom(2), _rom(3)];
+      RommBulkSyncPlan? seen;
+      final sync = RommBulkSync();
+
+      await sync.run(
+        sourceLabel: 'SNES',
+        fetchPage: _pagesOver(all),
+        isDownloaded: (rom) async => rom.id != 3,
+        link: (rom) async => rom.id == 1
+            ? RommLinkOutcome.linked
+            : RommLinkOutcome.alreadyLinked,
+        download: (rom) async => _completed(rom),
+        confirm: (plan) async {
+          seen = plan;
+          return true;
+        },
+        concurrency: 1,
+      );
+
+      expect(seen, isNotNull);
+      expect(seen!.skipped, 2);
+      expect(seen!.linked, 1);
+      expect(seen!.alreadyLinked, 1);
+      expect(seen!.romCount, 1);
     });
 
     test('queued bytes count only what is actually downloaded', () async {

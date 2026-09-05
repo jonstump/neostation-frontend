@@ -13,6 +13,23 @@ typedef RommPageFetcher =
 /// True when [rom] is already on disk and should be skipped.
 typedef RommDownloadedCheck = Future<bool> Function(RommRom rom);
 
+/// What linking an on-disk ROM to its RomM entry came to.
+enum RommLinkOutcome {
+  /// A new `app_romm_rom_map` row was written for the local file.
+  linked,
+
+  /// The local file already had a row; nothing was written.
+  alreadyLinked,
+
+  /// No local copy was found after all (it vanished between the downloaded
+  /// check and the link, or its platform resolves to no local system).
+  notLocal,
+}
+
+/// Links a ROM the downloaded check found on disk to its RomM entry, writing
+/// the mapping row only when none exists. Rows only — never metadata or media.
+typedef RommLocalLinker = Future<RommLinkOutcome> Function(RommRom rom);
+
 /// Downloads one ROM, resolving to its final [RommDownload] record.
 typedef RommRomDownloader = Future<RommDownload> Function(RommRom rom);
 
@@ -122,8 +139,15 @@ class RommBulkSyncPlan {
   /// ROMs actually queued (the source minus what is already on disk).
   final int romCount;
 
-  /// ROMs the pass found already on disk and won't fetch again.
+  /// ROMs the pass found already on disk and won't fetch again
+  /// ([linked] + [alreadyLinked], plus any that couldn't be linked).
   final int skipped;
+
+  /// Of [skipped], ROMs that gained a RomM link during the pass.
+  final int linked;
+
+  /// Of [skipped], ROMs that were already linked to RomM.
+  final int alreadyLinked;
 
   /// Sum of the queue's `fs_size_bytes` — what will be transferred.
   final int downloadBytes;
@@ -152,6 +176,8 @@ class RommBulkSyncPlan {
     required this.downloadBytes,
     required this.requiredBytes,
     required this.volumes,
+    this.linked = 0,
+    this.alreadyLinked = 0,
     this.unresolvedRoms = 0,
   });
 
@@ -234,6 +260,8 @@ class RommBulkSync extends ChangeNotifier {
   int _completed = 0;
   int _failed = 0;
   int _skipped = 0;
+  int _linked = 0;
+  int _alreadyLinked = 0;
   int _cancelled = 0;
   int _doneBytes = 0;
   int _queuedBytes = 0;
@@ -291,6 +319,13 @@ class RommBulkSync extends ChangeNotifier {
   /// ROMs the enumeration pass found already on disk and never queued.
   int get skipped => _skipped;
 
+  /// Of [skipped], ROMs that gained a RomM link during this run (a mapping
+  /// row was written for the local file). 0 when [run] had no linker.
+  int get linked => _linked;
+
+  /// Of [skipped], ROMs that were already linked when the pass reached them.
+  int get alreadyLinked => _alreadyLinked;
+
   /// Queue items abandoned because the sync was cancelled mid-flight.
   int get cancelled => _cancelled;
 
@@ -317,6 +352,10 @@ class RommBulkSync extends ChangeNotifier {
   /// reports as already local, and runs the rest through [download] with at
   /// most [concurrency] transfers in flight.
   ///
+  /// Each ROM found on disk is handed to [link] so it gains its RomM mapping
+  /// without a download, and counted as [linked] or [alreadyLinked] by the
+  /// outcome. Without [link] on-disk ROMs are only counted as [skipped].
+  ///
   /// [cancelDownload] is invoked for each in-flight ROM when [cancel] is
   /// called, so cancelling stops the transfers as well as the queue.
   ///
@@ -337,6 +376,7 @@ class RommBulkSync extends ChangeNotifier {
     required RommPageFetcher fetchPage,
     required RommDownloadedCheck isDownloaded,
     required RommRomDownloader download,
+    RommLocalLinker? link,
     void Function(int romId)? cancelDownload,
     RommBulkSyncConfirm? confirm,
     RommDestinationProbe? destination,
@@ -351,7 +391,7 @@ class RommBulkSync extends ChangeNotifier {
     _notify();
 
     try {
-      await _enumerate(fetchPage, isDownloaded, pageSize);
+      await _enumerate(fetchPage, isDownloaded, link, pageSize);
       if (_cancelRequested || _queue.isEmpty) return;
 
       if (confirm != null) {
@@ -467,6 +507,8 @@ class RommBulkSync extends ChangeNotifier {
       sourceLabel: _sourceLabel,
       romCount: _queue.length,
       skipped: _skipped,
+      linked: _linked,
+      alreadyLinked: _alreadyLinked,
       downloadBytes: _queuedBytes,
       requiredBytes: _queuedBytes + transientHeadroomBytes(concurrency),
       volumes: volumes,
@@ -517,6 +559,8 @@ class RommBulkSync extends ChangeNotifier {
     _completed = 0;
     _failed = 0;
     _skipped = 0;
+    _linked = 0;
+    _alreadyLinked = 0;
     _cancelled = 0;
     _doneBytes = 0;
     _queuedBytes = 0;
@@ -524,14 +568,43 @@ class RommBulkSync extends ChangeNotifier {
     _lastError = null;
   }
 
+  /// Runs [link] for one on-disk ROM and books the outcome.
+  ///
+  /// A linker failure is logged and leaves the ROM counted only as skipped:
+  /// the sync is about downloads first, and a mapping that couldn't be
+  /// written now is picked up by the next connect-time link pass.
+  Future<void> _link(RommLocalLinker link, RommRom rom) async {
+    try {
+      switch (await link(rom)) {
+        case RommLinkOutcome.linked:
+          _linked++;
+        case RommLinkOutcome.alreadyLinked:
+          _alreadyLinked++;
+        case RommLinkOutcome.notLocal:
+          break;
+      }
+    } catch (e) {
+      _log.e(
+        'RomM bulk sync: linking ${rom.fsName} (rom ${rom.id}) failed: $e',
+      );
+    }
+  }
+
   /// Pages the whole source into [_queue], skipping ROMs already on disk.
   ///
   /// Filtering per page (rather than collecting everything and filtering after)
   /// keeps the queue and its byte total growing while the pass runs, so the
   /// progress UI has something truthful to show on a large platform.
+  ///
+  /// A ROM that is already on disk is the one case where the sync has work
+  /// that isn't a download: the file predates RomM (or was copied over by
+  /// hand) and has no mapping row, so save sync and the cloud badge can't see
+  /// it. [link] writes that row; the ROM is still never queued.
+  // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Link on Already Downloaded"
   Future<void> _enumerate(
     RommPageFetcher fetchPage,
     RommDownloadedCheck isDownloaded,
+    RommLocalLinker? link,
     int pageSize,
   ) async {
     var offset = 0;
@@ -556,6 +629,7 @@ class RommBulkSync extends ChangeNotifier {
         _enumerated++;
         if (await isDownloaded(rom)) {
           _skipped++;
+          if (link != null) await _link(link, rom);
         } else {
           _queue.add(rom);
           _queuedBytes += rom.fsSizeBytes;
