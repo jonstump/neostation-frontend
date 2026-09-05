@@ -1291,6 +1291,28 @@ mixin AppLocale {
   static const String customFolderUploadFailed = 'custom_folder_upload_failed';
   static const String customSaveFoldersMigrate = 'custom_save_folders_migrate';
 
+  // RomM manual link picker / Manage tab link rows (SPEC-0004).
+  static const String rommLinkRow = 'romm_link_row';
+  static const String rommLinkRowSubtitle = 'romm_link_row_subtitle';
+  static const String rommLinkAction = 'romm_link_action';
+  static const String rommUnlinkRow = 'romm_unlink_row';
+  static const String rommUnlinkRowSubtitle = 'romm_unlink_row_subtitle';
+  static const String rommUnlinkAction = 'romm_unlink_action';
+  static const String rommUnlinkConfirmTitle = 'romm_unlink_confirm_title';
+  static const String rommUnlinkConfirmBody = 'romm_unlink_confirm_body';
+  static const String rommLinkStateNotLinked = 'romm_link_state_not_linked';
+  static const String rommLinkStateAuto = 'romm_link_state_auto';
+  static const String rommLinkStateManual = 'romm_link_state_manual';
+  static const String rommLinkPickerTitle = 'romm_link_picker_title';
+  static const String rommLinkPickerSearchHint = 'romm_link_picker_search_hint';
+  static const String rommLinkPickerLoading = 'romm_link_picker_loading';
+  static const String rommLinkPickerNoResults = 'romm_link_picker_no_results';
+  static const String rommLinkPickerError = 'romm_link_picker_error';
+  static const String rommLinkPickerUnscoped = 'romm_link_picker_unscoped';
+  static const String rommLinkSaved = 'romm_link_saved';
+  static const String rommLinkFailed = 'romm_link_failed';
+  static const String rommUnlinked = 'romm_unlinked';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================
