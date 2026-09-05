@@ -52,7 +52,7 @@ Chosen option: "Picker with provenance in the Manage tab", because it mirrors th
 
 ### Confirmation
 
-* Migration test: column added, idempotent re-run, download-path rows backfilled to `download`, others null.
+* Migration test: column added, idempotent re-run, existing rows left null.
 * Repository tests: `putMapping` refuses to replace a manual row; a manual write replaces an automatic row; insert-if-absent unchanged.
 * Linker test: a manual row matched to a different id is logged as a conflict and untouched.
 * Picker tests: search debounce and scoping to the game's platform ids; confirm writes `manual`; B cancels; the Manage tab row is reachable by D-pad and shows the link state.
