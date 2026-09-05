@@ -24,7 +24,7 @@ The connect-time link pass from SPEC-0001 still fetches nothing. RomM is not add
 
 ### Requirement: Metadata Source Provenance
 
-The system SHALL add a nullable `metadata_source` column to `user_screenscraper_metadata` by a versioned migration, holding one of `screenscraper`, `romm`, `esde`, or `manual`. Legacy rows MUST stay null. Every metadata writer MUST set the column: ScreenScraper scrapes write `screenscraper`, RomM writes `romm`, the ES-DE and in-folder importers write `esde`, and the manual metadata editor writes `manual`. Fill-gaps writers MUST set the column only when they insert a row; replacing writers MUST set it on every write.
+The system SHALL add a nullable `metadata_source` column to `user_screenscraper_metadata` by a versioned migration, holding one of `screenscraper`, `romm`, `esde`, `steam`, or `manual`. Legacy rows MUST stay null. Every metadata writer MUST set the column: ScreenScraper scrapes write `screenscraper`, RomM writes `romm`, the ES-DE and in-folder importers write `esde`, the Steam scraper writes `steam`, and the manual metadata editor writes `manual`. Fill-gaps writers MUST set the column only when they insert a row; replacing writers MUST set it on every write.
 
 #### Scenario: Migration
 

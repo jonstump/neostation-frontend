@@ -106,7 +106,7 @@ erDiagram
         text genre
         text players
         int is_fully_scraped
-        text metadata_source "screenscraper | romm | esde | manual | null"
+        text metadata_source "screenscraper | romm | esde | steam | manual | null"
     }
 ```
 
