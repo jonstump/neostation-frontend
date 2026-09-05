@@ -1389,7 +1389,6 @@ const Map<String, dynamic> appLocaleDe = {
       '{count} Felder geschrieben, aber {media} Artworks konnten nicht heruntergeladen werden',
   AppLocale.rommFetchMetadataFailed:
       'Abrufen der Metadaten von RomM fehlgeschlagen',
-||||||| parent of 42d930a (feat(romm): per-system "Fetch metadata from RomM" pass with progress and summary)
 
   // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
   AppLocale.rommSystemFetchAction: 'Metadaten von RomM abrufen',

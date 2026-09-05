@@ -1230,7 +1230,6 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommFetchMetadataPartial:
       '항목 {count}개를 기록했지만 아트워크 {media}개를 다운로드하지 못했습니다',
   AppLocale.rommFetchMetadataFailed: 'RomM에서 메타데이터를 가져오지 못했습니다',
-||||||| parent of 42d930a (feat(romm): per-system "Fetch metadata from RomM" pass with progress and summary)
 
   // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
   AppLocale.rommSystemFetchAction: 'RomM에서 메타데이터 가져오기',

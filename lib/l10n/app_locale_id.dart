@@ -1347,7 +1347,6 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommFetchMetadataPartial:
       '{count} kolom ditulis, tetapi {media} gambar gagal diunduh',
   AppLocale.rommFetchMetadataFailed: 'Gagal mengambil metadata dari RomM',
-||||||| parent of 42d930a (feat(romm): per-system "Fetch metadata from RomM" pass with progress and summary)
 
   // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
   AppLocale.rommSystemFetchAction: 'Ambil metadata dari RomM',

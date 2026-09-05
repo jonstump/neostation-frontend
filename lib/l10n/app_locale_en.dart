@@ -1331,7 +1331,6 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rommFetchMetadataPartial:
       'Wrote {count} fields, but {media} artwork failed to download',
   AppLocale.rommFetchMetadataFailed: 'Fetching metadata from RomM failed',
-||||||| parent of 42d930a (feat(romm): per-system "Fetch metadata from RomM" pass with progress and summary)
 
   // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
   AppLocale.rommSystemFetchAction: 'Fetch metadata from RomM',

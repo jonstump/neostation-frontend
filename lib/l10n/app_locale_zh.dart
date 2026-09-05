@@ -1182,7 +1182,6 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.rommFetchMetadataNotFound: '在 RomM 上未找到：链接的 ROM 已不存在',
   AppLocale.rommFetchMetadataPartial: '已写入 {count} 个字段，但 {media} 张封面图下载失败',
   AppLocale.rommFetchMetadataFailed: '从 RomM 获取元数据失败',
-||||||| parent of 42d930a (feat(romm): per-system "Fetch metadata from RomM" pass with progress and summary)
 
   // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
   AppLocale.rommSystemFetchAction: '从 RomM 获取元数据',

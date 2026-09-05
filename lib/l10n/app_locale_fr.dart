@@ -1393,7 +1393,6 @@ const Map<String, dynamic> appLocaleFr = {
       '{count} champs écrits, mais {media} visuels n’ont pas pu être téléchargés',
   AppLocale.rommFetchMetadataFailed:
       'Échec de la récupération des métadonnées depuis RomM',
-||||||| parent of 42d930a (feat(romm): per-system "Fetch metadata from RomM" pass with progress and summary)
 
   // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
   AppLocale.rommSystemFetchAction: 'Récupérer les métadonnées depuis RomM',

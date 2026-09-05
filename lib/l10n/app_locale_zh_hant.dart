@@ -1183,7 +1183,6 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.rommFetchMetadataNotFound: '在 RomM 上找不到：連結的 ROM 已不存在',
   AppLocale.rommFetchMetadataPartial: '已寫入 {count} 個欄位，但 {media} 張封面圖下載失敗',
   AppLocale.rommFetchMetadataFailed: '從 RomM 取得中繼資料失敗',
-||||||| parent of 42d930a (feat(romm): per-system "Fetch metadata from RomM" pass with progress and summary)
 
   // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
   AppLocale.rommSystemFetchAction: '從 RomM 取得中繼資料',

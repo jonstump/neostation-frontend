@@ -1347,7 +1347,6 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommFetchMetadataPartial:
       'Записано полей: {count}, но не удалось загрузить обложек: {media}',
   AppLocale.rommFetchMetadataFailed: 'Не удалось получить метаданные из RomM',
-||||||| parent of 42d930a (feat(romm): per-system "Fetch metadata from RomM" pass with progress and summary)
 
   // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
   AppLocale.rommSystemFetchAction: 'Получить метаданные из RomM',

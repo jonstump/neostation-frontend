@@ -1220,7 +1220,6 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommFetchMetadataPartial:
       '{count} 項目を書き込みましたが、{media} 点のアートワークのダウンロードに失敗しました',
   AppLocale.rommFetchMetadataFailed: 'RomM からのメタデータ取得に失敗しました',
-||||||| parent of 42d930a (feat(romm): per-system "Fetch metadata from RomM" pass with progress and summary)
 
   // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
   AppLocale.rommSystemFetchAction: 'RomM からメタデータを取得',
