@@ -95,6 +95,17 @@ class _ScraperLoginScreenState extends State<ScraperLoginScreen>
       return;
     }
 
+    // A build without developer credentials cannot reach the API at all;
+    // naming that beats blaming the user's password.
+    if (!ScreenScraperService.hasDeveloperCredentials) {
+      AppNotification.showNotification(
+        context,
+        AppLocale.screenscraperDevCredentialsMissing.getString(context),
+        type: NotificationType.error,
+      );
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });

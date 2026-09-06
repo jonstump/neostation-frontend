@@ -1424,6 +1424,8 @@ mixin AppLocale {
       'scrape_bulk_romm_only_started';
   static const String scrapeBulkNoSourceAvailable =
       'scrape_bulk_no_source_available';
+  static const String screenscraperDevCredentialsMissing =
+      'screenscraper_dev_credentials_missing';
 
   // ==========================================================================
   // Localization Maps

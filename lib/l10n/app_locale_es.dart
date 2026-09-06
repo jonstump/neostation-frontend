@@ -1436,4 +1436,6 @@ const Map<String, dynamic> appLocaleEs = {
       'Scraping solo desde RomM; ScreenScraper no está configurado',
   AppLocale.scrapeBulkNoSourceAvailable:
       'Inicia sesión en ScreenScraper o conecta RomM antes de iniciar el scraping',
+  AppLocale.screenscraperDevCredentialsMissing:
+      'Esta compilación no incluye credenciales de desarrollador de ScreenScraper; el inicio de sesión y el scraping de ScreenScraper no están disponibles.',
 };

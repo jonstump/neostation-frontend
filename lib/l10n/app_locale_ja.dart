@@ -1269,4 +1269,6 @@ const Map<String, dynamic> appLocaleJa = {
       'RomM のみからスクレイピングします。ScreenScraper は設定されていません',
   AppLocale.scrapeBulkNoSourceAvailable:
       'スクレイピングを始める前に ScreenScraper にログインするか RomM に接続してください',
+  AppLocale.screenscraperDevCredentialsMissing:
+      'このビルドには ScreenScraper の開発者認証情報が含まれていないため、ScreenScraper へのログインとスクレイピングは利用できません。',
 };

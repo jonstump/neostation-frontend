@@ -1400,4 +1400,6 @@ const Map<String, dynamic> appLocaleRu = {
       'Скрапинг только из RomM; ScreenScraper не настроен',
   AppLocale.scrapeBulkNoSourceAvailable:
       'Войдите в ScreenScraper или подключите RomM перед запуском скрапинга',
+  AppLocale.screenscraperDevCredentialsMissing:
+      'В этой сборке нет учётных данных разработчика ScreenScraper, поэтому вход и скрапинг ScreenScraper недоступны.',
 };

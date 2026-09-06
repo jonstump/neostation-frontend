@@ -46,6 +46,13 @@ class ScreenScraperService {
     return Platform.environment['SCREENSCRAPER_DEV_PASSWORD'] ?? '';
   }
 
+  /// Whether this build carries the developer credentials ScreenScraper
+  /// requires on every request. Without them the API rejects everything
+  /// before the user's own credentials are checked, so callers should say
+  /// so instead of reporting the user's login as invalid.
+  static bool get hasDeveloperCredentials =>
+      _devId.isNotEmpty && _devPassword.isNotEmpty;
+
   static Map<String, dynamic>? _cachedCredentials;
   static bool _isMetadataScrapingRunning = false;
 
