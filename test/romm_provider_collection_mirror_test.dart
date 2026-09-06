@@ -14,6 +14,7 @@ import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/providers/romm_bulk_sync.dart';
 import 'package:neostation/providers/romm_provider.dart';
 import 'package:neostation/repositories/collection_repository.dart';
+import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/romm/romm_collection_mirror.dart';
 import 'package:neostation/services/romm_service.dart';
 import 'package:path/path.dart' as p;
@@ -30,7 +31,7 @@ import 'database_test_helper.dart';
 /// probe, so the subclass pins it; the ROM list comes from the fake service.
 ///
 /// Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ
-/// "Triggered By The Collection Sync"
+/// "Triggered By The Collection Sync", REQ "Metadata For Linked Members"
 
 const _snes = SystemModel(
   id: 'snes',
@@ -415,6 +416,114 @@ void main() {
       await provider.settleNowForTesting();
       expect(await collections(), isEmpty);
       expect(mirrored, 0);
+    });
+  });
+
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Metadata For Linked Members"
+  group('metadata for linked members', () {
+    late List<RommCollectionMetadataRequest> requests;
+
+    setUp(() {
+      requests = [];
+      provider.onCollectionMetadataTargets = requests.add;
+    });
+
+    test('links A and downloads B: one request, with only A, named after the '
+        'collection', () async {
+      final a = await local('Game A.sfc');
+      provider.fake.roms = [_rom(1, 'Game A.sfc'), _rom(2, 'Game B.sfc')];
+      provider.onDownloadsSettled = (_) async {
+        await local('Game B.sfc');
+      };
+
+      await provider.syncSource(
+        collection: _bestOfSnes,
+        romFolders: romFolders,
+        confirm: (_) async => true,
+      );
+
+      expect(provider.downloaded, [2]);
+      expect(requests, hasLength(1), reason: 'raised by the approval run');
+      final request = requests.single;
+      expect(request.collectionName, 'Best of SNES');
+      expect(request.targets, hasLength(1));
+      final target = request.targets.single;
+      expect(target.romId, 1, reason: 'the rom id A was linked to');
+      expect(target.game.romPath, a);
+      expect(target.game.filename, 'Game A.sfc');
+      expect(target.indexedName, 'Game A.sfc');
+      expect(target.game.systemFolderName, 'snes');
+      expect(request.systemsByFolder.keys, ['snes']);
+      expect(request.systemOf(target).id, 'snes');
+
+      // The settle adds the download as a member; it is this sync's
+      // download, so no second request is raised for it.
+      await provider.settleNowForTesting();
+      expect(provider.lastCollectionMirror!.added, 1);
+      expect(provider.lastCollectionMirror!.addedRomPaths, hasLength(1));
+      expect(requests, hasLength(1));
+    });
+
+    test('every member downloaded: no request', () async {
+      provider.fake.roms = [_rom(2, 'Game B.sfc'), _rom(3, 'Game C.sfc')];
+      provider.onDownloadsSettled = (_) async {
+        await local('Game B.sfc');
+        await local('Game C.sfc');
+      };
+
+      await provider.syncSource(
+        collection: _bestOfSnes,
+        romFolders: romFolders,
+        confirm: (_) async => true,
+      );
+      expect(provider.downloaded, [2, 3]);
+      expect(requests, isEmpty, reason: 'nothing was added on approval');
+
+      await provider.settleNowForTesting();
+
+      expect(provider.lastCollectionMirror!.added, 2);
+      expect(requests, isEmpty, reason: 'both members were downloads');
+    });
+
+    test('an unchanged collection raises none', () async {
+      await local('Game A.sfc');
+      provider.fake.roms = [_rom(1, 'Game A.sfc')];
+      await provider.syncSource(
+        collection: _bestOfSnes,
+        romFolders: romFolders,
+      );
+      expect(requests, hasLength(1));
+
+      await provider.syncSource(
+        collection: _bestOfSnes,
+        romFolders: romFolders,
+      );
+      expect(provider.lastCollectionMirror!.added, 0);
+      expect(requests, hasLength(1), reason: 'nothing new to fetch');
+    });
+
+    test('no handler: dropped with a log line, the sync unaffected', () async {
+      provider.onCollectionMetadataTargets = null;
+      await local('Game A.sfc');
+      provider.fake.roms = [_rom(1, 'Game A.sfc')];
+      LoggerService.instance.startCapture();
+
+      await provider.syncSource(
+        collection: _bestOfSnes,
+        romFolders: romFolders,
+      );
+
+      final lines = LoggerService.instance.takeCapture();
+      expect(provider.lastCollectionMirror!.added, 1);
+      expect(mirrored, 1);
+      expect(
+        lines.where((l) => l.contains('request dropped, no handler')),
+        hasLength(1),
+      );
+      expect(
+        lines.singleWhere((l) => l.contains('request dropped')),
+        allOf(contains('collection=12'), contains('targets=1')),
+      );
     });
   });
 }

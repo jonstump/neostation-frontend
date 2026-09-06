@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 
 import '../../l10n/app_locale.dart';
 import '../../models/romm_collection.dart';
+import '../../models/romm_metadata_fetch.dart';
 import '../../models/romm_platform.dart';
 import '../../models/romm_rom.dart';
 import '../../providers/file_provider.dart';
@@ -31,6 +32,7 @@ import '../../utils/count_label.dart';
 import '../../widgets/romm_browse_footer.dart';
 import '../../widgets/romm_sync_banner.dart';
 import '../app_screen.dart';
+import 'romm_metadata_fetch_runner.dart';
 import 'romm_rom_card.dart';
 import 'romm_rom_grid.dart';
 import 'romm_rom_list.dart';
@@ -267,6 +269,24 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
         onActivate: () => _gamepadNav.activate(),
         onDeactivate: () => _gamepadNav.deactivate(),
       );
+      // A collection sync's mirror hands over the members it linked (not
+      // the ones it downloaded) for a fill-gaps metadata pass; this screen
+      // runs it detached with the global notification while it is on
+      // screen. Cleared in dispose: the provider must never call into a
+      // dead context, and a sync that outlives the tab drops the request
+      // with a log line (the per-system action covers it later).
+      // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Metadata For Linked Members"
+      if (!mounted) return;
+      _rommProvider.onCollectionMetadataTargets = (request) {
+        if (!mounted) return;
+        RommMetadataFetchRunner.runTargets(
+          context,
+          label: request.collectionName,
+          targets: request.targets,
+          mode: RommMetadataMode.fillGaps,
+          systemsByFolder: request.systemsByFolder,
+        );
+      };
       // The library may have changed since the last visit — games deleted here
       // unlink themselves, but a ROM removed outside the app leaves the cached
       // download state claiming it's still there. Re-read from disk.
@@ -319,6 +339,7 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   @override
   void dispose() {
     _savePosition();
+    _rommProvider.onCollectionMetadataTargets = null;
     _search.cancel();
     if (_searchSelected) GamepadNavigationManager.popLayer(_searchLayerId);
     _searchNav.dispose();

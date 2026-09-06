@@ -254,6 +254,46 @@ class GameRepository {
     return result.isNotEmpty ? result.first['rom_path']?.toString() : null;
   }
 
+  /// Rows per `IN (...)` list in [getGamesByRomPaths]; SQLite's default
+  /// variable limit is 999.
+  static const int _romPathChunkSize = 500;
+
+  /// The scanned games whose `rom_path` is one of [romPaths], in no
+  /// particular order; paths the library has no row for are simply absent.
+  ///
+  /// Carries the identity columns a metadata fetch target needs — filename,
+  /// path, system — not the metadata joins of the list loaders. Chunked so a
+  /// collection of thousands stays under SQLite's variable limit. This is
+  /// how the members a collection sync added become fetch targets.
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Metadata For Linked Members"
+  static Future<List<DatabaseGameModel>> getGamesByRomPaths(
+    Iterable<String> romPaths,
+  ) async {
+    final paths = romPaths.toSet().toList(growable: false);
+    if (paths.isEmpty) return const [];
+    final db = await SqliteService.getDatabase();
+    final games = <DatabaseGameModel>[];
+    for (var i = 0; i < paths.length; i += _romPathChunkSize) {
+      final chunk = paths.sublist(
+        i,
+        (i + _romPathChunkSize).clamp(0, paths.length),
+      );
+      final placeholders = List.filled(chunk.length, '?').join(', ');
+      final rows = await db.rawQuery('''
+        SELECT
+          ur.filename, ur.rom_path, ur.is_favorite, ur.is_hidden,
+          ur.app_emulator_unique_id as emulator_name,
+          s.id as system_id, s.real_name as system_real_name,
+          s.folder_name as system_folder_name, s.short_name as system_short_name
+        FROM user_roms ur
+        JOIN app_systems s ON ur.app_system_id = s.id
+        WHERE ur.rom_path IN ($placeholders)
+        ''', chunk);
+      games.addAll(rows.map(DatabaseGameModel.fromJson));
+    }
+    return games;
+  }
+
   /// Returns the raw app_system_id for a game by exact romname, or null.
   static Future<String?> getSystemIdForGame(String romname) async {
     final db = await SqliteService.getDatabase();

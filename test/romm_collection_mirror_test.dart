@@ -120,6 +120,8 @@ class _Fixture {
     );
   }
 
+  Future<Set<String>> readMembers(String id) async => Set.of(rows[id]!.members);
+
   Future<({int added, int removed})> replaceMembers(
     String id,
     Set<String> paths,
@@ -152,6 +154,7 @@ class _Fixture {
         resolveLocal: resolveLocal,
         findMirror: findMirror,
         insertMirror: insertMirror,
+        readMembers: readMembers,
         replaceMembers: replaceMembers,
         setProvenance: setProvenance,
         newId: () => 'local-${nextId++}',
@@ -193,6 +196,11 @@ void main() {
       expect(s.created, isTrue);
       expect(s.collectionId, 'local-1');
       expect(s.added, 2);
+      expect(
+        s.addedRomPaths,
+        unorderedEquals(['/r/snes/Game 1.sfc', '/r/snes/Game 2.sfc']),
+        reason: 'a created collection held nothing, so every member is new',
+      );
       expect(s.removed, 0);
       expect(s.kept, 0);
       expect(s.unresolved, 1);
@@ -254,6 +262,9 @@ void main() {
         expect(second.collectionId, first.collectionId);
         expect(second.created, isFalse);
         expect(second.added, 1);
+        expect(second.addedRomPaths, [
+          '/r/3.sfc',
+        ], reason: 'only the member that was not already there');
         expect(second.removed, 1);
         expect(second.kept, 1);
         expect(second.members, 2);
@@ -309,6 +320,49 @@ void main() {
     });
   });
 
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Metadata For Linked Members"
+  group('added rom paths', () {
+    test('an unchanged membership adds nothing', () async {
+      f.serverRoms.add(_rom(1));
+      f.localPaths[1] = '/r/1.sfc';
+      await f.mirror().run(_bestOfSnes, serverUrl: _server);
+
+      final second = await f.mirror().run(_bestOfSnes, serverUrl: _server);
+
+      expect(second.added, 0);
+      expect(second.addedRomPaths, isEmpty);
+      expect(second.kept, 1);
+    });
+
+    test('a member kept under another spelling is not re-added', () async {
+      f.serverRoms.add(_rom(1));
+      f.localPaths[1] = '/r/Game 1.sfc';
+      final first = await f.mirror().run(_bestOfSnes, serverUrl: _server);
+      // The membership key is NOCASE; the stored spelling may differ.
+      f.rows[first.collectionId]!.members = {'/r/game 1.sfc'};
+
+      final second = await f.mirror().run(_bestOfSnes, serverUrl: _server);
+
+      expect(second.addedRomPaths, isEmpty);
+    });
+
+    test('a cancelled run and a failed page report none', () async {
+      f.serverRoms.addAll([_rom(1), _rom(2)]);
+      f.localPaths[1] = '/r/1.sfc';
+      f.stop = true;
+      final cancelled = await f.mirror().run(_bestOfSnes, serverUrl: _server);
+      expect(cancelled.cancelled, isTrue);
+      expect(cancelled.addedRomPaths, isEmpty);
+
+      f.stop = false;
+      f.failOnPage = StateError('502');
+      f.failPage = 1;
+      final failed = await f.mirror().run(_bestOfSnes, serverUrl: _server);
+      expect(failed.failed, isTrue);
+      expect(failed.addedRomPaths, isEmpty);
+    });
+  });
+
   group('unresolved', () {
     test('ROMs neither local nor downloaded are counted, not added', () async {
       f.serverRoms.addAll([_rom(1), _rom(2), _rom(3), _rom(4)]);
@@ -330,6 +384,7 @@ void main() {
         },
         findMirror: f.findMirror,
         insertMirror: f.insertMirror,
+        readMembers: f.readMembers,
         replaceMembers: f.replaceMembers,
         setProvenance: f.setProvenance,
         newId: () => 'local-x',
@@ -463,6 +518,7 @@ void main() {
         resolveLocal: f.resolveLocal,
         findMirror: f.findMirror,
         insertMirror: f.insertMirror,
+        readMembers: f.readMembers,
         replaceMembers: (_, _) async => throw StateError('disk full'),
         setProvenance: f.setProvenance,
         newId: () => 'local-x',

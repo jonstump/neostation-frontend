@@ -5,7 +5,9 @@ import 'package:flutter/foundation.dart';
 import '../../models/romm_collection.dart';
 import '../../models/romm_rom.dart';
 import '../../models/romm_rom_page.dart';
+import '../../models/system_model.dart';
 import '../logger_service.dart';
+import 'romm_metadata_fetch.dart';
 import 'romm_paging.dart';
 
 /// One page of the RomM collection's ROMs, the same walk bulk sync makes.
@@ -34,6 +36,10 @@ typedef RommMirrorInserter =
       required bool virtual,
       required DateTime syncedAt,
     });
+
+/// The `rom_path`s that are members of a local collection right now — read
+/// before the membership write so the run can name the paths it is adding.
+typedef RommMirrorMemberReader = Future<Set<String>> Function(String id);
 
 /// Sets a collection's membership to exactly the given paths (one
 /// transaction) and reports how many rows were added and removed.
@@ -71,6 +77,13 @@ class RommCollectionMirrorSummary {
   /// Members added this run.
   final int added;
 
+  /// The `rom_path` of every member added this run — the resolved set minus
+  /// what the collection already held — so the caller can tell the newly
+  /// linked members from the ones it downloaded and fetch metadata for them.
+  /// Empty when nothing was added, and on a cancelled or failed run.
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Metadata For Linked Members"
+  final List<String> addedRomPaths;
+
   /// Members removed this run because their ROM left the RomM collection
   /// (or was never in it — a hand-added game).
   final int removed;
@@ -99,6 +112,7 @@ class RommCollectionMirrorSummary {
     this.collectionId,
     this.created = false,
     this.added = 0,
+    this.addedRomPaths = const [],
     this.removed = 0,
     this.kept = 0,
     this.unresolved = 0,
@@ -114,6 +128,35 @@ class RommCollectionMirrorSummary {
 
   /// True when the run wrote membership.
   bool get wroteMembership => !cancelled && !failed && collectionId != null;
+}
+
+/// What a collection sync asks the UI to fetch metadata for once its mirror
+/// run has resolved the members: the members that run added and the sync
+/// linked rather than downloaded (a download gets its metadata on
+/// completion). [systemsByFolder] carries the system of every target, keyed
+/// by the game's system folder, so the runner needs no lookup of its own.
+// Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Metadata For Linked Members"
+@immutable
+class RommCollectionMetadataRequest {
+  /// The RomM collection's name — what the notification names.
+  final String collectionName;
+
+  /// The linked members to fetch, each with the rom id its map row points at.
+  final List<RommMetadataFetchTarget> targets;
+
+  /// The system of every target, by `DatabaseGameModel.systemFolderName`.
+  final Map<String, SystemModel> systemsByFolder;
+
+  const RommCollectionMetadataRequest({
+    required this.collectionName,
+    required this.targets,
+    required this.systemsByFolder,
+  });
+
+  /// The system of [target]. Every target's system is in [systemsByFolder]
+  /// by construction; a miss is a wiring bug, not a runtime condition.
+  SystemModel systemOf(RommMetadataFetchTarget target) =>
+      systemsByFolder[target.game.systemFolderName]!;
 }
 
 /// A page of the RomM collection could not be fetched. Carries the RomM
@@ -233,6 +276,7 @@ class RommCollectionMirror {
   final RommCollectionLocalResolver _resolveLocal;
   final RommMirrorFinder _findMirror;
   final RommMirrorInserter _insertMirror;
+  final RommMirrorMemberReader _readMembers;
   final RommMirrorMemberReplacer _replaceMembers;
   final RommMirrorProvenanceSetter _setProvenance;
   final RommMirrorStopCheck _shouldStop;
@@ -245,6 +289,7 @@ class RommCollectionMirror {
     required RommCollectionLocalResolver resolveLocal,
     required RommMirrorFinder findMirror,
     required RommMirrorInserter insertMirror,
+    required RommMirrorMemberReader readMembers,
     required RommMirrorMemberReplacer replaceMembers,
     required RommMirrorProvenanceSetter setProvenance,
     required String Function() newId,
@@ -255,6 +300,7 @@ class RommCollectionMirror {
        _resolveLocal = resolveLocal,
        _findMirror = findMirror,
        _insertMirror = insertMirror,
+       _readMembers = readMembers,
        _replaceMembers = replaceMembers,
        _setProvenance = setProvenance,
        _newId = newId,
@@ -452,8 +498,23 @@ class RommCollectionMirror {
       );
     }
 
+    // The paths this run adds: the resolved set minus what the collection
+    // holds now, compared the way the membership key is (case-insensitively).
+    // A created collection holds nothing, so every resolved path is new.
+    // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Metadata For Linked Members"
     final ({int added, int removed}) change;
+    final List<String> addedPaths;
     try {
+      final previous = created
+          ? const <String>{}
+          : {
+              for (final path in await _readMembers(localId))
+                path.toLowerCase(),
+            };
+      addedPaths = [
+        for (final path in resolved)
+          if (!previous.contains(path.toLowerCase())) path,
+      ];
       change = await _replaceMembers(localId, resolved);
     } catch (e) {
       final error = RommCollectionMirrorWriteException(
@@ -499,6 +560,7 @@ class RommCollectionMirror {
       collectionId: localId,
       created: created,
       added: change.added,
+      addedRomPaths: addedPaths,
       removed: change.removed,
       kept: resolved.length - change.added,
       unresolved: unresolved,
