@@ -53,12 +53,12 @@ The system SHALL provide `RommCollectionMirror` with injected functions for pagi
 
 ### Requirement: Triggered By The Collection Sync
 
-`RommProvider.syncSource` for a collection SHALL run the mirror after the bulk sync completes and MUST NOT run it when the user declined the plan. The provider MUST remember the synced collection and run the mirror again after the settle rescan has indexed that sync's downloads, so downloaded ROMs become members. The mirror MUST NOT run on connect or for platform syncs.
+`RommProvider.syncSource` for a collection SHALL run the mirror as soon as the user approves the sync plan (so the collection exists while downloads are still running), or after the bulk sync completes when no plan was shown, and MUST NOT run it when the user declined the plan. The provider MUST remember the synced collection and run the mirror again after the settle rescan has indexed that sync's downloads, so downloaded ROMs become members. The mirror MUST NOT run on connect or for platform syncs.
 
 #### Scenario: Sync with downloads
 
 - **WHEN** a collection of 10 ROMs is synced, 6 are local and 4 are downloaded
-- **THEN** the collection holds 6 members right after the sync and 10 once the downloads are indexed
+- **THEN** the collection exists with 6 members as soon as the plan is approved, while the 4 are still downloading, and holds 10 once the downloads are indexed
 
 #### Scenario: Declined plan
 

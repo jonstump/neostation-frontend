@@ -46,7 +46,7 @@ The service collects the whole resolved set first and writes it once at the end;
 
 ### Provider hooks
 
-**Choice**: In `syncSource`, after `bulkSync.run` returns and `!bulkSync.declined`, run the mirror for the collection and remember `_pendingCollectionMirrors[collection.id] = collection`; in the settle handler, after downloads are marked indexed, run the mirror again for each remembered collection and clear it. Both runs call `CollectionsProvider`-facing refresh through a callback the app wires in `main.dart` (like `onDownloadsSettled`), so the collections screen updates.
+**Choice**: In `syncSource`, wrap the plan confirmation so an approval runs the mirror immediately (fire-and-forget, awaited before the outcome is reported); when no plan was shown, run it after `bulkSync.run` returns and `!bulkSync.declined`. Either way remember `_pendingCollectionMirrors[collection.id] = collection`; in the settle handler, after downloads are marked indexed, run the mirror again for each remembered collection and clear it. Both runs call `CollectionsProvider`-facing refresh through a callback the app wires in `main.dart` (like `onDownloadsSettled`), so the collections screen updates.
 **Rationale**: Keeps the trigger where the sync already lives; the settle is the only point where downloaded files are guaranteed in `user_roms`.
 
 ### Browser surfaces
