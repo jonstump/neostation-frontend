@@ -2109,6 +2109,9 @@ class RommProvider extends ChangeNotifier {
     RommBulkSyncConfirm? confirm,
     void Function(String romname)? onLinked,
   }) async {
+    // A fresh sync must never report the previous one's collection summary;
+    // it is set again only when this sync's mirror actually runs.
+    _lastCollectionMirror = null;
     // An explicit argument wins outright: a sync started from the list must not
     // inherit the other kind of source from whatever the browser has open.
     final RommPlatform? target;

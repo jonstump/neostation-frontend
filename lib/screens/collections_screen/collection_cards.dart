@@ -12,6 +12,11 @@ import '../../themes/corner_radii.dart';
 /// matching the Collections virtual system's own palette.
 const String kCollectionFallbackColor = '#7C4DFF';
 
+/// The glyph a mirrored collection's card carries: the same cloud the RomM
+/// tab's own controls use, so the card says where the collection comes from
+/// in the tab's vocabulary.
+const IconData kRommMirrorGlyph = Symbols.cloud_sync_rounded;
+
 /// Presents [collection] to the systems-card widgets.
 ///
 /// Collections are not systems, but they are shown with the same card, so they
@@ -32,11 +37,6 @@ const String kCollectionFallbackColor = '#7C4DFF';
 /// so passing them alongside one only furnishes its `errorBuilder`. Pass them
 /// unconditionally — a card whose artwork file has gone missing is otherwise
 /// blank with no way to tell why.
-/// The glyph a mirrored collection's card carries: the same cloud the RomM
-/// tab's own controls use, so the card says where the collection comes from
-/// in the tab's vocabulary.
-const IconData kRommMirrorGlyph = Symbols.cloud_sync_rounded;
-
 // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Mirrored Collections In The Browser"
 SystemInfo collectionToSystemInfo(
   CollectionModel collection, {
