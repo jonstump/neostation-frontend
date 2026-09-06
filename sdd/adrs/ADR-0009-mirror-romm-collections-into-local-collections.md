@@ -40,6 +40,7 @@ Chosen option: "Provenance-linked mirror", because it makes the existing Y-sync 
 4. **Managed membership, user-owned everything else.** On each run membership mirrors the RomM collection exactly for the ROMs that exist locally. Name is set at creation and left alone afterwards, so a rename sticks; image, colours, and sort order are never touched. Deleting the local collection is allowed; the next sync recreates it. Unresolved ROMs (not local, not downloaded) are counted, not added.
 5. **Visible and unlinkable.** The collections browser marks a mirrored collection with a RomM indicator and offers "Unlink from RomM", which clears the provenance and leaves the collection and its games as an ordinary local collection.
 6. **Virtual collections included; no connect-time mirroring.** Virtual RomM collections mirror the same way when synced. Nothing happens on connect.
+7. **Linked members get metadata.** Device testing showed a synced collection whose ROMs were already local came across with no metadata: bulk sync links without fetching (ADR-0001). For a collection sync the set is bounded and curated, so after the mirror resolves its members the provider runs the SPEC-0005 fill-gaps fetch over the members the sync linked (not the ones it downloaded, which get metadata on completion), through the same bounded, notified pass the system settings action uses. Platform syncs stay metadata-free.
 
 ### Consequences
 

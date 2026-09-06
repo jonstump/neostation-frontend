@@ -61,7 +61,7 @@ When a user confirms a ROM in the RomM browser, or bulk sync enumerates a ROM, a
 
 The browser path MUST tell the user the ROM was linked rather than repeating the "already downloaded" message when a new row was written. Bulk sync MUST count linked ROMs separately from ROMs that were already linked, and MUST NOT queue them for download.
 
-The browser path SHOULD fill the game's metadata and media gaps from RomM on confirm (the fill-gaps import from SPEC-0005 replaced the original "no scraped metadata" gate). Bulk sync MUST NOT fetch media for linked ROMs.
+The browser path SHOULD fill the game's metadata and media gaps from RomM on confirm (the fill-gaps import from SPEC-0005 replaced the original "no scraped metadata" gate). Platform bulk syncs MUST NOT fetch media for linked ROMs; a collection sync fills the metadata gaps of the members it linked per SPEC-0009.
 
 #### Scenario: Browser confirm on an existing file
 

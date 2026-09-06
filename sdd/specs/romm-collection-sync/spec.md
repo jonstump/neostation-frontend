@@ -70,6 +70,20 @@ The system SHALL provide `RommCollectionMirror` with injected functions for pagi
 - **WHEN** the user cancels after some downloads completed
 - **THEN** the mirror runs for what is local and the indexed downloads still join after the settle
 
+### Requirement: Metadata For Linked Members
+
+After a collection sync's mirror run has resolved its members, the system SHALL fetch RomM metadata in fill-gaps mode (SPEC-0005 writer) for the members that were linked rather than downloaded by that sync, MUST run it with the bounded concurrency and progress notification of the per-system pass, MUST skip members the sync downloaded (they receive metadata on download completion), MUST NOT block the sync or the mirror on it, and MUST isolate per-game failures. Platform syncs remain metadata-free (SPEC-0001).
+
+#### Scenario: Linked members get metadata
+
+- **WHEN** a collection sync links 6 ROMs already on the device and downloads 4
+- **THEN** a fill-gaps fetch runs for the 6 linked games, the 4 downloaded games are not fetched again, and progress shows in the global notification
+
+#### Scenario: Nothing linked
+
+- **WHEN** every member was downloaded by the sync
+- **THEN** no metadata pass runs
+
 ### Requirement: Sync Dialog And Outcome
 
 The sync confirmation dialog for a collection SHALL include a localized line saying the collection will be created or updated in NeoStation, and the sync outcome notification SHALL include how many games the local collection holds.
