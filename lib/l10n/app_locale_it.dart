@@ -1434,4 +1434,19 @@ const Map<String, dynamic> appLocaleIt = {
       'Accedi a ScreenScraper o collega RomM prima di avviare lo scraping',
   AppLocale.screenscraperDevCredentialsMissing:
       'Questa build non include le credenziali sviluppatore di ScreenScraper; accesso e scraping ScreenScraper non sono disponibili.',
+  AppLocale.rommAuthModePairCode: 'Abbinamento',
+  AppLocale.rommPairCodeLabel: 'Codice di abbinamento',
+  AppLocale.rommPairCodePlaceholder: 'XXXX-XXXX',
+  AppLocale.rommPairCodeHint:
+      'In RomM apri Impostazioni → Client API Tokens → Abbina dispositivo. Il codice scade circa un minuto dopo la generazione.',
+  AppLocale.rommPairCodeInvalidLength:
+      'Inserisci l’URL del server e il codice di abbinamento di 8 caratteri (XXXX-XXXX)',
+  AppLocale.rommPairCodeInvalid:
+      'Questo codice di abbinamento non è valido; controlla gli 8 caratteri',
+  AppLocale.rommPairCodeExpired:
+      'Codice di abbinamento scaduto o già usato; generane uno nuovo in RomM',
+  AppLocale.rommPairRateLimited:
+      'Troppi tentativi; attendi un minuto e riprova',
+  AppLocale.rommPairedTokenExpires: 'Il token scade il {date}',
+  AppLocale.rommPairedTokenName: 'Token: {name}',
 };

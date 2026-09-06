@@ -1225,4 +1225,15 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.scrapeBulkNoSourceAvailable: '開始擷取前請先登入 ScreenScraper 或連線 RomM',
   AppLocale.screenscraperDevCredentialsMissing:
       '此版本未包含 ScreenScraper 開發者憑證，因此無法登入 ScreenScraper 或進行抓取。',
+  AppLocale.rommAuthModePairCode: '配對碼',
+  AppLocale.rommPairCodeLabel: '配對碼',
+  AppLocale.rommPairCodePlaceholder: 'XXXX-XXXX',
+  AppLocale.rommPairCodeHint:
+      '在 RomM 中開啟 設定 → Client API Tokens → 配對裝置 取得配對碼。配對碼在產生約一分鐘後失效。',
+  AppLocale.rommPairCodeInvalidLength: '請輸入伺服器 URL 和 8 位配對碼 (XXXX-XXXX)',
+  AppLocale.rommPairCodeInvalid: '此配對碼無效，請檢查這 8 個字元',
+  AppLocale.rommPairCodeExpired: '配對碼已過期或已被使用，請在 RomM 中重新產生',
+  AppLocale.rommPairRateLimited: '嘗試次數過多，請等待一分鐘後再試',
+  AppLocale.rommPairedTokenExpires: '權杖將於 {date} 過期',
+  AppLocale.rommPairedTokenName: '權杖：{name}',
 };

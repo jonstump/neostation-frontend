@@ -1224,4 +1224,15 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.scrapeBulkNoSourceAvailable: '开始抓取前请先登录 ScreenScraper 或连接 RomM',
   AppLocale.screenscraperDevCredentialsMissing:
       '此版本未包含 ScreenScraper 开发者凭据，因此无法登录 ScreenScraper 或进行抓取。',
+  AppLocale.rommAuthModePairCode: '配对码',
+  AppLocale.rommPairCodeLabel: '配对码',
+  AppLocale.rommPairCodePlaceholder: 'XXXX-XXXX',
+  AppLocale.rommPairCodeHint:
+      '在 RomM 中打开 设置 → Client API Tokens → 配对设备 获取配对码。配对码在生成约一分钟后失效。',
+  AppLocale.rommPairCodeInvalidLength: '请输入服务器 URL 和 8 位配对码 (XXXX-XXXX)',
+  AppLocale.rommPairCodeInvalid: '该配对码无效，请检查这 8 个字符',
+  AppLocale.rommPairCodeExpired: '配对码已过期或已被使用，请在 RomM 中重新生成',
+  AppLocale.rommPairRateLimited: '尝试次数过多，请等待一分钟后重试',
+  AppLocale.rommPairedTokenExpires: '令牌将于 {date} 过期',
+  AppLocale.rommPairedTokenName: '令牌：{name}',
 };

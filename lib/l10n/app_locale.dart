@@ -1427,6 +1427,19 @@ mixin AppLocale {
   static const String screenscraperDevCredentialsMissing =
       'screenscraper_dev_credentials_missing';
 
+  // RomM pairing-code mode (SPEC-0007)
+  static const String rommAuthModePairCode = 'romm_auth_mode_pair_code';
+  static const String rommPairCodeLabel = 'romm_pair_code_label';
+  static const String rommPairCodePlaceholder = 'romm_pair_code_placeholder';
+  static const String rommPairCodeHint = 'romm_pair_code_hint';
+  static const String rommPairCodeInvalidLength =
+      'romm_pair_code_invalid_length';
+  static const String rommPairCodeInvalid = 'romm_pair_code_invalid';
+  static const String rommPairCodeExpired = 'romm_pair_code_expired';
+  static const String rommPairRateLimited = 'romm_pair_rate_limited';
+  static const String rommPairedTokenExpires = 'romm_paired_token_expires';
+  static const String rommPairedTokenName = 'romm_paired_token_name';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================

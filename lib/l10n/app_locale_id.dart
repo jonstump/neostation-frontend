@@ -1402,4 +1402,19 @@ const Map<String, dynamic> appLocaleId = {
       'Masuk ke ScreenScraper atau hubungkan RomM sebelum memulai scraping',
   AppLocale.screenscraperDevCredentialsMissing:
       'Build ini tidak memiliki kredensial pengembang ScreenScraper, sehingga login dan scraping ScreenScraper tidak tersedia.',
+  AppLocale.rommAuthModePairCode: 'Sandingkan',
+  AppLocale.rommPairCodeLabel: 'Kode penyandingan',
+  AppLocale.rommPairCodePlaceholder: 'XXXX-XXXX',
+  AppLocale.rommPairCodeHint:
+      'Di RomM buka Settings → Client API Tokens → Pair device. Kode kedaluwarsa sekitar satu menit setelah dibuat.',
+  AppLocale.rommPairCodeInvalidLength:
+      'Masukkan URL server dan kode penyandingan 8 karakter (XXXX-XXXX)',
+  AppLocale.rommPairCodeInvalid:
+      'Kode penyandingan itu tidak valid; periksa 8 karakternya',
+  AppLocale.rommPairCodeExpired:
+      'Kode penyandingan kedaluwarsa atau sudah dipakai; buat yang baru di RomM',
+  AppLocale.rommPairRateLimited:
+      'Terlalu banyak percobaan; tunggu satu menit lalu coba lagi',
+  AppLocale.rommPairedTokenExpires: 'Token kedaluwarsa pada {date}',
+  AppLocale.rommPairedTokenName: 'Token: {name}',
 };
