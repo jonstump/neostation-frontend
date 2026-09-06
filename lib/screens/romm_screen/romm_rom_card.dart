@@ -106,7 +106,7 @@ class RommRomCardState extends State<RommRomCard> {
     // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Tile Cover Source Order"
     var attempt = _coverAttempt;
     while (attempt < covers.length &&
-        RommDeadCovers.contains(covers[attempt])) {
+        widget.provider.service.isDeadCover(covers[attempt])) {
       attempt++;
     }
     final coverUrl = attempt < covers.length ? covers[attempt] : null;
@@ -462,8 +462,8 @@ class RommRomCardState extends State<RommRomCard> {
   /// This moves [_coverAttempt] on by one rather than to the index actually
   /// drawn, which can be further along when the skip loop in `build` stepped
   /// over dead sources. That still converges: the failure is recorded in
-  /// [RommDeadCovers] first, so the next build's skip loop walks past it and
-  /// every other known-dead entry in one go.
+  /// the service's dead-cover set first, so the next build's skip loop walks
+  /// past it and every other known-dead entry in one go.
   void _tryNextCover() {
     final failed = _coverAttempt;
     WidgetsBinding.instance.addPostFrameCallback((_) {

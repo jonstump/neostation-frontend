@@ -145,6 +145,27 @@ class RommService {
   /// both are somehow given, and puts the service in API-key mode where the
   /// [accessToken]/[refreshToken]/[tokenExpiresMs] restore arguments are
   /// meaningless and ignored.
+  /// Cover URLs this server answered with nothing, so a tile does not re-ask
+  /// for a dead end every time it is rebuilt.
+  ///
+  /// The grid keeps two rows either side of the viewport built and disposes
+  /// the rest, so scrolling away and back gives a tile a fresh `State` with
+  /// its candidate index at zero. For a library where RomM never cached small
+  /// thumbnails that meant re-requesting the same 404 on every scrollback.
+  ///
+  /// On the service rather than in a static because it is a fact about *this
+  /// server*: [configure] clears it, so pointing at a different RomM — or
+  /// reconnecting after a rescan that filled the gaps — asks again. In memory
+  /// only; nothing is written to disk.
+  // Governing: ADR-0008 (RomM browse cover loading), SPEC-0008 REQ "Tile Cover Source Order"
+  final Set<String> _deadCovers = <String>{};
+
+  /// Whether [url] already answered with nothing for the current server.
+  bool isDeadCover(String url) => _deadCovers.contains(url);
+
+  /// Records that [url] had no usable image behind it.
+  void markDeadCover(String url) => _deadCovers.add(url);
+
   void configure({
     required String serverUrl,
     String username = '',
@@ -154,6 +175,9 @@ class RommService {
     String? refreshToken,
     int? tokenExpiresMs,
   }) {
+    // A different server (or a reconnect) knows nothing about the last one's
+    // missing covers.
+    _deadCovers.clear();
     final raw = serverUrl.trim();
     _schemeExplicit = raw.startsWith('http://') || raw.startsWith('https://');
     _baseUrl = _normalizeBaseUrl(raw);

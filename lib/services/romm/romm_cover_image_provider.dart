@@ -77,15 +77,15 @@ class RommCoverImage extends ImageProvider<RommCoverImage> {
     await _gate.acquire();
     Uint8List? bytes;
     try {
-      // `quiet: true`: a 404 on the first candidate is the documented way to
-      // reach the second (see `tileCoverUrlCandidates`), so a miss here is
-      // expected traffic rather than something to warn about once per tile.
-      bytes = await key.service.fetchImageBytes(key.url, quiet: true);
+      // A 404 on the first candidate is the documented way to reach the
+      // second (see `tileCoverUrlCandidates`), so a miss here is expected
+      // traffic rather than a fault.
+      bytes = await key.service.fetchImageBytes(key.url);
     } finally {
       _gate.release();
     }
     if (bytes == null || bytes.isEmpty) {
-      RommDeadCovers.add(key.url);
+      key.service.markDeadCover(key.url);
       // The same shape `NetworkImage` fails with, so the card's existing
       // `errorBuilder` keeps working and still advances to the next candidate.
       throw NetworkImageLoadException(statusCode: 404, uri: Uri.parse(key.url));
@@ -102,35 +102,4 @@ class RommCoverImage extends ImageProvider<RommCoverImage> {
 
   @override
   String toString() => 'RommCoverImage("$url", scale: $scale)';
-}
-
-/// Cover URLs that came back with nothing this session, so a tile does not
-/// re-ask for a dead end every time it is rebuilt.
-///
-/// The grid keeps two rows either side of the viewport built and disposes the
-/// rest, so scrolling away and back gives a tile a fresh `State` with its
-/// candidate index at zero. For a library where RomM never cached small
-/// thumbnails that meant re-requesting the same 404 on every scrollback,
-/// forever — the app kept rediscovering what it already knew.
-///
-/// In memory only, and deliberately not persisted: a cover missing today may
-/// be there after the next RomM scan, and a restart is the cheapest way to
-/// ask again. Nothing is written to disk, so SPEC-0008 REQ "In-Memory Cache
-/// Only" still holds — this records an *absence*, not an image.
-// Governing: ADR-0008 (RomM browse cover loading), SPEC-0008 REQ "Tile Cover Source Order"
-class RommDeadCovers {
-  static final Set<String> _urls = <String>{};
-
-  /// Whether [url] already answered with nothing this session.
-  static bool contains(String url) => _urls.contains(url);
-
-  /// Records that [url] had no usable image behind it.
-  static void add(String url) => _urls.add(url);
-
-  /// Forgets everything. Called when the server changes underneath us — a
-  /// different RomM, or a fresh scan — and by tests.
-  static void clear() => _urls.clear();
-
-  /// How many dead sources are remembered, for tests and logging.
-  static int get length => _urls.length;
 }

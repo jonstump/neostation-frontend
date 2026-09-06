@@ -40,15 +40,12 @@ void main() {
     return s;
   }
 
-  setUp(() {
-    RommDeadCovers.clear();
-    service = connected();
-  });
+  // A fresh service per test *is* the isolation now: the dead-cover memory
+  // lives on the service, so nothing leaks between tests the way a static set
+  // did — which is what broke `romm_tile_cover_test` when this was global.
+  setUp(() => service = connected());
 
-  tearDown(() {
-    RommService.debugUseHttpClient(null);
-    RommDeadCovers.clear();
-  });
+  tearDown(() => RommService.debugUseHttpClient(null));
 
   Future<void> resolve(String url) {
     final completer = Completer<void>();
@@ -173,7 +170,7 @@ void main() {
 
       await resolve('https://romm.local/missing.png');
 
-      expect(RommDeadCovers.contains('https://romm.local/missing.png'), isTrue);
+      expect(service.isDeadCover('https://romm.local/missing.png'), isTrue);
     });
 
     test('a hit is not recorded', () async {
@@ -189,11 +186,26 @@ void main() {
 
       await resolve('https://romm.local/present.png');
 
-      expect(
-        RommDeadCovers.contains('https://romm.local/present.png'),
-        isFalse,
+      expect(service.isDeadCover('https://romm.local/present.png'), isFalse);
+    });
+
+    test('a different server forgets the last one\'s dead covers', () async {
+      // The reason this lives on the service. A RomM that gains covers after a
+      // rescan, or a switch to a different server, must not inherit the old
+      // one's misses for the rest of the session.
+      RommService.debugUseHttpClient(
+        MockClient((request) async => http.Response('nope', 404)),
       );
-      expect(RommDeadCovers.length, 0);
+      await resolve('https://romm.local/gone.png');
+      expect(service.isDeadCover('https://romm.local/gone.png'), isTrue);
+
+      service.configure(serverUrl: 'https://other.local', apiKey: 'k');
+
+      expect(
+        service.isDeadCover('https://romm.local/gone.png'),
+        isFalse,
+        reason: 'configure() clears what the previous server answered',
+      );
     });
   });
 
