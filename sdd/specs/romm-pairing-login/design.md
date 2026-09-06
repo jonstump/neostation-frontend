@@ -42,6 +42,8 @@ Constraints: strict layering, twelve-language strings, controller reachability, 
 **Choice**: Replace `bool _useApiKey` with `enum RommAuthMode { password, apiKey, pairCode }`; the switch renders three segments; Left/Right cycles; focus lists gain the code field and, on camera platforms, the scan action. Code field input is upper-cased and dashes tolerated; the hint says the code lasts about a minute.
 **Rationale**: The existing switch already does two modes with gamepad semantics; extending it keeps one navigation model.
 
+As implemented: Left/Right on the switch step one segment and stop at the ends; A (and a tap on a segment) advances or picks, wrapping from the last to the first. The spec's "cycles" is satisfied by A; the D-pad does not wrap so a refused edge move stays silent like the rest of the form.
+
 ### Scanner as its own screen and layer
 
 **Choice**: `RommQrScanScreen` under `lib/screens/romm_screen/`, pushed with `Navigator.push`, registering a `GamepadNavigationManager` layer in the same post-frame callback as initialize and popping it in dispose; B pops with null. It hosts `MobileScanner(onDetect:)` and returns the first `RommPairLink` that parses; non-matching values show a transient refusal and continue. The action is shown when `Platform.isAndroid || Platform.isMacOS`. Camera permission is requested by the plugin on start; a denial is surfaced from the controller's error and the screen pops with a `denied` result.
