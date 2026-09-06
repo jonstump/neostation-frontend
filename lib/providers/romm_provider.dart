@@ -458,7 +458,7 @@ class RommProvider extends ChangeNotifier {
     for (final entry in pending) {
       await _mirrorCollection(entry.collection, entry.romFolders);
     }
-    if (_completedPendingIndex.isEmpty) _pendingCollectionMirrors.clear();
+    if (_completedPendingIndex.isEmpty) _forgetPendingMirrors();
   }
 
   /// Registers a finished download exactly as [downloadRom] does once the
@@ -2176,7 +2176,20 @@ class RommProvider extends ChangeNotifier {
         romFolders: romFolders,
       );
       await _mirrorCollection(source, romFolders);
+      // With no download awaiting a settle (all local, or every transfer
+      // failed or was cancelled) this run already saw everything; nothing
+      // is left for a later settle to add.
+      if (_completedPendingIndex.isEmpty) _forgetPendingMirrors();
     }
+  }
+
+  /// Drops the remembered collections and the per-download names kept for
+  /// their resolver; both exist only to let a settle-triggered run see the
+  /// downloads a sync produced.
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Concurrency Safety"
+  void _forgetPendingMirrors() {
+    _pendingCollectionMirrors.clear();
+    _indexedDownloadNames.clear();
   }
 
   /// Mirrors [collection] into its local collection (see
