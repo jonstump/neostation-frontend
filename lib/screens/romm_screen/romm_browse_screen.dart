@@ -1061,7 +1061,11 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
                       left: 0,
                       right: 0,
                       bottom: kCoreFooterHeight.r,
-                      child: RommSyncBanner(sync: provider.bulkSync),
+                      child: RommSyncBanner(
+                        sync: provider.bulkSync,
+                        downloadFor: provider.downloadFor,
+                        progressTicks: provider,
+                      ),
                     ),
                   ],
                 ),

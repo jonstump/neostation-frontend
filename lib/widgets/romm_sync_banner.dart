@@ -5,7 +5,9 @@ import 'package:material_symbols_icons/symbols.dart';
 
 import '../l10n/app_locale.dart';
 import '../providers/romm_bulk_sync.dart';
+import '../providers/romm_provider.dart' show RommDownload;
 import '../themes/corner_radii.dart';
+import '../utils/romm_sync_progress.dart';
 
 /// Human-readable byte size (e.g. "2.1 MB", "54 GB").
 String rommFormatBytes(int bytes) {
@@ -37,12 +39,26 @@ String rommFormatBytes(int bytes) {
 class RommSyncBanner extends StatelessWidget {
   final RommBulkSync sync;
 
-  const RommSyncBanner({super.key, required this.sync});
+  /// Looks up the live tracker of an in-flight ROM so each file's own bytes
+  /// can be drawn; null keeps the count-based bar.
+  final RommDownload? Function(int romId)? downloadFor;
+
+  /// Fires on byte progress (the RomM provider). Listened to here, inside the
+  /// band, so per-file bars tick without the browse screen rebuilding.
+  final Listenable? progressTicks;
+
+  const RommSyncBanner({
+    super.key,
+    required this.sync,
+    this.downloadFor,
+    this.progressTicks,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final ticks = progressTicks;
     return ListenableBuilder(
-      listenable: sync,
+      listenable: ticks == null ? sync : Listenable.merge([sync, ticks]),
       builder: (context, _) {
         if (!sync.isRunning) return const SizedBox.shrink();
         return _band(context);
@@ -104,17 +120,21 @@ class RommSyncBanner extends StatelessWidget {
                   ],
                 ),
                 SizedBox(height: 6.r),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4.r),
-                  child: LinearProgressIndicator(
-                    // The enumeration pass has no meaningful denominator until
-                    // the server reports a total, so it runs indeterminate.
-                    value: preparing ? null : _fraction,
-                    minHeight: 4.r,
-                    backgroundColor: scheme.surfaceContainerHighest,
-                    color: scheme.primary,
-                  ),
-                ),
+                if (preparing || downloadFor == null || sync.activeRoms.isEmpty)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4.r),
+                    child: LinearProgressIndicator(
+                      // The enumeration pass has no meaningful denominator
+                      // until the server reports a total, so it runs
+                      // indeterminate.
+                      value: preparing ? null : _fraction,
+                      minHeight: 4.r,
+                      backgroundColor: scheme.surfaceContainerHighest,
+                      color: scheme.primary,
+                    ),
+                  )
+                else
+                  ..._fileRows(theme, scheme),
               ],
             ),
           ),
@@ -123,8 +143,66 @@ class RommSyncBanner extends StatelessWidget {
     );
   }
 
-  /// Progress by ROM count rather than bytes: RomM reports sizes per ROM, but
-  /// the bar would otherwise stall through a single large disc image and then
+  /// One thin bar per transfer in flight (the queue drains a few at a time):
+  /// the file's name, its own percentage, and its own bytes. The header line
+  /// above keeps the whole-queue count, so the two answer different questions
+  /// — how far this file is, and how far the sync is.
+  List<Widget> _fileRows(ThemeData theme, ColorScheme scheme) {
+    final rows = <Widget>[];
+    for (final rom in sync.activeRoms) {
+      final download = downloadFor!(rom.id);
+      final fraction = download == null
+          ? null
+          : rommFileFraction(
+              received: download.received,
+              total: download.total,
+            );
+      final percent = fraction == null ? '' : '${(fraction * 100).round()}%';
+      if (rows.isNotEmpty) rows.add(SizedBox(height: 4.r));
+      rows.add(
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                rom.fsName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ),
+            if (percent.isNotEmpty) ...[
+              SizedBox(width: 8.r),
+              Text(
+                percent,
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: scheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ],
+        ),
+      );
+      rows.add(SizedBox(height: 2.r));
+      rows.add(
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4.r),
+          child: LinearProgressIndicator(
+            value: fraction,
+            minHeight: 4.r,
+            backgroundColor: scheme.surfaceContainerHighest,
+            color: scheme.primary,
+          ),
+        ),
+      );
+    }
+    return rows;
+  }
+
+  /// Whole-queue progress by ROM count, used while nothing is in flight or no
+  /// tracker lookup was supplied: RomM reports sizes per ROM, but a byte bar
+  /// across the queue would stall through a single large disc image and then
   /// jump, which reads as a hang.
   double? get _fraction {
     if (sync.total <= 0) return null;

@@ -269,6 +269,10 @@ class RommBulkSync extends ChangeNotifier {
 
   final Set<int> _activeRomIds = {};
 
+  /// The ROMs behind [_activeRomIds], in the order their transfers started, so
+  /// a progress view can name them and read each transfer's own bytes.
+  final Map<int, RommRom> _activeRoms = {};
+
   RommDownloadError? _lastError;
 
   bool _disposed = false;
@@ -342,6 +346,9 @@ class RommBulkSync extends ChangeNotifier {
   /// ROM ids transferring right now. The UI reads live byte progress for these
   /// from [RommProvider.downloadFor].
   Set<int> get activeRomIds => Set.unmodifiable(_activeRomIds);
+
+  /// ROMs whose transfers are in flight right now, oldest first.
+  List<RommRom> get activeRoms => List.unmodifiable(_activeRoms.values);
 
   /// Why the most recent failure failed, or null when nothing has failed.
   /// A whole-queue outcome, not per ROM: the last failure wins.
@@ -418,6 +425,7 @@ class RommBulkSync extends ChangeNotifier {
       await _drain(download, cancelDownload, concurrency);
     } finally {
       _activeRomIds.clear();
+      _activeRoms.clear();
       _phase = RommBulkSyncPhase.idle;
       _notify();
     }
@@ -566,6 +574,7 @@ class RommBulkSync extends ChangeNotifier {
     _doneBytes = 0;
     _queuedBytes = 0;
     _activeRomIds.clear();
+    _activeRoms.clear();
     _lastError = null;
   }
 
@@ -673,6 +682,7 @@ class RommBulkSync extends ChangeNotifier {
         // synchronous run, so [cancel] can never land between them and miss a
         // download that has no tracker yet.
         _activeRomIds.add(rom.id);
+        _activeRoms[rom.id] = rom;
         _notify();
         try {
           final result = await download(rom);
@@ -704,6 +714,7 @@ class RommBulkSync extends ChangeNotifier {
           _lastError = RommDownloadError.network;
         } finally {
           _activeRomIds.remove(rom.id);
+          _activeRoms.remove(rom.id);
           _notify();
         }
       }
