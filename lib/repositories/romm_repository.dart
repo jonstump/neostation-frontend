@@ -97,8 +97,10 @@ class RommRepository {
   ///
   /// Keys: `server_url`, `username`, `password`, `api_key`, `access_token`,
   /// `refresh_token`, `token_expires` (int millis since epoch, nullable),
-  /// `last_verified`. A non-empty `api_key` means the connection authenticates
-  /// with a Client API Token rather than the password grant.
+  /// `last_verified`, `token_name` (String?), `token_expires_at` (DateTime?).
+  /// A non-empty `api_key` means the connection authenticates with a Client
+  /// API Token rather than the password grant; `token_name` and
+  /// `token_expires_at` are only set when that key came from a pairing code.
   static Future<Map<String, dynamic>?> getConfig() async {
     try {
       final db = await SqliteService.getDatabase();
@@ -122,6 +124,12 @@ class RommRepository {
         'refresh_token': row['refresh_token']?.toString(),
         'token_expires': int.tryParse(row['token_expires']?.toString() ?? ''),
         'last_verified': row['last_verified']?.toString(),
+        // Paired-token metadata (v160). Read by name so a database that
+        // skipped the migration reads as "no metadata" rather than failing.
+        'token_name': _nonEmpty(row['romm_token_name']),
+        'token_expires_at': DateTime.tryParse(
+          row['romm_token_expires_at']?.toString() ?? '',
+        ),
       };
     } catch (e) {
       _log.e('Error getting RomM config: $e');
@@ -200,6 +208,50 @@ class RommRepository {
     } catch (_) {
       return '';
     }
+  }
+
+  /// Records the display metadata of a client token obtained by pairing —
+  /// its RomM-side [name] and, when the token expires, [expiresAt] (stored as
+  /// ISO-8601 UTC). Call after [saveConfig] has written the connection row:
+  /// that write replaces the whole row, which is also what clears the
+  /// metadata when the user reconnects with a pasted key or a password.
+  ///
+  /// The token itself goes through [saveConfig]'s `apiKey`, so a paired
+  /// session is stored exactly like a pasted one.
+  // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Connect Through The API-Key Path"
+  static Future<bool> savePairedTokenMetadata({
+    required String? name,
+    required DateTime? expiresAt,
+  }) async {
+    try {
+      final db = await SqliteService.getDatabase();
+      final changed = await db.update(
+        'user_romm_config',
+        {
+          'romm_token_name': name == null || name.isEmpty ? null : name,
+          'romm_token_expires_at': expiresAt?.toUtc().toIso8601String(),
+          'updated_at': DateTime.now().toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [1],
+      );
+      return changed > 0;
+    } catch (e) {
+      _log.e('Error saving RomM paired-token metadata: $e');
+      return false;
+    }
+  }
+
+  /// Forgets the paired-token metadata while keeping the connection row.
+  /// [clearConfig] deletes the row outright, so disconnect needs no call here;
+  /// this exists for a connection that stays but is no longer a paired one.
+  // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Connect Through The API-Key Path"
+  static Future<bool> clearPairedTokenMetadata() =>
+      savePairedTokenMetadata(name: null, expiresAt: null);
+
+  static String? _nonEmpty(Object? value) {
+    final text = value?.toString();
+    return text == null || text.isEmpty ? null : text;
   }
 
   /// Updates the cached JWT tokens after a successful authentication.

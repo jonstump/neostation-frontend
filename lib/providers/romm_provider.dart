@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import '../models/game_model.dart';
 import '../models/romm_collection.dart';
 import '../models/romm_metadata_fetch.dart';
+import '../models/romm_pairing.dart';
 import '../models/romm_platform.dart';
 import '../models/romm_rom.dart';
 import '../models/romm_scrape_step.dart';
@@ -96,6 +97,15 @@ class RommProvider extends ChangeNotifier {
 
   RommConnectionStatus _status = RommConnectionStatus.disconnected;
   String? _lastError;
+
+  /// The sentinel behind [_lastError] when the failure was a [RommException];
+  /// null while there is no error.
+  RommErrorKind? _lastErrorKind;
+
+  /// Display metadata of a client token obtained by pairing; null for a
+  /// pasted key or a password connection. Persisted with the connection row.
+  String? _pairedTokenName;
+  DateTime? _pairedTokenExpiresAt;
 
   String _serverUrl = '';
   String _username = '';
@@ -214,6 +224,21 @@ class RommProvider extends ChangeNotifier {
   RommConnectionStatus get status => _status;
   bool get isConnected => _status == RommConnectionStatus.connected;
   String? get lastError => _lastError;
+
+  /// What kind of failure [lastError] is, so the connect screen can pick a
+  /// localized message (an expired pairing code reads differently from a rate
+  /// limit). [RommErrorKind.other] for every failure that isn't pairing
+  /// specific; null when there is no error.
+  // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Error Handling Standards"
+  RommErrorKind? get lastErrorKind => _lastErrorKind;
+
+  /// The RomM-side name of the paired client token, or null when the
+  /// connection was not made by pairing.
+  String? get pairedTokenName => _pairedTokenName;
+
+  /// When the paired client token expires; null for a token that never
+  /// expires and for connections not made by pairing.
+  DateTime? get pairedTokenExpiresAt => _pairedTokenExpiresAt;
   String get serverUrl => _serverUrl;
   String get username => _username;
 
@@ -431,6 +456,8 @@ class RommProvider extends ChangeNotifier {
       // first browse call doesn't re-write an identical row. An API-key
       // connection has no tokens at all, so there is never anything to persist.
       _lastPersistedAccessToken = config['access_token'] as String?;
+      _pairedTokenName = config['token_name'] as String?;
+      _pairedTokenExpiresAt = config['token_expires_at'] as DateTime?;
       _status = RommConnectionStatus.connected;
       notifyListeners();
       _flushQueuedPlaytime();
@@ -482,6 +509,7 @@ class RommProvider extends ChangeNotifier {
   }) async {
     _status = RommConnectionStatus.connecting;
     _lastError = null;
+    _lastErrorKind = null;
     notifyListeners();
 
     _service.configure(
@@ -495,11 +523,13 @@ class RommProvider extends ChangeNotifier {
     } on RommException catch (e) {
       _status = RommConnectionStatus.error;
       _lastError = e.message;
+      _lastErrorKind = e.kind;
       notifyListeners();
       return e.message;
     } catch (e) {
       _status = RommConnectionStatus.error;
       _lastError = 'Connection failed: $e';
+      _lastErrorKind = RommErrorKind.other;
       notifyListeners();
       return _lastError;
     }
@@ -512,6 +542,11 @@ class RommProvider extends ChangeNotifier {
       password: password,
       apiKey: apiKey,
     );
+    // saveConfig replaced the row, so any paired-token metadata went with it:
+    // this credential was typed or pasted. [connectWithPairCode] writes the
+    // metadata back after this returns.
+    _pairedTokenName = null;
+    _pairedTokenExpiresAt = null;
     // Only the password grant produces tokens worth caching; an API key is
     // itself the credential and is already in the config row.
     if (!_service.usesApiKey) {
@@ -528,6 +563,76 @@ class RommProvider extends ChangeNotifier {
     _status = RommConnectionStatus.connected;
     notifyListeners();
     _flushQueuedPlaytime();
+    return null;
+  }
+
+  /// Pairs with a RomM server: exchanges [code] (typed as `XXXX-XXXX` or
+  /// scanned from the pairing QR) for a client token, then connects with that
+  /// token through [connect] exactly as if the user had pasted it as an API
+  /// key. Returns null on success or a user-facing error message; on failure
+  /// [lastErrorKind] says whether the code was invalid, expired, rate limited,
+  /// or something else.
+  ///
+  /// The token is persisted only by [connect], so a token that the server
+  /// issued but then refused on `/api/users/me` is never stored. On success
+  /// the token's name and expiry are written beside the connection row for
+  /// the connect screen ([pairedTokenName], [pairedTokenExpiresAt]).
+  // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Connect Through The API-Key Path"
+  Future<String?> connectWithPairCode({
+    required String serverUrl,
+    required String code,
+  }) async {
+    _status = RommConnectionStatus.connecting;
+    _lastError = null;
+    _lastErrorKind = null;
+    notifyListeners();
+
+    final RommPairedToken token;
+    try {
+      token = await _service.exchangePairCode(serverUrl, code);
+    } on RommException catch (e) {
+      _status = RommConnectionStatus.error;
+      _lastError = e.message;
+      _lastErrorKind = e.kind;
+      notifyListeners();
+      return e.message;
+    } catch (e) {
+      _status = RommConnectionStatus.error;
+      _lastError = 'Pairing failed: $e';
+      _lastErrorKind = RommErrorKind.other;
+      notifyListeners();
+      return _lastError;
+    }
+
+    // The exchange may have downgraded https→http; connect against the URL
+    // that actually answered rather than repeating the probe.
+    final error = await connect(
+      serverUrl: _service.baseUrl,
+      apiKey: token.rawToken,
+    );
+    if (error != null) {
+      _log.w(
+        'RomM pairing: exchange succeeded but verification failed: '
+        'name=${token.name} error=$error',
+      );
+      return error;
+    }
+
+    final saved = await RommRepository.savePairedTokenMetadata(
+      name: token.name,
+      expiresAt: token.expiresAt,
+    );
+    if (!saved) {
+      // The connection itself is stored and working; only the label and
+      // expiry line are lost until the next pairing.
+      _log.w(
+        'RomM pairing: token metadata not persisted: name=${token.name} '
+        'expires_at=${token.expiresAt?.toIso8601String()}',
+      );
+    }
+    _pairedTokenName = token.name.isEmpty ? null : token.name;
+    _pairedTokenExpiresAt = token.expiresAt;
+    notifyListeners();
     return null;
   }
 
@@ -555,6 +660,9 @@ class RommProvider extends ChangeNotifier {
     await RommRepository.clearConfig();
     _status = RommConnectionStatus.disconnected;
     _lastError = null;
+    _lastErrorKind = null;
+    _pairedTokenName = null;
+    _pairedTokenExpiresAt = null;
     _serverUrl = '';
     _username = '';
     _platforms = [];
