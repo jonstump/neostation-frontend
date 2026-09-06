@@ -1449,4 +1449,19 @@ const Map<String, dynamic> appLocaleFr = {
       'Connectez-vous à ScreenScraper ou connectez RomM avant de lancer le scraping',
   AppLocale.screenscraperDevCredentialsMissing:
       'Cette version ne contient pas d’identifiants développeur ScreenScraper ; la connexion et le scraping ScreenScraper sont indisponibles.',
+  AppLocale.rommAuthModePairCode: 'Code d’appairage',
+  AppLocale.rommPairCodeLabel: 'Code d’appairage',
+  AppLocale.rommPairCodePlaceholder: 'XXXX-XXXX',
+  AppLocale.rommPairCodeHint:
+      'Dans RomM, ouvrez Paramètres → Client API Tokens → Appairer un appareil. Le code expire environ une minute après sa génération.',
+  AppLocale.rommPairCodeInvalidLength:
+      'Saisissez l’URL du serveur et le code d’appairage à 8 caractères (XXXX-XXXX)',
+  AppLocale.rommPairCodeInvalid:
+      'Ce code d’appairage n’est pas valide ; vérifiez les 8 caractères',
+  AppLocale.rommPairCodeExpired:
+      'Code d’appairage expiré ou déjà utilisé ; générez-en un nouveau dans RomM',
+  AppLocale.rommPairRateLimited:
+      'Trop de tentatives ; attendez une minute puis réessayez',
+  AppLocale.rommPairedTokenExpires: 'Le jeton expire le {date}',
+  AppLocale.rommPairedTokenName: 'Jeton : {name}',
 };

@@ -1438,4 +1438,19 @@ const Map<String, dynamic> appLocaleEs = {
       'Inicia sesión en ScreenScraper o conecta RomM antes de iniciar el scraping',
   AppLocale.screenscraperDevCredentialsMissing:
       'Esta compilación no incluye credenciales de desarrollador de ScreenScraper; el inicio de sesión y el scraping de ScreenScraper no están disponibles.',
+  AppLocale.rommAuthModePairCode: 'Código de emparejamiento',
+  AppLocale.rommPairCodeLabel: 'Código de emparejamiento',
+  AppLocale.rommPairCodePlaceholder: 'XXXX-XXXX',
+  AppLocale.rommPairCodeHint:
+      'En RomM abre Ajustes → Client API Tokens → Emparejar dispositivo. El código caduca aproximadamente un minuto después de generarse.',
+  AppLocale.rommPairCodeInvalidLength:
+      'Introduce la URL del servidor y el código de emparejamiento de 8 caracteres (XXXX-XXXX)',
+  AppLocale.rommPairCodeInvalid:
+      'Ese código de emparejamiento no es válido; revisa los 8 caracteres',
+  AppLocale.rommPairCodeExpired:
+      'El código de emparejamiento caducó o ya se usó; genera uno nuevo en RomM',
+  AppLocale.rommPairRateLimited:
+      'Demasiados intentos; espera un minuto y vuelve a intentarlo',
+  AppLocale.rommPairedTokenExpires: 'El token caduca el {date}',
+  AppLocale.rommPairedTokenName: 'Token: {name}',
 };

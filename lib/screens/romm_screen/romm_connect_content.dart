@@ -1,5 +1,6 @@
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -8,6 +9,7 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../l10n/app_locale.dart';
+import '../../models/romm_pairing.dart';
 import '../../providers/romm_provider.dart';
 import '../../providers/sqlite_config_provider.dart';
 import '../../services/game_service.dart' show GamepadNavigationManager;
@@ -17,16 +19,20 @@ import '../../sync/providers/romm_provider.dart';
 import '../../sync/sync_manager.dart';
 import '../../utils/gamepad_nav.dart';
 import '../../utils/login_form_selection.dart';
+import '../../utils/romm_pair_code_input_formatter.dart';
+import '../../utils/romm_pair_error_message.dart';
 import '../../widgets/custom_notification.dart';
 import '../app_screen.dart';
+import 'romm_auth_mode.dart';
 
 /// Self-contained RomM connect / account panel for the top-level RomM tab.
 ///
 /// When disconnected it shows the server credential form: the server URL, an
-/// authentication mode switch (username + password, or a RomM Client API
-/// Token), the fields that mode needs, and connect. The URL leads because both
-/// modes need it — the switch only changes how you prove who you are, not which
-/// server you are proving it to. When connected it shows the server status plus
+/// authentication mode switch (username + password, a RomM Client API Token,
+/// or a pairing code from RomM's Client API Tokens screen), the fields that
+/// mode needs, and connect. The URL leads because every mode needs it — the
+/// switch only changes how you prove who you are, not which server you are
+/// proving it to. When connected it shows the server status plus
 /// the save-sync toggle, a disconnect action, and — when [onBrowse] is provided
 /// — a shortcut back to the library browser. Unlike the old settings panel this
 /// widget owns its own gamepad navigation layer so it works as a standalone tab.
@@ -50,50 +56,71 @@ class _RommConnectContentState extends State<RommConnectContent>
   final TextEditingController _userController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _apiKeyController = TextEditingController();
+  final TextEditingController _pairCodeController = TextEditingController();
   final FocusNode _urlFocus = FocusNode();
   final FocusNode _userFocus = FocusNode();
   final FocusNode _passwordFocus = FocusNode();
   final FocusNode _apiKeyFocus = FocusNode();
+  final FocusNode _pairCodeFocus = FocusNode();
 
   late final GamepadNavigation _gamepadNav;
   bool _busy = false;
 
-  /// Whether the form is collecting a Client API Token instead of a username
-  /// and password. Purely a property of the login form — a connection remembers
-  /// its own mode in the database.
-  bool _useApiKey = false;
+  /// How the form is collecting credentials: a username and password, a
+  /// Client API Token, or a pairing code. Purely a property of the login form
+  /// — a connection remembers its own mode in the database.
+  // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Pairing Mode On The Connect Screen"
+  RommAuthMode _authMode = RommAuthMode.password;
 
   /// The slots the D-pad walks, which change with both the connection state and
   /// the authentication mode: connected it is three action rows and no field at
-  /// all, disconnected it is the server URL, the mode switch, that mode's
-  /// secret(s), and connect. Read live, so the cursor is clamped into range the
-  /// moment any of that changes — including by something other than this
-  /// panel's own buttons.
+  /// all, disconnected it is [focusOrderFor] the current mode — the server URL,
+  /// the mode switch, that mode's secret(s), and connect — mapped onto focus
+  /// nodes. Read live, so the cursor is clamped into range the moment any of
+  /// that changes — including by something other than this panel's own
+  /// buttons.
   @override
   List<FocusNode?> get selectionSlots {
     if (context.read<RommProvider>().isConnected) {
       return const [null, null, null];
     }
-    return _useApiKey
-        ? [_urlFocus, null, _apiKeyFocus, null]
-        : [_urlFocus, null, _userFocus, _passwordFocus, null];
+    return focusOrderFor(_authMode).map(_focusNodeFor).toList(growable: false);
   }
 
   /// Every node the panel owns, not just the ones the current state shows, so
   /// focus tracking survives the switch to the connected view or between the
-  /// two authentication modes.
+  /// authentication modes.
   @override
   List<FocusNode> get ownedFocusNodes => [
     _urlFocus,
     _userFocus,
     _passwordFocus,
     _apiKeyFocus,
+    _pairCodeFocus,
   ];
 
-  /// Slot the mode switch sits on: under the server URL, which both modes need,
-  /// and above the fields it actually decides. Left/Right pick a half directly
-  /// (see [_setAuthMode]); A flips it, for anyone who reaches it that way.
-  static const int _authModeSlot = 1;
+  /// The text field behind [slot], or null for a control the D-pad activates
+  /// rather than focuses. A new action slot only needs a null here and a case
+  /// in [_selectCurrent].
+  FocusNode? _focusNodeFor(RommConnectSlot slot) => switch (slot) {
+    RommConnectSlot.url => _urlFocus,
+    RommConnectSlot.username => _userFocus,
+    RommConnectSlot.password => _passwordFocus,
+    RommConnectSlot.apiKey => _apiKeyFocus,
+    RommConnectSlot.pairCode => _pairCodeFocus,
+    RommConnectSlot.authMode || RommConnectSlot.connect => null,
+  };
+
+  /// Where [slot] sits in the current mode's cursor order, for the rows that
+  /// draw their own selection glow.
+  int _slotIndex(RommConnectSlot slot) =>
+      focusOrderFor(_authMode).indexOf(slot);
+
+  /// Slot the mode switch sits on: under the server URL, which every mode
+  /// needs, and above the fields it actually decides. Left/Right step along
+  /// its segments (see [_setAuthMode]); A advances it, for anyone who reaches
+  /// it that way.
+  int get _authModeSlot => _slotIndex(RommConnectSlot.authMode);
 
   @override
   void initState() {
@@ -102,8 +129,8 @@ class _RommConnectContentState extends State<RommConnectContent>
     _gamepadNav = GamepadNavigation(
       onNavigateUp: _navigateUp,
       onNavigateDown: _navigateDown,
-      onNavigateLeft: () => _setAuthMode(useApiKey: false),
-      onNavigateRight: () => _setAuthMode(useApiKey: true),
+      onNavigateLeft: () => _setAuthMode(_authMode.toLeft),
+      onNavigateRight: () => _setAuthMode(_authMode.toRight),
       onSelectItem: _selectCurrent,
       onBack: _handleBack,
       onPreviousTab: AppNavigation.previousTab,
@@ -137,10 +164,12 @@ class _RommConnectContentState extends State<RommConnectContent>
     _userController.dispose();
     _passwordController.dispose();
     _apiKeyController.dispose();
+    _pairCodeController.dispose();
     _urlFocus.dispose();
     _userFocus.dispose();
     _passwordFocus.dispose();
     _apiKeyFocus.dispose();
+    _pairCodeFocus.dispose();
     super.dispose();
   }
 
@@ -169,38 +198,50 @@ class _RommConnectContentState extends State<RommConnectContent>
       }
       return;
     }
-    if (isSelected(_authModeSlot)) {
-      _toggleAuthMode();
-      return;
+    // Dispatch on the slot rather than its index so a mode that inserts a
+    // row (the scanner story adds a scan action to pairing mode) only needs a
+    // case here.
+    switch (focusOrderFor(_authMode)[selectedSlot]) {
+      case RommConnectSlot.authMode:
+        _toggleAuthMode();
+      case RommConnectSlot.connect:
+        _connect();
+      case RommConnectSlot.url:
+      case RommConnectSlot.username:
+      case RommConnectSlot.password:
+      case RommConnectSlot.apiKey:
+      case RommConnectSlot.pairCode:
+        focusSelectedField();
     }
-    if (focusSelectedField()) return;
-    _connect();
   }
 
-  /// Flips between the two login modes. Nothing at or above the switch moves,
-  /// so the cursor is left where it is; only the rows below are replaced, and
-  /// the mixin clamps a cursor that was parked on one of them.
-  void _toggleAuthMode() => _applyAuthMode(!_useApiKey);
+  /// Advances to the next login mode, wrapping from pairing code back to
+  /// password. Nothing at or above the switch moves, so the cursor is left
+  /// where it is; only the rows below are replaced, and the mixin clamps a
+  /// cursor that was parked on one of them.
+  void _toggleAuthMode() => _applyAuthMode(_authMode.next);
 
-  /// Picks a mode outright rather than cycling, which is what Left and Right
-  /// do while the cursor is on the switch: Left is the left half (password),
-  /// Right is the right half (API key). A two-option control reads as a pair of
-  /// positions, not a list to step through, so pointing at one should choose it.
+  /// Steps to a neighbouring segment, which is what Left and Right do while
+  /// the cursor is on the switch: Left moves one segment left and stops at
+  /// password, Right moves one right and stops at pairing code. A segmented
+  /// control reads as positions, not a ring, so the ends don't wrap.
   ///
   /// Returns whether anything changed, so the gamepad handler stays silent when
   /// the mode asked for is already the current one — the same "refused moves
   /// make no sound" contract [moveSelection] follows.
-  bool _setAuthMode({required bool useApiKey}) {
+  // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Pairing Mode On The Connect Screen"
+  bool _setAuthMode(RommAuthMode mode) {
     if (context.read<RommProvider>().isConnected) return false;
     if (!isSelected(_authModeSlot)) return false;
     if (isAnyFieldFocused()) return false;
-    if (_useApiKey == useApiKey) return false;
-    _applyAuthMode(useApiKey);
+    if (_authMode == mode) return false;
+    _applyAuthMode(mode);
     return true;
   }
 
-  void _applyAuthMode(bool useApiKey) {
-    setState(() => _useApiKey = useApiKey);
+  void _applyAuthMode(RommAuthMode mode) {
+    if (_authMode == mode) return;
+    setState(() => _authMode = mode);
   }
 
   /// B leaves a focused field first — that is what it does everywhere else in
@@ -229,17 +270,25 @@ class _RommConnectContentState extends State<RommConnectContent>
 
   bool _validateInputs() {
     final urlMissing = _urlController.text.trim().isEmpty;
-    final secretMissing = _useApiKey
-        ? _apiKeyController.text.trim().isEmpty
-        : _userController.text.trim().isEmpty ||
-              _passwordController.text.isEmpty;
+    final secretMissing = switch (_authMode) {
+      RommAuthMode.password =>
+        _userController.text.trim().isEmpty || _passwordController.text.isEmpty,
+      RommAuthMode.apiKey => _apiKeyController.text.trim().isEmpty,
+      // The formatter only lets code characters through, so what is left to
+      // check is that all 8 of them are there.
+      RommAuthMode.pairCode => !RommPairCode.isValid(
+        RommPairCode.normalize(_pairCodeController.text),
+      ),
+    };
     if (urlMissing || secretMissing) {
+      final key = switch (_authMode) {
+        RommAuthMode.password => AppLocale.rommCredentialsRequired,
+        RommAuthMode.apiKey => AppLocale.rommApiKeyRequired,
+        RommAuthMode.pairCode => AppLocale.rommPairCodeInvalidLength,
+      };
       AppNotification.showNotification(
         context,
-        (_useApiKey
-                ? AppLocale.rommApiKeyRequired
-                : AppLocale.rommCredentialsRequired)
-            .getString(context),
+        key.getString(context),
         type: NotificationType.error,
       );
       return false;
@@ -256,18 +305,35 @@ class _RommConnectContentState extends State<RommConnectContent>
     final persist = context
         .read<SqliteConfigProvider>()
         .updateActiveSyncProvider;
-    final error = await provider.connect(
-      serverUrl: _urlController.text.trim(),
-      username: _useApiKey ? '' : _userController.text.trim(),
-      password: _useApiKey ? '' : _passwordController.text,
-      apiKey: _useApiKey ? _apiKeyController.text.trim() : '',
-    );
+    final serverUrl = _urlController.text.trim();
+    final useApiKey = _authMode == RommAuthMode.apiKey;
+    // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Pairing Mode On The Connect Screen"
+    final error = _authMode == RommAuthMode.pairCode
+        // The code is good for about a minute and one use, so it goes to the
+        // server the moment Connect is pressed; the provider exchanges it
+        // and then connects through the API-key path with the token.
+        ? await provider.connectWithPairCode(
+            serverUrl: serverUrl,
+            code: _pairCodeController.text,
+          )
+        : await provider.connect(
+            serverUrl: serverUrl,
+            username: useApiKey ? '' : _userController.text.trim(),
+            password: useApiKey ? '' : _passwordController.text,
+            apiKey: useApiKey ? _apiKeyController.text.trim() : '',
+          );
     if (!mounted) return;
     setState(() => _busy = false);
     if (error != null) {
+      // A pairing failure the provider could classify gets its own sentence;
+      // anything else (network, TLS, verification) reads as it does for the
+      // other modes.
+      final pairKey = _authMode == RommAuthMode.pairCode
+          ? rommPairErrorKey(provider.lastErrorKind)
+          : null;
       AppNotification.showNotification(
         context,
-        error,
+        pairKey?.getString(context) ?? error,
         type: NotificationType.error,
       );
     } else {
@@ -315,12 +381,14 @@ class _RommConnectContentState extends State<RommConnectContent>
     resetSelection();
   }
 
-  /// Wipes both modes' secrets out of the form once they have been handed to
-  /// the provider (or thrown away by a disconnect), so neither lingers on
-  /// screen — nor in memory — while the panel stays mounted.
+  /// Wipes every mode's secret out of the form once it has been handed to
+  /// the provider (or thrown away by a disconnect), so none lingers on
+  /// screen — nor in memory — while the panel stays mounted. A pairing code
+  /// is single use, so it is as spent as a password after the attempt.
   void _clearSecretFields() {
     _passwordController.clear();
     _apiKeyController.clear();
+    _pairCodeController.clear();
   }
 
   bool get _isSaveSyncActive =>
@@ -420,6 +488,7 @@ class _RommConnectContentState extends State<RommConnectContent>
           if (connected) ...[
             SizedBox(height: 8.r),
             _buildStatusLine(theme, provider),
+            ..._buildPairedTokenLines(theme, provider),
           ],
           SizedBox(height: 12.r),
           if (connected)
@@ -592,11 +661,48 @@ class _RommConnectContentState extends State<RommConnectContent>
     );
   }
 
+  /// The name and expiry of a token obtained by pairing, under the status
+  /// line, so the user knows which RomM token this is and when it will stop
+  /// working. Nothing for a pasted key or a password connection. Not
+  /// focusable — captions for the status above them.
+  List<Widget> _buildPairedTokenLines(ThemeData theme, RommProvider provider) {
+    final name = provider.pairedTokenName;
+    final expiresAt = provider.pairedTokenExpiresAt;
+    final lines = <String>[
+      if (name != null && name.isNotEmpty)
+        AppLocale.rommPairedTokenName
+            .getString(context)
+            .replaceFirst('{name}', name),
+      if (expiresAt != null)
+        AppLocale.rommPairedTokenExpires
+            .getString(context)
+            .replaceFirst('{date}', rommTokenExpiryDate(expiresAt)),
+    ];
+    return [
+      for (final line in lines)
+        Padding(
+          padding: EdgeInsets.only(top: 4.r, left: 24.r),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              line,
+              style: TextStyle(
+                fontSize: 9.r,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ),
+    ];
+  }
+
   List<Widget> _buildCredentialRows(ThemeData theme) {
     return [
       _buildFieldRow(
         theme,
-        index: 0,
+        index: _slotIndex(RommConnectSlot.url),
         label: AppLocale.rommServerUrl.getString(context),
         hint: AppLocale.rommServerUrlHint.getString(context),
         controller: _urlController,
@@ -605,43 +711,84 @@ class _RommConnectContentState extends State<RommConnectContent>
       SizedBox(height: 10.r),
       _buildAuthModeRow(theme),
       SizedBox(height: 10.r),
-      if (_useApiKey) ...[
-        _buildFieldRow(
-          theme,
-          index: 2,
-          label: AppLocale.rommApiKey.getString(context),
-          hint: AppLocale.rommApiKeyHint.getString(context),
-          controller: _apiKeyController,
-          focusNode: _apiKeyFocus,
-          obscure: true,
-        ),
-      ] else ...[
-        _buildFieldRow(
-          theme,
-          index: 2,
-          label: AppLocale.username.getString(context),
-          hint: AppLocale.enterUsername.getString(context),
-          controller: _userController,
-          focusNode: _userFocus,
-        ),
-        SizedBox(height: 8.r),
-        _buildFieldRow(
-          theme,
-          index: 3,
-          label: AppLocale.password.getString(context),
-          hint: AppLocale.enterPassword.getString(context),
-          controller: _passwordController,
-          focusNode: _passwordFocus,
-          obscure: true,
-        ),
-      ],
+      ...switch (_authMode) {
+        RommAuthMode.password => [
+          _buildFieldRow(
+            theme,
+            index: _slotIndex(RommConnectSlot.username),
+            label: AppLocale.username.getString(context),
+            hint: AppLocale.enterUsername.getString(context),
+            controller: _userController,
+            focusNode: _userFocus,
+          ),
+          SizedBox(height: 8.r),
+          _buildFieldRow(
+            theme,
+            index: _slotIndex(RommConnectSlot.password),
+            label: AppLocale.password.getString(context),
+            hint: AppLocale.enterPassword.getString(context),
+            controller: _passwordController,
+            focusNode: _passwordFocus,
+            obscure: true,
+          ),
+        ],
+        RommAuthMode.apiKey => [
+          _buildFieldRow(
+            theme,
+            index: _slotIndex(RommConnectSlot.apiKey),
+            label: AppLocale.rommApiKey.getString(context),
+            hint: AppLocale.rommApiKeyHint.getString(context),
+            controller: _apiKeyController,
+            focusNode: _apiKeyFocus,
+            obscure: true,
+          ),
+        ],
+        RommAuthMode.pairCode => [
+          // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Pairing Mode On The Connect Screen"
+          _buildFieldRow(
+            theme,
+            index: _slotIndex(RommConnectSlot.pairCode),
+            label: AppLocale.rommPairCodeLabel.getString(context),
+            hint: AppLocale.rommPairCodePlaceholder.getString(context),
+            controller: _pairCodeController,
+            focusNode: _pairCodeFocus,
+            // Not a secret worth hiding: it is single use, dies in a minute,
+            // and the user needs to see the 8 characters to check them.
+            inputFormatters: const [RommPairCodeInputFormatter()],
+            capitalization: TextCapitalization.characters,
+            // Autocorrect and suggestions only ever fight a code.
+            suggestions: false,
+          ),
+          SizedBox(height: 4.r),
+          _buildPairCodeHint(theme),
+        ],
+      },
       SizedBox(height: 12.r),
       _buildConnectButton(theme),
     ];
   }
 
-  /// Two-option switch choosing how to authenticate. A (or a tap on either
-  /// half) flips it, so the gamepad needs one slot rather than two.
+  /// Where the code comes from and how long it lives, under the code field.
+  /// Not focusable — a caption for the field above it.
+  Widget _buildPairCodeHint(ThemeData theme) {
+    return Container(
+      constraints: BoxConstraints(maxWidth: 220.r),
+      padding: EdgeInsets.symmetric(horizontal: 4.r),
+      child: Text(
+        AppLocale.rommPairCodeHint.getString(context),
+        style: TextStyle(
+          fontSize: 8.r,
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+        ),
+        softWrap: true,
+      ),
+    );
+  }
+
+  /// Three-segment switch choosing how to authenticate. A advances it and a
+  /// tap picks the segment tapped, so the gamepad needs one slot rather than
+  /// three.
+  // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Pairing Mode On The Connect Screen"
   Widget _buildAuthModeRow(ThemeData theme) {
     final selected = isSelected(_authModeSlot);
     final scheme = theme.colorScheme;
@@ -680,12 +827,17 @@ class _RommConnectContentState extends State<RommConnectContent>
           _buildAuthModeOption(
             theme,
             label: AppLocale.rommAuthPassword.getString(context),
-            active: !_useApiKey,
+            mode: RommAuthMode.password,
           ),
           _buildAuthModeOption(
             theme,
             label: AppLocale.rommAuthApiKey.getString(context),
-            active: _useApiKey,
+            mode: RommAuthMode.apiKey,
+          ),
+          _buildAuthModeOption(
+            theme,
+            label: AppLocale.rommAuthModePairCode.getString(context),
+            mode: RommAuthMode.pairCode,
           ),
         ],
       ),
@@ -695,16 +847,17 @@ class _RommConnectContentState extends State<RommConnectContent>
   Widget _buildAuthModeOption(
     ThemeData theme, {
     required String label,
-    required bool active,
+    required RommAuthMode mode,
   }) {
     final scheme = theme.colorScheme;
+    final active = _authMode == mode;
     return Expanded(
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          // Either half flips the switch: tapping the half already active is a
-          // no-op the user never notices, and this keeps the hit targets even.
-          onTap: _busy ? null : _toggleAuthMode,
+          // A tap has a target, so it picks that segment; tapping the one
+          // already active is a no-op the user never notices.
+          onTap: _busy ? null : () => _applyAuthMode(mode),
           borderRadius: BorderRadius.circular(6.r),
           child: Container(
             padding: EdgeInsets.symmetric(vertical: 6.r),
@@ -715,6 +868,8 @@ class _RommConnectContentState extends State<RommConnectContent>
             child: Text(
               label,
               textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 fontSize: 9.r,
                 fontWeight: active ? FontWeight.bold : FontWeight.normal,
@@ -806,6 +961,9 @@ class _RommConnectContentState extends State<RommConnectContent>
     required TextEditingController controller,
     required FocusNode focusNode,
     bool obscure = false,
+    List<TextInputFormatter>? inputFormatters,
+    TextCapitalization capitalization = TextCapitalization.none,
+    bool suggestions = true,
   }) {
     final selected = isSelected(index);
     // Mirror the ScreenScraper / RetroAchievements field: a filled input with
@@ -833,6 +991,10 @@ class _RommConnectContentState extends State<RommConnectContent>
           focusNode: focusNode,
           obscureText: obscure,
           enabled: !_busy,
+          inputFormatters: inputFormatters,
+          textCapitalization: capitalization,
+          autocorrect: suggestions,
+          enableSuggestions: suggestions,
           style: TextStyle(fontSize: 11.r),
           decoration: InputDecoration(
             labelText: label,

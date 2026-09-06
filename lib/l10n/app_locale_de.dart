@@ -1445,4 +1445,19 @@ const Map<String, dynamic> appLocaleDe = {
       'Bitte bei ScreenScraper anmelden oder RomM verbinden, bevor das Scraping gestartet wird',
   AppLocale.screenscraperDevCredentialsMissing:
       'Dieser Build enthält keine ScreenScraper-Entwicklerzugangsdaten; ScreenScraper-Anmeldung und Scraping sind nicht verfügbar.',
+  AppLocale.rommAuthModePairCode: 'Kopplungscode',
+  AppLocale.rommPairCodeLabel: 'Kopplungscode',
+  AppLocale.rommPairCodePlaceholder: 'XXXX-XXXX',
+  AppLocale.rommPairCodeHint:
+      'Öffne in RomM Einstellungen → Client API Tokens → Gerät koppeln. Der Code läuft etwa eine Minute nach dem Erzeugen ab.',
+  AppLocale.rommPairCodeInvalidLength:
+      'Gib die Server-URL und den 8-stelligen Kopplungscode ein (XXXX-XXXX)',
+  AppLocale.rommPairCodeInvalid:
+      'Dieser Kopplungscode ist ungültig; prüfe die 8 Zeichen',
+  AppLocale.rommPairCodeExpired:
+      'Kopplungscode abgelaufen oder bereits verwendet; erzeuge in RomM einen neuen',
+  AppLocale.rommPairRateLimited:
+      'Zu viele Versuche; warte eine Minute und versuche es erneut',
+  AppLocale.rommPairedTokenExpires: 'Token läuft ab am {date}',
+  AppLocale.rommPairedTokenName: 'Token: {name}',
 };

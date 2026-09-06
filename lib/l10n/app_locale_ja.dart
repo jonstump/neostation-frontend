@@ -1271,4 +1271,16 @@ const Map<String, dynamic> appLocaleJa = {
       'スクレイピングを始める前に ScreenScraper にログインするか RomM に接続してください',
   AppLocale.screenscraperDevCredentialsMissing:
       'このビルドには ScreenScraper の開発者認証情報が含まれていないため、ScreenScraper へのログインとスクレイピングは利用できません。',
+  AppLocale.rommAuthModePairCode: 'ペアリングコード',
+  AppLocale.rommPairCodeLabel: 'ペアリングコード',
+  AppLocale.rommPairCodePlaceholder: 'XXXX-XXXX',
+  AppLocale.rommPairCodeHint:
+      'RomM の 設定 → Client API Tokens → Pair device でコードを取得します。コードは生成から約 1 分で期限切れになります。',
+  AppLocale.rommPairCodeInvalidLength:
+      'サーバー URL と 8 文字のペアリングコード (XXXX-XXXX) を入力してください',
+  AppLocale.rommPairCodeInvalid: 'このペアリングコードは無効です。8 文字を確認してください',
+  AppLocale.rommPairCodeExpired: 'ペアリングコードは期限切れか使用済みです。RomM で新しいコードを生成してください',
+  AppLocale.rommPairRateLimited: '試行回数が多すぎます。1 分待ってからやり直してください',
+  AppLocale.rommPairedTokenExpires: 'トークンの有効期限: {date}',
+  AppLocale.rommPairedTokenName: 'トークン: {name}',
 };

@@ -1386,4 +1386,19 @@ const Map<String, dynamic> appLocaleEn = {
       'Log in to ScreenScraper or connect to RomM before scraping',
   AppLocale.screenscraperDevCredentialsMissing:
       'This build has no ScreenScraper developer credentials, so ScreenScraper login and scraping are unavailable.',
+  AppLocale.rommAuthModePairCode: 'Pairing code',
+  AppLocale.rommPairCodeLabel: 'Pairing code',
+  AppLocale.rommPairCodePlaceholder: 'XXXX-XXXX',
+  AppLocale.rommPairCodeHint:
+      'In RomM open Settings → Client API Tokens → Pair device. The code expires about a minute after it is generated.',
+  AppLocale.rommPairCodeInvalidLength:
+      'Enter the server URL and the 8-character pairing code (XXXX-XXXX)',
+  AppLocale.rommPairCodeInvalid:
+      'That pairing code is not valid; check the 8 characters',
+  AppLocale.rommPairCodeExpired:
+      'Pairing code expired or already used; generate a new one in RomM',
+  AppLocale.rommPairRateLimited:
+      'Too many attempts; wait a minute and try again',
+  AppLocale.rommPairedTokenExpires: 'Token expires on {date}',
+  AppLocale.rommPairedTokenName: 'Token: {name}',
 };

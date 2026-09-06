@@ -1280,4 +1280,16 @@ const Map<String, dynamic> appLocaleKo = {
       '스크래핑을 시작하기 전에 ScreenScraper에 로그인하거나 RomM에 연결하세요',
   AppLocale.screenscraperDevCredentialsMissing:
       '이 빌드에는 ScreenScraper 개발자 자격 증명이 없어 ScreenScraper 로그인과 스크래핑을 사용할 수 없습니다.',
+  AppLocale.rommAuthModePairCode: '페어링 코드',
+  AppLocale.rommPairCodeLabel: '페어링 코드',
+  AppLocale.rommPairCodePlaceholder: 'XXXX-XXXX',
+  AppLocale.rommPairCodeHint:
+      'RomM에서 설정 → Client API Tokens → Pair device를 열어 코드를 받으세요. 코드는 생성 후 약 1분이 지나면 만료됩니다.',
+  AppLocale.rommPairCodeInvalidLength: '서버 URL과 8자리 페어링 코드(XXXX-XXXX)를 입력하세요',
+  AppLocale.rommPairCodeInvalid: '이 페어링 코드는 유효하지 않습니다. 8자리를 확인하세요',
+  AppLocale.rommPairCodeExpired:
+      '페어링 코드가 만료되었거나 이미 사용되었습니다. RomM에서 새 코드를 생성하세요',
+  AppLocale.rommPairRateLimited: '시도 횟수가 너무 많습니다. 1분 후 다시 시도하세요',
+  AppLocale.rommPairedTokenExpires: '토큰 만료일: {date}',
+  AppLocale.rommPairedTokenName: '토큰: {name}',
 };

@@ -1402,4 +1402,19 @@ const Map<String, dynamic> appLocaleRu = {
       'Войдите в ScreenScraper или подключите RomM перед запуском скрапинга',
   AppLocale.screenscraperDevCredentialsMissing:
       'В этой сборке нет учётных данных разработчика ScreenScraper, поэтому вход и скрапинг ScreenScraper недоступны.',
+  AppLocale.rommAuthModePairCode: 'Код сопряжения',
+  AppLocale.rommPairCodeLabel: 'Код сопряжения',
+  AppLocale.rommPairCodePlaceholder: 'XXXX-XXXX',
+  AppLocale.rommPairCodeHint:
+      'В RomM откройте Настройки → Client API Tokens → Pair device. Код истекает примерно через минуту после создания.',
+  AppLocale.rommPairCodeInvalidLength:
+      'Введите URL сервера и 8-символьный код сопряжения (XXXX-XXXX)',
+  AppLocale.rommPairCodeInvalid:
+      'Этот код сопряжения недействителен; проверьте 8 символов',
+  AppLocale.rommPairCodeExpired:
+      'Код сопряжения истёк или уже использован; создайте новый в RomM',
+  AppLocale.rommPairRateLimited:
+      'Слишком много попыток; подождите минуту и попробуйте снова',
+  AppLocale.rommPairedTokenExpires: 'Токен истекает {date}',
+  AppLocale.rommPairedTokenName: 'Токен: {name}',
 };
