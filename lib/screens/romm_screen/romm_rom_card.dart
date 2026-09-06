@@ -6,6 +6,7 @@ import 'package:material_symbols_icons/symbols.dart';
 import '../../l10n/app_locale.dart';
 import '../../models/romm_rom.dart';
 import '../../providers/romm_provider.dart';
+import '../../utils/cover_decode.dart';
 import '../../widgets/romm_sync_banner.dart' show rommFormatBytes;
 
 /// How a [RommRomCard] arranges itself. Mirrors the local library's view modes
@@ -29,6 +30,13 @@ class RommRomCard extends StatefulWidget {
   final VoidCallback onTap;
   final RommRomLayout layout;
 
+  /// Logical width of the grid cell this card fills, so the cover can be
+  /// decoded at exactly the size it is drawn. The grid already computes its
+  /// cell width, so it passes that rather than having every card measure
+  /// itself; when absent the card measures its own constraints. Unused by the
+  /// list layout, whose thumbnail is a fixed size.
+  final double? tileWidth;
+
   const RommRomCard({
     super.key,
     required this.rom,
@@ -39,6 +47,7 @@ class RommRomCard extends StatefulWidget {
     required this.onCancel,
     required this.onTap,
     this.layout = RommRomLayout.grid,
+    this.tileWidth,
   });
 
   @override
@@ -48,7 +57,7 @@ class RommRomCard extends StatefulWidget {
 class RommRomCardState extends State<RommRomCard> {
   bool _alreadyDownloaded = false;
 
-  /// Index into `RommService.coverUrlCandidates` of the cover being drawn.
+  /// Index into `RommService.tileCoverUrlCandidates` of the cover being drawn.
   /// A failed load advances it rather than settling for the placeholder: which
   /// of RomM's cover sources a given library populated is not knowable up
   /// front, and only the load can tell us the first one was a dead end.
@@ -81,7 +90,10 @@ class RommRomCardState extends State<RommRomCard> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final covers = widget.provider.service.coverUrlCandidates(widget.rom);
+    // Server thumbnail first: tiles are small, and RomM's cached small file is
+    // the cheapest thing to fetch and decode.
+    // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Tile Cover Source Order"
+    final covers = widget.provider.service.tileCoverUrlCandidates(widget.rom);
     final coverUrl = _coverAttempt < covers.length
         ? covers[_coverAttempt]
         : null;
@@ -124,12 +136,28 @@ class RommRomCardState extends State<RommRomCard> {
           child: Stack(
             fit: StackFit.expand,
             children: [
-              _buildCover(theme, coverUrl),
+              _buildTileCover(theme, coverUrl),
               if (widget.rom.hasRetroAchievements) _buildRaBadge(),
               _buildOverlay(theme, download),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  /// The art tile's cover at the cell width the grid handed us, or — when no
+  /// width was given — at whatever width the parent lays us out to.
+  Widget _buildTileCover(ThemeData theme, String? coverUrl) {
+    final width = widget.tileWidth;
+    if (width != null) {
+      return _buildCover(theme, coverUrl, logicalWidth: width);
+    }
+    return LayoutBuilder(
+      builder: (context, constraints) => _buildCover(
+        theme,
+        coverUrl,
+        logicalWidth: constraints.hasBoundedWidth ? constraints.maxWidth : null,
       ),
     );
   }
@@ -158,7 +186,7 @@ class RommRomCardState extends State<RommRomCard> {
               height: 72.r,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(6.r),
-                child: _buildCover(theme, coverUrl),
+                child: _buildCover(theme, coverUrl, logicalWidth: 72.r),
               ),
             ),
             SizedBox(width: 10.r),
@@ -410,22 +438,53 @@ class RommRomCardState extends State<RommRomCard> {
     });
   }
 
-  Widget _buildCover(ThemeData theme, String? coverUrl) {
+  /// The cover for [coverUrl], decoded no wider than [logicalWidth] needs on
+  /// this display and cropped (never letterboxed) to the tile.
+  ///
+  /// `cacheWidth` makes Flutter wrap the provider in a `ResizeImage`, which
+  /// both bounds decode memory and keys the `ImageCache` by size — so the grid
+  /// and list each keep their own right-sized entry. `gaplessPlayback` keeps
+  /// the previous cover painted while a recycled tile loads its new one,
+  /// instead of flashing the placeholder on every scroll. Nothing is written
+  /// to disk: the `ImageCache` is the only cache.
+  // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Decode At Tile Size"
+  Widget _buildCover(
+    ThemeData theme,
+    String? coverUrl, {
+    required double? logicalWidth,
+  }) {
     if (coverUrl == null) {
       return _coverPlaceholder(theme);
     }
-    return Image.network(
-      coverUrl,
-      fit: BoxFit.cover,
-      headers: widget.provider.service.imageHeadersFor(coverUrl),
-      errorBuilder: (_, _, _) {
-        _tryNextCover();
-        return _coverPlaceholder(theme);
-      },
-      loadingBuilder: (context, child, progress) {
-        if (progress == null) return child;
-        return _coverPlaceholder(theme);
-      },
+    // The placeholder sits *under* the image rather than in a loadingBuilder:
+    // a loadingBuilder replaces the retained frame with the placeholder for
+    // the whole download, which is exactly the flash gaplessPlayback exists
+    // to avoid. An image with nothing decoded yet paints nothing, so the
+    // placeholder shows through until the first frame and the previous cover
+    // stays on top while a recycled tile re-decodes.
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        _coverPlaceholder(theme),
+        Image.network(
+          coverUrl,
+          fit: BoxFit.cover,
+          // An unknown width (unbounded parent) skips the hint rather than
+          // decoding to a 1-pixel bitmap.
+          cacheWidth: logicalWidth == null
+              ? null
+              : coverDecodeWidth(
+                  logicalWidth: logicalWidth,
+                  devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
+                ),
+          gaplessPlayback: true,
+          headers: widget.provider.service.imageHeadersFor(coverUrl),
+          errorBuilder: (_, _, _) {
+            _tryNextCover();
+            return _coverPlaceholder(theme);
+          },
+        ),
+      ],
     );
   }
 
