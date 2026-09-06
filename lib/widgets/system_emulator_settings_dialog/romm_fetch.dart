@@ -8,10 +8,11 @@ part of '../system_emulator_settings_dialog.dart';
 /// affordance, and while one runs for another system it names that system
 /// and refuses (one pass at a time across all systems).
 ///
-/// The pass itself is started detached from this dialog: it holds no widget,
-/// context or provider reference past the moment it starts, so closing the
-/// dialog neither cancels it nor stops the global notification from
-/// reporting progress and completion.
+/// The pass itself is started detached from this dialog (see
+/// [RommMetadataFetchRunner]): it holds no widget, context or provider
+/// reference past the moment it starts, so closing the dialog neither
+/// cancels it nor stops the global notification from reporting progress and
+/// completion.
 // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
 extension _RommFetch on _SystemEmulatorSettingsDialogState {
   Widget _buildRommFetchItem({required int index, required Key key}) {
@@ -62,10 +63,7 @@ extension _RommFetch on _SystemEmulatorSettingsDialogState {
               enabled: false,
               subtitle: AppLocale.rommSystemFetchBusy
                   .getString(context)
-                  .replaceFirst(
-                    '{system}',
-                    active.system?.realName ?? active.system?.folderName ?? '',
-                  ),
+                  .replaceFirst('{system}', active.subject),
               trailing: Icon(
                 Symbols.hourglass_top_rounded,
                 size: 16.r,
@@ -199,10 +197,7 @@ extension _RommFetch on _SystemEmulatorSettingsDialogState {
         context,
         AppLocale.rommSystemFetchBusy
             .getString(context)
-            .replaceFirst(
-              '{system}',
-              active.system?.realName ?? active.system?.folderName ?? '',
-            ),
+            .replaceFirst('{system}', active.subject),
         type: NotificationType.error,
       );
       return;
@@ -216,183 +211,6 @@ extension _RommFetch on _SystemEmulatorSettingsDialogState {
     );
     if (mode == null || !mounted) return;
 
-    // Everything the detached run needs is resolved here, while the context
-    // is alive; nothing below reads the widget again.
-    final strings = _RommFetchStrings.of(context, _system);
-    final files = context.read<FileProvider>();
-    final scraping = context.read<ScrapingProvider>();
-    final system = _system;
-
-    AppNotification.showNotification(
-      context,
-      strings.started,
-      type: NotificationType.info,
-    );
-    unawaited(
-      _runRommFetchDetached(
-        system: system,
-        mode: mode,
-        romm: romm,
-        files: files,
-        scraping: scraping,
-        strings: strings,
-      ),
-    );
-  }
-}
-
-/// The localized text the detached run reports with, resolved up front so
-/// the run never needs a [BuildContext].
-class _RommFetchStrings {
-  final String started;
-  final String preparing;
-  final String progressTemplate;
-  final String summaryTemplate;
-  final String cancelledTemplate;
-  final String busyTemplate;
-  final String failedToStartTemplate;
-
-  const _RommFetchStrings({
-    required this.started,
-    required this.preparing,
-    required this.progressTemplate,
-    required this.summaryTemplate,
-    required this.cancelledTemplate,
-    required this.busyTemplate,
-    required this.failedToStartTemplate,
-  });
-
-  factory _RommFetchStrings.of(BuildContext context, SystemModel system) {
-    final name = system.realName;
-    return _RommFetchStrings(
-      started: AppLocale.rommSystemFetchStarted
-          .getString(context)
-          .replaceFirst('{system}', name),
-      preparing: AppLocale.rommSystemFetchPreparing
-          .getString(context)
-          .replaceFirst('{system}', name),
-      progressTemplate: AppLocale.rommSystemFetchProgress
-          .getString(context)
-          .replaceFirst('{system}', name),
-      summaryTemplate: AppLocale.rommSystemFetchSummary
-          .getString(context)
-          .replaceFirst('{system}', name),
-      cancelledTemplate: AppLocale.rommSystemFetchCancelled.getString(context),
-      busyTemplate: AppLocale.rommSystemFetchBusy.getString(context),
-      failedToStartTemplate: AppLocale.rommSystemFetchFailedToStart
-          .getString(context)
-          .replaceFirst('{system}', name),
-    );
-  }
-
-  /// Names the system whose pass is still running, not the one refused.
-  String busy(String runningSystem) =>
-      busyTemplate.replaceFirst('{system}', runningSystem);
-
-  String progress(int done, int total) => progressTemplate
-      .replaceFirst('{done}', '$done')
-      .replaceFirst('{total}', '$total');
-
-  String summary(RommMetadataFetchSummary s) {
-    final text = summaryTemplate
-        .replaceFirst('{linked}', '${s.linked}')
-        .replaceFirst('{filled}', '${s.filled}')
-        .replaceFirst('{replaced}', '${s.replaced}')
-        .replaceFirst('{unlinked}', '${s.unlinkedSkipped}')
-        .replaceFirst('{notFound}', '${s.notFound}')
-        .replaceFirst('{failed}', '${s.failed}');
-    if (!s.cancelled) return text;
-    return cancelledTemplate.replaceFirst('{summary}', text);
-  }
-
-  String failedToStart(Object error) =>
-      failedToStartTemplate.replaceFirst('{error}', '$error');
-}
-
-/// Runs one pass to completion with progress and the summary in the global
-/// notification. Holds providers and pre-resolved strings only — no widget,
-/// no context — so it outlives the dialog that started it.
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
-Future<void> _runRommFetchDetached({
-  required SystemModel system,
-  required RommMetadataMode mode,
-  required RommProvider romm,
-  required FileProvider files,
-  required ScrapingProvider scraping,
-  required _RommFetchStrings strings,
-}) async {
-  final notifications = GlobalNotificationService();
-  final notificationId = 'romm_metadata_fetch_${system.folderName}';
-  final log = _SystemEmulatorSettingsDialogState._log;
-
-  final pass = RommMetadataFetch(
-    listGames: GameRepository.loadGamesForSystem,
-    linkIndex: RommSaveMapRepository.getRomIdIndex,
-    fetchOne: (target, system, mode) => romm.fetchMetadataForRomId(
-      romId: target.romId,
-      system: system,
-      fileProvider: files,
-      indexedName: target.indexedName,
-      mode: mode,
-    ),
-    // A disconnect mid-pass would otherwise fail every remaining game
-    // against the cleared config; stop between games instead.
-    // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
-    shouldStop: () => !romm.isConnected,
-    onProgress: (done, total) => notifications.update(
-      id: notificationId,
-      message: strings.progress(done, total),
-      type: GlobalNotificationType.info,
-      progress: total == 0 ? 0 : done / total,
-      ongoing: true,
-    ),
-  );
-
-  notifications.show(
-    id: notificationId,
-    message: strings.preparing,
-    type: GlobalNotificationType.info,
-    progress: 0,
-    ongoing: true,
-  );
-
-  try {
-    final summary = await pass.run(system, mode);
-    if (summary.wroteSomething) {
-      // Once, after the pass, through the owners' existing paths: the games
-      // list drops its artwork caches and reloads on the revision bump, and
-      // the provider's settle rescans the system for a library that isn't
-      // showing it right now.
-      // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
-      scraping.markArtworkUpdated();
-      romm.scheduleLibraryRefresh(system);
-    }
-    notifications.update(
-      id: notificationId,
-      message: strings.summary(summary),
-      type: summary.cancelled
-          ? GlobalNotificationType.info
-          : (summary.failed > 0
-                ? GlobalNotificationType.error
-                : GlobalNotificationType.success),
-      progress: null,
-    );
-  } on RommMetadataFetchBusyException catch (e) {
-    log.w('$e');
-    notifications.update(
-      id: notificationId,
-      message: strings.busy(e.runningSystemFolder),
-      type: GlobalNotificationType.error,
-      progress: null,
-    );
-  } catch (e, st) {
-    log.e('RomM metadata fetch pass did not run', error: e, stackTrace: st);
-    notifications.update(
-      id: notificationId,
-      message: strings.failedToStart(e),
-      type: GlobalNotificationType.error,
-      progress: null,
-    );
+    RommMetadataFetchRunner.runSystem(context, _system, mode);
   }
 }

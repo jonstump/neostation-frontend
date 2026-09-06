@@ -551,6 +551,221 @@ void main() {
     });
   });
 
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Metadata For Linked Members"
+  group('target run', () {
+    const label = 'Best of SNES';
+    SystemModel systemOf(RommMetadataFetchTarget t) =>
+        t.game.systemFolderName == 'nes' ? _nes : _snes;
+    List<RommMetadataFetchTarget> targets() => [
+      for (var i = 0; i < 3; i++)
+        RommMetadataFetchTarget(game: _game(i), romId: i),
+      for (var i = 10; i < 12; i++)
+        RommMetadataFetchTarget(
+          game: _game(i, folder: 'nes'),
+          romId: i,
+        ),
+    ];
+
+    test(
+      'fetches every target with its own system, spanning systems',
+      () async {
+        final writer = _FakeWriter();
+        final systemSeen = <int, String>{};
+        final progress = <(int, int)>[];
+        final pass = _pass(
+          games: const [],
+          index: const RommRomIdIndex({}),
+          fetchOne: (target, system, mode) {
+            systemSeen[target.romId] = system.folderName;
+            return writer(target, system, mode);
+          },
+          onProgress: (done, total) => progress.add((done, total)),
+        );
+
+        final summary = await pass.runTargets(
+          targets(),
+          mode: RommMetadataMode.fillGaps,
+          systemOf: systemOf,
+          label: label,
+        );
+
+        expect(writer.calls.toSet(), {0, 1, 2, 10, 11});
+        expect(systemSeen, {
+          0: 'snes',
+          1: 'snes',
+          2: 'snes',
+          10: 'nes',
+          11: 'nes',
+        });
+        expect(writer.modes.toSet(), {RommMetadataMode.fillGaps});
+        expect(summary.linked, 5);
+        expect(summary.filled, 5);
+        expect(summary.unlinkedSkipped, 0);
+        expect(summary.failed, 0);
+        expect(summary.cancelled, isFalse);
+        expect(progress.first, (0, 5));
+        expect(progress.last, (5, 5));
+        expect(pass.system, isNull);
+        expect(pass.label, label);
+        expect(pass.subject, label);
+        expect(RommMetadataFetch.active, isNull);
+
+        final lines = _summaryLines();
+        expect(lines, hasLength(1));
+        expect(lines.single, contains('pass complete:'));
+        expect(lines.single, contains('targets="$label"'));
+        expect(lines.single, contains('systems=snes,nes'));
+        expect(lines.single, contains('linked=5'));
+        expect(lines.single, contains('filled=5'));
+      },
+    );
+
+    test('never more than the bulk-sync concurrency is in flight', () async {
+      final writer = _FakeWriter(gated: true);
+      final pass = _pass(
+        games: const [],
+        index: const RommRomIdIndex({}),
+        fetchOne: _gatedOrOpen(writer),
+      );
+      final many = [
+        for (var i = 0; i < 20; i++)
+          RommMetadataFetchTarget(game: _game(i), romId: i),
+      ];
+
+      final run = pass.runTargets(
+        many,
+        mode: RommMetadataMode.fillGaps,
+        systemOf: systemOf,
+        label: label,
+      );
+      await _settle();
+      expect(writer.inFlight, RommBulkSync.defaultConcurrency);
+      expect(pass.total, 20);
+
+      writer.releaseAll();
+      final summary = await run;
+
+      expect(writer.maxInFlight, RommBulkSync.defaultConcurrency);
+      expect(writer.calls.length, 20);
+      expect(summary.filled, 20);
+    });
+
+    test('one failing target is counted and logged; the rest run', () async {
+      final writer = _FakeWriter(failing: {1}, notFound: {10});
+      final pass = _pass(
+        games: const [],
+        index: const RommRomIdIndex({}),
+        fetchOne: writer.call,
+      );
+
+      final summary = await pass.runTargets(
+        targets(),
+        mode: RommMetadataMode.fillGaps,
+        systemOf: systemOf,
+        label: label,
+      );
+
+      expect(writer.calls.length, 5);
+      expect(summary.linked, 5);
+      expect(summary.filled, 3);
+      expect(summary.failed, 1);
+      expect(summary.notFound, 1);
+      expect(summary.cancelled, isFalse);
+      final warnings = LoggerService.instance
+          .takeCapture()
+          .where((l) => l.contains('metadata fetch pass game failed'))
+          .toList();
+      expect(warnings, hasLength(1));
+      expect(warnings.single, contains('rom=1'));
+      expect(warnings.single, contains('system=snes'));
+    });
+
+    test('shares the one-pass-at-a-time guard with the system pass', () async {
+      final writer = _FakeWriter(gated: true);
+      final collection = _pass(
+        games: const [],
+        index: const RommRomIdIndex({}),
+        fetchOne: _gatedOrOpen(writer),
+      );
+      final lib = _library(count: 2, linked: 2);
+      final other = _FakeWriter();
+      final system = _pass(
+        games: lib.games,
+        index: lib.index,
+        fetchOne: other.call,
+      );
+
+      final run = collection.runTargets(
+        targets(),
+        mode: RommMetadataMode.fillGaps,
+        systemOf: systemOf,
+        label: label,
+      );
+      await _settle();
+
+      await expectLater(
+        system.run(_snes, RommMetadataMode.fillGaps),
+        throwsA(
+          isA<RommMetadataFetchBusyException>()
+              .having((e) => e.runningSystemFolder, 'running', label)
+              .having((e) => e.requestedSystemFolder, 'requested', 'snes'),
+        ),
+      );
+      expect(other.calls, isEmpty);
+      expect(RommMetadataFetch.active, same(collection));
+
+      writer.releaseAll();
+      await run;
+      expect(RommMetadataFetch.active, isNull);
+
+      // And the other way round: a system pass refuses a target run.
+      final blocker = _FakeWriter(gated: true);
+      final running = _pass(
+        games: lib.games,
+        index: lib.index,
+        fetchOne: _gatedOrOpen(blocker),
+      );
+      final systemRun = running.run(_snes, RommMetadataMode.fillGaps);
+      await _settle();
+      await expectLater(
+        collection.runTargets(
+          targets(),
+          mode: RommMetadataMode.fillGaps,
+          systemOf: systemOf,
+          label: label,
+        ),
+        throwsA(
+          isA<RommMetadataFetchBusyException>()
+              .having((e) => e.runningSystemFolder, 'running', 'snes')
+              .having((e) => e.requestedSystemFolder, 'requested', label),
+        ),
+      );
+      blocker.releaseAll();
+      await systemRun;
+    });
+
+    test('an empty target list runs to an empty summary', () async {
+      final writer = _FakeWriter();
+      final pass = _pass(
+        games: const [],
+        index: const RommRomIdIndex({}),
+        fetchOne: writer.call,
+      );
+
+      final summary = await pass.runTargets(
+        const [],
+        mode: RommMetadataMode.fillGaps,
+        systemOf: systemOf,
+        label: label,
+      );
+
+      expect(writer.calls, isEmpty);
+      expect(summary.linked, 0);
+      expect(summary.wroteSomething, isFalse);
+      expect(_summaryLines(), hasLength(1));
+    });
+  });
+
   group('summary log line', () {
     // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
     test('exactly one per run, with every count as key=value', () async {

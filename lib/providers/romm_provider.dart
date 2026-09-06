@@ -24,6 +24,7 @@ import '../repositories/system_repository.dart';
 import '../services/collections/collections_service.dart';
 import '../services/logger_service.dart';
 import '../services/romm/romm_collection_mirror.dart';
+import '../services/romm/romm_metadata_fetch.dart';
 import '../services/romm_playtime_service.dart';
 import '../services/romm_service.dart';
 import '../services/storage_space_service.dart';
@@ -184,6 +185,16 @@ class RommProvider extends ChangeNotifier {
   /// provider's reload so the browser and the Collections card update.
   // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Concurrency Safety"
   void Function()? onCollectionsMirrored;
+
+  /// Invoked after a mirror run added members the sync linked rather than
+  /// downloaded, with the fetch targets for them — the UI runs the fill-gaps
+  /// metadata pass with its notification (this provider shows nothing).
+  /// The sync never waits on what the handler does. Unset, the request is
+  /// dropped with a log line: the RomM browse screen registers it while it
+  /// is on screen and clears it when it leaves.
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Metadata For Linked Members"
+  void Function(RommCollectionMetadataRequest request)?
+  onCollectionMetadataTargets;
 
   /// Collections synced this session, keyed by RomM collection id, whose
   /// mirror runs again after each settle until every completed download has
@@ -2254,6 +2265,7 @@ class RommProvider extends ChangeNotifier {
       resolveLocal: (rom) => _localRomPathFor(rom, romFolders),
       findMirror: CollectionRepository.findRommMirror,
       insertMirror: CollectionRepository.insertRommMirrorCollection,
+      readMembers: CollectionRepository.getMemberRomPaths,
       replaceMembers: CollectionRepository.replaceMembers,
       setProvenance: CollectionRepository.setRommProvenance,
       newId: CollectionsService.generateCollectionId,
@@ -2262,11 +2274,10 @@ class RommProvider extends ChangeNotifier {
       // is local.
       shouldStop: () => !isConnected,
     );
+    final RommCollectionMirrorSummary summary;
     try {
-      _lastCollectionMirror = await mirror.run(
-        collection,
-        serverUrl: service.baseUrl,
-      );
+      summary = await mirror.run(collection, serverUrl: service.baseUrl);
+      _lastCollectionMirror = summary;
     } catch (e) {
       // `run` reports failures through its summary; this catches only a bug
       // in the wiring, and the sync must not fail for it.
@@ -2276,6 +2287,113 @@ class RommProvider extends ChangeNotifier {
       return;
     }
     onCollectionsMirrored?.call();
+    if (summary.wroteMembership && summary.added > 0) {
+      await _requestMetadataForLinkedMembers(collection, summary);
+    }
+  }
+
+  /// Hands the UI the fetch targets for the members [summary] added that
+  /// this sync linked rather than downloaded — a download gets its metadata
+  /// on completion, so it is left out by its indexed `rom_path`.
+  ///
+  /// Only the lookups run here (the games behind the paths, the link map,
+  /// the systems); the fetch itself is the handler's, started detached and
+  /// never awaited by the sync. Never throws: a failure is logged and the
+  /// sync goes on without a metadata pass.
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Metadata For Linked Members"
+  Future<void> _requestMetadataForLinkedMembers(
+    RommCollection collection,
+    RommCollectionMirrorSummary summary,
+  ) async {
+    try {
+      final downloaded = <String>{};
+      for (final download in _indexedDownloadNames.values) {
+        final path = await GameRepository.getRomPathByFilename(
+          download.systemFolder,
+          download.indexedName,
+        );
+        if (path != null) downloaded.add(path);
+      }
+      final linked = [
+        for (final path in summary.addedRomPaths)
+          if (!downloaded.contains(path)) path,
+      ];
+      final excluded = summary.addedRomPaths.length - linked.length;
+      if (linked.isEmpty) {
+        _log.i(
+          'RomM collection metadata: nothing to fetch '
+          'collection=${collection.id} added=${summary.added} '
+          'downloaded_excluded=$excluded',
+        );
+        return;
+      }
+
+      final games = await GameRepository.getGamesByRomPaths(linked);
+      final index = await RommSaveMapRepository.getRomIdIndex();
+      // One system lookup per folder; a folder with no system row is
+      // remembered as null so it is not asked again.
+      final lookedUp = <String, SystemModel?>{};
+      final systems = <String, SystemModel>{};
+      final targets = <RommMetadataFetchTarget>[];
+      var unlinked = 0, noSystem = 0;
+      for (final game in games) {
+        final folder = game.systemFolderName;
+        if (folder == null || folder.isEmpty) {
+          noSystem++;
+          continue;
+        }
+        if (!lookedUp.containsKey(folder)) {
+          lookedUp[folder] = await SystemRepository.getSystemByFolderName(
+            folder,
+          );
+        }
+        final system = lookedUp[folder];
+        if (system == null) {
+          noSystem++;
+          continue;
+        }
+        final romId = RommMetadataFetch.lookupRomId(index, game, system);
+        if (romId == null) {
+          unlinked++;
+          continue;
+        }
+        systems[folder] = system;
+        targets.add(RommMetadataFetchTarget(game: game, romId: romId));
+      }
+
+      final handler = onCollectionMetadataTargets;
+      _log.i(
+        'RomM collection metadata: collection=${collection.id} '
+        'added=${summary.added} downloaded_excluded=$excluded '
+        'games=${games.length} targets=${targets.length} '
+        'unlinked=$unlinked no_system=$noSystem '
+        'handler=${handler == null ? 'none' : 'set'}',
+      );
+      if (targets.isEmpty) return;
+      if (handler == null) {
+        // Documented, not silent: the browse screen that would run the pass
+        // is not on screen, so the linked members keep whatever metadata
+        // they have until the per-system action is used.
+        _log.i(
+          'RomM collection metadata: request dropped, no handler '
+          'collection=${collection.id} targets=${targets.length}',
+        );
+        return;
+      }
+      handler(
+        RommCollectionMetadataRequest(
+          collectionName: collection.name,
+          targets: targets,
+          systemsByFolder: systems,
+        ),
+      );
+    } catch (e, st) {
+      _log.e(
+        'RomM collection metadata: request failed collection=${collection.id}',
+        error: e,
+        stackTrace: st,
+      );
+    }
   }
 
   /// The `rom_path` of [rom]'s local copy, or null when it has none the

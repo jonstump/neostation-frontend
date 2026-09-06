@@ -105,10 +105,11 @@ class RommMetadataFetchSummary {
 /// the system that is busy.
 // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
 class RommMetadataFetchBusyException implements Exception {
-  /// The system whose pass is still running.
+  /// The system whose pass is still running — or, for a target run
+  /// ([RommMetadataFetch.runTargets]), its label.
   final String runningSystemFolder;
 
-  /// The system the refused pass was for.
+  /// The system the refused pass was for — or the refused target run's label.
   final String requestedSystemFolder;
 
   const RommMetadataFetchBusyException({
@@ -156,7 +157,12 @@ class RommMetadataFetchPassException implements Exception {
 /// with [RommMetadataFetchBusyException]. [cancel] (or the injected
 /// [shouldStop]) ends the pass between games — the fetches already in flight
 /// complete and their writes are kept.
+///
+/// [runTargets] runs the same bounded loop over a target list built by the
+/// caller — the members a collection sync linked, which can span systems —
+/// under the same guard, cancellation, counting and summary line.
 // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
+// Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Metadata For Linked Members"
 class RommMetadataFetch extends ChangeNotifier {
   static final _defaultLog = LoggerService.instance;
 
@@ -192,6 +198,7 @@ class RommMetadataFetch extends ChangeNotifier {
   int _done = 0;
   int _total = 0;
   SystemModel? _system;
+  String? _label;
   RommMetadataMode? _mode;
 
   RommMetadataFetch({
@@ -224,8 +231,16 @@ class RommMetadataFetch extends ChangeNotifier {
   /// Linked games the pass set out to fetch (0 until the index is read).
   int get total => _total;
 
-  /// The system of the running (or last) pass.
+  /// The system of the running (or last) pass; null for a target run.
   SystemModel? get system => _system;
+
+  /// The label of the running (or last) target run; null for a system pass.
+  String? get label => _label;
+
+  /// What the running (or last) pass is over, for a notice that names it:
+  /// the system's display name, or the target run's label.
+  String get subject =>
+      _system?.realName ?? _system?.folderName ?? _label ?? '';
 
   /// The mode of the running (or last) pass.
   RommMetadataMode? get mode => _mode;
@@ -238,7 +253,7 @@ class RommMetadataFetch extends ChangeNotifier {
     _cancelRequested = true;
     _log.i(
       'RomM metadata fetch pass cancel requested '
-      '(system=${_system?.folderName}, done=$_done, total=$_total)',
+      '(system=${_system?.folderName ?? _label}, done=$_done, total=$_total)',
     );
     notifyListeners();
   }
@@ -247,8 +262,8 @@ class RommMetadataFetch extends ChangeNotifier {
 
   /// Runs one pass over [system] in [mode] and returns what it did.
   ///
-  /// Throws [RommMetadataFetchBusyException] — synchronously, before any
-  /// work — when a pass is already running for any system, and
+  /// Fails with [RommMetadataFetchBusyException] — before any work, the
+  /// guard is taken synchronously — when a pass is already running, and
   /// [RommMetadataFetchPassException] when the games or the link map could
   /// not be read. Per-game failures never propagate: they are counted and
   /// logged with the rom id.
@@ -257,16 +272,69 @@ class RommMetadataFetch extends ChangeNotifier {
     SystemModel system,
     RommMetadataMode mode,
   ) async {
+    _claim(requested: system.folderName, system: system, mode: mode);
+    return _finish(scope: 'system=${system.folderName}', mode: mode, (
+      started,
+    ) async {
+      final split = await _systemTargets(system);
+      return _fetchTargets(
+        split.targets,
+        mode,
+        (_) => system,
+        started,
+        unlinked: split.unlinked,
+      );
+    });
+  }
+
+  /// Runs one pass over an explicit [targets] list in [mode] — the members a
+  /// collection sync linked, resolved by the caller and possibly spanning
+  /// systems ([systemOf] names each target's) — and returns what it did.
+  ///
+  /// Same guard, cancellation, concurrency, per-game isolation and summary
+  /// line as [run]; [label] stands in for the system name in the busy
+  /// refusal and the log. Nothing is listed or looked up: every target is
+  /// linked by construction, so `unlinkedSkipped` is 0.
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Metadata For Linked Members"
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
+  Future<RommMetadataFetchSummary> runTargets(
+    List<RommMetadataFetchTarget> targets, {
+    required RommMetadataMode mode,
+    required SystemModel Function(RommMetadataFetchTarget target) systemOf,
+    required String label,
+  }) async {
+    // Resolve every system before claiming the guard: a throwing lookup here
+    // would otherwise leave the pass marked active with no run to release it.
+    final folders = <String>{
+      for (final target in targets) systemOf(target).folderName,
+    };
+    _claim(requested: label, label: label, mode: mode);
+    return _finish(
+      scope: 'targets="$label" systems=${folders.join(',')}',
+      mode: mode,
+      (started) => _fetchTargets(List.of(targets), mode, systemOf, started),
+    );
+  }
+
+  /// Takes the process-wide guard for this pass, or throws
+  /// [RommMetadataFetchBusyException] without touching anything.
+  void _claim({
+    required String requested,
+    required RommMetadataMode mode,
+    SystemModel? system,
+    String? label,
+  }) {
     final current = activeNotifier.value;
     if (current != null) {
+      final running = current._system?.folderName ?? current._label ?? '';
       _log.w(
         'RomM metadata fetch pass refused '
-        '(system=${system.folderName}): a pass is already running '
-        '(system=${current._system?.folderName})',
+        '(system=$requested): a pass is already running '
+        '(system=$running)',
       );
       throw RommMetadataFetchBusyException(
-        runningSystemFolder: current._system?.folderName ?? '',
-        requestedSystemFolder: system.folderName,
+        runningSystemFolder: running,
+        requestedSystemFolder: requested,
       );
     }
     // Claimed before the first await so two starts in one event-loop turn
@@ -277,13 +345,22 @@ class RommMetadataFetch extends ChangeNotifier {
     _done = 0;
     _total = 0;
     _system = system;
+    _label = label;
     _mode = mode;
     notifyListeners();
+  }
 
+  /// Runs [body] under the guard taken by [_claim], logs the one summary
+  /// line, and releases the guard however [body] ends.
+  Future<RommMetadataFetchSummary> _finish(
+    Future<RommMetadataFetchSummary> Function(DateTime started) body, {
+    required String scope,
+    required RommMetadataMode mode,
+  }) async {
     final started = _clock();
     try {
-      final summary = await _run(system, mode, started);
-      _logSummary(system, mode, summary);
+      final summary = await body(started);
+      _logSummary(scope, mode, summary);
       return summary;
     } finally {
       _running = false;
@@ -292,11 +369,10 @@ class RommMetadataFetch extends ChangeNotifier {
     }
   }
 
-  Future<RommMetadataFetchSummary> _run(
-    SystemModel system,
-    RommMetadataMode mode,
-    DateTime started,
-  ) async {
+  /// Lists [system]'s games and splits them into the linked ones (as
+  /// targets) and a count of the rest.
+  Future<({List<RommMetadataFetchTarget> targets, int unlinked})>
+  _systemTargets(SystemModel system) async {
     final List<DatabaseGameModel> games;
     try {
       games = await _listGames(system.folderName);
@@ -314,19 +390,28 @@ class RommMetadataFetch extends ChangeNotifier {
     }
 
     // Split the system into the linked games (fetched) and the rest (counted).
-    // The map is written under the on-disk filename but readable by either
-    // spelling, and under whichever folder the row was indexed in, so ask
-    // every combination before calling a game unlinked.
     final targets = <RommMetadataFetchTarget>[];
     var unlinked = 0;
     for (final game in games) {
-      final romId = _lookup(index, game, system);
+      final romId = lookupRomId(index, game, system);
       if (romId == null) {
         unlinked++;
         continue;
       }
       targets.add(RommMetadataFetchTarget(game: game, romId: romId));
     }
+    return (targets: targets, unlinked: unlinked);
+  }
+
+  /// The bounded loop both entry points share: fetches every target with at
+  /// most [concurrency] in flight, counting each outcome.
+  Future<RommMetadataFetchSummary> _fetchTargets(
+    List<RommMetadataFetchTarget> targets,
+    RommMetadataMode mode,
+    SystemModel Function(RommMetadataFetchTarget target) systemOf,
+    DateTime started, {
+    int unlinked = 0,
+  }) async {
     _total = targets.length;
     _done = 0;
     notifyListeners();
@@ -343,6 +428,7 @@ class RommMetadataFetch extends ChangeNotifier {
         skipped++;
         return;
       }
+      final system = systemOf(target);
       RommMetadataOutcome outcome;
       try {
         outcome = await _fetchOne(target, system, mode);
@@ -392,7 +478,12 @@ class RommMetadataFetch extends ChangeNotifier {
   }
 
   /// The rom id of [game]'s map row, or null when it has none.
-  static int? _lookup(
+  ///
+  /// The map is written under the on-disk filename but readable by either
+  /// spelling, and under whichever folder the row was indexed in, so every
+  /// combination is asked before a game is called unlinked. Public so the
+  /// collection sync resolves its linked members the same way.
+  static int? lookupRomId(
     RommRomIdIndex index,
     DatabaseGameModel game,
     SystemModel system,
@@ -414,19 +505,20 @@ class RommMetadataFetch extends ChangeNotifier {
   /// The one info line per run. Per-game outcomes are deliberately absent:
   /// on a large system they would drown the log, and the counts are what a
   /// user reading it needs. Failed games each got a warning as they failed.
+  /// [scope] names what ran: `system=<folder>` or the target run's label.
   ///
   /// Phrased `pass complete:` / `pass cancelled:` rather than `pass:` because
   /// the log redactor treats `pass:` as a credential key and blanks whatever
   /// follows it.
   // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
   void _logSummary(
-    SystemModel system,
+    String scope,
     RommMetadataMode mode,
     RommMetadataFetchSummary s,
   ) {
     _log.i(
       'RomM metadata fetch pass ${s.cancelled ? 'cancelled' : 'complete'}: '
-      'system=${system.folderName} mode=${mode.name} '
+      '$scope mode=${mode.name} '
       'linked=${s.linked} filled=${s.filled} replaced=${s.replaced} '
       'unlinked_skipped=${s.unlinkedSkipped} not_found=${s.notFound} '
       'failed=${s.failed} skipped=${s.skipped} cancelled=${s.cancelled} '
