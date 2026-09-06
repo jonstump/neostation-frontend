@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -107,6 +108,10 @@ class _PinnedProvider extends RommProvider {
 
   /// No transfer: records the completion exactly as a finished download
   /// would, under the ROM's own filename, and leaves the settle to the test.
+  /// When set, every "download" waits on it, so a test can look at the
+  /// state the sync leaves while transfers are still in flight.
+  Completer<void>? downloadGate;
+
   @override
   Future<RommDownload> downloadRom(
     RommRom rom, {
@@ -114,6 +119,8 @@ class _PinnedProvider extends RommProvider {
     FileProvider? fileProvider,
   }) async {
     downloaded.add(rom.id);
+    final gate = downloadGate;
+    if (gate != null) await gate.future;
     debugRegisterCompletedDownload(rom, _snes, rom.fsName);
     return RommDownload(romId: rom.id, status: RommDownloadStatus.completed);
   }
@@ -288,6 +295,35 @@ void main() {
       expect(await collections(), isEmpty);
       expect(provider.lastCollectionMirror, isNull);
       expect(mirrored, 0);
+    });
+  });
+
+  group('while downloading', () {
+    test('the collection exists as soon as the plan is approved', () async {
+      final a = await local('Game A.sfc');
+      provider.fake.roms = [_rom(1, 'Game A.sfc'), _rom(2, 'Game B.sfc')];
+      provider.downloadGate = Completer<void>();
+
+      // Not awaited: the sync is parked inside the gated download.
+      final sync = provider.syncSource(
+        collection: _bestOfSnes,
+        romFolders: romFolders,
+        confirm: (_) async => true,
+      );
+      // Let the enumeration, the approval and the early mirror run.
+      for (var i = 0; i < 50 && (await collections()).isEmpty; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+      expect(provider.downloaded, [2], reason: 'the transfer has started');
+      final c = (await collections()).single;
+      expect(await CollectionRepository.getMemberRomPaths(c.id), {
+        a,
+      }, reason: 'created on approval with the local ROM, before the download');
+
+      provider.downloadGate!.complete();
+      await sync;
+      expect((await collections()).single.id, c.id);
+      expect(mirrored, 1, reason: 'the approval-time run is the only one');
     });
   });
 
