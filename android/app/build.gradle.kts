@@ -33,6 +33,18 @@ android {
     }
 
     signingConfigs {
+        // Side-by-side test build: a checked-in debug keystore (the standard
+        // debug alias/password) so every CI build of this branch signs the
+        // same way and can update the app already installed on the device.
+        // The runner's generated debug key differs between builds and made
+        // updates fail with INSTALL_FAILED_UPDATE_INCOMPATIBLE. Test branch
+        // only — never merge.
+        getByName("debug") {
+            storeFile = file("test-debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
         if (hasReleaseSigning) {
             create("release") {
                 keyAlias = keystoreProperties.getProperty("keyAlias")
