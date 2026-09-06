@@ -1236,4 +1236,10 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.rommPairRateLimited: '嘗試次數過多，請等待一分鐘後再試',
   AppLocale.rommPairedTokenExpires: '權杖將於 {date} 過期',
   AppLocale.rommPairedTokenName: '權杖：{name}',
+  AppLocale.rommScanQrAction: '掃描 QR Code',
+  AppLocale.rommScanQrTitle: '掃描配對碼',
+  AppLocale.rommScanQrPrompt: '將相機對準 RomM 中顯示的配對 QR Code',
+  AppLocale.rommScanQrNotPairingCode: '這不是 RomM 配對碼',
+  AppLocale.rommScanQrCameraDenied: '相機權限遭拒，請改為手動輸入配對碼',
+  AppLocale.rommScanQrCameraUnavailable: '沒有可用的相機，請改為手動輸入配對碼',
 };

@@ -1417,4 +1417,12 @@ const Map<String, dynamic> appLocaleId = {
       'Terlalu banyak percobaan; tunggu satu menit lalu coba lagi',
   AppLocale.rommPairedTokenExpires: 'Token kedaluwarsa pada {date}',
   AppLocale.rommPairedTokenName: 'Token: {name}',
+  AppLocale.rommScanQrAction: 'Pindai kode QR',
+  AppLocale.rommScanQrTitle: 'Pindai kode penyandingan',
+  AppLocale.rommScanQrPrompt:
+      'Arahkan kamera ke kode QR penyandingan yang ditampilkan di RomM',
+  AppLocale.rommScanQrNotPairingCode: 'Itu bukan kode penyandingan RomM',
+  AppLocale.rommScanQrCameraDenied: 'Izin kamera ditolak; ketik kodenya saja',
+  AppLocale.rommScanQrCameraUnavailable:
+      'Tidak ada kamera yang tersedia; ketik kodenya saja',
 };

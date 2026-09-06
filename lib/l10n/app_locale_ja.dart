@@ -1283,4 +1283,10 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommPairRateLimited: '試行回数が多すぎます。1 分待ってからやり直してください',
   AppLocale.rommPairedTokenExpires: 'トークンの有効期限: {date}',
   AppLocale.rommPairedTokenName: 'トークン: {name}',
+  AppLocale.rommScanQrAction: 'QR コードをスキャン',
+  AppLocale.rommScanQrTitle: 'ペアリングコードをスキャン',
+  AppLocale.rommScanQrPrompt: 'RomM に表示されたペアリング QR コードにカメラを向けてください',
+  AppLocale.rommScanQrNotPairingCode: 'これは RomM のペアリングコードではありません',
+  AppLocale.rommScanQrCameraDenied: 'カメラの使用が拒否されました。代わりにコードを入力してください',
+  AppLocale.rommScanQrCameraUnavailable: 'カメラが利用できません。代わりにコードを入力してください',
 };

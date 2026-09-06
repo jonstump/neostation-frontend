@@ -42,9 +42,14 @@ enum RommConnectSlot {
   password,
   apiKey,
 
-  /// The pairing-code field. The QR-scan action of the scanner story slots
-  /// in after it and before [connect] in the [RommAuthMode.pairCode] order.
+  /// The pairing-code field.
   pairCode,
+
+  /// The "Scan QR code" action: an action row, not a field, that sits between
+  /// [pairCode] and [connect] in the [RommAuthMode.pairCode] order — and only
+  /// on platforms with a camera (see `showsQrScanAction`).
+  // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "QR Scan Where A Camera Exists"
+  scanQr,
 
   /// The connect button, always last.
   connect,
@@ -53,8 +58,15 @@ enum RommConnectSlot {
 /// The cursor order for [mode]: the URL, the switch, that mode's secret
 /// field(s), and connect. The switch keeps the same index in every mode so
 /// changing modes never moves the cursor off it.
+///
+/// [includeScanQr] adds the [RommConnectSlot.scanQr] action after the code
+/// field in pairing mode; it is the platform gate's answer, so a Windows or
+/// Linux build never has a slot for a row it does not draw.
 // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Pairing Mode On The Connect Screen"
-List<RommConnectSlot> focusOrderFor(RommAuthMode mode) {
+List<RommConnectSlot> focusOrderFor(
+  RommAuthMode mode, {
+  bool includeScanQr = false,
+}) {
   return switch (mode) {
     RommAuthMode.password => const [
       RommConnectSlot.url,
@@ -69,10 +81,12 @@ List<RommConnectSlot> focusOrderFor(RommAuthMode mode) {
       RommConnectSlot.apiKey,
       RommConnectSlot.connect,
     ],
-    RommAuthMode.pairCode => const [
+    // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "QR Scan Where A Camera Exists"
+    RommAuthMode.pairCode => [
       RommConnectSlot.url,
       RommConnectSlot.authMode,
       RommConnectSlot.pairCode,
+      if (includeScanQr) RommConnectSlot.scanQr,
       RommConnectSlot.connect,
     ],
   };

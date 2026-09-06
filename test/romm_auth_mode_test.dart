@@ -83,11 +83,74 @@ void main() {
     test('every mode starts on the URL, keeps the switch at slot 1, and ends '
         'on connect', () {
       for (final mode in RommAuthMode.values) {
-        final order = focusOrderFor(mode);
-        expect(order.first, RommConnectSlot.url, reason: '$mode');
-        expect(order[1], RommConnectSlot.authMode, reason: '$mode');
-        expect(order.last, RommConnectSlot.connect, reason: '$mode');
-        expect(order.toSet().length, order.length, reason: '$mode repeats');
+        for (final scan in [false, true]) {
+          final order = focusOrderFor(mode, includeScanQr: scan);
+          expect(order.first, RommConnectSlot.url, reason: '$mode scan=$scan');
+          expect(
+            order[1],
+            RommConnectSlot.authMode,
+            reason: '$mode scan=$scan',
+          );
+          expect(
+            order.last,
+            RommConnectSlot.connect,
+            reason: '$mode scan=$scan',
+          );
+          expect(
+            order.toSet().length,
+            order.length,
+            reason: '$mode scan=$scan repeats',
+          );
+        }
+      }
+    });
+  });
+
+  // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "QR Scan Where A
+  // Camera Exists"
+  group('focusOrderFor with the scan action', () {
+    test('pairing mode puts scan between the code field and connect', () {
+      expect(focusOrderFor(RommAuthMode.pairCode, includeScanQr: true), const [
+        RommConnectSlot.url,
+        RommConnectSlot.authMode,
+        RommConnectSlot.pairCode,
+        RommConnectSlot.scanQr,
+        RommConnectSlot.connect,
+      ]);
+    });
+
+    test('pairing mode without a camera has no scan slot', () {
+      expect(
+        focusOrderFor(RommAuthMode.pairCode, includeScanQr: false),
+        isNot(contains(RommConnectSlot.scanQr)),
+      );
+      expect(
+        focusOrderFor(RommAuthMode.pairCode),
+        focusOrderFor(RommAuthMode.pairCode, includeScanQr: false),
+      );
+    });
+
+    test('the scan action never appears outside pairing mode', () {
+      expect(
+        focusOrderFor(RommAuthMode.password, includeScanQr: true),
+        focusOrderFor(RommAuthMode.password),
+      );
+      expect(
+        focusOrderFor(RommAuthMode.apiKey, includeScanQr: true),
+        focusOrderFor(RommAuthMode.apiKey),
+      );
+    });
+
+    test('the switch keeps its index whether or not scan is offered', () {
+      for (final mode in RommAuthMode.values) {
+        expect(
+          focusOrderFor(
+            mode,
+            includeScanQr: true,
+          ).indexOf(RommConnectSlot.authMode),
+          focusOrderFor(mode).indexOf(RommConnectSlot.authMode),
+          reason: '$mode',
+        );
       }
     });
   });

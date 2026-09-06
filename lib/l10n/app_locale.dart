@@ -1439,6 +1439,14 @@ mixin AppLocale {
   static const String rommPairRateLimited = 'romm_pair_rate_limited';
   static const String rommPairedTokenExpires = 'romm_paired_token_expires';
   static const String rommPairedTokenName = 'romm_paired_token_name';
+  static const String rommScanQrAction = 'romm_scan_qr_action';
+  static const String rommScanQrTitle = 'romm_scan_qr_title';
+  static const String rommScanQrPrompt = 'romm_scan_qr_prompt';
+  static const String rommScanQrNotPairingCode =
+      'romm_scan_qr_not_pairing_code';
+  static const String rommScanQrCameraDenied = 'romm_scan_qr_camera_denied';
+  static const String rommScanQrCameraUnavailable =
+      'romm_scan_qr_camera_unavailable';
 
   // ==========================================================================
   // Localization Maps
