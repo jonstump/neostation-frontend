@@ -37,6 +37,8 @@ RomM side: `RommCollection {id (string), name, romCount, isVirtual, covers}`; `R
 **Choice**: Add `CollectionRepository.replaceMembers(collectionId, Set<String> romPaths)` (delete rows not in the set, insert missing) executed inside `SqliteService`'s transaction helper.
 **Rationale**: SPEC "Database Operation Standards" wants atomic multi-step mutation; a half-written membership would look like data loss.
 
+The service collects the whole resolved set first and writes it once at the end; a cancel or page failure therefore leaves membership untouched rather than partially updated.
+
 ### Resolution: local copy, then indexed downloads
 
 **Choice**: `resolveLocal` first tries `findLocalCopy(rom, romFolders)` (what the sync uses to decide "already here"); after the settle, ROMs recorded in `_completedPendingIndex` for this sync are resolved by their `indexedName` under the system folder (a `GameRepository` lookup by system folder and filename, added if missing).

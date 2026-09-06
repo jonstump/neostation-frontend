@@ -114,7 +114,7 @@ All error-producing operations MUST follow structured error handling:
 #### Scenario: Page fetch fails
 
 - **WHEN** a page request fails mid-run
-- **THEN** the run stops, keeps the membership written so far, logs the collection id and page, and the outcome reports the failure
+- **THEN** the run stops before writing (membership is written once at the end, so nothing partial is left), logs the collection id and page, and the outcome reports the failure
 
 ### Requirement: Concurrency Safety
 
