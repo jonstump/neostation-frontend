@@ -1468,4 +1468,7 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.rommSearchResultCountOne: '1 risultato',
   AppLocale.rommSearchResultCountMore: '{count}+ risultati',
   AppLocale.rommSearchNoResults: 'Nessun risultato per {term}',
+  AppLocale.scraperSubtitleRomm: 'Scarica i metadati dei giochi da RomM',
+  AppLocale.scraperSubtitleBoth:
+      'Scarica i metadati dei giochi da RomM; ScreenScraper completa ciò che manca a RomM',
 };

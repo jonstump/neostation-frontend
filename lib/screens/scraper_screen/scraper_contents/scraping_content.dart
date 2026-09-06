@@ -13,17 +13,23 @@ import 'package:neostation/services/screenscraper/screenscraper_exceptions.dart'
 import 'package:neostation/widgets/custom_notification.dart';
 import 'package:neostation/services/logger_service.dart';
 import '../../settings_screen/new_settings_options/settings_title.dart';
+import 'package:neostation/utils/scraper_subtitle.dart';
 
 class ScrapingContent extends StatefulWidget {
   final bool isContentFocused;
   final int selectedContentIndex;
   final VoidCallback? onScrapingFinished;
 
+  /// Whether ScreenScraper credentials are saved; with RomM connected the
+  /// options open without them, and the subtitle must say so.
+  final bool screenScraperLoggedIn;
+
   const ScrapingContent({
     super.key,
     required this.isContentFocused,
     required this.selectedContentIndex,
     this.onScrapingFinished,
+    this.screenScraperLoggedIn = true,
   });
 
   @override
@@ -272,7 +278,14 @@ class ScrapingContentState extends State<ScrapingContent> {
                       title: AppLocale.scraping.getString(context),
                       subtitle: scrapingProvider.isScraping
                           ? '${AppLocale.scrapingInProgress.getString(context)} ${scrapingProvider.maxThreads} threads'
-                          : AppLocale.scraperSubtitle.getString(context),
+                          // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "Entry Point Consistency"
+                          : scraperSubtitleKeyFor(
+                              rommConnected: context
+                                  .watch<RommProvider>()
+                                  .isConnected,
+                              screenScraperLoggedIn:
+                                  widget.screenScraperLoggedIn,
+                            ).getString(context),
                     ),
                   ),
                   SizedBox(width: 24.r),

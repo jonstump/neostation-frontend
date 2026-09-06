@@ -1434,4 +1434,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommSearchResultCountOne: '1 hasil',
   AppLocale.rommSearchResultCountMore: '{count}+ hasil',
   AppLocale.rommSearchNoResults: 'Tidak ada hasil untuk {term}',
+  AppLocale.scraperSubtitleRomm: 'Unduh metadata game dari RomM',
+  AppLocale.scraperSubtitleBoth:
+      'Unduh metadata game dari RomM, dengan ScreenScraper untuk yang tidak ada di RomM',
 };

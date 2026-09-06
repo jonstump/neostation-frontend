@@ -1430,6 +1430,8 @@ mixin AppLocale {
       'scraper_screenscraper_optional';
   static const String scraperLoginToScreenscraper =
       'scraper_login_to_screenscraper';
+  static const String scraperSubtitleRomm = 'scraper_subtitle_romm';
+  static const String scraperSubtitleBoth = 'scraper_subtitle_both';
 
   // RomM pairing-code mode (SPEC-0007)
   static const String rommAuthModePairCode = 'romm_auth_mode_pair_code';

@@ -1250,4 +1250,6 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.rommSearchResultCountOne: '1 个结果',
   AppLocale.rommSearchResultCountMore: '{count}+ 个结果',
   AppLocale.rommSearchNoResults: '没有与“{term}”匹配的结果',
+  AppLocale.scraperSubtitleRomm: '从 RomM 下载游戏元数据',
+  AppLocale.scraperSubtitleBoth: '从 RomM 下载游戏元数据，RomM 缺少的部分由 ScreenScraper 补充',
 };
