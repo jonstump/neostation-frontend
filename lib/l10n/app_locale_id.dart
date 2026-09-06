@@ -1425,4 +1425,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommScanQrCameraDenied: 'Izin kamera ditolak; ketik kodenya saja',
   AppLocale.rommScanQrCameraUnavailable:
       'Tidak ada kamera yang tersedia; ketik kodenya saja',
+  AppLocale.scraperScreenscraperOptional:
+      'RomM terhubung dan digunakan lebih dulu untuk scraping. Masuk ke ScreenScraper untuk menambahkannya sebagai sumber cadangan.',
+  AppLocale.scraperLoginToScreenscraper: 'Masuk ke ScreenScraper',
 };

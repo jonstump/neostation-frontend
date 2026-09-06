@@ -1242,4 +1242,7 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.rommScanQrNotPairingCode: '這不是 RomM 配對碼',
   AppLocale.rommScanQrCameraDenied: '相機權限遭拒，請改為手動輸入配對碼',
   AppLocale.rommScanQrCameraUnavailable: '沒有可用的相機，請改為手動輸入配對碼',
+  AppLocale.scraperScreenscraperOptional:
+      '已連接 RomM，抓取時會優先使用。登入 ScreenScraper 可將其作為備用來源。',
+  AppLocale.scraperLoginToScreenscraper: '登入 ScreenScraper',
 };

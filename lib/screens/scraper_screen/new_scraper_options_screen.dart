@@ -21,7 +21,18 @@ import 'scraper_contents/media_content.dart';
 class NewScraperOptionsScreen extends StatefulWidget {
   final VoidCallback? onLogout;
 
-  const NewScraperOptionsScreen({super.key, this.onLogout});
+  /// False when the options are open on the strength of a RomM connection
+  /// alone; the Account pane then offers the ScreenScraper login instead of
+  /// the account card and logout.
+  final bool screenScraperLoggedIn;
+  final VoidCallback? onLoginRequested;
+
+  const NewScraperOptionsScreen({
+    super.key,
+    this.onLogout,
+    this.screenScraperLoggedIn = true,
+    this.onLoginRequested,
+  });
 
   @override
   State<NewScraperOptionsScreen> createState() =>
@@ -367,7 +378,12 @@ class _NewScraperOptionsScreenState extends State<NewScraperOptionsScreen> {
       _systemsKey.currentState?.selectItem();
     } else if (selectedKey == AppLocale.account) {
       if (_selectedContentIndex == 0) {
-        _handleLogout();
+        // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "Entry Point Consistency"
+        if (widget.screenScraperLoggedIn) {
+          _handleLogout();
+        } else {
+          widget.onLoginRequested?.call();
+        }
       }
     }
   }
@@ -635,6 +651,8 @@ class _NewScraperOptionsScreenState extends State<NewScraperOptionsScreen> {
         selectedContentIndex: _selectedContentIndex,
         userInfo: _userInfo,
         onLogout: _handleLogout,
+        loggedIn: widget.screenScraperLoggedIn,
+        onLogin: widget.onLoginRequested,
       );
     } else {
       return Center(

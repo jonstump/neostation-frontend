@@ -15,6 +15,7 @@ import '../../../../themes/corner_radii.dart';
 import '../../../../utils/game_utils.dart';
 import '../widgets/panel_gate_highlight.dart';
 import '../widgets/scrolling_status_line.dart';
+import 'package:neostation/providers/romm_provider.dart';
 
 class GameDetailsGameInfoTab extends StatefulWidget {
   final SystemModel system;
@@ -384,7 +385,11 @@ class GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
                 );
               }
               final hasCredentials = snapshot.data ?? false;
-              if (!hasCredentials) {
+              // A connected RomM server scrapes on its own (ADR-0006), so
+              // the ScreenScraper prompt only applies when neither is set up.
+              // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "Entry Point Consistency"
+              final rommConnected = context.read<RommProvider>().isConnected;
+              if (!hasCredentials && !rommConnected) {
                 return Text(
                   AppLocale.loginToScrape.getString(context),
                   style: TextStyle(

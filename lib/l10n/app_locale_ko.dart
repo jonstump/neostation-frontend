@@ -1298,4 +1298,7 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommScanQrNotPairingCode: 'RomM 페어링 코드가 아닙니다',
   AppLocale.rommScanQrCameraDenied: '카메라 권한이 거부되었습니다. 대신 코드를 입력하세요',
   AppLocale.rommScanQrCameraUnavailable: '사용할 수 있는 카메라가 없습니다. 대신 코드를 입력하세요',
+  AppLocale.scraperScreenscraperOptional:
+      'RomM이 연결되어 스크래핑에 먼저 사용됩니다. ScreenScraper에 로그인하면 대체 소스로 추가됩니다.',
+  AppLocale.scraperLoginToScreenscraper: 'ScreenScraper 로그인',
 };
