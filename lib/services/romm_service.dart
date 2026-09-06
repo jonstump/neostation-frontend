@@ -3,26 +3,56 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:path/path.dart' as path;
 
 import '../models/romm_asset.dart';
 import '../models/romm_collection.dart';
+import '../models/romm_pairing.dart';
 import '../models/romm_platform.dart';
 import '../models/romm_rom_page.dart';
 import '../models/romm_play_session.dart';
 import '../models/romm_rom.dart';
 import 'logger_service.dart';
 
+/// Failure modes a caller needs to tell apart programmatically (the connect
+/// screen picks a localized message per kind). [other] covers everything that
+/// only needs [RommException.message] and [RommException.statusCode].
+// Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Pairing Code Exchange"
+enum RommErrorKind {
+  other,
+
+  /// The pairing code is not 8 characters of the pairing alphabet, or the
+  /// server rejected it for a reason other than expiry or rate limiting.
+  pairCodeInvalid,
+
+  /// The server has no such code: unknown, already used, or past its TTL.
+  pairCodeExpired,
+
+  /// Too many exchange attempts in the last minute.
+  pairRateLimited,
+}
+
 /// Raised when a RomM API call fails; [message] is safe to surface to the user.
 class RommException implements Exception {
   final String message;
   final int? statusCode;
-  RommException(this.message, {this.statusCode});
+
+  /// Sentinel for callers that branch on the failure; [RommErrorKind.other]
+  /// unless the call site says otherwise.
+  final RommErrorKind kind;
+  RommException(
+    this.message, {
+    this.statusCode,
+    this.kind = RommErrorKind.other,
+  });
 
   @override
-  String toString() => 'RommException($statusCode): $message';
+  String toString() => kind == RommErrorKind.other
+      ? 'RommException($statusCode): $message'
+      : 'RommException($statusCode, ${kind.name}): $message';
 }
 
 /// Raised when a download is aborted because the caller's `shouldCancel`
@@ -67,12 +97,26 @@ class RommService {
   static const int maxPlaySessionBatch = 100;
 
   /// Shared client that tolerates self-signed certificates (homelab servers).
-  static final http.Client _httpClient = () {
+  static final http.Client _sharedHttpClient = () {
     final inner = HttpClient()
       ..badCertificateCallback =
           ((X509Certificate cert, String host, int port) => true);
     return IOClient(inner);
   }();
+
+  /// Test seam: when set, every request goes through this client instead of
+  /// [_sharedHttpClient]. Process-wide, like the client it replaces.
+  static http.Client? _httpClientOverride;
+
+  /// Routes all RomM HTTP through [client] (a `MockClient`, typically); pass
+  /// null to restore the shared client.
+  @visibleForTesting
+  static void debugUseHttpClient(http.Client? client) {
+    _httpClientOverride = client;
+  }
+
+  static http.Client get _httpClient =>
+      _httpClientOverride ?? _sharedHttpClient;
 
   String _baseUrl = '';
 
@@ -139,9 +183,7 @@ class RommService {
     String? refreshToken,
     int? tokenExpiresMs,
   }) {
-    final raw = serverUrl.trim();
-    _schemeExplicit = raw.startsWith('http://') || raw.startsWith('https://');
-    _baseUrl = _normalizeBaseUrl(raw);
+    _setServerUrl(serverUrl);
     _apiKey = apiKey.trim();
     _username = username;
     _password = _apiKey.isEmpty ? password : '';
@@ -153,6 +195,15 @@ class RommService {
     // instead of inheriting the previous server's verdict.
     _playtimeScopeGranted = true;
     _playSessionsSupported = true;
+  }
+
+  /// Points the service at [serverUrl] without touching credentials or cached
+  /// tokens — the URL half of [configure], shared with [exchangePairCode],
+  /// which has no credentials yet.
+  void _setServerUrl(String serverUrl) {
+    final raw = serverUrl.trim();
+    _schemeExplicit = raw.startsWith('http://') || raw.startsWith('https://');
+    _baseUrl = _normalizeBaseUrl(raw);
   }
 
   static String _normalizeBaseUrl(String raw) {
@@ -266,6 +317,129 @@ class RommService {
     } catch (_) {
       // The key works; a surprising body shape only costs us the display name.
     }
+  }
+
+  /// Exchanges a RomM pairing code for a client token.
+  ///
+  /// Points the service at [serverUrl] (credentials untouched), normalises
+  /// [code] the way the server does, and refuses anything that isn't eight
+  /// characters of [RommPairCode.alphabet] without a request. The exchange is
+  /// unauthenticated, so no bearer header is sent. Failures are
+  /// [RommException]s whose [RommException.kind] the UI can branch on; network,
+  /// TLS, and timeout errors read exactly as they do for [_verifyApiKey].
+  ///
+  /// The returned token is used like a pasted Client API Token: pass
+  /// [RommPairedToken.rawToken] to [configure] as `apiKey`.
+  // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Pairing Code Exchange"
+  Future<RommPairedToken> exchangePairCode(
+    String serverUrl,
+    String code,
+  ) async {
+    final normalized = RommPairCode.normalize(code);
+    final shown = RommPairCode.display(normalized);
+    if (!RommPairCode.isValid(normalized)) {
+      _log.w(
+        'RomM pair exchange rejected before request: code=$shown '
+        'kind=${RommErrorKind.pairCodeInvalid.name}',
+      );
+      throw RommException(
+        'Invalid pairing code format — expected 8 characters as XXXX-XXXX',
+        kind: RommErrorKind.pairCodeInvalid,
+      );
+    }
+
+    _setServerUrl(serverUrl);
+    if (_baseUrl.isEmpty) {
+      throw RommException('Server URL is empty');
+    }
+
+    http.Response resp;
+    try {
+      resp = await _withSchemeFallback(
+        () => _httpClient
+            .post(
+              _uri('/api/client-tokens/exchange'),
+              headers: const {'Content-Type': 'application/json'},
+              body: jsonEncode({'code': normalized}),
+            )
+            .timeout(const Duration(seconds: 30)),
+      );
+    } on TimeoutException {
+      _log.w('RomM pair exchange failed: code=$shown error=timeout');
+      throw RommException('Connection timed out');
+    } on HandshakeException {
+      _log.w('RomM pair exchange failed: code=$shown error=tls_handshake');
+      throw RommException(
+        'TLS handshake failed — try an http:// URL if the server is not HTTPS',
+      );
+    } on SocketException catch (e) {
+      _log.w(
+        'RomM pair exchange failed: code=$shown error=socket ${e.message}',
+      );
+      throw RommException('Cannot reach server: ${e.message}');
+    } catch (e) {
+      _log.w('RomM pair exchange failed: code=$shown error=$e');
+      throw RommException('Connection failed: $e');
+    }
+
+    if (resp.statusCode == 200) {
+      RommPairedToken token;
+      try {
+        final decoded = jsonDecode(resp.body);
+        if (decoded is! Map<String, dynamic>) {
+          throw const FormatException('response is not a JSON object');
+        }
+        token = RommPairedToken.fromJson(decoded);
+      } catch (e) {
+        _log.w(
+          'RomM pair exchange failed: code=$shown status=200 '
+          'error=unparseable_body $e',
+        );
+        throw RommException(
+          'Unexpected pairing response from server',
+          statusCode: 200,
+        );
+      }
+      if (token.rawToken.isEmpty) {
+        _log.w(
+          'RomM pair exchange failed: code=$shown status=200 '
+          'error=missing_raw_token',
+        );
+        throw RommException(
+          'Pairing response carried no token',
+          statusCode: 200,
+        );
+      }
+      _log.i(
+        'RomM pair exchange succeeded: code=$shown name=${token.name} '
+        'expires_at=${token.expiresAt?.toIso8601String()}',
+      );
+      return token;
+    }
+
+    final RommErrorKind kind;
+    final String message;
+    switch (resp.statusCode) {
+      case 429:
+        kind = RommErrorKind.pairRateLimited;
+        message = 'Too many pairing attempts; wait a minute and try again';
+      case 404:
+      case 410:
+        kind = RommErrorKind.pairCodeExpired;
+        message =
+            'Pairing code is invalid or expired — generate a new one in RomM';
+      case >= 400 && < 500:
+        kind = RommErrorKind.pairCodeInvalid;
+        message = 'Pairing code rejected (${resp.statusCode})';
+      default:
+        kind = RommErrorKind.other;
+        message = 'Pairing failed (${resp.statusCode})';
+    }
+    _log.w(
+      'RomM pair exchange failed: code=$shown status=${resp.statusCode} '
+      'kind=${kind.name}',
+    );
+    throw RommException(message, statusCode: resp.statusCode, kind: kind);
   }
 
   /// Performs the OAuth2 password grant and stores the resulting tokens.

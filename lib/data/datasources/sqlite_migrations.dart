@@ -23,6 +23,10 @@ class SqliteMigrations {
   /// `api_key` (v131) holds a RomM Client API Token and is the alternative to
   /// `username`/`password`: exactly one of the two is populated, and a non-empty
   /// `api_key` is what marks the row as API-key authentication.
+  ///
+  /// `romm_token_name` / `romm_token_expires_at` (v160) describe a key that
+  /// came from a pairing code — the token's RomM-side name and its ISO-8601
+  /// expiry, or null for a pasted key and for a token that never expires.
   static const String createUserRommConfigTableSql = '''
     CREATE TABLE IF NOT EXISTS user_romm_config (
       id INTEGER PRIMARY KEY CHECK (id = 1),
@@ -34,7 +38,9 @@ class SqliteMigrations {
       refresh_token TEXT,
       token_expires INTEGER,
       last_verified TEXT,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      romm_token_name TEXT,
+      romm_token_expires_at TEXT
     );
   ''';
 
@@ -616,6 +622,9 @@ class SqliteMigrations {
         break;
       case 159:
         await _migrateToVersion159(db);
+        break;
+      case 160:
+        await _migrateToVersion160(db);
         break;
       default:
         _log.w('No migration defined for version $version');
@@ -7063,6 +7072,46 @@ class SqliteMigrations {
       _log.i('Migration v159 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v159: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v160: Adds `user_romm_config.romm_token_name` and
+  /// `user_romm_config.romm_token_expires_at`, the display metadata of a
+  /// client token obtained through RomM's pairing code (its name on the
+  /// server and its ISO-8601 UTC expiry).
+  ///
+  /// The token itself keeps going through the API-key secret path, so a paired
+  /// connection reconnects exactly like a pasted key; these columns only let
+  /// the connect screen say which token it is and when it expires. Existing
+  /// rows stay null: a pasted key has no name to show. Both nullable and
+  /// guarded by `PRAGMA table_info`, so a re-run is a no-op. A database that
+  /// never got the table (pre-v111) gets both columns from the CREATE.
+  // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Database Operation Standards"
+  static Future<void> _migrateToVersion160(Database db) async {
+    _log.i(
+      'Migration v160: Adding romm_token_name / romm_token_expires_at to '
+      'user_romm_config',
+    );
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_romm_config)');
+      if (tableInfo.isEmpty) {
+        _log.i('Table user_romm_config absent — nothing to migrate');
+        return;
+      }
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      for (final column in const ['romm_token_name', 'romm_token_expires_at']) {
+        if (!columns.contains(column)) {
+          db.execute('ALTER TABLE user_romm_config ADD COLUMN $column TEXT');
+          _log.i('Column $column added via v160');
+        } else {
+          _log.i('Column $column already exists');
+        }
+      }
+      _log.i('Migration v160 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v160: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }
