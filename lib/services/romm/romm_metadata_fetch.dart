@@ -303,10 +303,12 @@ class RommMetadataFetch extends ChangeNotifier {
     required SystemModel Function(RommMetadataFetchTarget target) systemOf,
     required String label,
   }) async {
-    _claim(requested: label, label: label, mode: mode);
+    // Resolve every system before claiming the guard: a throwing lookup here
+    // would otherwise leave the pass marked active with no run to release it.
     final folders = <String>{
       for (final target in targets) systemOf(target).folderName,
     };
+    _claim(requested: label, label: label, mode: mode);
     return _finish(
       scope: 'targets="$label" systems=${folders.join(',')}',
       mode: mode,
