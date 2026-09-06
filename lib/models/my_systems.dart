@@ -75,6 +75,15 @@ class SystemInfo {
   /// every real system, which keeps the existing tint fallback untouched.
   final List<String> mosaicPaths;
 
+  /// A small glyph drawn in the card's top-right corner, or null for none.
+  ///
+  /// Generic on purpose: the card only knows it has a badge to draw. The
+  /// collections browser uses it for the RomM cloud on a mirrored collection.
+  final IconData? badgeIcon;
+
+  /// Already-localized accessibility label and tooltip for [badgeIcon].
+  final String? badgeLabel;
+
   SystemInfo({
     this.svgSrc,
     this.title,
@@ -95,6 +104,8 @@ class SystemInfo {
     this.isGame = false,
     this.gameModel,
     this.mosaicPaths = const [],
+    this.badgeIcon,
+    this.badgeLabel,
   });
 
   /// Returns a new instance with the specified properties updated.
@@ -118,6 +129,8 @@ class SystemInfo {
     bool? isGame,
     GameModel? gameModel,
     List<String>? mosaicPaths,
+    IconData? badgeIcon,
+    String? badgeLabel,
   }) {
     return SystemInfo(
       svgSrc: svgSrc ?? this.svgSrc,
@@ -139,6 +152,8 @@ class SystemInfo {
       isGame: isGame ?? this.isGame,
       gameModel: gameModel ?? this.gameModel,
       mosaicPaths: mosaicPaths ?? this.mosaicPaths,
+      badgeIcon: badgeIcon ?? this.badgeIcon,
+      badgeLabel: badgeLabel ?? this.badgeLabel,
     );
   }
 

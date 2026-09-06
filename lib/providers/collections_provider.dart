@@ -136,6 +136,14 @@ class CollectionsProvider extends ChangeNotifier {
     await _refresh();
   }
 
+  /// Clears [id]'s RomM provenance and reloads, so the browser's indicator
+  /// goes away; the collection and its games stay.
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Mirrored Collections In The Browser"
+  Future<void> unlinkFromRomm(String id) async {
+    await CollectionsService.unlinkFromRomm(id);
+    await _refresh();
+  }
+
   /// Replaces a collection's artwork with a copy of [pickedFilePath].
   ///
   /// Bumps [imageVersion] on success so widgets keyed on it repaint even though

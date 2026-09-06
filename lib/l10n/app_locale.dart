@@ -1463,6 +1463,20 @@ mixin AppLocale {
       'romm_search_result_count_more';
   static const String rommSearchNoResults = 'romm_search_no_results';
 
+  // ---------------------------------------------------------------------------
+  // RomM collection mirroring (ADR-0009, SPEC-0009)
+  // ---------------------------------------------------------------------------
+  static const String rommSyncConfirmCollection =
+      'romm_sync_confirm_collection';
+  static const String rommSyncOutcomeCollection =
+      'romm_sync_outcome_collection';
+  static const String rommSyncOutcomeCollectionFailed =
+      'romm_sync_outcome_collection_failed';
+  static const String collectionRommMirrored = 'collection_romm_mirrored';
+  static const String collectionUnlinkRomm = 'collection_unlink_romm';
+  static const String collectionUnlinkRommConfirm =
+      'collection_unlink_romm_confirm';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================

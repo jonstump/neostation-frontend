@@ -328,6 +328,8 @@ class _SystemCardState extends State<SystemCard> {
                               children: [
                                 _buildSystemBackground(),
                                 if (widget.showCount) _buildCountPill(context),
+                                if (widget.info.badgeIcon != null)
+                                  _buildCornerBadge(context),
                               ],
                             ),
                           ),
@@ -724,6 +726,44 @@ class _SystemCardState extends State<SystemCard> {
             fontSize: 10.r,
             fontWeight: FontWeight.w800,
             letterSpacing: 1.0,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The optional glyph in the top-right corner ([SystemInfo.badgeIcon]).
+  ///
+  /// Opposite corner from the count pill so the two never meet, and drawn on
+  /// the same translucent disc the games' collection bookmark uses so it
+  /// reads over any artwork. The label doubles as the tooltip for a mouse and
+  /// the semantics for a reader; the glyph is decorative for a pad, which
+  /// reaches the same fact through the card's menu.
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Mirrored Collections In The Browser"
+  Widget _buildCornerBadge(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final label = widget.info.badgeLabel ?? '';
+    final size = 22.r;
+    return Positioned(
+      top: 6.r,
+      right: 6.r,
+      child: Semantics(
+        label: label,
+        child: Tooltip(
+          message: label,
+          child: Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(
+              color: Colors.black.withValues(alpha: 0.45),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              widget.info.badgeIcon,
+              size: size * 0.64,
+              fill: 1,
+              color: colorScheme.primary,
+            ),
           ),
         ),
       ),

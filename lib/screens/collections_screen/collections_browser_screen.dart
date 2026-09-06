@@ -33,6 +33,7 @@ import '../game_screen/my_games_list.dart';
 import '../systems_screen/my_systems_section/my_systems_carousel.dart';
 import '../systems_screen/my_systems_section/my_systems_grid.dart';
 import 'collection_cards.dart';
+import 'collection_menu_layout.dart';
 import 'collection_name_dialog.dart';
 
 /// Second level of the collections navigation: the user's collections as cards,
@@ -59,14 +60,6 @@ class CollectionsBrowserScreen extends StatefulWidget {
   State<CollectionsBrowserScreen> createState() =>
       _CollectionsBrowserScreenState();
 }
-
-/// Context-menu result ids. Local to this screen; the menu widget itself is
-/// domain-agnostic.
-const String _menuRename = 'rename';
-const String _menuChangeImage = 'change_image';
-const String _menuRemoveImage = 'remove_image';
-const String _menuDelete = 'delete';
-const String _menuViewMode = 'view_mode';
 
 class _CollectionsBrowserScreenState extends State<CollectionsBrowserScreen> {
   static final _log = LoggerService.instance;
@@ -258,41 +251,15 @@ class _CollectionsBrowserScreenState extends State<CollectionsBrowserScreen> {
 
     SfxService().playNavSound();
 
-    final items = <ContextMenuItem>[
-      ContextMenuItem(
-        id: _menuRename,
-        label: AppLocale.renameCollection.getString(context),
-        icon: Symbols.edit_rounded,
-      ),
-      ContextMenuItem(
-        id: _menuChangeImage,
-        label: AppLocale.changeImage.getString(context),
-        icon: Symbols.image_rounded,
-      ),
-      if (collection.imagePath != null)
-        ContextMenuItem(
-          id: _menuRemoveImage,
-          label: AppLocale.removeImage.getString(context),
-          icon: Symbols.hide_image_rounded,
-        ),
-      ContextMenuItem(
-        id: _menuDelete,
-        label: AppLocale.deleteCollection.getString(context),
-        icon: Symbols.delete_rounded,
-        separatorBefore: true,
-      ),
-      // View-level action, below the hairline that marks where the menu stops
-      // acting on this one collection — the same split the games views' menu
-      // uses. It is here because the header that used to carry the View Mode
-      // pill is gone, and X is a pad-only route: without this row a touch user
-      // could not change the view at all. Mirrors what the rail removal did to
-      // the games views, which moved the same control into the same menu.
-      ContextMenuItem(
-        id: _menuViewMode,
-        label: AppLocale.viewMode.getString(context),
-        icon: Symbols.grid_view_rounded,
-        separatorBefore: true,
-      ),
+    // Which entries this collection gets is decided by [collectionMenuIds]
+    // (pure, tested); this only dresses each id with its label and icon. The
+    // menu widget itself is domain-agnostic and the ids are local to it.
+    final items = [
+      for (final id in collectionMenuIds(
+        hasImage: collection.imagePath != null,
+        isRommMirror: collection.isRommMirror,
+      ))
+        _menuItem(id),
     ];
 
     final result = await showAnchoredContextMenu(
@@ -312,17 +279,75 @@ class _CollectionsBrowserScreenState extends State<CollectionsBrowserScreen> {
     if (!mounted || result == null) return;
 
     switch (result) {
-      case _menuRename:
+      case kCollectionMenuRename:
         await _renameCollection(collection);
-      case _menuChangeImage:
+      case kCollectionMenuChangeImage:
         await _changeImage(collection);
-      case _menuRemoveImage:
+      case kCollectionMenuRemoveImage:
         await _removeImage(collection);
-      case _menuDelete:
+      case kCollectionMenuDelete:
         await _deleteCollection(collection);
-      case _menuViewMode:
+      case kCollectionMenuUnlinkRomm:
+        await _unlinkFromRomm(collection);
+      case kCollectionMenuViewMode:
         await _openViewMenu();
     }
+  }
+
+  /// Label and icon for one per-collection menu id.
+  ContextMenuItem _menuItem(String id) {
+    switch (id) {
+      case kCollectionMenuRename:
+        return ContextMenuItem(
+          id: id,
+          label: AppLocale.renameCollection.getString(context),
+          icon: Symbols.edit_rounded,
+        );
+      case kCollectionMenuChangeImage:
+        return ContextMenuItem(
+          id: id,
+          label: AppLocale.changeImage.getString(context),
+          icon: Symbols.image_rounded,
+        );
+      case kCollectionMenuRemoveImage:
+        return ContextMenuItem(
+          id: id,
+          label: AppLocale.removeImage.getString(context),
+          icon: Symbols.hide_image_rounded,
+        );
+      case kCollectionMenuDelete:
+        return ContextMenuItem(
+          id: id,
+          label: AppLocale.deleteCollection.getString(context),
+          icon: Symbols.delete_rounded,
+          separatorBefore: true,
+        );
+      case kCollectionMenuUnlinkRomm:
+        // Only a mirrored collection gets this row (see [collectionMenuIds]);
+        // it sits with the other per-collection actions, above the view-mode
+        // hairline, and is one more D-pad step down from Delete.
+        // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Mirrored Collections In The Browser"
+        return ContextMenuItem(
+          id: id,
+          label: AppLocale.collectionUnlinkRomm.getString(context),
+          icon: Symbols.cloud_off_rounded,
+        );
+      case kCollectionMenuViewMode:
+        // View-level action, below the hairline that marks where the menu
+        // stops acting on this one collection — the same split the games
+        // views' menu uses. It is here because the header that used to carry
+        // the View Mode pill is gone, and X is a pad-only route: without this
+        // row a touch user could not change the view at all. Mirrors what the
+        // rail removal did to the games views, which moved the same control
+        // into the same menu.
+        return ContextMenuItem(
+          id: id,
+          label: AppLocale.viewMode.getString(context),
+          icon: Symbols.grid_view_rounded,
+          separatorBefore: true,
+        );
+    }
+    throw ArgumentError.value(id, 'id', 'unknown collection menu id');
   }
 
   /// Opens the view picker (X).
@@ -443,6 +468,37 @@ class _CollectionsBrowserScreenState extends State<CollectionsBrowserScreen> {
       );
     } catch (e) {
       _log.e('Collection delete failed: $e');
+      _reportSaveError();
+    }
+  }
+
+  /// Turns a mirrored collection back into an ordinary one after the user
+  /// confirms. The games stay; only the link to the RomM collection goes, so
+  /// the next sync of that RomM collection creates a fresh local one.
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Mirrored Collections In The Browser"
+  Future<void> _unlinkFromRomm(CollectionModel collection) async {
+    if (_isBusy) return;
+    _isBusy = true;
+    bool confirmed;
+    try {
+      confirmed = await ConfirmActionDialog.show(
+        context,
+        title: AppLocale.collectionUnlinkRomm.getString(context),
+        body: AppLocale.collectionUnlinkRommConfirm.getString(context),
+        confirmLabel: AppLocale.collectionUnlinkRomm.getString(context),
+        icon: Symbols.cloud_off_rounded,
+      );
+    } finally {
+      _isBusy = false;
+    }
+    if (!confirmed || !mounted) return;
+
+    try {
+      await context.read<CollectionsProvider>().unlinkFromRomm(collection.id);
+    } catch (e) {
+      _log.e(
+        'Collection unlink from RomM failed: id=${collection.id} error=$e',
+      );
       _reportSaveError();
     }
   }
@@ -738,6 +794,10 @@ class _CollectionsBrowserScreenState extends State<CollectionsBrowserScreen> {
           collection,
           imageVersion: imageVersion,
           mosaicPaths: _previewFor(collection, imageType),
+          // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Mirrored Collections In The Browser"
+          rommMirroredLabel: AppLocale.collectionRommMirrored.getString(
+            context,
+          ),
         ),
       newCollectionCardInfo(AppLocale.createCollection.getString(context)),
     ];

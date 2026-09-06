@@ -32,11 +32,22 @@ const String kCollectionFallbackColor = '#7C4DFF';
 /// so passing them alongside one only furnishes its `errorBuilder`. Pass them
 /// unconditionally — a card whose artwork file has gone missing is otherwise
 /// blank with no way to tell why.
+/// The glyph a mirrored collection's card carries: the same cloud the RomM
+/// tab's own controls use, so the card says where the collection comes from
+/// in the tab's vocabulary.
+const IconData kRommMirrorGlyph = Symbols.cloud_sync_rounded;
+
+// Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Mirrored Collections In The Browser"
 SystemInfo collectionToSystemInfo(
   CollectionModel collection, {
   required int imageVersion,
   List<String> mosaicPaths = const [],
+
+  /// Localized label for the RomM glyph; the glyph is drawn only when
+  /// [CollectionModel.isRommMirror] and this is given.
+  String? rommMirroredLabel,
 }) {
+  final mirrored = collection.isRommMirror && rommMirroredLabel != null;
   return SystemInfo(
     title: collection.name,
     shortName: collection.name,
@@ -47,6 +58,8 @@ SystemInfo collectionToSystemInfo(
     customBackgroundPath: collection.imagePath,
     imageVersion: imageVersion,
     mosaicPaths: mosaicPaths,
+    badgeIcon: mirrored ? kRommMirrorGlyph : null,
+    badgeLabel: mirrored ? rommMirroredLabel : null,
   );
 }
 

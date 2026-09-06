@@ -1471,4 +1471,13 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.scraperSubtitleRomm: 'Scarica i metadati dei giochi da RomM',
   AppLocale.scraperSubtitleBoth:
       'Scarica i metadati dei giochi da RomM; ScreenScraper completa ciò che manca a RomM',
+  AppLocale.rommSyncConfirmCollection:
+      'La raccolta «{name}» verrà creata o aggiornata in NeoStation.',
+  AppLocale.rommSyncOutcomeCollection: 'Raccolta «{name}»: {count} giochi',
+  AppLocale.rommSyncOutcomeCollectionFailed:
+      'Impossibile aggiornare la raccolta «{name}»',
+  AppLocale.collectionRommMirrored: 'Sincronizzata da RomM',
+  AppLocale.collectionUnlinkRomm: 'Scollega da RomM',
+  AppLocale.collectionUnlinkRommConfirm:
+      'Questa raccolta smetterà di seguire la raccolta RomM. I suoi giochi restano.',
 };
