@@ -459,7 +459,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 160;
+  static const int _databaseVersion = 161;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -4575,6 +4575,8 @@ class SqliteService {
       SELECT
         c.id, c.name, c.image_path, c.color1, c.color2, c.sort_order,
         c.created_at, c.updated_at,
+        c.romm_server_url, c.romm_collection_id, c.romm_collection_virtual,
+        c.romm_synced_at,
         COALESCE(counts.game_count, 0) as game_count
       FROM user_collections c
       LEFT JOIN (
@@ -4594,6 +4596,8 @@ class SqliteService {
       SELECT
         c.id, c.name, c.image_path, c.color1, c.color2, c.sort_order,
         c.created_at, c.updated_at,
+        c.romm_server_url, c.romm_collection_id, c.romm_collection_virtual,
+        c.romm_synced_at,
         (SELECT COUNT(*) FROM user_collection_items ci
           WHERE ci.collection_id = c.id) as game_count
       FROM user_collections c
@@ -4603,6 +4607,224 @@ class SqliteService {
       [id],
     );
     return rows.isEmpty ? null : rows.first;
+  }
+
+  // ── RomM mirror provenance ─────────────────────────────────────────────────
+  // The `romm_*` columns (v161) tie a local collection to the RomM collection
+  // it mirrors. Only CollectionRepository may call these.
+
+  /// The local collection mirroring RomM collection [collectionId] on
+  /// [serverUrl], with its game count, or null when none does.
+  ///
+  /// Provenance is scoped per server: the same RomM id on two servers is two
+  /// local collections. [serverUrl] is compared exactly, so callers pass the
+  /// normalised base URL the RomM service reports.
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Collection Provenance Columns"
+  static Future<Map<String, Object?>?> findRommMirror(
+    String serverUrl,
+    String collectionId,
+  ) async {
+    final db = await instance.database;
+    final rows = await db.rawQuery(
+      '''
+      SELECT
+        c.id, c.name, c.image_path, c.color1, c.color2, c.sort_order,
+        c.created_at, c.updated_at,
+        c.romm_server_url, c.romm_collection_id, c.romm_collection_virtual,
+        c.romm_synced_at,
+        (SELECT COUNT(*) FROM user_collection_items ci
+          WHERE ci.collection_id = c.id) as game_count
+      FROM user_collections c
+      WHERE c.romm_server_url = ? AND c.romm_collection_id = ?
+      ORDER BY c.created_at ASC
+      LIMIT 1
+      ''',
+      [serverUrl, collectionId],
+    );
+    return rows.isEmpty ? null : rows.first;
+  }
+
+  /// Records (or refreshes) which RomM collection [id] mirrors.
+  ///
+  /// Touches only the provenance columns and `updated_at`; name, artwork,
+  /// colours and sort order are the user's and are never written here.
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Collection Provenance Columns"
+  static Future<void> setRommProvenance(
+    String id, {
+    required String serverUrl,
+    required String collectionId,
+    required bool virtual,
+    required DateTime syncedAt,
+  }) async {
+    final db = await instance.database;
+    await db.update(
+      'user_collections',
+      {
+        'romm_server_url': serverUrl,
+        'romm_collection_id': collectionId,
+        'romm_collection_virtual': virtual ? 1 : 0,
+        'romm_synced_at': syncedAt.toIso8601String(),
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Forgets which RomM collection [id] mirrors ("Unlink from RomM").
+  ///
+  /// The collection and its members are left exactly as they are; the next
+  /// sync of that RomM collection creates a fresh local one.
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Collection Provenance Columns"
+  static Future<void> clearRommProvenance(String id) async {
+    final db = await instance.database;
+    await db.update(
+      'user_collections',
+      {
+        'romm_server_url': null,
+        'romm_collection_id': null,
+        'romm_collection_virtual': null,
+        'romm_synced_at': null,
+        'updated_at': DateTime.now().toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Creates a collection that mirrors a RomM collection: the row and its
+  /// provenance in one transaction, so a crash between the two cannot leave
+  /// an unlinked collection the next sync would duplicate.
+  ///
+  /// Appended at the end of the list like [insertCollection]; no artwork or
+  /// colours — those stay user-managed (ADR-0009).
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Database Operation Standards"
+  static Future<void> insertRommMirrorCollection({
+    required String id,
+    required String name,
+    required String serverUrl,
+    required String collectionId,
+    required bool virtual,
+    required DateTime syncedAt,
+  }) async {
+    final db = await instance.database;
+    await db.transaction((txn) async {
+      final rows = await txn.rawQuery(
+        'SELECT COALESCE(MAX(sort_order), -1) + 1 as next FROM user_collections',
+      );
+      final position = (rows.first['next'] as num?)?.toInt() ?? 0;
+      final now = DateTime.now().toIso8601String();
+      await txn.rawInsert(
+        'INSERT INTO user_collections '
+        '(id, name, sort_order, created_at, updated_at, '
+        'romm_server_url, romm_collection_id, romm_collection_virtual, '
+        'romm_synced_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [
+          id,
+          name,
+          position,
+          now,
+          now,
+          serverUrl,
+          collectionId,
+          virtual ? 1 : 0,
+          syncedAt.toIso8601String(),
+        ],
+      );
+    });
+  }
+
+  /// Every `rom_path` in collection [collectionId].
+  static Future<Set<String>> getMemberRomPaths(String collectionId) async {
+    final db = await instance.database;
+    final rows = await db.rawQuery(
+      'SELECT rom_path FROM user_collection_items WHERE collection_id = ?',
+      [collectionId],
+    );
+    return {for (final row in rows) row['rom_path'].toString()};
+  }
+
+  /// Rows per `IN (...)` list in [replaceMembers]. SQLite's default variable
+  /// limit is 999 (32766 on newer builds); 500 keeps every statement well
+  /// under either with the collection id alongside.
+  static const int _memberChunkSize = 500;
+
+  /// Sets the membership of [collectionId] to exactly [romPaths]: members
+  /// not in the set are removed, paths not yet members are appended. Returns
+  /// how many rows were added and removed.
+  ///
+  /// One transaction, so a mirror that is half applied can never be
+  /// observed — the previous membership stays until the whole set is in.
+  /// Paths are compared case-insensitively, matching the column's
+  /// `COLLATE NOCASE`, and the deletes are chunked so a large virtual
+  /// collection never exceeds SQLite's variable limit. Everything is
+  /// parameterized; nothing is interpolated into SQL but the `?` list.
+  ///
+  /// Paths that name no `user_roms` row are inserted regardless: the table
+  /// has no foreign-key enforcement of its own (see [deleteCollection]), and
+  /// callers pass paths they resolved from the library moments earlier.
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Database Operation Standards"
+  static Future<({int added, int removed})> replaceMembers(
+    String collectionId,
+    Set<String> romPaths,
+  ) async {
+    final db = await instance.database;
+    return db.transaction((txn) async {
+      final rows = await txn.rawQuery(
+        'SELECT rom_path FROM user_collection_items WHERE collection_id = ?',
+        [collectionId],
+      );
+      // Keyed on the lower-cased path so the comparison agrees with the
+      // column's NOCASE primary key: a member stored as `game.sfc` is the
+      // same member as a desired `Game.sfc`.
+      final current = <String, String>{
+        for (final row in rows)
+          row['rom_path'].toString().toLowerCase(): row['rom_path'].toString(),
+      };
+      final desired = <String, String>{
+        for (final path in romPaths) path.toLowerCase(): path,
+      };
+      final toRemove = [
+        for (final entry in current.entries)
+          if (!desired.containsKey(entry.key)) entry.value,
+      ];
+      final toAdd = [
+        for (final entry in desired.entries)
+          if (!current.containsKey(entry.key)) entry.value,
+      ];
+
+      for (var i = 0; i < toRemove.length; i += _memberChunkSize) {
+        final chunk = toRemove.sublist(
+          i,
+          (i + _memberChunkSize).clamp(0, toRemove.length),
+        );
+        final placeholders = List.filled(chunk.length, '?').join(', ');
+        await txn.rawDelete(
+          'DELETE FROM user_collection_items '
+          'WHERE collection_id = ? AND rom_path IN ($placeholders)',
+          [collectionId, ...chunk],
+        );
+      }
+
+      if (toAdd.isNotEmpty) {
+        final next = await txn.rawQuery(
+          'SELECT COALESCE(MAX(sort_order), -1) + 1 as next '
+          'FROM user_collection_items WHERE collection_id = ?',
+          [collectionId],
+        );
+        var position = (next.first['next'] as num?)?.toInt() ?? 0;
+        final now = DateTime.now().toIso8601String();
+        for (final path in toAdd) {
+          await txn.rawInsert(
+            'INSERT OR IGNORE INTO user_collection_items '
+            '(collection_id, rom_path, sort_order, created_at) '
+            'VALUES (?, ?, ?, ?)',
+            [collectionId, path, position++, now],
+          );
+        }
+      }
+      return (added: toAdd.length, removed: toRemove.length);
+    });
   }
 
   /// Inserts a collection. [id] is generated by the caller (service layer).

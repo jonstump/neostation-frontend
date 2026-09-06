@@ -219,6 +219,41 @@ class GameRepository {
     return result.isNotEmpty ? result.first['folder_name']?.toString() : null;
   }
 
+  /// The `rom_path` of the scanned game filed under [systemFolder] as
+  /// [filename] (with extension, exactly as `user_roms.filename` holds it),
+  /// or null when the library has no such row.
+  ///
+  /// [systemFolder] may be the system's canonical folder name or one of its
+  /// aliases (`app_system_folders`). This is how a file the RomM sync found
+  /// on disk — or just downloaded and indexed — becomes the `rom_path` key a
+  /// collection membership row needs; on Android that key is a SAF URI, so
+  /// it cannot be derived from the directory and name alone.
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Mirror Service"
+  static Future<String?> getRomPathByFilename(
+    String systemFolder,
+    String filename,
+  ) async {
+    final db = await SqliteService.getDatabase();
+    final result = await db.rawQuery(
+      '''
+      SELECT ur.rom_path
+      FROM user_roms ur
+      JOIN app_systems s ON ur.app_system_id = s.id
+      WHERE ur.filename = ?
+        AND (
+          LOWER(s.folder_name) = LOWER(?)
+          OR s.id IN (
+            SELECT system_id FROM app_system_folders
+            WHERE LOWER(folder_name) = LOWER(?)
+          )
+        )
+      LIMIT 1
+      ''',
+      [filename, systemFolder, systemFolder],
+    );
+    return result.isNotEmpty ? result.first['rom_path']?.toString() : null;
+  }
+
   /// Returns the raw app_system_id for a game by exact romname, or null.
   static Future<String?> getSystemIdForGame(String romname) async {
     final db = await SqliteService.getDatabase();

@@ -45,6 +45,23 @@ class CollectionModel {
   /// lands. Null when the column is absent or unparseable.
   final DateTime? createdAt;
 
+  // RomM mirror provenance (v161). All null on an ordinary collection; set
+  // together by the mirror and cleared together by "Unlink from RomM".
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Collection Provenance Columns"
+
+  /// Normalised base URL of the RomM server this collection mirrors, or null.
+  final String? rommServerUrl;
+
+  /// Id of the RomM collection this one mirrors, or null. An integer-as-string
+  /// for a user collection, an opaque string for a virtual one.
+  final String? rommCollectionId;
+
+  /// Whether [rommCollectionId] names a RomM virtual collection.
+  final bool rommCollectionVirtual;
+
+  /// When the mirror last set this collection's membership, or null.
+  final DateTime? rommSyncedAt;
+
   const CollectionModel({
     required this.id,
     required this.name,
@@ -55,7 +72,15 @@ class CollectionModel {
     this.gameCount = 0,
     this.imageVersion = 0,
     this.createdAt,
+    this.rommServerUrl,
+    this.rommCollectionId,
+    this.rommCollectionVirtual = false,
+    this.rommSyncedAt,
   });
+
+  /// True when this collection mirrors a RomM collection: its membership is
+  /// managed by the sync, and the browser marks it and offers to unlink it.
+  bool get isRommMirror => rommCollectionId != null;
 
   /// Builds a model from a `user_collections` row, including the joined
   /// `game_count` produced by the listing query when present.
@@ -70,11 +95,18 @@ class CollectionModel {
       gameCount: _toInt(json['game_count']),
       imageVersion: _toInt(json['image_version']),
       createdAt: DateTime.tryParse(json['created_at']?.toString() ?? ''),
+      rommServerUrl: _nullIfEmpty(json['romm_server_url']),
+      rommCollectionId: _nullIfEmpty(json['romm_collection_id']),
+      rommCollectionVirtual: _toInt(json['romm_collection_virtual']) == 1,
+      rommSyncedAt: DateTime.tryParse(json['romm_synced_at']?.toString() ?? ''),
     );
   }
 
   /// Serializes only the persisted columns — [gameCount] and [imageVersion]
-  /// are derived and must never be written back to `user_collections`.
+  /// are derived and must never be written back to `user_collections`. The
+  /// RomM provenance columns are left out too: they are written only through
+  /// `CollectionRepository.setRommProvenance` / `clearRommProvenance`, never
+  /// as part of a whole-row write.
   Map<String, dynamic> toJson() => {
     'id': id,
     'name': name,
@@ -102,6 +134,11 @@ class CollectionModel {
     int? gameCount,
     int? imageVersion,
     DateTime? createdAt,
+    String? rommServerUrl,
+    String? rommCollectionId,
+    bool? rommCollectionVirtual,
+    DateTime? rommSyncedAt,
+    bool clearRommProvenance = false,
   }) {
     return CollectionModel(
       id: id ?? this.id,
@@ -113,6 +150,18 @@ class CollectionModel {
       gameCount: gameCount ?? this.gameCount,
       imageVersion: imageVersion ?? this.imageVersion,
       createdAt: createdAt ?? this.createdAt,
+      rommServerUrl: clearRommProvenance
+          ? null
+          : (rommServerUrl ?? this.rommServerUrl),
+      rommCollectionId: clearRommProvenance
+          ? null
+          : (rommCollectionId ?? this.rommCollectionId),
+      rommCollectionVirtual: clearRommProvenance
+          ? false
+          : (rommCollectionVirtual ?? this.rommCollectionVirtual),
+      rommSyncedAt: clearRommProvenance
+          ? null
+          : (rommSyncedAt ?? this.rommSyncedAt),
     );
   }
 
@@ -127,7 +176,11 @@ class CollectionModel {
           other.color2 == color2 &&
           other.sortOrder == sortOrder &&
           other.gameCount == gameCount &&
-          other.imageVersion == imageVersion;
+          other.imageVersion == imageVersion &&
+          other.rommServerUrl == rommServerUrl &&
+          other.rommCollectionId == rommCollectionId &&
+          other.rommCollectionVirtual == rommCollectionVirtual &&
+          other.rommSyncedAt == rommSyncedAt;
 
   @override
   int get hashCode => Object.hash(
@@ -139,6 +192,10 @@ class CollectionModel {
     sortOrder,
     gameCount,
     imageVersion,
+    rommServerUrl,
+    rommCollectionId,
+    rommCollectionVirtual,
+    rommSyncedAt,
   );
 
   @override

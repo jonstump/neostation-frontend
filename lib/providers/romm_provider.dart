@@ -14,12 +14,16 @@ import '../models/romm_platform.dart';
 import '../models/romm_rom.dart';
 import '../models/romm_scrape_step.dart';
 import '../models/system_model.dart';
+import '../repositories/collection_repository.dart';
+import '../repositories/game_repository.dart';
 import '../repositories/romm_repository.dart';
 import '../repositories/romm_save_map_repository.dart';
 import '../repositories/retro_achievements_repository.dart';
 import '../repositories/scraper_repository.dart';
 import '../repositories/system_repository.dart';
+import '../services/collections/collections_service.dart';
 import '../services/logger_service.dart';
+import '../services/romm/romm_collection_mirror.dart';
 import '../services/romm_playtime_service.dart';
 import '../services/romm_service.dart';
 import '../services/storage_space_service.dart';
@@ -83,6 +87,18 @@ class _CompletedRommDownload {
   final SystemModel system;
   final String indexedName;
   final RommDownload tracker;
+}
+
+/// A RomM collection synced this session whose local mirror must be run
+/// again once the settle rescan has indexed the sync's downloads.
+class _PendingCollectionMirror {
+  const _PendingCollectionMirror({
+    required this.collection,
+    required this.romFolders,
+  });
+
+  final RommCollection collection;
+  final List<String> romFolders;
 }
 
 /// State for browsing a remote RomM library and downloading ROMs locally.
@@ -161,6 +177,34 @@ class RommProvider extends ChangeNotifier {
 
   final Map<int, _CompletedRommDownload> _completedPendingIndex = {};
   int _libraryRevision = 0;
+
+  /// Invoked after a RomM collection has been mirrored into a local
+  /// collection (after a collection sync, and again after the settle that
+  /// indexed its downloads). Wired in main.dart to the collections
+  /// provider's reload so the browser and the Collections card update.
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Concurrency Safety"
+  void Function()? onCollectionsMirrored;
+
+  /// Collections synced this session, keyed by RomM collection id, whose
+  /// mirror runs again after each settle until every completed download has
+  /// been indexed — that is the only point where downloaded ROMs have a
+  /// `user_roms` row to become members with.
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Triggered By The Collection Sync"
+  final Map<String, _PendingCollectionMirror> _pendingCollectionMirrors = {};
+
+  /// System folder and on-disk indexed name of every ROM this session
+  /// downloaded, by RomM rom id. Outlives the download's
+  /// [_completedPendingIndex] entry (removed by the settle) so the mirror's
+  /// resolver can still find the row a download was indexed under.
+  final Map<int, ({String systemFolder, String indexedName})>
+  _indexedDownloadNames = {};
+
+  RommCollectionMirrorSummary? _lastCollectionMirror;
+
+  /// What the most recent collection mirror run did, or null before the first
+  /// one. Read by the sync outcome notification for the local game count.
+  RommCollectionMirrorSummary? get lastCollectionMirror =>
+      _lastCollectionMirror;
 
   /// Advances after completed downloads have been indexed into user_roms.
   /// Consumers can use this to refresh derived local-library state without
@@ -388,6 +432,9 @@ class RommProvider extends ChangeNotifier {
         _libraryRevision++;
         _notifyDownloadState();
       }
+      // The downloads above now have user_roms rows, so the collections they
+      // were synced for can take them as members.
+      await _mirrorPendingCollections();
     } finally {
       // A failed or incomplete scan only clears entries it actually attempted;
       // later completions remain queued for the next settle.
@@ -397,6 +444,53 @@ class RommProvider extends ChangeNotifier {
       }
       _settling = false;
     }
+  }
+
+  /// Runs the mirror again for every collection synced this session, now that
+  /// a settle has indexed downloads. A collection stays remembered while any
+  /// completed download is still waiting for a settle — one that landed
+  /// during the scan has no row yet — and is forgotten once the index has
+  /// caught up, so the last run of the session sees every download.
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Triggered By The Collection Sync"
+  Future<void> _mirrorPendingCollections() async {
+    if (_pendingCollectionMirrors.isEmpty) return;
+    final pending = _pendingCollectionMirrors.values.toList(growable: false);
+    for (final entry in pending) {
+      await _mirrorCollection(entry.collection, entry.romFolders);
+    }
+    if (_completedPendingIndex.isEmpty) _pendingCollectionMirrors.clear();
+  }
+
+  /// Registers a finished download exactly as [downloadRom] does once the
+  /// file is on disk — the completion entry the settle indexes, the system
+  /// it refreshes, and the name the mirror resolves — without a transfer.
+  @visibleForTesting
+  void debugRegisterCompletedDownload(
+    RommRom rom,
+    SystemModel system,
+    String indexedName,
+  ) {
+    _downloadedSystems[system.folderName] = system;
+    _completedPendingIndex[rom.id] = _CompletedRommDownload(
+      rom: rom,
+      system: system,
+      indexedName: indexedName,
+      tracker: RommDownload(
+        romId: rom.id,
+        status: RommDownloadStatus.completed,
+      ),
+    );
+    _indexedDownloadNames[rom.id] = (
+      systemFolder: system.folderName,
+      indexedName: indexedName,
+    );
+  }
+
+  /// Runs the settle now, ahead of its debounce, and waits for it.
+  @visibleForTesting
+  Future<void> settleNowForTesting() {
+    _settleTimer?.cancel();
+    return _runSettle();
   }
 
   /// Known IGDB-style RomM slug → NeoStation folder name mismatches. Tried after
@@ -682,6 +776,8 @@ class RommProvider extends ChangeNotifier {
     _raGameLookupCache.clear();
     _raEarnedByGameId = {};
     _downloadedSystems.clear();
+    _pendingCollectionMirrors.clear();
+    _indexedDownloadNames.clear();
     _systemByPlatformId.clear();
     _unsupportedPlatformIds.clear();
     _downloadedByRomId.clear();
@@ -1966,6 +2062,10 @@ class RommProvider extends ChangeNotifier {
       indexedName: indexedName,
       tracker: tracker,
     );
+    _indexedDownloadNames[rom.id] = (
+      systemFolder: system.folderName,
+      indexedName: indexedName,
+    );
     _notifyDownloadState();
     // Arm the debounced rescan so this ROM (and any others finishing around the
     // same time) get indexed + their lists refreshed shortly, without waiting
@@ -2028,7 +2128,7 @@ class RommProvider extends ChangeNotifier {
     await bulkSync.run(
       sourceLabel: target?.name ?? source?.name ?? '',
       fetchPage: ({required int limit, required int offset}) =>
-          _service.getRomsPage(
+          service.getRomsPage(
             platformIds: target == null ? const [] : [target.id],
             collectionId: (source != null && !source.isVirtual)
                 ? int.tryParse(source.id)
@@ -2063,6 +2163,99 @@ class RommProvider extends ChangeNotifier {
     // The queue's downloads each refreshed the token as they went; persist
     // whatever the last one ended up with.
     await _persistRefreshedTokens();
+
+    // A synced collection becomes (or updates) a local collection. Not when
+    // the user declined the plan — nothing was synced — and not when `run`
+    // stepped aside for a sync already in progress. A cancelled sync still
+    // mirrors: what is local belongs in the collection, and the downloads
+    // that did complete join after the settle. Platform syncs never mirror.
+    // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Triggered By The Collection Sync"
+    if (source != null && !bulkSync.declined && !bulkSync.isRunning) {
+      _pendingCollectionMirrors[source.id] = _PendingCollectionMirror(
+        collection: source,
+        romFolders: romFolders,
+      );
+      await _mirrorCollection(source, romFolders);
+    }
+  }
+
+  /// Mirrors [collection] into its local collection (see
+  /// [RommCollectionMirror]) and tells the app to reload the collections.
+  ///
+  /// Pages the collection's ROMs the way [syncSource] does, without the
+  /// browse search term: the collection is mirrored whole, not the part the
+  /// user happened to be looking at. Never throws — a failure lands in
+  /// [lastCollectionMirror] and the log.
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Triggered By The Collection Sync"
+  Future<void> _mirrorCollection(
+    RommCollection collection,
+    List<String> romFolders,
+  ) async {
+    final mirror = RommCollectionMirror(
+      fetchPage: ({required int limit, required int offset}) =>
+          service.getRomsPage(
+            collectionId: collection.isVirtual
+                ? null
+                : int.tryParse(collection.id),
+            virtualCollectionId: collection.isVirtual ? collection.id : null,
+            limit: limit,
+            offset: offset,
+          ),
+      resolveLocal: (rom) => _localRomPathFor(rom, romFolders),
+      findMirror: CollectionRepository.findRommMirror,
+      insertMirror: CollectionRepository.insertRommMirrorCollection,
+      replaceMembers: CollectionRepository.replaceMembers,
+      setProvenance: CollectionRepository.setRommProvenance,
+      newId: CollectionsService.generateCollectionId,
+      // A disconnect mid-run ends it at the next page; the sync's own cancel
+      // is deliberately not consulted — a cancelled sync still mirrors what
+      // is local.
+      shouldStop: () => !isConnected,
+    );
+    try {
+      _lastCollectionMirror = await mirror.run(
+        collection,
+        serverUrl: service.baseUrl,
+      );
+    } catch (e) {
+      // `run` reports failures through its summary; this catches only a bug
+      // in the wiring, and the sync must not fail for it.
+      _log.e(
+        'RomM collection mirror threw: collection=${collection.id} error=$e',
+      );
+      return;
+    }
+    onCollectionsMirrored?.call();
+  }
+
+  /// The `rom_path` of [rom]'s local copy, or null when it has none the
+  /// library knows about.
+  ///
+  /// The on-disk probe the sync itself uses ([findLocalCopy]) names the
+  /// system folder and file; the library row under that name supplies the
+  /// `rom_path` (a SAF URI on Android, so it cannot be built from the path).
+  /// A ROM this session downloaded is tried under the name it was indexed as,
+  /// which covers an unpacked multi-disc playlist the name heuristics cannot
+  /// reconstruct. Either lookup missing its row means the scan has not
+  /// indexed the file yet — unresolved now, a member after the settle.
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Triggered By The Collection Sync"
+  Future<String?> _localRomPathFor(RommRom rom, List<String> romFolders) async {
+    final copy = await findLocalCopy(rom, romFolders);
+    if (copy != null) {
+      final path = await GameRepository.getRomPathByFilename(
+        copy.system.folderName,
+        copy.filename,
+      );
+      if (path != null) return path;
+    }
+    final download = _indexedDownloadNames[rom.id];
+    if (download != null) {
+      return GameRepository.getRomPathByFilename(
+        download.systemFolder,
+        download.indexedName,
+      );
+    }
+    return null;
   }
 
   /// Unpacks a downloaded multi-disc zip ([zipPath]) into NeoStation's native

@@ -1002,7 +1002,16 @@ class _MyAppState extends State<MyApp> {
           // first screen. A lazy create would leave the count at zero until
           // something else read the provider.
           lazy: false,
-          create: (context) => CollectionsProvider()..load(),
+          create: (context) {
+            final collections = CollectionsProvider()..load();
+            // A RomM collection sync creates or updates a local collection
+            // (and again after its downloads are indexed); reload so the
+            // browser and the Collections card show it.
+            // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Concurrency Safety"
+            widget.rommProvider.onCollectionsMirrored = () =>
+                unawaited(collections.load());
+            return collections;
+          },
         ),
         ChangeNotifierProvider(
           // Eager: the theme manifest is a network fetch, and during first-run
