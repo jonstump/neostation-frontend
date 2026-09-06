@@ -85,4 +85,65 @@ class CollectionRepository {
   static Future<List<DatabaseGameModel>> getGamesInCollection(
     String collectionId,
   ) => SqliteService.getGamesInCollection(collectionId);
+
+  // ── RomM mirror provenance ─────────────────────────────────────────────────
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Collection Provenance Columns"
+
+  /// The local collection row mirroring RomM collection [collectionId] on
+  /// [serverUrl], or null when none does.
+  static Future<Map<String, Object?>?> findRommMirror(
+    String serverUrl,
+    String collectionId,
+  ) => SqliteService.findRommMirror(serverUrl, collectionId);
+
+  /// Records (or refreshes) which RomM collection [id] mirrors. Only the
+  /// provenance columns are written.
+  static Future<void> setRommProvenance(
+    String id, {
+    required String serverUrl,
+    required String collectionId,
+    required bool virtual,
+    required DateTime syncedAt,
+  }) => SqliteService.setRommProvenance(
+    id,
+    serverUrl: serverUrl,
+    collectionId: collectionId,
+    virtual: virtual,
+    syncedAt: syncedAt,
+  );
+
+  /// Forgets which RomM collection [id] mirrors; the collection and its
+  /// members are untouched.
+  static Future<void> clearRommProvenance(String id) =>
+      SqliteService.clearRommProvenance(id);
+
+  /// Creates a collection mirroring a RomM collection — row and provenance
+  /// in one transaction.
+  static Future<void> insertRommMirrorCollection({
+    required String id,
+    required String name,
+    required String serverUrl,
+    required String collectionId,
+    required bool virtual,
+    required DateTime syncedAt,
+  }) => SqliteService.insertRommMirrorCollection(
+    id: id,
+    name: name,
+    serverUrl: serverUrl,
+    collectionId: collectionId,
+    virtual: virtual,
+    syncedAt: syncedAt,
+  );
+
+  /// Every `rom_path` in collection [collectionId].
+  static Future<Set<String>> getMemberRomPaths(String collectionId) =>
+      SqliteService.getMemberRomPaths(collectionId);
+
+  /// Sets the membership of [collectionId] to exactly [romPaths] in one
+  /// transaction; returns how many rows were added and removed.
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Database Operation Standards"
+  static Future<({int added, int removed})> replaceMembers(
+    String collectionId,
+    Set<String> romPaths,
+  ) => SqliteService.replaceMembers(collectionId, romPaths);
 }

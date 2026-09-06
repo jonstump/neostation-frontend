@@ -146,6 +146,13 @@ class SqliteMigrations {
   /// after, so a rename never orphans the artwork. Deliberately **no** UNIQUE
   /// on `name`: duplicate collection names are the user's business and must
   /// never make a write fail.
+  ///
+  /// The `romm_*` columns (v161) record which RomM collection a local one
+  /// mirrors — server URL plus RomM id, whether that id names a virtual
+  /// collection, and when the mirror last ran. All nullable: an ordinary
+  /// collection has none of them, and "Unlink from RomM" sets them back to
+  /// null without touching anything else on the row.
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Collection Provenance Columns"
   static const String createUserCollectionsTableSql = '''
     CREATE TABLE IF NOT EXISTS user_collections (
       id TEXT PRIMARY KEY,
@@ -155,9 +162,23 @@ class SqliteMigrations {
       color2 TEXT,
       sort_order INTEGER NOT NULL DEFAULT 0,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP,
-      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      romm_server_url TEXT,
+      romm_collection_id TEXT,
+      romm_collection_virtual INTEGER,
+      romm_synced_at TEXT
     );
   ''';
+
+  /// The RomM provenance columns v161 adds to `user_collections`, in the
+  /// order the CREATE above declares them. One list so the migration and the
+  /// fresh-install DDL cannot drift apart.
+  static const List<String> rommCollectionProvenanceColumns = [
+    'romm_server_url',
+    'romm_collection_id',
+    'romm_collection_virtual',
+    'romm_synced_at',
+  ];
 
   /// CREATE for collection membership (v139).
   ///
@@ -625,6 +646,9 @@ class SqliteMigrations {
         break;
       case 160:
         await _migrateToVersion160(db);
+        break;
+      case 161:
+        await _migrateToVersion161(db);
         break;
       default:
         _log.w('No migration defined for version $version');
@@ -7112,6 +7136,43 @@ class SqliteMigrations {
       _log.i('Migration v160 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v160: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v161: RomM provenance on `user_collections`.
+  ///
+  /// Adds the four nullable `romm_*` columns a mirrored collection carries
+  /// (see [rommCollectionProvenanceColumns]). Guarded per column with
+  /// `PRAGMA table_info` and idempotent, so a database that already has some
+  /// of them — a branch that ran ahead, or a second pass after a partial
+  /// upgrade — gains only what is missing. Existing rows stay null: a
+  /// collection made before this version mirrors nothing.
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Collection Provenance Columns"
+  static Future<void> _migrateToVersion161(Database db) async {
+    _log.i(
+      'Migration v161: Adding RomM provenance columns to user_collections',
+    );
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_collections)');
+      if (tableInfo.isEmpty) {
+        _log.i('Table user_collections absent — nothing to migrate');
+        return;
+      }
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      for (final column in rommCollectionProvenanceColumns) {
+        if (columns.contains(column)) {
+          _log.i('Column $column already exists');
+          continue;
+        }
+        final type = column == 'romm_collection_virtual' ? 'INTEGER' : 'TEXT';
+        db.execute('ALTER TABLE user_collections ADD COLUMN $column $type');
+        _log.i('Column $column added via v161');
+      }
+      _log.i('Migration v161 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v161: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

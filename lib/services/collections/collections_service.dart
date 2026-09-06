@@ -72,7 +72,7 @@ class CollectionsService {
     String name, {
     String? imageSourcePath,
   }) async {
-    final id = _generateUuidV4();
+    final id = generateCollectionId();
     final trimmed = name.trim();
 
     await CollectionRepository.insertCollection(id: id, name: trimmed);
@@ -244,11 +244,13 @@ class CollectionsService {
 
   // ── Internals ──────────────────────────────────────────────────────────────
 
-  /// Generates a RFC 4122 version 4 UUID without pulling in a dependency.
+  /// Generates a RFC 4122 version 4 UUID without pulling in a dependency —
+  /// the id every new collection gets, whether created here or by the RomM
+  /// collection mirror.
   ///
   /// The bare (unprefixed) form is what the `collection:<uuid>` synthesized
   /// folder name and the artwork filename both carry.
-  static String _generateUuidV4() {
+  static String generateCollectionId() {
     final bytes = List<int>.generate(16, (_) => _random.nextInt(256));
     bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
     bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 1
