@@ -22,6 +22,7 @@ import '../../sync/providers/romm_provider.dart';
 import '../../sync/sync_manager.dart';
 import '../../utils/debounced_search.dart';
 import '../../utils/gamepad_nav.dart';
+import '../../utils/romm_collection_sync_message.dart';
 import '../../utils/romm_search_message.dart';
 import '../../widgets/confirm_action_dialog.dart';
 import '../../widgets/core_footer.dart' show kCoreFooterHeight;
@@ -513,10 +514,10 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
       romFolders: context.read<SqliteConfigProvider>().config.romFolders,
       fileProvider: context.read<FileProvider>(),
       onLinked: _invalidateSyncState,
-      confirm: (plan) => _confirmSyncPlan(label, plan),
+      confirm: (plan) => _confirmSyncPlan(label, plan, collection: collection),
     );
     if (!mounted) return;
-    _reportSyncOutcome(sync);
+    _reportSyncOutcome(sync, collection: collection);
   }
 
   /// Asks the user to approve a priced sync.
@@ -527,7 +528,15 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   /// separately (see `RommProvider.syncDestinationProbe`) — but a destination is
   /// still resolved without creating it, so the user remains better placed than
   /// this check to know whether a shortfall is really a problem.
-  Future<bool> _confirmSyncPlan(String label, RommBulkSyncPlan plan) async {
+  ///
+  /// [collection] is the RomM collection being synced, or null for a platform
+  /// sync; a collection sync also says that a local collection of that name
+  /// will be created or updated.
+  Future<bool> _confirmSyncPlan(
+    String label,
+    RommBulkSyncPlan plan, {
+    RommCollection? collection,
+  }) async {
     if (!mounted) return false;
 
     final lines = <String>[
@@ -548,6 +557,14 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
         AppLocale.rommSyncConfirmLinked
             .getString(context)
             .replaceFirst('{count}', '${plan.linked}'),
+      );
+    }
+    if (collection != null) {
+      // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Sync Dialog And Outcome"
+      lines.add(
+        AppLocale.rommSyncConfirmCollection
+            .getString(context)
+            .replaceFirst('{name}', collection.name),
       );
     }
     lines.addAll(_spaceLines(plan));
@@ -614,66 +631,60 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
 
   /// Summarises a finished sync in a single toast. The band showed the detail
   /// while it ran; this is the "what did I end up with" line.
-  void _reportSyncOutcome(RommBulkSync sync) {
+  ///
+  /// A collection sync also mirrored a local collection (see
+  /// `RommProvider.lastCollectionMirror`); its game count — or that it could
+  /// not be updated — goes on a second line of the same toast.
+  void _reportSyncOutcome(RommBulkSync sync, {RommCollection? collection}) {
     // Turning down the confirmation is its own answer — a toast repeating what
     // the user just declined is noise.
     if (sync.declined) return;
+    final String message;
+    final NotificationType type;
     if (sync.cancelRequested) {
-      AppNotification.showNotification(
-        context,
-        AppLocale.rommSyncCancelled.getString(context),
-        type: NotificationType.info,
-      );
-      return;
-    }
-    if (sync.failed > 0) {
-      AppNotification.showNotification(
-        context,
-        AppLocale.rommSyncFailedCount
-            .getString(context)
-            .replaceFirst('{count}', '${sync.failed}'),
-        type: NotificationType.error,
-      );
-      return;
-    }
-    if (sync.lastError != null) {
+      message = AppLocale.rommSyncCancelled.getString(context);
+      type = NotificationType.info;
+    } else if (sync.failed > 0) {
+      message = AppLocale.rommSyncFailedCount
+          .getString(context)
+          .replaceFirst('{count}', '${sync.failed}');
+      type = NotificationType.error;
+    } else if (sync.lastError != null) {
       // Nothing failed per ROM but an error was recorded: the enumeration pass
       // itself couldn't reach the server, so there was never a queue. Saying
       // "already downloaded" here would be a plain lie.
-      AppNotification.showNotification(
-        context,
-        _errorMessage(sync.lastError!),
-        type: NotificationType.error,
-      );
-      return;
-    }
-    if (sync.completed == 0) {
+      message = _errorMessage(sync.lastError!);
+      type = NotificationType.error;
+    } else if (sync.completed == 0) {
       // Nothing was queued: every ROM in the source was already on disk. If
       // the pass linked some of them to RomM, that is the news worth telling.
       if (sync.linked > 0) {
-        AppNotification.showNotification(
-          context,
-          AppLocale.rommSyncLinkedCount
-              .getString(context)
-              .replaceFirst('{count}', '${sync.linked}'),
-          type: NotificationType.success,
-        );
-        return;
+        message = AppLocale.rommSyncLinkedCount
+            .getString(context)
+            .replaceFirst('{count}', '${sync.linked}');
+        type = NotificationType.success;
+      } else {
+        message = AppLocale.rommSyncNothingToDo.getString(context);
+        type = NotificationType.info;
       }
-      AppNotification.showNotification(
-        context,
-        AppLocale.rommSyncNothingToDo.getString(context),
-        type: NotificationType.info,
-      );
-      return;
-    }
-    AppNotification.showNotification(
-      context,
-      AppLocale.rommSyncComplete
+    } else {
+      message = AppLocale.rommSyncComplete
           .getString(context)
-          .replaceFirst('{count}', '${sync.completed}'),
-      type: NotificationType.success,
-    );
+          .replaceFirst('{count}', '${sync.completed}');
+      type = NotificationType.success;
+    }
+
+    // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Sync Dialog And Outcome"
+    final mirrored = collection == null
+        ? null
+        : rommCollectionOutcomeMessage(
+            _rommProvider.lastCollectionMirror,
+            name: collection.name,
+          );
+    final text = mirrored == null
+        ? message
+        : '$message\n${mirrored.format((key) => key.getString(context))}';
+    AppNotification.showNotification(context, text, type: type);
   }
 
   String _errorMessage(RommDownloadError error) {

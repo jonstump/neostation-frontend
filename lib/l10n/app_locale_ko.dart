@@ -1310,4 +1310,12 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.scraperSubtitleRomm: 'RomM에서 게임 메타데이터 다운로드',
   AppLocale.scraperSubtitleBoth:
       'RomM에서 게임 메타데이터를 다운로드하고, RomM에 없는 항목은 ScreenScraper로 보완',
+  AppLocale.rommSyncConfirmCollection:
+      '컬렉션 "{name}"이(가) NeoStation에 생성되거나 업데이트됩니다.',
+  AppLocale.rommSyncOutcomeCollection: '컬렉션 "{name}": 게임 {count}개',
+  AppLocale.rommSyncOutcomeCollectionFailed: '컬렉션 "{name}"을(를) 업데이트할 수 없습니다',
+  AppLocale.collectionRommMirrored: 'RomM에서 동기화됨',
+  AppLocale.collectionUnlinkRomm: 'RomM 연결 해제',
+  AppLocale.collectionUnlinkRommConfirm:
+      '이 컬렉션은 더 이상 RomM 컬렉션을 따르지 않습니다. 게임은 그대로 유지됩니다.',
 };

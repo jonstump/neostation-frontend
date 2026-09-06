@@ -108,6 +108,13 @@ class CollectionsService {
   static Future<void> setCollectionSortOrder(String id, int sortOrder) =>
       CollectionRepository.updateCollection(id, sortOrder: sortOrder);
 
+  /// Turns a mirrored collection back into an ordinary one: the RomM
+  /// provenance is cleared, the row and its members are untouched, and the
+  /// next sync of that RomM collection creates a new local collection.
+  // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Mirrored Collections In The Browser"
+  static Future<void> unlinkFromRomm(String id) =>
+      CollectionRepository.clearRommProvenance(id);
+
   // ── Artwork ────────────────────────────────────────────────────────────────
 
   /// Copies [pickedFilePath] into `<userData>/media/collections/` and stores it

@@ -1252,4 +1252,10 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.rommSearchNoResults: '没有与“{term}”匹配的结果',
   AppLocale.scraperSubtitleRomm: '从 RomM 下载游戏元数据',
   AppLocale.scraperSubtitleBoth: '从 RomM 下载游戏元数据，RomM 缺少的部分由 ScreenScraper 补充',
+  AppLocale.rommSyncConfirmCollection: '合集“{name}”将在 NeoStation 中创建或更新。',
+  AppLocale.rommSyncOutcomeCollection: '合集“{name}”：{count} 个游戏',
+  AppLocale.rommSyncOutcomeCollectionFailed: '无法更新合集“{name}”',
+  AppLocale.collectionRommMirrored: '已从 RomM 同步',
+  AppLocale.collectionUnlinkRomm: '取消与 RomM 的关联',
+  AppLocale.collectionUnlinkRommConfirm: '此合集将不再跟随 RomM 合集。其中的游戏会保留。',
 };

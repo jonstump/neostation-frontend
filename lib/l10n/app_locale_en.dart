@@ -1422,4 +1422,13 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.scraperSubtitleRomm: 'Download game metadata from RomM',
   AppLocale.scraperSubtitleBoth:
       'Download game metadata from RomM, with ScreenScraper for anything RomM lacks',
+  AppLocale.rommSyncConfirmCollection:
+      'The collection "{name}" will be created or updated in NeoStation.',
+  AppLocale.rommSyncOutcomeCollection: 'Collection "{name}": {count} games',
+  AppLocale.rommSyncOutcomeCollectionFailed:
+      'Collection "{name}" could not be updated',
+  AppLocale.collectionRommMirrored: 'Synced from RomM',
+  AppLocale.collectionUnlinkRomm: 'Unlink from RomM',
+  AppLocale.collectionUnlinkRommConfirm:
+      'This collection will stop following the RomM collection. Its games stay.',
 };

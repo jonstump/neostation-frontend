@@ -1301,4 +1301,12 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.scraperSubtitleRomm: 'RomM からゲームのメタデータをダウンロード',
   AppLocale.scraperSubtitleBoth:
       'RomM からゲームのメタデータをダウンロードし、不足分は ScreenScraper で補完',
+  AppLocale.rommSyncConfirmCollection:
+      'コレクション「{name}」が NeoStation に作成または更新されます。',
+  AppLocale.rommSyncOutcomeCollection: 'コレクション「{name}」: {count} 本',
+  AppLocale.rommSyncOutcomeCollectionFailed: 'コレクション「{name}」を更新できませんでした',
+  AppLocale.collectionRommMirrored: 'RomM から同期',
+  AppLocale.collectionUnlinkRomm: 'RomM とのリンクを解除',
+  AppLocale.collectionUnlinkRommConfirm:
+      'このコレクションは RomM のコレクションに追従しなくなります。ゲームはそのまま残ります。',
 };

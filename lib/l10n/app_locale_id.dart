@@ -1437,4 +1437,13 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.scraperSubtitleRomm: 'Unduh metadata game dari RomM',
   AppLocale.scraperSubtitleBoth:
       'Unduh metadata game dari RomM, dengan ScreenScraper untuk yang tidak ada di RomM',
+  AppLocale.rommSyncConfirmCollection:
+      'Koleksi "{name}" akan dibuat atau diperbarui di NeoStation.',
+  AppLocale.rommSyncOutcomeCollection: 'Koleksi "{name}": {count} gim',
+  AppLocale.rommSyncOutcomeCollectionFailed:
+      'Koleksi "{name}" tidak dapat diperbarui',
+  AppLocale.collectionRommMirrored: 'Disinkronkan dari RomM',
+  AppLocale.collectionUnlinkRomm: 'Putuskan tautan dari RomM',
+  AppLocale.collectionUnlinkRommConfirm:
+      'Koleksi ini tidak akan lagi mengikuti koleksi RomM. Gim di dalamnya tetap ada.',
 };
