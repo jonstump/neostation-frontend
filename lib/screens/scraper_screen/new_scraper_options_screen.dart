@@ -607,6 +607,7 @@ class _NewScraperOptionsScreenState extends State<NewScraperOptionsScreen> {
         isContentFocused: !_focusOnMenu,
         selectedContentIndex: _selectedContentIndex,
         onScrapingFinished: _refreshAccountInfo,
+        screenScraperLoggedIn: widget.screenScraperLoggedIn,
       );
     } else if (selectedKey == AppLocale.scrapeMode) {
       return ScrapeModeContent(

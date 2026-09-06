@@ -1298,4 +1298,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommSearchResultCountOne: '1件の結果',
   AppLocale.rommSearchResultCountMore: '{count}件以上の結果',
   AppLocale.rommSearchNoResults: '「{term}」に一致する結果はありません',
+  AppLocale.scraperSubtitleRomm: 'RomM からゲームのメタデータをダウンロード',
+  AppLocale.scraperSubtitleBoth:
+      'RomM からゲームのメタデータをダウンロードし、不足分は ScreenScraper で補完',
 };

@@ -1251,4 +1251,6 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.rommSearchResultCountOne: '1 個結果',
   AppLocale.rommSearchResultCountMore: '{count}+ 個結果',
   AppLocale.rommSearchNoResults: '沒有與「{term}」相符的結果',
+  AppLocale.scraperSubtitleRomm: '從 RomM 下載遊戲中繼資料',
+  AppLocale.scraperSubtitleBoth: '從 RomM 下載遊戲中繼資料，RomM 缺少的部分由 ScreenScraper 補充',
 };

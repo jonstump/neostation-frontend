@@ -1307,4 +1307,7 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommSearchResultCountOne: '결과 1개',
   AppLocale.rommSearchResultCountMore: '결과 {count}개 이상',
   AppLocale.rommSearchNoResults: '"{term}"에 대한 결과 없음',
+  AppLocale.scraperSubtitleRomm: 'RomM에서 게임 메타데이터 다운로드',
+  AppLocale.scraperSubtitleBoth:
+      'RomM에서 게임 메타데이터를 다운로드하고, RomM에 없는 항목은 ScreenScraper로 보완',
 };

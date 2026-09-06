@@ -1435,4 +1435,7 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommSearchResultCountOne: '1 результат',
   AppLocale.rommSearchResultCountMore: 'Результатов: {count}+',
   AppLocale.rommSearchNoResults: 'Ничего не найдено по запросу {term}',
+  AppLocale.scraperSubtitleRomm: 'Загрузить метаданные игр из RomM',
+  AppLocale.scraperSubtitleBoth:
+      'Загрузить метаданные игр из RomM, а недостающее — из ScreenScraper',
 };
