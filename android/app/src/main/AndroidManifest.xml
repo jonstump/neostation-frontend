@@ -23,6 +23,13 @@
     <uses-feature 
         android:name="android.software.leanback" 
         android:required="false" />
+    <!-- Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "QR Scan Where A Camera Exists".
+         The RomM pairing QR scanner (mobile_scanner) uses the camera when there is one;
+         camera-less handhelds must stay installable. CAMERA permission comes from the
+         plugin's manifest merge. -->
+    <uses-feature
+        android:name="android.hardware.camera"
+        android:required="false" />
     
     <!-- Permisos para gamepads -->
     <uses-permission android:name="android.permission.BLUETOOTH" />

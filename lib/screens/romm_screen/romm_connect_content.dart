@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show defaultTargetPlatform;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -21,9 +22,11 @@ import '../../utils/gamepad_nav.dart';
 import '../../utils/login_form_selection.dart';
 import '../../utils/romm_pair_code_input_formatter.dart';
 import '../../utils/romm_pair_error_message.dart';
+import '../../utils/romm_qr_platform.dart';
 import '../../widgets/custom_notification.dart';
 import '../app_screen.dart';
 import 'romm_auth_mode.dart';
+import 'romm_qr_scan_screen.dart';
 
 /// Self-contained RomM connect / account panel for the top-level RomM tab.
 ///
@@ -50,7 +53,8 @@ class RommConnectContent extends StatefulWidget {
 class _RommConnectContentState extends State<RommConnectContent>
     with LoginFormSelection<RommConnectContent> {
   final ScrollController _scrollController = ScrollController();
-  final List<GlobalKey> _itemKeys = List.generate(5, (_) => GlobalKey());
+  // One per slot of the longest order: pairing mode with the scan action.
+  final List<GlobalKey> _itemKeys = List.generate(6, (_) => GlobalKey());
 
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _userController = TextEditingController();
@@ -72,6 +76,17 @@ class _RommConnectContentState extends State<RommConnectContent>
   // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Pairing Mode On The Connect Screen"
   RommAuthMode _authMode = RommAuthMode.password;
 
+  /// Whether pairing mode draws the "Scan QR code" row: only on Android and
+  /// macOS, where the scanner plugin is wired in and a camera is plausible.
+  /// Windows and Linux never get the row, nor a slot for it.
+  // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "QR Scan Where A Camera Exists"
+  bool get _canScanQr => showsQrScanAction(defaultTargetPlatform);
+
+  /// The current mode's cursor order, with the scan action when this
+  /// platform has it.
+  List<RommConnectSlot> get _focusOrder =>
+      focusOrderFor(_authMode, includeScanQr: _canScanQr);
+
   /// The slots the D-pad walks, which change with both the connection state and
   /// the authentication mode: connected it is three action rows and no field at
   /// all, disconnected it is [focusOrderFor] the current mode — the server URL,
@@ -84,7 +99,7 @@ class _RommConnectContentState extends State<RommConnectContent>
     if (context.read<RommProvider>().isConnected) {
       return const [null, null, null];
     }
-    return focusOrderFor(_authMode).map(_focusNodeFor).toList(growable: false);
+    return _focusOrder.map(_focusNodeFor).toList(growable: false);
   }
 
   /// Every node the panel owns, not just the ones the current state shows, so
@@ -108,13 +123,14 @@ class _RommConnectContentState extends State<RommConnectContent>
     RommConnectSlot.password => _passwordFocus,
     RommConnectSlot.apiKey => _apiKeyFocus,
     RommConnectSlot.pairCode => _pairCodeFocus,
-    RommConnectSlot.authMode || RommConnectSlot.connect => null,
+    RommConnectSlot.authMode ||
+    RommConnectSlot.scanQr ||
+    RommConnectSlot.connect => null,
   };
 
   /// Where [slot] sits in the current mode's cursor order, for the rows that
   /// draw their own selection glow.
-  int _slotIndex(RommConnectSlot slot) =>
-      focusOrderFor(_authMode).indexOf(slot);
+  int _slotIndex(RommConnectSlot slot) => _focusOrder.indexOf(slot);
 
   /// Slot the mode switch sits on: under the server URL, which every mode
   /// needs, and above the fields it actually decides. Left/Right step along
@@ -201,9 +217,12 @@ class _RommConnectContentState extends State<RommConnectContent>
     // Dispatch on the slot rather than its index so a mode that inserts a
     // row (the scanner story adds a scan action to pairing mode) only needs a
     // case here.
-    switch (focusOrderFor(_authMode)[selectedSlot]) {
+    switch (_focusOrder[selectedSlot]) {
       case RommConnectSlot.authMode:
         _toggleAuthMode();
+      // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "QR Scan Where A Camera Exists"
+      case RommConnectSlot.scanQr:
+        _scanQr();
       case RommConnectSlot.connect:
         _connect();
       case RommConnectSlot.url:
@@ -361,6 +380,42 @@ class _RommConnectContentState extends State<RommConnectContent>
         AppLocale.rommConnectionSuccess.getString(context),
         type: NotificationType.success,
       );
+    }
+  }
+
+  /// Opens the camera scanner and acts on what it returns: a pairing link
+  /// fills the URL and code fields and connects at once (the code has about
+  /// a minute to live), a camera refusal is reported and the typed path is
+  /// left exactly as it was, and backing out changes nothing.
+  // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "QR Scan Where A Camera Exists"
+  Future<void> _scanQr() async {
+    if (_busy) return;
+    // The scanner is a route of its own; leave text entry so the keyboard
+    // isn't still up when the form comes back.
+    exitTextEntry();
+    final result = await RommQrScanScreen.show(context);
+    if (!mounted) return;
+    switch (result) {
+      case null:
+        return;
+      case RommQrScanLink(:final link):
+        _urlController.text = link.serverUrl;
+        // Shown dashed, as RomM prints it and as the formatter would have
+        // laid it out had the user typed it.
+        _pairCodeController.text = RommPairCode.display(link.code);
+        await _connect();
+      case RommQrScanDenied():
+        AppNotification.showNotification(
+          context,
+          AppLocale.rommScanQrCameraDenied.getString(context),
+          type: NotificationType.error,
+        );
+      case RommQrScanUnavailable():
+        AppNotification.showNotification(
+          context,
+          AppLocale.rommScanQrCameraUnavailable.getString(context),
+          type: NotificationType.error,
+        );
     }
   }
 
@@ -764,6 +819,17 @@ class _RommConnectContentState extends State<RommConnectContent>
           ),
           SizedBox(height: 4.r),
           _buildPairCodeHint(theme),
+          // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "QR Scan Where A Camera Exists"
+          if (_canScanQr) ...[
+            SizedBox(height: 8.r),
+            _buildActionRow(
+              theme,
+              index: _slotIndex(RommConnectSlot.scanQr),
+              icon: Symbols.qr_code_scanner_rounded,
+              label: AppLocale.rommScanQrAction.getString(context),
+              onTap: _scanQr,
+            ),
+          ],
         ],
       },
       SizedBox(height: 12.r),

@@ -35,5 +35,8 @@
 	<!-- Network Client (Usually implied but good to be explicit) -->
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<!-- Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "QR Scan Where A Camera Exists" -->
+	<key>com.apple.security.device.camera</key>
+	<true/>
 </dict>
 </plist>

@@ -1235,4 +1235,10 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.rommPairRateLimited: '尝试次数过多，请等待一分钟后重试',
   AppLocale.rommPairedTokenExpires: '令牌将于 {date} 过期',
   AppLocale.rommPairedTokenName: '令牌：{name}',
+  AppLocale.rommScanQrAction: '扫描二维码',
+  AppLocale.rommScanQrTitle: '扫描配对码',
+  AppLocale.rommScanQrPrompt: '将摄像头对准 RomM 中显示的配对二维码',
+  AppLocale.rommScanQrNotPairingCode: '这不是 RomM 配对码',
+  AppLocale.rommScanQrCameraDenied: '摄像头权限被拒绝，请改为手动输入配对码',
+  AppLocale.rommScanQrCameraUnavailable: '没有可用的摄像头，请改为手动输入配对码',
 };

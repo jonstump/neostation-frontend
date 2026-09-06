@@ -1417,4 +1417,13 @@ const Map<String, dynamic> appLocaleRu = {
       'Слишком много попыток; подождите минуту и попробуйте снова',
   AppLocale.rommPairedTokenExpires: 'Токен истекает {date}',
   AppLocale.rommPairedTokenName: 'Токен: {name}',
+  AppLocale.rommScanQrAction: 'Сканировать QR-код',
+  AppLocale.rommScanQrTitle: 'Сканировать код сопряжения',
+  AppLocale.rommScanQrPrompt:
+      'Наведите камеру на QR-код сопряжения, показанный в RomM',
+  AppLocale.rommScanQrNotPairingCode: 'Это не код сопряжения RomM',
+  AppLocale.rommScanQrCameraDenied:
+      'Доступ к камере запрещён; введите код вручную',
+  AppLocale.rommScanQrCameraUnavailable:
+      'Камера недоступна; введите код вручную',
 };

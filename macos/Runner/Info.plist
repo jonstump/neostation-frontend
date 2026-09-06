@@ -28,5 +28,8 @@
 	<string>MainMenu</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
+	<!-- Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "QR Scan Where A Camera Exists" -->
+	<key>NSCameraUsageDescription</key>
+	<string>Scan a RomM pairing QR code to sign in.</string>
 </dict>
 </plist>

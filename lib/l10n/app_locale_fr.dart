@@ -1464,4 +1464,13 @@ const Map<String, dynamic> appLocaleFr = {
       'Trop de tentatives ; attendez une minute puis réessayez',
   AppLocale.rommPairedTokenExpires: 'Le jeton expire le {date}',
   AppLocale.rommPairedTokenName: 'Jeton : {name}',
+  AppLocale.rommScanQrAction: 'Scanner le code QR',
+  AppLocale.rommScanQrTitle: 'Scanner le code d’appairage',
+  AppLocale.rommScanQrPrompt:
+      'Pointez la caméra vers le code QR d’appairage affiché dans RomM',
+  AppLocale.rommScanQrNotPairingCode: 'Ce n’est pas un code d’appairage RomM',
+  AppLocale.rommScanQrCameraDenied:
+      'L’accès à la caméra a été refusé ; saisissez le code à la place',
+  AppLocale.rommScanQrCameraUnavailable:
+      'Aucune caméra disponible ; saisissez le code à la place',
 };

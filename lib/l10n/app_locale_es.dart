@@ -1453,4 +1453,14 @@ const Map<String, dynamic> appLocaleEs = {
       'Demasiados intentos; espera un minuto y vuelve a intentarlo',
   AppLocale.rommPairedTokenExpires: 'El token caduca el {date}',
   AppLocale.rommPairedTokenName: 'Token: {name}',
+  AppLocale.rommScanQrAction: 'Escanear código QR',
+  AppLocale.rommScanQrTitle: 'Escanear código de emparejamiento',
+  AppLocale.rommScanQrPrompt:
+      'Apunta la cámara al código QR de emparejamiento que muestra RomM',
+  AppLocale.rommScanQrNotPairingCode:
+      'Eso no es un código de emparejamiento de RomM',
+  AppLocale.rommScanQrCameraDenied:
+      'Se denegó el permiso de cámara; escribe el código en su lugar',
+  AppLocale.rommScanQrCameraUnavailable:
+      'No hay ninguna cámara disponible; escribe el código en su lugar',
 };
