@@ -997,13 +997,31 @@ class RommService {
   /// for only has the provider URL. Anything that draws a cover should walk the
   /// list rather than give up on the first entry, or a ROM whose art the server
   /// plainly has renders as a blank card.
-  List<String> coverUrlCandidates(RommRom rom) {
+  List<String> coverUrlCandidates(RommRom rom) => _absoluteCoverUrls([
+    rom.urlCover,
+    rom.pathCoverLarge,
+    rom.pathCoverSmall,
+  ]);
+
+  /// [coverUrlCandidates] reordered for grid and list tiles: RomM's cached
+  /// small file first, then its large file, then the provider's copy.
+  ///
+  /// A tile is drawn at a fraction of a cover's native size, so the server's
+  /// thumbnail is both the cheapest fetch (LAN, small) and the cheapest decode.
+  /// Surfaces that show a single large cover keep [coverUrlCandidates].
+  // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Tile Cover Source Order"
+  List<String> tileCoverUrlCandidates(RommRom rom) => _absoluteCoverUrls([
+    rom.pathCoverSmall,
+    rom.pathCoverLarge,
+    rom.urlCover,
+  ]);
+
+  /// Absolute, authenticated-fetchable URLs for [covers] in the given order,
+  /// skipping null/empty entries and joining server-relative paths onto the
+  /// base URL.
+  List<String> _absoluteCoverUrls(Iterable<String?> covers) {
     final urls = <String>[];
-    for (final cover in [
-      rom.urlCover,
-      rom.pathCoverLarge,
-      rom.pathCoverSmall,
-    ]) {
+    for (final cover in covers) {
       if (cover == null || cover.isEmpty) continue;
       urls.add(
         (cover.startsWith('http://') || cover.startsWith('https://'))

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 
@@ -11,20 +12,22 @@ import '../../services/gamepad/gamepad_navigation_manager.dart';
 import '../../services/sfx_service.dart';
 import '../../utils/gamepad_nav.dart';
 import '../app_screen.dart';
-import 'romm_cover_aspect.dart';
 import 'romm_rom_card.dart';
 
 /// Artwork grid for the RomM browser's ROM view.
 ///
-/// The remote sibling of the local library's `GamesGrid`: same variable-height
-/// row engine (cards keep their artwork's own aspect, rows are as tall as their
-/// tallest card), same in-cell selection border, same card-size cycling off
-/// `gameGridColumns`, and the same debounced "settled selection" that keeps the
-/// footer and legend out of the fast-navigation hot path.
+/// The remote sibling of the local library's `GamesGrid`: same row engine and
+/// in-cell selection border, same card-size cycling off `gameGridColumns`, and
+/// the same debounced "settled selection" that keeps the footer and legend out
+/// of the fast-navigation hot path.
 ///
 /// What differs is the data: covers are fetched over the network rather than
-/// read off disk (see [RommCoverAspect]) and the library is paged, so moving
-/// past the last loaded row asks for the next page instead of wrapping.
+/// read off disk, and the library is paged, so moving past the last loaded row
+/// asks for the next page instead of wrapping. Because a remote cover's size is
+/// only known once it decodes, rows are NOT sized from their artwork the way
+/// the local grid's are: every tile is [tileRatio] tall for its width and the
+/// cover is cropped to fill it, so a row never changes height after first
+/// paint.
 class RommRomGrid extends StatefulWidget {
   final RommProvider provider;
   final List<RommRom> roms;
@@ -48,6 +51,15 @@ class RommRomGrid extends StatefulWidget {
   /// Footer for the settled selection, built by the host so it keeps ownership
   /// of the open platform / collection context.
   final Widget Function(RommRom? focused) footerBuilder;
+
+  /// Height/width ratio of every tile. IGDB covers are 264x374 (≈1.417 h/w),
+  /// which is what the overwhelming majority of RomM libraries serve; anything
+  /// off-ratio is cropped to fit rather than reshaping its row.
+  // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Fixed Tile Ratio"
+  static const double tileRatio = 1.417;
+
+  /// Height of a tile (and so of every row, before spacing) for [cellWidth].
+  static double rowHeightFor(double cellWidth) => cellWidth * tileRatio;
 
   const RommRomGrid({
     super.key,
@@ -90,9 +102,9 @@ class _RommRomGridState extends State<RommRomGrid> {
   bool _syncing = false;
   Widget? _chromeFooter;
 
-  // Memoized grid rows. Cards are a pure function of the layout generation, the
-  // decode width and the theme, so a settle / legend / download-progress
-  // setState returns identical Row instances and Flutter skips those subtrees.
+  // Memoized grid rows. Cards are a pure function of the layout generation and
+  // the theme, so a settle / legend / download-progress setState returns
+  // identical Row instances and Flutter skips those subtrees.
   int _layoutGen = 0;
   final Map<int, Widget> _rowCache = {};
   String? _rowCacheSig;
@@ -111,18 +123,6 @@ class _RommRomGridState extends State<RommRomGrid> {
   int? _lastLayoutCols;
   double _contentHeight = 0;
   bool _recenterAfterLayout = false;
-
-  /// Per-card height/width ratio, independent of the card width, so a reflow
-  /// (legend toggle, size cycle) is cheap arithmetic rather than a re-measure.
-  List<double> _cardHOverW = [];
-  bool _needsMeasure = true;
-
-  // Cover measurement. Ratios arrive asynchronously as artwork decodes; they
-  // are coalesced into one relayout rather than one per image, and only cards
-  // that actually got built are ever measured (so nothing is prefetched).
-  final Set<int> _measureRequested = {};
-  Timer? _measureSettle;
-  static const Duration _measureSettleDelay = Duration(milliseconds: 400);
 
   // Pinch-to-resize tracking.
   final Map<int, Offset> _activePointers = {};
@@ -164,7 +164,6 @@ class _RommRomGridState extends State<RommRomGrid> {
   void dispose() {
     _cardSizeLabelTimer?.cancel();
     _settleTimer?.cancel();
-    _measureSettle?.cancel();
     _cardSizeLabel.dispose();
     widget.provider.bulkSync.removeListener(_onBulkSyncChanged);
     GamepadNavigationManager.popLayer(_navLayerId);
@@ -200,7 +199,6 @@ class _RommRomGridState extends State<RommRomGrid> {
     final romsChanged = widget.roms.length != oldWidget.roms.length;
     if (romsChanged || _crossAxisCount != prevCols) {
       _lastLayoutWidth = null;
-      if (romsChanged) _needsMeasure = true;
       _rowCache.clear();
     }
     // Cached rows hold the download overlay, so a transfer starting, ticking or
@@ -358,75 +356,23 @@ class _RommRomGridState extends State<RommRomGrid> {
     if (_activePointers.length < 2) _lastPinchDistance = null;
   }
 
-  // ---- Measurement + layout ----
-
-  String? _coverUrl(int index) =>
-      widget.provider.service.coverUrl(widget.roms[index]);
-
-  double _heightRatioFor(int index) =>
-      RommCoverAspect.ratioOf(_coverUrl(index)) ?? RommCoverAspect.fallback;
-
-  void _measureCards() {
-    final n = widget.roms.length;
-    _cardHOverW = List<double>.filled(n, RommCoverAspect.fallback);
-    for (int i = 0; i < n; i++) {
-      _cardHOverW[i] = _heightRatioFor(i);
-    }
-    _needsMeasure = false;
-  }
-
-  /// Requests the real aspect for a card the moment it is first built. Anything
-  /// that never scrolls into view is never measured, so a 5,000-ROM platform
-  /// doesn't fetch 5,000 covers to lay itself out.
-  void _ensureMeasured(int index) {
-    if (_measureRequested.contains(index)) return;
-    final url = _coverUrl(index);
-    if (url == null) return;
-    _measureRequested.add(index);
-    if (RommCoverAspect.isMeasured(url)) return;
-    RommCoverAspect.measure(
-      url,
-      NetworkImage(url, headers: widget.provider.service.imageHeadersFor(url)),
-      _scheduleReflow,
-    );
-  }
-
-  /// Coalesces incoming cover measurements into a single relayout. Only covers
-  /// whose real aspect differs from the assumed one get this far (see
-  /// [RommCoverAspect.measure]), which for a typical IGDB-sourced library is
-  /// almost none — so in practice the grid settles on its first layout.
-  void _scheduleReflow() {
-    if (!mounted) return;
-    _measureSettle?.cancel();
-    _measureSettle = Timer(_measureSettleDelay, () {
-      if (!mounted) return;
-      setState(() {
-        _needsMeasure = true;
-        _lastLayoutWidth = null;
-      });
-    });
-  }
+  // ---- Layout ----
 
   void _computeLayout(double availableWidth) {
-    final measureChanged =
-        _needsMeasure || _cardHOverW.length != widget.roms.length;
-
-    if (!measureChanged &&
+    if (_cardRects.length == widget.roms.length &&
         _lastLayoutWidth == availableWidth &&
         _lastLayoutCols == _cols) {
       return;
     }
-
-    if (measureChanged) _measureCards();
-
     _lastLayoutWidth = availableWidth;
     _lastLayoutCols = _cols;
     _positionCards(availableWidth);
   }
 
-  /// Cheap positioning pass: cached aspect ratios + a target width become card
-  /// rects and row bounds. No image work, and rects are mutated in place so a
-  /// reflow animation allocates nothing.
+  /// Positioning pass: the fixed [RommRomGrid.tileRatio] and a target width
+  /// become card rects and row bounds. Pure arithmetic — no image work, so the
+  /// layout is final on first paint — and rects are mutated in place so a
+  /// resize allocates nothing.
   void _positionCards(double availableWidth) {
     final spX = 6.0.r;
     final spY = 6.0.r;
@@ -451,31 +397,25 @@ class _RommRomGridState extends State<RommRomGrid> {
       );
     }
 
+    final cardHeight = RommRomGrid.rowHeightFor(_cardWidth);
     double y = 0;
     int i = 0;
     int r = 0;
     while (i < n) {
       final end = (i + _cols).clamp(0, n);
-      double maxH = 0;
-      for (int idx = i; idx < end; idx++) {
-        final h = _cardHOverW[idx] * _cardWidth;
-        if (h > maxH) maxH = h;
-      }
       final row = _rows[r];
       row.topY = y;
-      row.height = maxH;
+      row.height = cardHeight;
       row.startIndex = i;
       row.count = end - i;
       for (int idx = i; idx < end; idx++) {
-        final col = idx % _cols;
-        final h = _cardHOverW[idx] * _cardWidth;
         final rect = _cardRects[idx];
-        rect.left = col * (_cardWidth + spX);
-        rect.top = y + (maxH + spY - h) / 2;
+        rect.left = (idx % _cols) * (_cardWidth + spX);
+        rect.top = y + spY / 2;
         rect.width = _cardWidth;
-        rect.height = h;
+        rect.height = cardHeight;
       }
-      y += maxH + spY;
+      y += cardHeight + spY;
       i = end;
       r++;
     }
@@ -684,13 +624,9 @@ class _RommRomGridState extends State<RommRomGrid> {
     final theme = Theme.of(context);
     final borderColor = theme.colorScheme.secondary;
 
-    // Quantize the decode resolution into buckets so the small per-frame width
-    // changes during a reflow don't thrash every card into re-decoding.
-    const decodeBucket = 64;
-    final bucketed = ((_cardWidth * 1.5) / decodeBucket).ceil() * decodeBucket;
-    final targetWidth = bucketed < decodeBucket ? decodeBucket : bucketed;
-
-    final rowSig = '$_layoutGen|$targetWidth|${theme.brightness.index}';
+    // The card decodes each cover at its cell width, and the cell width is part
+    // of the layout generation, so the row cache needs nothing beyond it.
+    final rowSig = '$_layoutGen|${theme.brightness.index}';
     if (rowSig != _rowCacheSig) {
       _rowCacheSig = rowSig;
       _rowCache.clear();
@@ -716,7 +652,6 @@ class _RommRomGridState extends State<RommRomGrid> {
         final idx = row.startIndex + j;
         if (idx >= widget.roms.length) break;
         final rect = _cardRects[idx];
-        _ensureMeasured(idx);
         Widget cell = _buildCard(idx);
         if (idx == _selectedIndex) {
           cell = Stack(
@@ -771,6 +706,12 @@ class _RommRomGridState extends State<RommRomGrid> {
             },
             child: CustomScrollView(
               controller: _scrollController,
+              // About one viewport of rows past each edge stays built, so the
+              // next screenful's covers are already requested — into Flutter's
+              // in-memory ImageCache, the only cache these tiles use — while
+              // the user is still scrolling towards them.
+              // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "In-Memory Cache Only"
+              scrollCacheExtent: const ScrollCacheExtent.viewport(1.0),
               slivers: [
                 SliverPadding(
                   padding: const EdgeInsets.only(
@@ -841,6 +782,7 @@ class _RommRomGridState extends State<RommRomGrid> {
       provider: widget.provider,
       romFolders: widget.romFolders,
       isFocused: false, // The in-cell cursor above draws the selection.
+      tileWidth: _cardWidth,
       onDownload: () => widget.onConfirm(rom),
       onCancel: () => widget.onCancel(rom),
       onTap: () {
