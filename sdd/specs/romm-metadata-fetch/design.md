@@ -134,4 +134,4 @@ Rollback: removing the UI leaves a nullable column that readers ignore.
 ## Open Questions
 
 - Should the games list show a small per-source marker now that the column exists? Deferred; cheap to add later.
-- Should RomM become the default source for newly downloaded games' rescrape actions? Out of scope; Force Rescrape stays ScreenScraper.
+- Should RomM become the default source for newly downloaded games' rescrape actions? Answered by ADR-0006 / SPEC-0006: every scrape action, Force Rescrape included, now tries RomM first and falls back to ScreenScraper.

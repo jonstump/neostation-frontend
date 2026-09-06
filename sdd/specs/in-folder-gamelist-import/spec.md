@@ -124,12 +124,12 @@ The system SHALL expose the in-folder import as an action in the existing direct
 
 ### Requirement: Real-Path Scope
 
-The in-folder mode MUST operate on ROM folders that resolve to real filesystem paths. A ROM folder that is a SAF `content://` URI and cannot be resolved to a real path MUST be skipped, counted as skipped in the result, and named in the log; it MUST NOT cause the import to fail. The result MUST make it visible to the user that folders were skipped for this reason.
+The in-folder mode MUST operate on ROM folders that resolve to real filesystem paths. A ROM folder that is a SAF `content://` URI and cannot be resolved to a real path is handled by SPEC-0003, which imports it over SAF; only a folder whose SAF listing fails MUST be skipped, counted as skipped in the result, and named in the log, and it MUST NOT cause the import to fail. The result MUST make it visible to the user that folders were skipped for this reason.
 
 #### Scenario: SAF folder without real-path access
 
-- **WHEN** a configured ROM folder is a `content://` tree and no real path can be resolved for it
-- **THEN** the import skips that folder, continues with the others, and the summary shows one folder skipped
+- **WHEN** a configured ROM folder is a `content://` tree, no real path can be resolved for it, and its SAF listing fails
+- **THEN** the import skips that folder, continues with the others, and the summary shows one folder skipped (a listable SAF folder is imported per SPEC-0003)
 
 #### Scenario: SAF folder with real-path access
 
@@ -157,7 +157,7 @@ All error-producing operations MUST follow structured error handling:
 - Errors MUST be wrapped with contextual information at each layer boundary (for example, "in-folder import failed: could not read /roms/snes/gamelist.xml: permission denied")
 - Sentinel errors MUST be defined for domain-specific failure modes that callers need to distinguish programmatically
 - Silent error swallowing MUST NOT occur — every error MUST be either returned to the caller, logged with sufficient context, or explicitly handled with a documented reason for suppression
-- Structured logging MUST be used for error reporting (key-value pairs, not string interpolation)
+- Error logs MUST carry their context as `key=value` pairs in the message (this repo's `LoggerService` takes strings; a structured API is not required)
 
 #### Scenario: Malformed gamelist
 
@@ -169,7 +169,7 @@ All error-producing operations MUST follow structured error handling:
 All database operations MUST follow structured data access patterns:
 
 - Transactions MUST be used for multi-step mutations that require atomicity
-- Connection lifecycle MUST be explicitly managed — connections MUST be returned to the pool after use, with timeouts configured
+- Database access MUST go through the shared `SqliteService` connection via a repository; there is no connection pool in this app
 - Query parameters MUST use parameterized queries — string interpolation in queries MUST NOT occur
 
 #### Scenario: Per-system batch write

@@ -55,11 +55,11 @@ Constraints from the repo rules: strict layering (UI to providers to services to
 
 ### Insert-if-absent instead of replace
 
-**Choice**: Add `RommSaveMapRepository.putMappingIfAbsent` using `INSERT OR IGNORE` semantics through the existing adapter's conflict algorithm, returning whether a row was written. `putMapping` keeps its replace semantics for the download path, which legitimately re-targets a mapping when a ROM is re-downloaded.
+**Choice**: Add `RommSaveMapRepository.putMappingIfAbsent` using `INSERT OR IGNORE` semantics through the existing adapter's conflict algorithm, returning whether a row was written. `putMapping` kept its replace semantics for the download path at the time; SPEC-0004 later made it replace-unless-manual with a required `source`.
 **Rationale**: The never-overwrite rule protects future manual links without a provenance column. Returning a boolean gives the callers their "linked" versus "already linked" counts for free.
 **Alternatives considered**:
 - Read-then-write in the caller: two round trips and a race with the download path.
-- Add a `linked_by` column now: requires a migration for a distinction nothing consumes yet. Deferred to the manual picker.
+- Add a `linked_by` column now: requires a migration for a distinction nothing consumes yet. Deferred to the manual picker, which added it as `link_source` (SPEC-0004).
 
 ### Ambiguity is skipped, not resolved
 
@@ -68,7 +68,7 @@ Constraints from the repo rules: strict layering (UI to providers to services to
 
 ### Browser path imports metadata, bulk and pass do not
 
-**Choice**: `_confirmRom` on an existing file writes the mapping and, if the local game has no scraped metadata, calls the existing `_importMetadata` (made callable from the browser path). Bulk sync and the connect pass only write rows.
+**Choice**: `_confirmRom` on an existing file writes the mapping and fills the game's metadata gaps from RomM (originally gated on "no scraped metadata"; SPEC-0005 replaced the gate with the fill-gaps writer). Bulk sync and the connect pass only write rows.
 **Rationale**: The browser action is a single, user-initiated ROM, so one metadata fetch is proportionate and directly answers #386's "let the download button do something". The pass touches thousands of ROMs and must stay network-light.
 
 ## Architecture
@@ -129,7 +129,7 @@ Layer placement: `RommLocalMatcher` is a pure utility (no I/O) consumed by both 
 - **Server enumeration on every connect** → Bounded by the existing page size and cap; the pass exits early when the local index is empty or every local game is already linked, so steady-state cost is one platform list plus cheap page walks. If this proves heavy, a "last full pass" timestamp can gate it to once per server per day.
 - **Filename collisions across platforms mapping to one system** → Skipped and logged, never guessed.
 - **Case-insensitive match on case-sensitive filesystems** → The mapping is written with the library's canonical filename, which is what the sync provider looks up, so a case mismatch between server and disk still links correctly.
-- **Metadata import from the browser path re-scrapes a game the user curated** → Gated on "no scraped metadata", matching the ES-DE importer's fill-gaps posture.
+- **Metadata import from the browser path re-scrapes a game the user curated** → Fill-gaps only (SPEC-0005), matching the ES-DE importer's posture.
 - **Dart has no race detector** → The spec's concurrency requirement is written for the single-threaded event loop: cancellation checks between awaits and a single-instance guard, not thread-safety primitives.
 
 ## Migration Plan

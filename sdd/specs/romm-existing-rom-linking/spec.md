@@ -61,7 +61,7 @@ When a user confirms a ROM in the RomM browser, or bulk sync enumerates a ROM, a
 
 The browser path MUST tell the user the ROM was linked rather than repeating the "already downloaded" message when a new row was written. Bulk sync MUST count linked ROMs separately from ROMs that were already linked, and MUST NOT queue them for download.
 
-The browser path SHOULD import the ROM's RomM metadata and cover art through the existing metadata import when the local game has no scraped metadata. Bulk sync MUST NOT fetch media for linked ROMs.
+The browser path SHOULD fill the game's metadata and media gaps from RomM on confirm (the fill-gaps import from SPEC-0005 replaced the original "no scraped metadata" gate). Bulk sync MUST NOT fetch media for linked ROMs.
 
 #### Scenario: Browser confirm on an existing file
 
@@ -105,7 +105,7 @@ The pass MUST use the existing page size and page cap of bulk sync enumeration, 
 
 ### Requirement: Existing Mappings Are Never Overwritten
 
-Neither entry point MUST overwrite an existing `app_romm_rom_map` row. A row that already holds a `romm_rom_id` for a given filename and system folder MUST be left unchanged even when the pass matches that file to a different ROM.
+Neither entry point MUST overwrite an existing `app_romm_rom_map` row (SPEC-0004 later refined this: automatic writers never replace a row, and the download path replaces unless the row is manual). A row that already holds a `romm_rom_id` for a given filename and system folder MUST be left unchanged even when the pass matches that file to a different ROM.
 
 #### Scenario: Manually chosen link survives the pass
 
@@ -169,7 +169,7 @@ All error-producing operations MUST follow structured error handling:
 - Errors MUST be wrapped with contextual information at each layer boundary (for example, "link pass failed: platform enumeration failed: connection refused")
 - Sentinel errors MUST be defined for domain-specific failure modes that callers need to distinguish programmatically
 - Silent error swallowing MUST NOT occur — every error MUST be either returned to the caller, logged with sufficient context, or explicitly handled with a documented reason for suppression
-- Structured logging MUST be used for error reporting (key-value pairs, not string interpolation)
+- Error logs MUST carry their context as `key=value` pairs in the message (this repo's `LoggerService` takes strings; a structured API is not required)
 
 #### Scenario: Server error during paging
 
@@ -194,7 +194,7 @@ The pass runs as a background task inside the app's single-threaded event loop a
 All database operations MUST follow structured data access patterns:
 
 - Transactions MUST be used for multi-step mutations that require atomicity
-- Connection lifecycle MUST be explicitly managed — connections MUST be returned to the pool after use, with timeouts configured
+- Database access MUST go through the shared `SqliteService` connection via a repository; there is no connection pool in this app
 - Query parameters MUST use parameterized queries — string interpolation in queries MUST NOT occur
 
 #### Scenario: Batch insert per platform

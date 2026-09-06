@@ -63,7 +63,7 @@ Automatic linking MUST only fill missing rows. It MUST NOT overwrite an existing
 
 Match on RomM `fs_name` (plus the multi-disc `.m3u` variants) within the local system that the RomM platform resolves to, and write `app_romm_rom_map`.
 
-* Good, because the matching logic and SAF handling already exist in `RommProvider._existingRomDir` and `_existingRomNames`.
+* Good, because the matching logic and SAF handling already exist in `RommProvider._existingRomDir` and the filename rule (since extracted to `RommLocalMatcher.candidateNames`).
 * Good, because it is a Dart-only change with no schema migration.
 * Good, because it is deterministic and cheap: no file reads, no hashing, one API enumeration per connect.
 * Neutral, because the platform-to-system resolution depends on the hardcoded slug alias table, so an unmapped platform silently yields no links for that system.
@@ -107,7 +107,7 @@ flowchart TD
         AD["Browse / bulk sync<br/>'already downloaded' path<br/>(new: link instead of stop)"]
         CP["Connect-time link pass<br/>(new: page platforms, match fs_name)"]
     end
-    ISD["RommProvider.isDownloaded<br/>_existingRomDir / _existingRomNames<br/>filename + .m3u equivalence"]
+    ISD["RommProvider.isDownloaded<br/>_existingRomDir / RommLocalMatcher<br/>filename + .m3u equivalence"]
     MAP[("app_romm_rom_map<br/>(romname, system_folder) → romm_rom_id")]
     RES["RomMSyncProvider._resolveRomId"]
     GATE{"rom id found?"}

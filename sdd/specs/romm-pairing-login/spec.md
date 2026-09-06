@@ -20,7 +20,7 @@ Facts fixed by RomM: the code is 8 characters from `ABCDEFGHJKMNPQRSTUVWXYZ23456
 
 ### Requirement: Pairing Code Exchange
 
-`RommService` SHALL provide `exchangePairCode(serverUrl, code)` that normalises the code (remove dashes and whitespace, upper-case), MUST reject codes that are not exactly 8 characters of the pairing alphabet before any request, MUST POST to `/api/client-tokens/exchange` using the same scheme-fallback and timeout handling as the other calls, and MUST return the token as `RommPairedToken {rawToken, name, scopes, expiresAt}`. Failures MUST be `RommException`s carrying a sentinel the UI can distinguish: invalid-or-expired code (404, 410, or any 4xx other than 429), too many attempts (429), and the existing network, TLS, and timeout cases.
+`RommService` SHALL provide `exchangePairCode(serverUrl, code)` that normalises the code (remove dashes and whitespace, upper-case), MUST reject codes that are not exactly 8 characters of the pairing alphabet before any request, MUST POST to `/api/client-tokens/exchange` using the same scheme-fallback and timeout handling as the other calls, and MUST return the token as `RommPairedToken {rawToken, name, scopes, expiresAt}`. Failures MUST be `RommException`s carrying a sentinel the UI can distinguish: expired-or-unknown code (404 or 410), invalid code (malformed before any request, or any other 4xx except 429), too many attempts (429), and the existing network, TLS, and timeout cases.
 
 #### Scenario: Dashed code
 
@@ -63,7 +63,7 @@ Facts fixed by RomM: the code is 8 characters from `ABCDEFGHJKMNPQRSTUVWXYZ23456
 
 ### Requirement: Pairing Mode On The Connect Screen
 
-The connect screen SHALL offer a third authentication mode, "Pairing code", beside password and API key. In that mode the form MUST show the server URL field and a code field accepting `XXXX-XXXX` or `XXXXXXXX` (case-insensitive), MUST show a hint that the code expires about a minute after RomM generates it, and Connect MUST exchange immediately. The mode switch MUST remain operable by D-pad (Left/Right cycles the modes) and every field and action MUST be reachable by controller with B leaving a focused field.
+The connect screen SHALL offer a third authentication mode, "Pairing code", beside password and API key. In that mode the form MUST show the server URL field and a code field accepting `XXXX-XXXX` or `XXXXXXXX` (case-insensitive), MUST show a hint that the code expires about a minute after RomM generates it, and Connect MUST exchange immediately. The mode switch MUST remain operable by D-pad (Left/Right step between the modes and stop at the ends; A advances and wraps) and every field and action MUST be reachable by controller with B leaving a focused field.
 
 #### Scenario: Typed pairing on a camera-less device
 
@@ -129,7 +129,7 @@ All error-producing operations MUST follow structured error handling:
 - Errors MUST be wrapped with contextual information at each layer boundary (for example, "pairing failed: exchange for code ABCD2345 rejected: 410 expired")
 - Sentinel errors MUST be defined for domain-specific failure modes that callers need to distinguish programmatically
 - Silent error swallowing MUST NOT occur — every error MUST be either returned to the caller, logged with sufficient context, or explicitly handled with a documented reason for suppression
-- Structured logging MUST be used for error reporting (key-value pairs, not string interpolation)
+- Error logs MUST carry their context as `key=value` pairs in the message (this repo's `LoggerService` takes strings; a structured API is not required)
 
 #### Scenario: Exchange succeeds, verification fails
 
@@ -141,7 +141,7 @@ All error-producing operations MUST follow structured error handling:
 All database operations MUST follow structured data access patterns:
 
 - Transactions MUST be used for multi-step mutations that require atomicity
-- Connection lifecycle MUST be explicitly managed — connections MUST be returned to the pool after use, with timeouts configured
+- Database access MUST go through the shared `SqliteService` connection via a repository; there is no connection pool in this app
 - Query parameters MUST use parameterized queries — string interpolation in queries MUST NOT occur
 
 #### Scenario: Token persisted
