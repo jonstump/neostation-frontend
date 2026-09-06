@@ -1,0 +1,136 @@
+---
+status: draft
+date: 2026-09-06
+implements: [ADR-0010]
+extends: [SPEC-0007]
+---
+
+# SPEC-0010: RomM Server Capabilities
+
+## Graph Edges
+
+- **Implements:** [ADR-0010](../../adrs/ADR-0010-romm-heartbeat-capability-probe.md) — probe RomM capabilities with the heartbeat endpoint at connect time
+- **Extends:** [SPEC-0007](../romm-pairing-login/spec.md) — RomM pairing code and QR login (the exchange gains a version gate and the connect screen a mode order)
+
+## Overview
+
+At connect time NeoStation fetches RomM's public `GET /api/heartbeat`, parses the server version and feature sections into a capability value object, and uses a single feature-threshold table to decide, before sending anything, whether a version-dependent endpoint exists on this server. A failed probe leaves capabilities unknown, which behaves exactly as today. See ADR-0010.
+
+## Requirements
+
+### Requirement: Capability Value Object
+
+The system SHALL provide `RommServerVersion` (major, minor, patch, optional prerelease; ordered; parsed from strings with or without a `v` prefix and with or without a prerelease suffix; unparseable input yields null) and `RommServerCapabilities` (version, `metadataSources` as a map of flag name to bool, `passwordLoginDisabled`, `fsPlatforms`, `tasks`, `emulation`, and `fetchedAt`). Parsing MUST tolerate missing sections, unknown keys, and non-boolean flag values, and MUST NOT throw.
+
+#### Scenario: Full heartbeat body
+
+- **WHEN** a body with `SYSTEM.VERSION = "5.2.0"`, `METADATA_SOURCES.SS_API_ENABLED = true`, and `FRONTEND.DISABLE_USERPASS_LOGIN = false` is parsed
+- **THEN** the version compares equal to 5.2.0, `metadataSources['SS_API_ENABLED']` is true, and `passwordLoginDisabled` is false
+
+#### Scenario: Sparse or odd body
+
+- **WHEN** a body has only `SYSTEM.VERSION = "v4.4.1-beta.2"` and an unknown top-level section
+- **THEN** the version parses as 4.4.1 with prerelease `beta.2`, every other field is empty or null, and no exception is raised
+
+### Requirement: Feature Threshold Table
+
+The system SHALL define `RommFeature` with one entry per gated endpoint and the RomM version that introduced it: `playSessions` 4.8.0, `clientTokenExchange` 4.8.0, `romLookupByHash` 4.5.0. `RommServerCapabilities.supports(feature)` MUST return `supported` when the version is at or above the threshold, `unsupported` when below, and `unknown` when there is no version. A prerelease of the threshold version MUST count as below it. Each entry MUST carry a comment naming the RomM commit or release it was verified against. The table MUST live in one file.
+
+#### Scenario: Old server
+
+- **WHEN** the version is 4.7.0 and the feature is `playSessions`
+- **THEN** `supports` returns `unsupported`
+
+#### Scenario: Prerelease of the threshold
+
+- **WHEN** the version is 4.8.0-beta.1 and the feature is `playSessions`
+- **THEN** `supports` returns `unsupported`
+
+#### Scenario: No probe result
+
+- **WHEN** capabilities are null
+- **THEN** every feature is `unknown`
+
+### Requirement: Heartbeat Probe
+
+`RommService.fetchHeartbeat()` SHALL GET `/api/heartbeat` on the configured base URL without an Authorization header, with a timeout of at most 5 seconds, using the service's existing HTTP client (including its TLS handling). It MUST store the parsed capabilities on the connection, MUST log exactly one line naming the version and whether the probe succeeded, and MUST NOT throw: any failure (timeout, socket error, non-2xx status, unparseable body) leaves capabilities null. `configure()` with a different base URL MUST clear stored capabilities. The service MUST expose `capabilities` and `supports(feature)`.
+
+#### Scenario: Probe succeeds
+
+- **WHEN** the server answers 200 with a valid body
+- **THEN** `capabilities.version` is set and one info line is logged
+
+#### Scenario: Probe fails
+
+- **WHEN** the server answers 404, or the request times out
+- **THEN** `capabilities` is null, `supports(anything)` is `unknown`, one warning line is logged, and the caller receives no exception
+
+### Requirement: Probe Before The Token Grant
+
+`authenticate()` SHALL call `fetchHeartbeat()` first when the connection has not been probed since the last `configure()`. When `supports(playSessions)` is `unsupported`, the password grant MUST request only the read scopes and MUST NOT retry with the playtime scopes; the playtime-scope-granted flag MUST be false. When `supported` or `unknown`, the grant and its 403 fallback MUST behave exactly as before this spec. API-key mode MUST still probe (the key's scopes are fixed, the version still gates endpoints).
+
+#### Scenario: Old server, password grant
+
+- **WHEN** the heartbeat reports 4.7.0 and the user logs in with a password
+- **THEN** exactly one token POST is sent, with the read scopes only, and playtime sync is unavailable
+
+#### Scenario: Heartbeat failed, password grant
+
+- **WHEN** the probe failed and the user logs in with a password
+- **THEN** the grant requests read plus playtime scopes and falls back to read scopes on 403, as before
+
+### Requirement: Gated Call Sites
+
+A method whose endpoint is in the threshold table MUST return early, without sending a request, when `supports(feature)` is `unsupported`. When `unknown`, it MUST behave as before (send, and degrade on 404 or a confirmed 403). `uploadPlaySessions` MUST report the early return the same way it reports an unavailable API today. The pairing exchange in `RommProvider.connectWithPairCode` MUST fail with a localized "server too old for pairing" error, and error kind `unsupported`, without sending the exchange request.
+
+#### Scenario: Play sessions on an old server
+
+- **WHEN** a session ends while connected to a 4.7.0 server
+- **THEN** no `/api/play-sessions` request is sent and the session is not queued for retry
+
+#### Scenario: Pairing on an old server
+
+- **WHEN** the user enters a pairing code against a 4.7.0 server
+- **THEN** the connect screen shows the localized "too old" message and no exchange request is sent
+
+#### Scenario: Unknown capabilities
+
+- **WHEN** the probe failed and a session ends
+- **THEN** the upload is attempted and 404/403 handling is unchanged
+
+### Requirement: Provider Exposure And Re-Probe
+
+`RommProvider` SHALL expose `serverVersion` (nullable) and `passwordLoginDisabled` (false when unknown). `connect` and `connectWithPairCode` probe through `authenticate()`. `initialize()` (restored session) MUST schedule a probe after marking the connection connected, off the critical path, and MUST notify listeners when it lands; the probe MUST be skipped when the provider is disposed or the connection changed meanwhile. `disconnect` MUST clear the exposed values.
+
+#### Scenario: Restored session
+
+- **WHEN** the app starts with a saved RomM connection
+- **THEN** the connection is reported connected before the probe returns, and `serverVersion` becomes non-null once it does
+
+### Requirement: Connect Screen Surfaces
+
+The connect content SHALL show the server version on a connected server as a localized line ("Server version {version}"), and MUST show nothing when the version is unknown. When `passwordLoginDisabled` is true, the connect screen's auth-mode order SHALL lead with pairing and API key and place the password mode last with a localized hint that the server has disabled it; the password mode MUST remain selectable. Every string MUST go through `AppLocale` with all twelve translations; every control MUST stay reachable by controller.
+
+#### Scenario: Version line
+
+- **WHEN** the RomM tab shows a connected 5.2.0 server
+- **THEN** a "Server version 5.2.0" line is visible
+
+#### Scenario: Password login disabled
+
+- **WHEN** the heartbeat reports `DISABLE_USERPASS_LOGIN = true`
+- **THEN** the pairing mode is focused first and the password mode carries the hint
+
+### Requirement: Error Handling Standards
+
+All error-producing operations MUST follow structured error handling:
+
+- Errors MUST be wrapped with contextual information at each layer boundary (the probe names the URL and the failure class in its warning line)
+- The probe MUST NOT swallow failures silently: every failure is logged once with its cause
+- Gated early returns MUST be logged at info level with the feature and the version that gated it, once per connection per feature
+- Structured logging MUST be used for error reporting (key-value pairs, not string interpolation)
+
+#### Scenario: Timeout
+
+- **WHEN** the heartbeat times out
+- **THEN** one warning names the base URL, `heartbeat`, and `timeout`, and connection continues
