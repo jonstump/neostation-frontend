@@ -1459,4 +1459,7 @@ const Map<String, dynamic> appLocaleIt = {
       'Permesso fotocamera negato; digita il codice',
   AppLocale.rommScanQrCameraUnavailable:
       'Nessuna fotocamera disponibile; digita il codice',
+  AppLocale.scraperScreenscraperOptional:
+      'RomM è connesso e viene usato per primo per lo scraping. Accedi a ScreenScraper per aggiungerlo come fonte di riserva.',
+  AppLocale.scraperLoginToScreenscraper: 'Accedi a ScreenScraper',
 };

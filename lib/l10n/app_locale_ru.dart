@@ -1426,4 +1426,7 @@ const Map<String, dynamic> appLocaleRu = {
       'Доступ к камере запрещён; введите код вручную',
   AppLocale.rommScanQrCameraUnavailable:
       'Камера недоступна; введите код вручную',
+  AppLocale.scraperScreenscraperOptional:
+      'RomM подключён и используется для скрапинга в первую очередь. Войдите в ScreenScraper, чтобы добавить его как резервный источник.',
+  AppLocale.scraperLoginToScreenscraper: 'Войти в ScreenScraper',
 };

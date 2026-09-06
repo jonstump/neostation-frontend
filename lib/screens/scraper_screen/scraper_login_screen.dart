@@ -15,7 +15,12 @@ import '../../utils/login_form_selection.dart';
 class ScraperLoginScreen extends StatefulWidget {
   final VoidCallback? onLoginSuccess;
 
-  const ScraperLoginScreen({super.key, this.onLoginSuccess});
+  /// Offered when the user can leave the login without signing in (a RomM
+  /// connection already makes scraping possible); B calls it when no field
+  /// is focused.
+  final VoidCallback? onCancel;
+
+  const ScraperLoginScreen({super.key, this.onLoginSuccess, this.onCancel});
 
   @override
   State<ScraperLoginScreen> createState() => _ScraperLoginScreenState();
@@ -54,7 +59,7 @@ class _ScraperLoginScreenState extends State<ScraperLoginScreen>
       onRightBumper: AppNavigation.nextTab,
       allowRepeat: false,
       isTextFieldFocused: isAnyFieldFocused,
-      onBack: exitTextEntry,
+      onBack: _handleBack,
     );
     _gamepadNav!.initialize();
     GamepadNavigationManager.pushLayer(
@@ -74,6 +79,17 @@ class _ScraperLoginScreenState extends State<ScraperLoginScreen>
     _usernameFocus.dispose();
     _passwordFocus.dispose();
     super.dispose();
+  }
+
+  /// B leaves a focused field first; with nothing focused it backs out to
+  /// the scraper options when that is allowed.
+  // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "Entry Point Consistency"
+  void _handleBack() {
+    if (isAnyFieldFocused()) {
+      exitTextEntry();
+      return;
+    }
+    widget.onCancel?.call();
   }
 
   bool _navigateUp() => moveSelection(-1);

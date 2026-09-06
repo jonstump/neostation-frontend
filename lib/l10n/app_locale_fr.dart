@@ -1473,4 +1473,7 @@ const Map<String, dynamic> appLocaleFr = {
       'L’accès à la caméra a été refusé ; saisissez le code à la place',
   AppLocale.rommScanQrCameraUnavailable:
       'Aucune caméra disponible ; saisissez le code à la place',
+  AppLocale.scraperScreenscraperOptional:
+      'RomM est connecté et utilisé en premier pour le scraping. Connectez-vous à ScreenScraper pour l’ajouter comme source de secours.',
+  AppLocale.scraperLoginToScreenscraper: 'Se connecter à ScreenScraper',
 };

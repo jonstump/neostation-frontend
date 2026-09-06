@@ -10,12 +10,19 @@ class AccountContent extends StatelessWidget {
   final Map<String, String>? userInfo;
   final VoidCallback onLogout;
 
+  /// False when RomM alone opened the scraper options: the pane then offers
+  /// the ScreenScraper login as its one selectable item.
+  final bool loggedIn;
+  final VoidCallback? onLogin;
+
   const AccountContent({
     super.key,
     required this.isContentFocused,
     required this.selectedContentIndex,
     required this.userInfo,
     required this.onLogout,
+    this.loggedIn = true,
+    this.onLogin,
   });
 
   String _getContributionLevel(BuildContext context, String? contribution) {
@@ -58,6 +65,9 @@ class AccountContent extends StatelessWidget {
     final theme = Theme.of(context);
     final hasExtendedInfo =
         userInfo != null && userInfo!['requests_today'] != null;
+
+    // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "Entry Point Consistency"
+    if (!loggedIn) return _buildLoginPrompt(context, theme);
 
     if (userInfo == null) {
       return const Center(child: CircularProgressIndicator());
@@ -152,6 +162,49 @@ class AccountContent extends StatelessWidget {
           ),
           SizedBox(width: 8.r),
           _buildLogoutButton(context, theme),
+        ],
+      ),
+    );
+  }
+
+  /// Shown instead of the account card when only RomM is connected: one
+  /// sentence on why ScreenScraper is optional and a single selectable
+  /// login action at content index 0.
+  Widget _buildLoginPrompt(BuildContext context, ThemeData theme) {
+    final selected = isContentFocused && selectedContentIndex == 0;
+    return Padding(
+      padding: EdgeInsets.all(16.r),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            AppLocale.scraperScreenscraperOptional.getString(context),
+            style: TextStyle(
+              fontSize: 12.r,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+              height: 1.5,
+            ),
+          ),
+          SizedBox(height: 16.r),
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(8.r),
+              border: Border.all(
+                color: selected
+                    ? theme.colorScheme.primary
+                    : Colors.transparent,
+                width: 2.r,
+              ),
+            ),
+            child: TextButton.icon(
+              onPressed: onLogin,
+              icon: Icon(Symbols.login_rounded, size: 18.r),
+              label: Text(
+                AppLocale.scraperLoginToScreenscraper.getString(context),
+                style: TextStyle(fontSize: 12.r),
+              ),
+            ),
+          ),
         ],
       ),
     );

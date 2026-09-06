@@ -1426,6 +1426,10 @@ mixin AppLocale {
       'scrape_bulk_no_source_available';
   static const String screenscraperDevCredentialsMissing =
       'screenscraper_dev_credentials_missing';
+  static const String scraperScreenscraperOptional =
+      'scraper_screenscraper_optional';
+  static const String scraperLoginToScreenscraper =
+      'scraper_login_to_screenscraper';
 
   // RomM pairing-code mode (SPEC-0007)
   static const String rommAuthModePairCode = 'romm_auth_mode_pair_code';

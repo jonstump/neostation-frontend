@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/romm_provider.dart';
 import '../screens/scraper_screen/new_scraper_options_screen.dart';
 import '../screens/scraper_screen/scraper_login_screen.dart';
 import '../services/screenscraper_service.dart';
+import '../utils/scraper_entry_gate.dart';
 
 class ScraperContent extends StatefulWidget {
   const ScraperContent({super.key});
@@ -13,6 +16,10 @@ class ScraperContent extends StatefulWidget {
 class _ScraperContentState extends State<ScraperContent> {
   bool _hasCredentials = false;
   bool _isLoading = true;
+
+  /// Set when a RomM-only user asks for the ScreenScraper login from the
+  /// Account pane; cleared on success or when they back out.
+  bool _loginRequested = false;
 
   @override
   void initState() {
@@ -33,6 +40,7 @@ class _ScraperContentState extends State<ScraperContent> {
   void _onLoginSuccess() {
     setState(() {
       _hasCredentials = true;
+      _loginRequested = false;
     });
   }
 
@@ -48,10 +56,30 @@ class _ScraperContentState extends State<ScraperContent> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    if (_hasCredentials) {
-      return NewScraperOptionsScreen(onLogout: _onLogout);
-    } else {
-      return ScraperLoginScreen(onLoginSuccess: _onLoginSuccess);
+    // A connected RomM server is a scrape source on its own, so the options
+    // (and the bulk scrape) must be reachable without ScreenScraper.
+    // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "Entry Point Consistency"
+    final rommConnected = context.watch<RommProvider>().isConnected;
+    final entry = scraperEntryFor(
+      hasScreenscraperCredentials: _hasCredentials,
+      rommConnected: rommConnected,
+      loginRequested: _loginRequested,
+    );
+
+    switch (entry) {
+      case ScraperEntry.options:
+        return NewScraperOptionsScreen(
+          onLogout: _onLogout,
+          screenScraperLoggedIn: _hasCredentials,
+          onLoginRequested: () => setState(() => _loginRequested = true),
+        );
+      case ScraperEntry.login:
+        return ScraperLoginScreen(
+          onLoginSuccess: _onLoginSuccess,
+          onCancel: rommConnected
+              ? () => setState(() => _loginRequested = false)
+              : null,
+        );
     }
   }
 }

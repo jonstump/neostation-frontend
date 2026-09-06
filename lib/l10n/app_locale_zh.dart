@@ -1241,4 +1241,7 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.rommScanQrNotPairingCode: '这不是 RomM 配对码',
   AppLocale.rommScanQrCameraDenied: '摄像头权限被拒绝，请改为手动输入配对码',
   AppLocale.rommScanQrCameraUnavailable: '没有可用的摄像头，请改为手动输入配对码',
+  AppLocale.scraperScreenscraperOptional:
+      '已连接 RomM，抓取时会优先使用。登录 ScreenScraper 可将其作为备用来源。',
+  AppLocale.scraperLoginToScreenscraper: '登录 ScreenScraper',
 };

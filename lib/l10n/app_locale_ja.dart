@@ -1289,4 +1289,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommScanQrNotPairingCode: 'これは RomM のペアリングコードではありません',
   AppLocale.rommScanQrCameraDenied: 'カメラの使用が拒否されました。代わりにコードを入力してください',
   AppLocale.rommScanQrCameraUnavailable: 'カメラが利用できません。代わりにコードを入力してください',
+  AppLocale.scraperScreenscraperOptional:
+      'RomM に接続済みで、スクレイピングでは最初に使われます。ScreenScraper にログインすると予備のソースとして追加できます。',
+  AppLocale.scraperLoginToScreenscraper: 'ScreenScraper にログイン',
 };
