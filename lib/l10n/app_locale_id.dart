@@ -1402,7 +1402,7 @@ const Map<String, dynamic> appLocaleId = {
       'Masuk ke ScreenScraper atau hubungkan RomM sebelum memulai scraping',
   AppLocale.screenscraperDevCredentialsMissing:
       'Build ini tidak memiliki kredensial pengembang ScreenScraper, sehingga login dan scraping ScreenScraper tidak tersedia.',
-  AppLocale.rommAuthModePairCode: 'Kode penyandingan',
+  AppLocale.rommAuthModePairCode: 'Sandingkan',
   AppLocale.rommPairCodeLabel: 'Kode penyandingan',
   AppLocale.rommPairCodePlaceholder: 'XXXX-XXXX',
   AppLocale.rommPairCodeHint:

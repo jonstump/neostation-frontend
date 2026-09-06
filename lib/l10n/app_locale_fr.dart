@@ -1449,7 +1449,7 @@ const Map<String, dynamic> appLocaleFr = {
       'Connectez-vous à ScreenScraper ou connectez RomM avant de lancer le scraping',
   AppLocale.screenscraperDevCredentialsMissing:
       'Cette version ne contient pas d’identifiants développeur ScreenScraper ; la connexion et le scraping ScreenScraper sont indisponibles.',
-  AppLocale.rommAuthModePairCode: 'Code d’appairage',
+  AppLocale.rommAuthModePairCode: 'Appairage',
   AppLocale.rommPairCodeLabel: 'Code d’appairage',
   AppLocale.rommPairCodePlaceholder: 'XXXX-XXXX',
   AppLocale.rommPairCodeHint:

@@ -306,9 +306,12 @@ class _RommConnectContentState extends State<RommConnectContent>
         .read<SqliteConfigProvider>()
         .updateActiveSyncProvider;
     final serverUrl = _urlController.text.trim();
-    final useApiKey = _authMode == RommAuthMode.apiKey;
+    // Captured too: the D-pad can move the switch while the request is out,
+    // and the error text must describe the mode that made the request.
+    final mode = _authMode;
+    final useApiKey = mode == RommAuthMode.apiKey;
     // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Pairing Mode On The Connect Screen"
-    final error = _authMode == RommAuthMode.pairCode
+    final error = mode == RommAuthMode.pairCode
         // The code is good for about a minute and one use, so it goes to the
         // server the moment Connect is pressed; the provider exchanges it
         // and then connects through the API-key path with the token.
@@ -328,7 +331,7 @@ class _RommConnectContentState extends State<RommConnectContent>
       // A pairing failure the provider could classify gets its own sentence;
       // anything else (network, TLS, verification) reads as it does for the
       // other modes.
-      final pairKey = _authMode == RommAuthMode.pairCode
+      final pairKey = mode == RommAuthMode.pairCode
           ? rommPairErrorKey(provider.lastErrorKind)
           : null;
       AppNotification.showNotification(
