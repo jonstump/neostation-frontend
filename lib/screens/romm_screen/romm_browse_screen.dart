@@ -257,6 +257,10 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _gamepadNav.initialize();
+      // The search navigator needs its input subscription too; it stays
+      // inert until its modal layer is pushed and activated.
+      // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "In-Platform Search Field"
+      _searchNav.initialize();
       GamepadNavigationManager.pushLayer(
         'romm_browse_screen',
         onActivate: () => _gamepadNav.activate(),
@@ -342,6 +346,9 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   /// otherwise the download starts.
   // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Link on Already Downloaded"
   Future<void> _confirmRom(RommRom rom) async {
+    // Reachable by touch while the search field holds the modal layer; the
+    // dialog this opens must land above the grid, not under the field.
+    _leaveSearchField();
     final active = _rommProvider.downloadFor(rom.id);
     if (active != null && active.status == RommDownloadStatus.downloading) {
       _rommProvider.cancelDownload(rom.id);
@@ -460,6 +467,9 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   ///
   /// The source menu has no source to sync, so Y does nothing there.
   Future<void> _syncFocusedSource() async {
+    // Reachable by touch while the search field holds the modal layer; the
+    // dialog this opens must land above the grid, not under the field.
+    _leaveSearchField();
     final sync = _rommProvider.bulkSync;
     if (sync.isRunning) {
       sync.cancel();
