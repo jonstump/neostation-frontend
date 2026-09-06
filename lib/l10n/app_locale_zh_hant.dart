@@ -1223,4 +1223,6 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.scrapeSummaryFromScreenscraper: '來自 ScreenScraper：{count}',
   AppLocale.scrapeBulkRommOnlyStarted: '僅從 RomM 擷取；尚未設定 ScreenScraper',
   AppLocale.scrapeBulkNoSourceAvailable: '開始擷取前請先登入 ScreenScraper 或連線 RomM',
+  AppLocale.screenscraperDevCredentialsMissing:
+      '此版本未包含 ScreenScraper 開發者憑證，因此無法登入 ScreenScraper 或進行抓取。',
 };

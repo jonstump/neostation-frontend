@@ -1400,4 +1400,6 @@ const Map<String, dynamic> appLocaleId = {
       'Scraping hanya dari RomM; ScreenScraper belum disiapkan',
   AppLocale.scrapeBulkNoSourceAvailable:
       'Masuk ke ScreenScraper atau hubungkan RomM sebelum memulai scraping',
+  AppLocale.screenscraperDevCredentialsMissing:
+      'Build ini tidak memiliki kredensial pengembang ScreenScraper, sehingga login dan scraping ScreenScraper tidak tersedia.',
 };

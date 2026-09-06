@@ -1222,4 +1222,6 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.scrapeSummaryFromScreenscraper: '来自 ScreenScraper：{count}',
   AppLocale.scrapeBulkRommOnlyStarted: '仅从 RomM 抓取；尚未设置 ScreenScraper',
   AppLocale.scrapeBulkNoSourceAvailable: '开始抓取前请先登录 ScreenScraper 或连接 RomM',
+  AppLocale.screenscraperDevCredentialsMissing:
+      '此版本未包含 ScreenScraper 开发者凭据，因此无法登录 ScreenScraper 或进行抓取。',
 };

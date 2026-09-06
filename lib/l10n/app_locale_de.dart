@@ -1443,4 +1443,6 @@ const Map<String, dynamic> appLocaleDe = {
       'Scraping nur über RomM; ScreenScraper ist nicht eingerichtet',
   AppLocale.scrapeBulkNoSourceAvailable:
       'Bitte bei ScreenScraper anmelden oder RomM verbinden, bevor das Scraping gestartet wird',
+  AppLocale.screenscraperDevCredentialsMissing:
+      'Dieser Build enthält keine ScreenScraper-Entwicklerzugangsdaten; ScreenScraper-Anmeldung und Scraping sind nicht verfügbar.',
 };

@@ -1278,4 +1278,6 @@ const Map<String, dynamic> appLocaleKo = {
       'RomM에서만 스크래핑합니다. ScreenScraper가 설정되지 않았습니다',
   AppLocale.scrapeBulkNoSourceAvailable:
       '스크래핑을 시작하기 전에 ScreenScraper에 로그인하거나 RomM에 연결하세요',
+  AppLocale.screenscraperDevCredentialsMissing:
+      '이 빌드에는 ScreenScraper 개발자 자격 증명이 없어 ScreenScraper 로그인과 스크래핑을 사용할 수 없습니다.',
 };
