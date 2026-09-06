@@ -1292,4 +1292,10 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.scraperScreenscraperOptional:
       'RomM に接続済みで、スクレイピングでは最初に使われます。ScreenScraper にログインすると予備のソースとして追加できます。',
   AppLocale.scraperLoginToScreenscraper: 'ScreenScraper にログイン',
+  AppLocale.rommSearchHint: 'このプラットフォームを検索',
+  AppLocale.rommSearchCollectionHint: 'このコレクションを検索',
+  AppLocale.rommSearchResultCount: '{count}件の結果',
+  AppLocale.rommSearchResultCountOne: '1件の結果',
+  AppLocale.rommSearchResultCountMore: '{count}件以上の結果',
+  AppLocale.rommSearchNoResults: '「{term}」に一致する結果はありません',
 };

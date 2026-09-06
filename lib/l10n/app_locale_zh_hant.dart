@@ -1245,4 +1245,10 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.scraperScreenscraperOptional:
       '已連接 RomM，抓取時會優先使用。登入 ScreenScraper 可將其作為備用來源。',
   AppLocale.scraperLoginToScreenscraper: '登入 ScreenScraper',
+  AppLocale.rommSearchHint: '搜尋此平台',
+  AppLocale.rommSearchCollectionHint: '搜尋此收藏集',
+  AppLocale.rommSearchResultCount: '{count} 個結果',
+  AppLocale.rommSearchResultCountOne: '1 個結果',
+  AppLocale.rommSearchResultCountMore: '{count}+ 個結果',
+  AppLocale.rommSearchNoResults: '沒有與「{term}」相符的結果',
 };

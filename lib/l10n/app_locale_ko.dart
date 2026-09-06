@@ -1301,4 +1301,10 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.scraperScreenscraperOptional:
       'RomM이 연결되어 스크래핑에 먼저 사용됩니다. ScreenScraper에 로그인하면 대체 소스로 추가됩니다.',
   AppLocale.scraperLoginToScreenscraper: 'ScreenScraper 로그인',
+  AppLocale.rommSearchHint: '이 플랫폼에서 검색',
+  AppLocale.rommSearchCollectionHint: '이 컬렉션에서 검색',
+  AppLocale.rommSearchResultCount: '결과 {count}개',
+  AppLocale.rommSearchResultCountOne: '결과 1개',
+  AppLocale.rommSearchResultCountMore: '결과 {count}개 이상',
+  AppLocale.rommSearchNoResults: '"{term}"에 대한 결과 없음',
 };

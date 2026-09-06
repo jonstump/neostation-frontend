@@ -1476,4 +1476,10 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.scraperScreenscraperOptional:
       'RomM est connecté et utilisé en premier pour le scraping. Connectez-vous à ScreenScraper pour l’ajouter comme source de secours.',
   AppLocale.scraperLoginToScreenscraper: 'Se connecter à ScreenScraper',
+  AppLocale.rommSearchHint: 'Rechercher dans cette plateforme',
+  AppLocale.rommSearchCollectionHint: 'Rechercher dans cette collection',
+  AppLocale.rommSearchResultCount: '{count} résultats',
+  AppLocale.rommSearchResultCountOne: '1 résultat',
+  AppLocale.rommSearchResultCountMore: '{count}+ résultats',
+  AppLocale.rommSearchNoResults: 'Aucun résultat pour {term}',
 };
