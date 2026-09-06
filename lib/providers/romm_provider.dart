@@ -2128,6 +2128,31 @@ class RommProvider extends ChangeNotifier {
     }
     if (target == null && source == null) return;
 
+    // A synced collection shows up in NeoStation the moment the plan is
+    // approved, holding what is already local, rather than only after the
+    // whole queue has drained: the link pass runs during enumeration, so
+    // every local copy is resolvable by then, and the downloads join after
+    // the settle. Fire-and-forget so the transfers start at once; awaited
+    // before the outcome is reported so the summary is this sync's.
+    // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Triggered By The Collection Sync"
+    Future<void>? mirrorOnConfirm;
+    RommBulkSyncConfirm? confirmAndMirror = confirm;
+    if (source != null && confirm != null) {
+      final collectionToMirror = source;
+      confirmAndMirror = (plan) async {
+        final approved = await confirm(plan);
+        if (approved) {
+          _pendingCollectionMirrors[collectionToMirror.id] =
+              _PendingCollectionMirror(
+                collection: collectionToMirror,
+                romFolders: romFolders,
+              );
+          mirrorOnConfirm = _mirrorCollection(collectionToMirror, romFolders);
+        }
+        return approved;
+      };
+    }
+
     await bulkSync.run(
       sourceLabel: target?.name ?? source?.name ?? '',
       fetchPage: ({required int limit, required int offset}) =>
@@ -2160,7 +2185,7 @@ class RommProvider extends ChangeNotifier {
       download: (rom) =>
           downloadRom(rom, romFolders: romFolders, fileProvider: fileProvider),
       cancelDownload: cancelDownload,
-      confirm: confirm,
+      confirm: confirmAndMirror,
       destination: syncDestinationProbe(romFolders),
     );
     // The queue's downloads each refreshed the token as they went; persist
@@ -2174,11 +2199,20 @@ class RommProvider extends ChangeNotifier {
     // that did complete join after the settle. Platform syncs never mirror.
     // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Triggered By The Collection Sync"
     if (source != null && !bulkSync.declined && !bulkSync.isRunning) {
-      _pendingCollectionMirrors[source.id] = _PendingCollectionMirror(
-        collection: source,
-        romFolders: romFolders,
-      );
-      await _mirrorCollection(source, romFolders);
+      final early = mirrorOnConfirm;
+      if (early != null) {
+        // Already created on approval; make sure it has finished so the
+        // outcome names this sync's numbers.
+        await early;
+      } else {
+        // No plan dialog ran (nothing to download, or no confirm callback),
+        // so this is the first chance to mirror.
+        _pendingCollectionMirrors[source.id] = _PendingCollectionMirror(
+          collection: source,
+          romFolders: romFolders,
+        );
+        await _mirrorCollection(source, romFolders);
+      }
       // With no download awaiting a settle (all local, or every transfer
       // failed or was cancelled) this run already saw everything; nothing
       // is left for a later settle to add.
