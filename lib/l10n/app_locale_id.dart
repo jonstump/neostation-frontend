@@ -1428,4 +1428,10 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.scraperScreenscraperOptional:
       'RomM terhubung dan digunakan lebih dulu untuk scraping. Masuk ke ScreenScraper untuk menambahkannya sebagai sumber cadangan.',
   AppLocale.scraperLoginToScreenscraper: 'Masuk ke ScreenScraper',
+  AppLocale.rommSearchHint: 'Cari di platform ini',
+  AppLocale.rommSearchCollectionHint: 'Cari di koleksi ini',
+  AppLocale.rommSearchResultCount: '{count} hasil',
+  AppLocale.rommSearchResultCountOne: '1 hasil',
+  AppLocale.rommSearchResultCountMore: '{count}+ hasil',
+  AppLocale.rommSearchNoResults: 'Tidak ada hasil untuk {term}',
 };

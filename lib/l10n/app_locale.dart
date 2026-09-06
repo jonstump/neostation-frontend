@@ -1452,6 +1452,15 @@ mixin AppLocale {
   static const String rommScanQrCameraUnavailable =
       'romm_scan_qr_camera_unavailable';
 
+  // RomM in-platform search (SPEC-0008 REQ "In-Platform Search Field")
+  static const String rommSearchHint = 'romm_search_hint';
+  static const String rommSearchCollectionHint = 'romm_search_collection_hint';
+  static const String rommSearchResultCount = 'romm_search_result_count';
+  static const String rommSearchResultCountOne = 'romm_search_result_count_one';
+  static const String rommSearchResultCountMore =
+      'romm_search_result_count_more';
+  static const String rommSearchNoResults = 'romm_search_no_results';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================

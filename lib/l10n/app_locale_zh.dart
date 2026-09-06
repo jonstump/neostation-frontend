@@ -1244,4 +1244,10 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.scraperScreenscraperOptional:
       '已连接 RomM，抓取时会优先使用。登录 ScreenScraper 可将其作为备用来源。',
   AppLocale.scraperLoginToScreenscraper: '登录 ScreenScraper',
+  AppLocale.rommSearchHint: '搜索此平台',
+  AppLocale.rommSearchCollectionHint: '搜索此收藏集',
+  AppLocale.rommSearchResultCount: '{count} 个结果',
+  AppLocale.rommSearchResultCountOne: '1 个结果',
+  AppLocale.rommSearchResultCountMore: '{count}+ 个结果',
+  AppLocale.rommSearchNoResults: '没有与“{term}”匹配的结果',
 };

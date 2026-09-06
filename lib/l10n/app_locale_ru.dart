@@ -1429,4 +1429,10 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.scraperScreenscraperOptional:
       'RomM подключён и используется для скрапинга в первую очередь. Войдите в ScreenScraper, чтобы добавить его как резервный источник.',
   AppLocale.scraperLoginToScreenscraper: 'Войти в ScreenScraper',
+  AppLocale.rommSearchHint: 'Поиск по этой платформе',
+  AppLocale.rommSearchCollectionHint: 'Поиск по этой коллекции',
+  AppLocale.rommSearchResultCount: 'Результатов: {count}',
+  AppLocale.rommSearchResultCountOne: '1 результат',
+  AppLocale.rommSearchResultCountMore: 'Результатов: {count}+',
+  AppLocale.rommSearchNoResults: 'Ничего не найдено по запросу {term}',
 };

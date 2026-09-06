@@ -42,6 +42,10 @@ class RommRomGrid extends StatefulWidget {
   final ValueChanged<RommRom> onCancel;
   final VoidCallback onBack;
 
+  /// Up from the first row, when the host has something above the grid to
+  /// move to (the search field). Null keeps the wrap to the last row.
+  final VoidCallback? onExitTop;
+
   /// X — cycles grid ↔ list.
   final VoidCallback onToggleView;
 
@@ -71,6 +75,7 @@ class RommRomGrid extends StatefulWidget {
     required this.onConfirm,
     required this.onCancel,
     required this.onBack,
+    this.onExitTop,
     required this.onToggleView,
     required this.onSyncAll,
     required this.footerBuilder,
@@ -445,6 +450,15 @@ class _RommRomGridState extends State<RommRomGrid> {
         _selectedIndex + delta >= n &&
         widget.provider.romsHasMore) {
       if (!widget.provider.loadingRoms) widget.provider.loadMoreRoms();
+      return;
+    }
+
+    // Up off the first row hands the cursor to whatever the host draws above
+    // the grid instead of wrapping to the bottom.
+    // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "In-Platform Search Field"
+    final exitTop = widget.onExitTop;
+    if (delta < 0 && _selectedIndex < c && exitTop != null) {
+      exitTop();
       return;
     }
 
