@@ -157,7 +157,7 @@ class RommRomCardState extends State<RommRomCard> {
       builder: (context, constraints) => _buildCover(
         theme,
         coverUrl,
-        logicalWidth: constraints.hasBoundedWidth ? constraints.maxWidth : 0,
+        logicalWidth: constraints.hasBoundedWidth ? constraints.maxWidth : null,
       ),
     );
   }
@@ -451,28 +451,40 @@ class RommRomCardState extends State<RommRomCard> {
   Widget _buildCover(
     ThemeData theme,
     String? coverUrl, {
-    required double logicalWidth,
+    required double? logicalWidth,
   }) {
     if (coverUrl == null) {
       return _coverPlaceholder(theme);
     }
-    return Image.network(
-      coverUrl,
-      fit: BoxFit.cover,
-      cacheWidth: coverDecodeWidth(
-        logicalWidth: logicalWidth,
-        devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
-      ),
-      gaplessPlayback: true,
-      headers: widget.provider.service.imageHeadersFor(coverUrl),
-      errorBuilder: (_, _, _) {
-        _tryNextCover();
-        return _coverPlaceholder(theme);
-      },
-      loadingBuilder: (context, child, progress) {
-        if (progress == null) return child;
-        return _coverPlaceholder(theme);
-      },
+    // The placeholder sits *under* the image rather than in a loadingBuilder:
+    // a loadingBuilder replaces the retained frame with the placeholder for
+    // the whole download, which is exactly the flash gaplessPlayback exists
+    // to avoid. An image with nothing decoded yet paints nothing, so the
+    // placeholder shows through until the first frame and the previous cover
+    // stays on top while a recycled tile re-decodes.
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        _coverPlaceholder(theme),
+        Image.network(
+          coverUrl,
+          fit: BoxFit.cover,
+          // An unknown width (unbounded parent) skips the hint rather than
+          // decoding to a 1-pixel bitmap.
+          cacheWidth: logicalWidth == null
+              ? null
+              : coverDecodeWidth(
+                  logicalWidth: logicalWidth,
+                  devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
+                ),
+          gaplessPlayback: true,
+          headers: widget.provider.service.imageHeadersFor(coverUrl),
+          errorBuilder: (_, _, _) {
+            _tryNextCover();
+            return _coverPlaceholder(theme);
+          },
+        ),
+      ],
     );
   }
 
