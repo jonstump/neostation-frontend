@@ -156,6 +156,84 @@ class SqliteMigrations {
     'sort_screenshots_by_content_enable': 'INTEGER DEFAULT 0',
   };
 
+  /// CREATE for the offline-first RomM library catalog (v165).
+  ///
+  /// A cache of the server's ROM list, keyed on `(server_url, romm_rom_id)` so
+  /// two servers can be catalogued side by side and a re-walk of the same
+  /// server updates rows in place. Deliberately *not* part of the local
+  /// library: `user_roms` is the user's truth and `app_romm_rom_map` is the
+  /// link the user's saves follow, while every row here is replaceable — the
+  /// whole table is dropped on disconnect or a server change and rebuilt by
+  /// the next refresh.
+  ///
+  /// `seen_at` is stamped by every refresh that saw the ROM; a completed
+  /// platform walk deletes its rows stamped before the run, which is how a
+  /// ROM deleted on the server leaves the catalog.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Tables"
+  static const String createAppRommCatalogTableSql = '''
+    CREATE TABLE IF NOT EXISTS app_romm_catalog (
+      server_url TEXT NOT NULL,
+      romm_rom_id INTEGER NOT NULL,
+      platform_id INTEGER NOT NULL,
+      system_folder TEXT NOT NULL,
+      name TEXT NOT NULL,
+      fs_name TEXT NOT NULL,
+      fs_extension TEXT,
+      fs_size_bytes INTEGER,
+      has_multiple_files INTEGER NOT NULL DEFAULT 0,
+      path_cover_small TEXT,
+      path_cover_large TEXT,
+      url_cover TEXT,
+      ra_id INTEGER,
+      genres TEXT,
+      release_year TEXT,
+      server_updated_at TEXT,
+      seen_at TEXT NOT NULL,
+      PRIMARY KEY (server_url, romm_rom_id)
+    );
+  ''';
+
+  /// Per-system read index for [createAppRommCatalogTableSql] (v165).
+  ///
+  /// Every list build asks one question — "what does this server hold for this
+  /// system folder?" — so the index carries exactly that pair.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Database Operation Standards"
+  static const String createAppRommCatalogIndexSql = '''
+    CREATE INDEX IF NOT EXISTS idx_romm_catalog_system
+    ON app_romm_catalog(server_url, system_folder);
+  ''';
+
+  /// CREATE for the per-platform catalog ledger (v165).
+  ///
+  /// One row per RomM platform that resolved to a local system: how many ROMs
+  /// the last walk recorded and when it finished. `refreshed_at` is what the
+  /// settings "as of {time}" line reads and what the hourly guard compares
+  /// against; a platform whose walk failed keeps its previous stamp, so a
+  /// failure never reads as a fresh catalog.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Tables"
+  static const String createAppRommCatalogPlatformsTableSql = '''
+    CREATE TABLE IF NOT EXISTS app_romm_catalog_platforms (
+      server_url TEXT NOT NULL,
+      platform_id INTEGER NOT NULL,
+      system_folder TEXT NOT NULL,
+      name TEXT NOT NULL,
+      rom_count INTEGER NOT NULL DEFAULT 0,
+      refreshed_at TEXT,
+      PRIMARY KEY (server_url, platform_id)
+    );
+  ''';
+
+  /// The `user_config` columns v165 adds, with their SQLite types.
+  ///
+  /// The unified library is opt-in (`romm_show_library` defaults to off), so
+  /// an upgraded device behaves exactly as before until the user asks for it.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Database Operation Standards"
+  static const Map<String, String> rommLibraryConfigColumns = {
+    'romm_show_library': 'INTEGER DEFAULT 0',
+    'romm_library_default_scope': "TEXT DEFAULT 'all'",
+    'romm_cover_cache_mb': 'INTEGER DEFAULT 200',
+  };
+
   /// Lookup index for [createAppRommPlaySessionsTableSql] (v111).
   static const String createAppRommPlaySessionsIndexSql = '''
     CREATE INDEX IF NOT EXISTS idx_romm_play_sessions_rom_id
@@ -731,6 +809,9 @@ class SqliteMigrations {
         break;
       case 164:
         await _migrateToVersion164(db);
+        break;
+      case 165:
+        await _migrateToVersion165(db);
         break;
       default:
         _log.w('No migration defined for version $version');
@@ -7385,6 +7466,65 @@ class SqliteMigrations {
       _log.i('Migration v164 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v164: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v165: the offline-first RomM library catalog.
+  ///
+  /// Everything the unified library persists lands together, so a device
+  /// reaches all of it or none of it:
+  ///
+  /// * `app_romm_catalog` — the cached server ROM list
+  ///   ([createAppRommCatalogTableSql]) and its per-system read index
+  ///   ([createAppRommCatalogIndexSql]).
+  /// * `app_romm_catalog_platforms` — the per-platform ledger
+  ///   ([createAppRommCatalogPlatformsTableSql]).
+  /// * `user_config.romm_show_library`, `.romm_library_default_scope` and
+  ///   `.romm_cover_cache_mb` ([rommLibraryConfigColumns]) — the feature
+  ///   toggle, the default list scope and the cover-cache cap.
+  ///
+  /// **Numbered 165, not 164.** 164 is claimed by the in-flight RomM
+  /// scope-groups branch, exactly as v163 stepped over the firmware branch's
+  /// 162: two lineages cannot both own a number, because a device that ran the
+  /// other branch's 164 is already past it and a `case 164` here would never
+  /// fire for it.
+  ///
+  /// Every statement is `IF NOT EXISTS` or guarded by `PRAGMA table_info`, so
+  /// re-running is a no-op and a database that already carries some of the
+  /// columns gains only what is missing. Fresh installs get the same schema
+  /// from the CREATE statements in `SqliteService`.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Tables"
+  static Future<void> _migrateToVersion165(Database db) async {
+    _log.i('Migration v165: Creating the RomM library catalog schema');
+    try {
+      db.execute(createAppRommCatalogTableSql);
+      db.execute(createAppRommCatalogPlatformsTableSql);
+      db.execute(createAppRommCatalogIndexSql);
+
+      final configColumns = db
+          .select('PRAGMA table_info(user_config)')
+          .map((c) => c['name'].toString())
+          .toList();
+      if (configColumns.isEmpty) {
+        _log.i('Table user_config absent - nothing to migrate');
+      } else {
+        for (final entry in rommLibraryConfigColumns.entries) {
+          if (configColumns.contains(entry.key)) {
+            _log.i('Column ${entry.key} already exists');
+            continue;
+          }
+          db.execute(
+            'ALTER TABLE user_config ADD COLUMN ${entry.key} ${entry.value}',
+          );
+          _log.i('Column ${entry.key} added via v165');
+        }
+      }
+
+      _log.i('Migration v165 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v165: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

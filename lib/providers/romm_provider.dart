@@ -55,6 +55,15 @@ class RommGalleryException implements Exception {
 }
 
 /// Per-ROM download lifecycle state.
+/// Whether the RomM server can currently be reached.
+///
+/// Not a connectivity API: it is what the last request said. [unknown] is the
+/// honest answer on a cold start with a saved connection — nothing has been
+/// asked of the server yet, and defaulting to `offline` there would open every
+/// list in the downloaded-only scope for a user who is perfectly online.
+// Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Reachability"
+enum RommReachability { online, offline, unknown }
+
 enum RommDownloadStatus { downloading, completed, failed, cancelled }
 
 /// Why a download could not proceed/complete (UI maps these to localized text).
@@ -556,6 +565,147 @@ class RommProvider extends ChangeNotifier {
     'super-famicom': 'sfc',
   };
 
+  // ── Reachability ────────────────────────────────────────────────────────────
+
+  /// First re-probe after going offline.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Reachability"
+  static const Duration firstReprobeDelay = Duration(seconds: 60);
+
+  /// Ceiling the doubling re-probe delay stops at.
+  static const Duration maxReprobeDelay = Duration(minutes: 5);
+
+  RommReachability _reachability = RommReachability.unknown;
+  Timer? _reprobeTimer;
+  Duration _reprobeDelay = firstReprobeDelay;
+  bool _transportHooksInstalled = false;
+
+  /// How many times the play-session outbox drain has been triggered.
+  ///
+  /// A test seam: the drain itself needs a server and a database, while what
+  /// the connect and reconnect paths owe is the *trigger*.
+  @visibleForTesting
+  int playtimeFlushes = 0;
+
+  /// Run once each time the server comes back after being unreachable.
+  ///
+  /// The provider knows *that* the server returned; what to do about it — walk
+  /// the catalog again, drain an outbox — belongs to the layers above, so they
+  /// install themselves here rather than this provider reaching up to them.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Reachability"
+  Future<void> Function()? onReconnected;
+
+  /// Whether the server can currently be reached. See [RommReachability].
+  RommReachability get reachability => _reachability;
+
+  /// The delay before the next re-probe while offline, for tests and for the
+  /// settings line that explains the wait.
+  @visibleForTesting
+  Duration get reprobeDelay => _reprobeDelay;
+
+  /// Points the service's transport hooks at this provider.
+  ///
+  /// Idempotent, and called from every entry point that can precede a request,
+  /// because the service instance outlives any single connection.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Reachability"
+  void installTransportHooks() {
+    if (_transportHooksInstalled) return;
+    _transportHooksInstalled = true;
+    service.onTransportSuccess = _onTransportSuccess;
+    service.onTransportFailure = _onTransportFailure;
+  }
+
+  void _onTransportSuccess() => _setReachability(RommReachability.online);
+
+  /// A request that never reached the server. Anything else — a 404, a 500,
+  /// a refused credential — proves the server *is* there and is not this.
+  void _onTransportFailure(Object error) {
+    if (error is SocketException ||
+        error is TimeoutException ||
+        error is HandshakeException) {
+      _setReachability(RommReachability.offline);
+    }
+  }
+
+  /// One transition: one log line, one [notifyListeners], and the timer state
+  /// that goes with the new value.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Reachability", REQ "Error Handling Standards"
+  void _setReachability(RommReachability next) {
+    if (_reachability == next) return;
+    final previous = _reachability;
+    _reachability = next;
+    _log.i(
+      'RomM reachability changed: from=${previous.name} to=${next.name} '
+      'url=$serverUrl',
+    );
+    if (next == RommReachability.offline) {
+      _scheduleReprobe(firstReprobeDelay);
+    } else {
+      _cancelReprobe();
+    }
+    notifyListeners();
+    // Only a genuine return counts as a reconnect: the first successful call
+    // of a session moves `unknown` to `online` and has nothing to catch up on.
+    if (next == RommReachability.online &&
+        previous == RommReachability.offline) {
+      _onServerReturned();
+    }
+  }
+
+  /// The catch-up when the server comes back: queued play sessions go out and
+  /// whoever registered [onReconnected] (the sync provider's catalog refresh)
+  /// is told. Fire-and-forget — nothing in the UI waits on it.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Reachability"
+  void _onServerReturned() {
+    _flushQueuedPlaytime();
+    final hook = onReconnected;
+    if (hook == null) return;
+    unawaited(
+      Future(hook).catchError((Object e) {
+        _log.w('RomM reconnect hook failed: $e');
+      }),
+    );
+  }
+
+  void _scheduleReprobe(Duration delay) {
+    _reprobeTimer?.cancel();
+    _reprobeDelay = delay;
+    _reprobeTimer = Timer(delay, () => unawaited(_reprobe()));
+  }
+
+  void _cancelReprobe() {
+    _reprobeTimer?.cancel();
+    _reprobeTimer = null;
+    _reprobeDelay = firstReprobeDelay;
+  }
+
+  /// One heartbeat while offline. The probe never throws; whether it reached
+  /// the server is reported through the transport hooks, so success flips the
+  /// state through the same path a normal request would. A failure doubles the
+  /// wait, up to [maxReprobeDelay].
+  // Governing: ADR-0010 (RomM heartbeat capability probe), SPEC-0010 REQ "Heartbeat Probe"
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Reachability"
+  Future<void> _reprobe() async {
+    _reprobeTimer = null;
+    if (!isConnected || serverUrl.isEmpty) return;
+    installTransportHooks();
+    await service.fetchHeartbeat();
+    if (_reachability == RommReachability.offline) {
+      _scheduleReprobe(_nextReprobeDelay(_reprobeDelay));
+    }
+  }
+
+  static Duration _nextReprobeDelay(Duration current) {
+    final doubled = current * 2;
+    return doubled > maxReprobeDelay ? maxReprobeDelay : doubled;
+  }
+
+  /// Runs the offline re-probe now rather than waiting out its timer.
+  @visibleForTesting
+  Future<void> reprobeNowForTesting() {
+    _reprobeTimer?.cancel();
+    return _reprobe();
+  }
+
   // ── Lifecycle / connection ──────────────────────────────────────────────────
 
   /// Loads any persisted credentials/tokens and configures the service.
@@ -587,6 +737,11 @@ class RommProvider extends ChangeNotifier {
       _pairedTokenName = config['token_name'] as String?;
       _pairedTokenExpiresAt = config['token_expires_at'] as DateTime?;
       _status = RommConnectionStatus.connected;
+      // A saved connection says nothing about the network: reachability stays
+      // unknown until something actually reaches the server.
+      // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Reachability"
+      _reachability = RommReachability.unknown;
+      installTransportHooks();
       notifyListeners();
       _flushQueuedPlaytime();
     } catch (e) {
@@ -689,6 +844,7 @@ class RommProvider extends ChangeNotifier {
     _serverUrl = _service.baseUrl;
     _username = _service.username;
     _status = RommConnectionStatus.connected;
+    installTransportHooks();
     notifyListeners();
     _flushQueuedPlaytime();
     return null;
@@ -802,6 +958,7 @@ class RommProvider extends ChangeNotifier {
   /// the catch-up that gets play from an offline stretch onto the server.
   /// Fire-and-forget: nothing in the UI waits on a statistic.
   void _flushQueuedPlaytime() {
+    playtimeFlushes++;
     if (!_service.playtimeSyncAvailable) return;
     unawaited(
       RommPlaytimeService.flushQueuedSessions(_service).catchError((Object e) {
@@ -843,6 +1000,10 @@ class RommProvider extends ChangeNotifier {
     _downloadedByRomId.clear();
     _localCopyByRomId.clear();
     _lastPersistedAccessToken = null;
+    // Nothing left to be reachable: stop the re-probe and forget the state.
+    // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Reachability"
+    _cancelReprobe();
+    _reachability = RommReachability.unknown;
     notifyListeners();
   }
 
@@ -3271,6 +3432,7 @@ class RommProvider extends ChangeNotifier {
   @override
   void dispose() {
     _settleTimer?.cancel();
+    _cancelReprobe();
     bulkSync
       ..cancel()
       ..dispose();

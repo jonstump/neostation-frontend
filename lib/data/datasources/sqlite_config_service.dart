@@ -290,6 +290,22 @@ class SqliteConfigService {
                 ) ??
                 1) ==
             1,
+        // The unified-library settings (SPEC-0019). Absent columns read as the
+        // migration defaults: feature off, `all` scope, 200 MB of covers.
+        // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Tables"
+        rommShowLibrary:
+            (int.tryParse(
+                  userConfig?['romm_show_library']?.toString() ?? '0',
+                ) ??
+                0) ==
+            1,
+        rommLibraryDefaultScope:
+            userConfig?['romm_library_default_scope']?.toString() ?? 'all',
+        rommCoverCacheMb:
+            int.tryParse(
+              userConfig?['romm_cover_cache_mb']?.toString() ?? '200',
+            ) ??
+            200,
       );
     } catch (e) {
       _log.e('Error applying configuration in loadConfig: $e');
@@ -357,6 +373,9 @@ class SqliteConfigService {
         raMatchOnStartup: config.raMatchOnStartup ? 1 : 0,
         subfolderViewAll: config.subfolderViewAll ? 1 : 0,
         rommUploadScreenshots: config.rommUploadScreenshots ? 1 : 0,
+        rommShowLibrary: config.rommShowLibrary ? 1 : 0,
+        rommLibraryDefaultScope: config.rommLibraryDefaultScope,
+        rommCoverCacheMb: config.rommCoverCacheMb,
       );
 
       await SqliteService.saveUserRomFolders(config.romFolders);

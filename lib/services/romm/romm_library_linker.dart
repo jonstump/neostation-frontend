@@ -3,30 +3,22 @@ import 'package:flutter/foundation.dart';
 import '../../models/database_game_model.dart';
 import '../../models/romm_platform.dart';
 import '../../models/romm_rom.dart';
-import '../../models/romm_rom_page.dart';
 import '../../models/system_model.dart';
 import '../../repositories/romm_save_map_repository.dart';
 import '../../utils/romm_local_matcher.dart';
 import '../logger_service.dart';
 import 'romm_paging.dart';
+import 'romm_platform_walk.dart';
 
-/// Lists the server's platforms (the ones with ROMs on them).
-typedef RommPlatformLister = Future<List<RommPlatform>> Function();
-
-/// Resolves a RomM platform to the local system its ROMs belong to, or null
-/// when this build has no system for it.
-typedef RommPlatformResolver =
-    Future<SystemModel?> Function(RommPlatform platform);
-
-/// One page of a platform's ROMs. Offset/limit paging only, like
-/// `RommPageFetcher`; the platform is bound per call because the pass walks
-/// several.
-typedef RommPlatformPageFetcher =
-    Future<RommRomPage> Function({
-      required int platformId,
-      required int limit,
-      required int offset,
-    });
+/// The server-facing halves of the pass now belong to the shared walk
+/// ([RommPlatformWalk]) — re-exported here so every existing caller keeps one
+/// import.
+export 'romm_platform_walk.dart'
+    show
+        RommPlatformLister,
+        RommPlatformPageFetcher,
+        RommPlatformResolver,
+        RommStopCheck;
 
 /// The local library index — the scanned games table, never the disk.
 typedef RommLocalLibraryLister = Future<List<DatabaseGameModel>> Function();
@@ -37,9 +29,6 @@ typedef RommRomIdIndexLoader = Future<RommRomIdIndex> Function();
 /// Insert-if-absent for a batch of links; returns the rows actually written.
 typedef RommMappingWriter =
     Future<int> Function(List<RommSaveMapEntry> entries);
-
-/// Polled between platforms and between pages; true ends the pass.
-typedef RommStopCheck = bool Function();
 
 /// A local file the pass refused to link because more than one RomM ROM
 /// claimed it.
@@ -209,7 +198,7 @@ class RommLibraryLinker {
   static final _defaultLog = LoggerService.instance;
 
   /// Rows per page — bulk sync's enumeration size, from the one definition
-  /// both walks read ([RommPaging]) so they cost the same.
+  /// every walk reads ([RommPaging]) so they cost the same.
   // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Connect-Time Link Pass"
   static const int pageSize = RommPaging.pageSize;
 
@@ -222,6 +211,9 @@ class RommLibraryLinker {
 
   /// Most conflicts given their own warning; the rest are counted.
   static const int _conflictLogLimit = 20;
+
+  /// How this pass names itself in the log.
+  static const String logLabel = 'RomM link pass';
 
   final RommPlatformLister _listPlatforms;
   final RommPlatformResolver _resolveSystem;
@@ -257,10 +249,16 @@ class RommLibraryLinker {
 
   static bool _neverStop() => false;
 
-  /// True while [run] is in progress.
+  /// True while a pass — standalone or driven by the catalog refresh — is in
+  /// progress.
   bool get isRunning => _running;
 
-  /// Runs one pass and returns what it did.
+  /// Runs one standalone pass and returns what it did.
+  ///
+  /// This is the pass on its own server walk: it lists the platforms, pages
+  /// them through [RommPlatformWalk] and consumes its own pages. When the
+  /// catalog refresh is driving instead, it walks once and hands the pages to
+  /// [beginStage]'s consumer — the same algorithm, one enumeration.
   ///
   /// Never overlaps with itself: a call while one is running returns an empty
   /// summary immediately (the provider guards this too; here it is the
@@ -272,270 +270,89 @@ class RommLibraryLinker {
   // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Concurrency Safety"
   Future<RommLinkPassSummary> run() async {
     if (_running) {
-      _log.w('RomM link pass skipped: a pass is already running');
+      _log.w('$logLabel skipped: a pass is already running');
       return const RommLinkPassSummary();
     }
-    _running = true;
-    final started = _clock();
-    try {
-      final summary = await _run(started);
+    final begun = await _begin();
+    final stage = begun.stage;
+    // Nothing unlinked: the standalone pass has no reason to touch the server
+    // at all. Under the catalog refresh the walk happens anyway — the catalog
+    // needs it — and only this stage is skipped.
+    if (stage == null) {
+      final summary = RommLinkPassSummary(
+        elapsed: _clock().difference(begun.started),
+      );
       _logSummary(summary);
       return summary;
-    } finally {
-      _running = false;
+    }
+    try {
+      final result = await walk().run(
+        onRom: stage.onRom,
+        onPlatformComplete: stage.onPlatformComplete,
+        onGroupComplete: stage.onGroupComplete,
+      );
+      return stage.finish(result);
+    } catch (_) {
+      stage.abandon();
+      rethrow;
     }
   }
 
-  Future<RommLinkPassSummary> _run(DateTime started) async {
+  /// The walk this pass would make on its own, wired to its own dependencies.
+  ///
+  /// Exposed so the catalog refresh can build the identical walk from the same
+  /// injected server access when it drives both consumers.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Refresh Shares The Walk"
+  RommPlatformWalk walk() => RommPlatformWalk(
+    listPlatforms: _listPlatforms,
+    resolveSystem: _resolveSystem,
+    fetchPage: _fetchPage,
+    shouldStop: _shouldStop,
+    logger: _log,
+    logLabel: logLabel,
+    wrapFailure: RommLinkPassException.new,
+  );
+
+  /// Opens a link stage for a walk somebody else drives.
+  ///
+  /// The stage is the pass's algorithm minus the paging: register
+  /// [RommLinkStage.onRom], [RommLinkStage.onPlatformComplete] and
+  /// [RommLinkStage.onGroupComplete] with a [RommPlatformWalk] and close it
+  /// with [RommLinkStage.finish]. Returns null — with one log line — when
+  /// there is nothing for it to do, either because every indexed game already
+  /// has a mapping row or because a pass is already running; the caller's walk
+  /// carries on regardless, which is the point: the catalog still has to be
+  /// refreshed on a fully linked library.
+  ///
+  /// Throws [RommLinkPassException] when the local library index cannot be
+  /// built, exactly as [run] does.
+  // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Connect-Time Link Pass"
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Refresh Shares The Walk"
+  Future<RommLinkStage?> beginStage() async => (await _begin()).stage;
+
+  /// [beginStage] with the start stamp the summary's elapsed time is measured
+  /// from, so exactly one clock reading opens a pass however it was entered.
+  Future<({DateTime started, RommLinkStage? stage})> _begin() async {
+    final started = _clock();
+    if (_running) {
+      _log.w('$logLabel skipped: a pass is already running');
+      return (started: started, stage: null);
+    }
+    _running = true;
     final _LocalIndex index;
     try {
       index = _LocalIndex.build(await _listGames(), await _loadRomIdIndex());
     } catch (e) {
+      _running = false;
       throw RommLinkPassException('local library index failed', e);
     }
     // Every game already has a row: nothing a server walk could add, so the
     // steady-state cost of a reconnect is one library read.
     if (index.unlinkedCount == 0) {
-      return RommLinkPassSummary(elapsed: _clock().difference(started));
+      _running = false;
+      return (started: started, stage: null);
     }
-
-    final List<RommPlatform> platforms;
-    try {
-      platforms = await _listPlatforms();
-    } catch (e) {
-      throw RommLinkPassException('platform enumeration failed', e);
-    }
-
-    // Group platforms by the local system they resolve to, in server order.
-    final groups = <String, _SystemGroup>{};
-    final unresolvedSlugs = <String>[];
-    for (final platform in platforms) {
-      final system = await _resolveOrThrow(platform);
-      if (system == null) {
-        unresolvedSlugs.add(platform.slug);
-        continue;
-      }
-      groups
-          .putIfAbsent(system.folderName, () => _SystemGroup(system))
-          .platforms
-          .add(platform);
-    }
-
-    var processed = 0, failures = 0, enumerated = 0;
-    var added = 0, alreadyPresent = 0, groupsSkipped = 0;
-    var stopped = false;
-    final ambiguities = <RommLinkAmbiguity>[];
-    final conflicts = <RommLinkConflict>[];
-    final linked = <String>[];
-
-    for (final group in groups.values) {
-      if (_shouldStop()) {
-        stopped = true;
-        break;
-      }
-      // Matches for this system: local file → the distinct ROMs claiming it.
-      final claims = <_LocalGame, Map<int, String>>{};
-      final aliases = _folderAliases(group.system);
-      var groupFailed = false;
-
-      for (final platform in group.platforms) {
-        if (_shouldStop()) {
-          stopped = true;
-          break;
-        }
-        final platformClaims = <_LocalGame, Map<int, String>>{};
-        final result = await _pagePlatform(platform, (rom) {
-          enumerated++;
-          for (final candidate in RommLocalMatcher.candidateNames(rom)) {
-            final key = RommLocalMatcher.normalizeName(candidate);
-            for (final alias in aliases) {
-              final game = index.lookup(alias, key);
-              if (game == null) continue;
-              platformClaims.putIfAbsent(game, () => {})[rom.id] = rom.fsName;
-            }
-          }
-        });
-        switch (result) {
-          case _PageResult.completed:
-            processed++;
-            for (final entry in platformClaims.entries) {
-              claims.putIfAbsent(entry.key, () => {}).addAll(entry.value);
-            }
-          case _PageResult.failed:
-            // A platform that threw part-way has not been fully seen, so its
-            // matches cannot be checked for ambiguity; contributing nothing
-            // is the only outcome that can't link the wrong ROM.
-            failures++;
-            groupFailed = true;
-          case _PageResult.stopped:
-            stopped = true;
-        }
-        if (stopped) break;
-      }
-      // A stop mid-group leaves the group unwritten: the ambiguity check needs
-      // every platform in it, and the contract is "no further rows".
-      if (stopped) break;
-      // Likewise a failed platform in a multi-platform group: a file the
-      // surviving platforms claim once may also be claimed by a ROM on the
-      // platform that threw, and a guess written now is permanent (rows are
-      // never overwritten). Skipping the whole group keeps the ambiguity
-      // check whole; the next connect retries it. A single-platform group
-      // that failed has nothing to write, so it is not counted here.
-      // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Ambiguous Matches Are Skipped"
-      if (groupFailed && group.platforms.length > 1) {
-        groupsSkipped++;
-        _log.w(
-          'RomM link pass skipped system "${group.system.folderName}": '
-          'a platform in its group failed, so its matches were not written',
-        );
-        continue;
-      }
-
-      final entries = <RommSaveMapEntry>[];
-      final entryGames = <_LocalGame>[];
-      for (final entry in claims.entries) {
-        final game = entry.key;
-        final roms = entry.value;
-        // A row that already exists is never touched, so whether the match is
-        // ambiguous is moot for it. A row pointing somewhere none of this
-        // pass's matches do is recorded, not corrected: the user's saves are
-        // attached to the id in the row, and swapping it silently would move
-        // them to a ROM the server may have renumbered underneath us — or,
-        // for a manual row, away from the ROM the user deliberately chose.
-        // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Existing Mappings Are Never Overwritten"
-        // Governing: ADR-0004 (manual link provenance), SPEC-0004 REQ "Manual Rows Are Never Replaced by Automatic Writers"
-        final existingRomId = game.existingRomId;
-        if (existingRomId != null) {
-          alreadyPresent++;
-          if (!roms.containsKey(existingRomId)) {
-            for (final matchedRomId in roms.keys.toList()..sort()) {
-              conflicts.add(
-                RommLinkConflict(
-                  filename: game.filename,
-                  systemFolder: game.systemFolder,
-                  existingRomId: existingRomId,
-                  existingSource: game.existingSource ?? RommLinkSource.auto,
-                  matchedRomId: matchedRomId,
-                ),
-              );
-            }
-          }
-          continue;
-        }
-        // Two ROMs claiming one file: guessing would attach the user's saves
-        // to the wrong server entry, so record both and write nothing.
-        // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Ambiguous Matches Are Skipped"
-        if (roms.length > 1) {
-          ambiguities.add(
-            RommLinkAmbiguity(
-              filename: game.filename,
-              systemFolder: game.systemFolder,
-              romIds: roms.keys.toList()..sort(),
-            ),
-          );
-          continue;
-        }
-        final romId = roms.keys.single;
-        entries.add((
-          romname: game.filename,
-          systemFolder: game.systemFolder,
-          rommRomId: romId,
-          fsName: roms[romId],
-        ));
-        entryGames.add(game);
-      }
-      if (entries.isEmpty) continue;
-
-      final inserted = await _putMappingsIfAbsent(entries);
-      added += inserted;
-      // An ignored insert means a row appeared between the index read and the
-      // write (a download finishing): already present, not a failure.
-      alreadyPresent += entries.length - inserted;
-      if (inserted > 0) {
-        // Which specific rows were ignored isn't reported; every candidate is
-        // invalidated, which is harmless — a game that was linked by a
-        // download meanwhile needs its badge refreshed just the same.
-        linked.addAll(entryGames.map((g) => g.romname));
-      }
-    }
-
-    return RommLinkPassSummary(
-      platformsProcessed: processed,
-      platformsUnresolved: unresolvedSlugs.length,
-      platformFailures: failures,
-      groupsSkipped: groupsSkipped,
-      romsEnumerated: enumerated,
-      rowsAdded: added,
-      rowsAlreadyPresent: alreadyPresent,
-      ambiguities: ambiguities,
-      conflicts: conflicts,
-      unresolvedSlugs: unresolvedSlugs,
-      stoppedEarly: stopped,
-      elapsed: _clock().difference(started),
-      linkedRomnames: linked,
-    );
-  }
-
-  /// [_resolveSystem] with its failure wrapped. The resolver reads this
-  /// build's system table; if that fails there is nothing to group by, and
-  /// the scheduler's contract is that a failed run surfaces as one
-  /// [RommLinkPassException], never a raw throw.
-  Future<SystemModel?> _resolveOrThrow(RommPlatform platform) async {
-    try {
-      return await _resolveSystem(platform);
-    } catch (e) {
-      throw RommLinkPassException('platform resolution failed', e);
-    }
-  }
-
-  /// Pages one platform to completion, handing every ROM to [onRom].
-  ///
-  /// Same loop shape as bulk sync's enumeration: a short page ends the
-  /// results, an empty one guards a server that ignores the offset, and the
-  /// page cap guards one that never stops. The stop check runs before every
-  /// request so a dispose or disconnect ends the pass before the next round
-  /// trip.
-  Future<_PageResult> _pagePlatform(
-    RommPlatform platform,
-    void Function(RommRom rom) onRom,
-  ) async {
-    var offset = 0;
-    var total = 0;
-    for (var page = 0; page < pageCap; page++) {
-      if (_shouldStop()) return _PageResult.stopped;
-
-      final RommRomPage result;
-      try {
-        result = await _fetchPage(
-          platformId: platform.id,
-          limit: pageSize,
-          offset: offset,
-        );
-      } catch (e) {
-        // Named, counted and stepped over — never swallowed, never fatal to
-        // the platforms still to come.
-        // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Error Handling Standards"
-        _log.w(
-          'RomM link pass platform "${platform.slug}" (id ${platform.id}) '
-          'failed at offset $offset, skipping it: $e',
-        );
-        return _PageResult.failed;
-      }
-
-      if (result.total > 0) total = result.total;
-      for (final rom in result.items) {
-        onRom(rom);
-      }
-
-      offset += result.items.length;
-      if (result.items.length < pageSize) return _PageResult.completed;
-      if (total > 0 && offset >= total) return _PageResult.completed;
-    }
-    _log.w(
-      'RomM link pass platform "${platform.slug}" hit the $pageCap-page cap, '
-      'matched what was seen',
-    );
-    return _PageResult.completed;
+    return (started: started, stage: RommLinkStage._(this, index, started));
   }
 
   /// Every folder name a system's ROMs are indexed under, normalized the way
@@ -601,6 +418,213 @@ class RommLibraryLinker {
   }
 }
 
+/// One link pass in progress, consuming pages a [RommPlatformWalk] delivers.
+///
+/// This is the matching half of [RommLibraryLinker] with the paging taken out:
+/// it accumulates the claims each platform's ROMs make on local files, drops a
+/// platform's claims when its paging failed or was cut short, and writes a
+/// system group's rows once every platform in the group has been seen. Both
+/// callers use it — the standalone [RommLibraryLinker.run] and the catalog
+/// refresh, which registers this stage against the walk it is already making
+/// so the server is enumerated once for both.
+///
+/// Matching is grouped by *local system*, not by platform: several RomM
+/// platforms can resolve to one system (slug aliases), and a file that two of
+/// them both claim is ambiguous. Rows are therefore written once per system
+/// group, after every platform in it has been paged, so the ambiguity check
+/// sees the whole picture before anything is committed.
+// Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Connect-Time Link Pass"
+// Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Refresh Shares The Walk"
+class RommLinkStage {
+  final RommLibraryLinker _linker;
+  final _LocalIndex _index;
+  final DateTime _started;
+
+  /// Claims made by the platform currently being paged, keyed by platform id:
+  /// local file → the distinct ROMs claiming it. Merged into [_claims] when
+  /// the platform completes, dropped when it fails or is stopped — a platform
+  /// only partly seen cannot be checked for ambiguity.
+  final Map<int, Map<_LocalGame, Map<int, String>>> _platformClaims = {};
+
+  /// Claims accumulated for the system group being walked, keyed by folder.
+  final Map<String, Map<_LocalGame, Map<int, String>>> _claims = {};
+
+  /// Normalized folder aliases per system folder, computed once per group.
+  final Map<String, Set<String>> _aliases = {};
+
+  final List<RommLinkAmbiguity> _ambiguities = [];
+  final List<RommLinkConflict> _conflicts = [];
+  final List<String> _linked = [];
+
+  var _added = 0;
+  var _alreadyPresent = 0;
+  var _groupsSkipped = 0;
+  var _closed = false;
+
+  RommLinkStage._(this._linker, this._index, this._started);
+
+  /// Records what [rom] claims among the local files of [group]'s system.
+  void onRom(RommWalkGroup group, RommPlatform platform, RommRom rom) {
+    final aliases = _aliases.putIfAbsent(
+      group.system.folderName,
+      () => RommLibraryLinker._folderAliases(group.system),
+    );
+    final claims = _platformClaims.putIfAbsent(platform.id, () => {});
+    for (final candidate in RommLocalMatcher.candidateNames(rom)) {
+      final key = RommLocalMatcher.normalizeName(candidate);
+      for (final alias in aliases) {
+        final game = _index.lookup(alias, key);
+        if (game == null) continue;
+        claims.putIfAbsent(game, () => {})[rom.id] = rom.fsName;
+      }
+    }
+  }
+
+  /// Keeps a completed platform's claims and discards the rest.
+  ///
+  /// A platform that threw part-way — or that the stop check cut short — has
+  /// not been fully seen, so its matches cannot be checked for ambiguity;
+  /// contributing nothing is the only outcome that can't link the wrong ROM.
+  // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Ambiguous Matches Are Skipped"
+  Future<void> onPlatformComplete(
+    RommWalkGroup group,
+    RommPlatform platform,
+    RommWalkPlatformOutcome outcome,
+  ) async {
+    final claims = _platformClaims.remove(platform.id);
+    if (outcome != RommWalkPlatformOutcome.completed || claims == null) return;
+    final groupClaims = _claims.putIfAbsent(group.system.folderName, () => {});
+    for (final entry in claims.entries) {
+      groupClaims.putIfAbsent(entry.key, () => {}).addAll(entry.value);
+    }
+  }
+
+  /// Writes the rows for one system group, now that every platform in it has
+  /// been walked.
+  Future<void> onGroupComplete(
+    RommWalkGroup group, {
+    required bool groupFailed,
+  }) async {
+    final claims = _claims.remove(group.system.folderName) ?? const {};
+    // A failed platform in a multi-platform group: a file the surviving
+    // platforms claim once may also be claimed by a ROM on the platform that
+    // threw, and a guess written now is permanent (rows are never
+    // overwritten). Skipping the whole group keeps the ambiguity check whole;
+    // the next connect retries it. A single-platform group that failed has
+    // nothing to write, so it is not counted here.
+    // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Ambiguous Matches Are Skipped"
+    if (groupFailed && group.platforms.length > 1) {
+      _groupsSkipped++;
+      _linker._log.w(
+        'RomM link pass skipped system "${group.system.folderName}": '
+        'a platform in its group failed, so its matches were not written',
+      );
+      return;
+    }
+
+    final entries = <RommSaveMapEntry>[];
+    final entryGames = <_LocalGame>[];
+    for (final entry in claims.entries) {
+      final game = entry.key;
+      final roms = entry.value;
+      // A row that already exists is never touched, so whether the match is
+      // ambiguous is moot for it. A row pointing somewhere none of this
+      // pass's matches do is recorded, not corrected: the user's saves are
+      // attached to the id in the row, and swapping it silently would move
+      // them to a ROM the server may have renumbered underneath us — or,
+      // for a manual row, away from the ROM the user deliberately chose.
+      // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Existing Mappings Are Never Overwritten"
+      // Governing: ADR-0004 (manual link provenance), SPEC-0004 REQ "Manual Rows Are Never Replaced by Automatic Writers"
+      final existingRomId = game.existingRomId;
+      if (existingRomId != null) {
+        _alreadyPresent++;
+        if (!roms.containsKey(existingRomId)) {
+          for (final matchedRomId in roms.keys.toList()..sort()) {
+            _conflicts.add(
+              RommLinkConflict(
+                filename: game.filename,
+                systemFolder: game.systemFolder,
+                existingRomId: existingRomId,
+                existingSource: game.existingSource ?? RommLinkSource.auto,
+                matchedRomId: matchedRomId,
+              ),
+            );
+          }
+        }
+        continue;
+      }
+      // Two ROMs claiming one file: guessing would attach the user's saves
+      // to the wrong server entry, so record both and write nothing.
+      // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Ambiguous Matches Are Skipped"
+      if (roms.length > 1) {
+        _ambiguities.add(
+          RommLinkAmbiguity(
+            filename: game.filename,
+            systemFolder: game.systemFolder,
+            romIds: roms.keys.toList()..sort(),
+          ),
+        );
+        continue;
+      }
+      final romId = roms.keys.single;
+      entries.add((
+        romname: game.filename,
+        systemFolder: game.systemFolder,
+        rommRomId: romId,
+        fsName: roms[romId],
+      ));
+      entryGames.add(game);
+    }
+    if (entries.isEmpty) return;
+
+    final inserted = await _linker._putMappingsIfAbsent(entries);
+    _added += inserted;
+    // An ignored insert means a row appeared between the index read and the
+    // write (a download finishing): already present, not a failure.
+    _alreadyPresent += entries.length - inserted;
+    if (inserted > 0) {
+      // Which specific rows were ignored isn't reported; every candidate is
+      // invalidated, which is harmless — a game that was linked by a
+      // download meanwhile needs its badge refreshed just the same.
+      _linked.addAll(entryGames.map((g) => g.romname));
+    }
+  }
+
+  /// Closes the stage against the walk that drove it and logs the one summary
+  /// line. Releases [RommLibraryLinker.isRunning].
+  // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Pass Observability"
+  RommLinkPassSummary finish(RommWalkResult result) {
+    final summary = RommLinkPassSummary(
+      platformsProcessed: result.platformsProcessed,
+      platformsUnresolved: result.platformsUnresolved,
+      platformFailures: result.platformFailures,
+      groupsSkipped: _groupsSkipped,
+      romsEnumerated: result.romsEnumerated,
+      rowsAdded: _added,
+      rowsAlreadyPresent: _alreadyPresent,
+      ambiguities: _ambiguities,
+      conflicts: _conflicts,
+      unresolvedSlugs: result.unresolvedSlugs,
+      stoppedEarly: result.stoppedEarly,
+      elapsed: _linker._clock().difference(_started),
+      linkedRomnames: _linked,
+    );
+    _close();
+    _linker._logSummary(summary);
+    return summary;
+  }
+
+  /// Closes the stage without a summary, for a walk that threw before it
+  /// could produce one.
+  void abandon() => _close();
+
+  void _close() {
+    if (_closed) return;
+    _closed = true;
+    _linker._running = false;
+  }
+}
+
 /// Why [RommLibraryLinker.run] could not run at all — the library, the
 /// platform list, or a platform's system resolution was unreadable.
 /// Per-platform paging failures are counted, not thrown; this is for the
@@ -613,15 +637,6 @@ class RommLinkPassException implements Exception {
 
   @override
   String toString() => 'RomM link pass failed: $context: $cause';
-}
-
-enum _PageResult { completed, failed, stopped }
-
-/// Platforms resolving to one local system, written together.
-class _SystemGroup {
-  final SystemModel system;
-  final List<RommPlatform> platforms = [];
-  _SystemGroup(this.system);
 }
 
 /// One indexed local file. Identity is the `(systemFolder, filename)` pair,

@@ -37,6 +37,40 @@ class ConfigRepository {
   static Future<void> setRommUploadScreenshots(bool value) =>
       SqliteService.saveUserConfig(rommUploadScreenshots: value ? 1 : 0);
 
+  /// Whether the RomM server's library is shown inside the local systems
+  /// (`user_config.romm_show_library`, migration v165).
+  ///
+  /// Defaults to false when the row or the column is missing: the feature is
+  /// opt-in, and a database that has not reached v165 yet must behave exactly
+  /// as it did before it existed.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Tables"
+  static Future<bool> getRommShowLibrary() async {
+    final row = await SqliteService.getUserConfig();
+    final raw = row?['romm_show_library'];
+    if (raw == null) return false;
+    if (raw is bool) return raw;
+    return (int.tryParse(raw.toString()) ?? 0) != 0;
+  }
+
+  /// The scope a game list opens in — `all` or `downloaded`
+  /// (`user_config.romm_library_default_scope`, migration v165).
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Library Scope"
+  static Future<String> getRommLibraryDefaultScope() async {
+    final row = await SqliteService.getUserConfig();
+    final raw = row?['romm_library_default_scope']?.toString();
+    return (raw == null || raw.isEmpty) ? 'all' : raw;
+  }
+
+  /// Cap in megabytes on the on-disk RomM cover cache
+  /// (`user_config.romm_cover_cache_mb`, migration v165).
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Cover Cache"
+  static Future<int> getRommCoverCacheMb() async {
+    final row = await SqliteService.getUserConfig();
+    final raw = row?['romm_cover_cache_mb'];
+    if (raw == null) return 200;
+    return int.tryParse(raw.toString()) ?? 200;
+  }
+
   // ── Theme settings ──────────────────────────────────────────────────────
 
   static Future<String> getThemeName() => SqliteService.getThemeName();

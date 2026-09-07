@@ -247,6 +247,20 @@ class RommService {
   /// this server" line is logged once per feature rather than once per call.
   final Set<RommFeature> _gatesLogged = <RommFeature>{};
 
+  /// Called when a request could not reach the server at all — a socket error
+  /// or a timeout, never a status the server answered with.
+  ///
+  /// The provider installs these to keep its reachability state honest without
+  /// this service knowing what reachability is: every authenticated call and
+  /// the heartbeat report through them, so "offline" is a fact about the last
+  /// request rather than a poll of its own.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Reachability"
+  void Function(Object error)? onTransportFailure;
+
+  /// Called when a request reached the server, whatever it answered.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Reachability"
+  void Function()? onTransportSuccess;
+
   /// Whether playtime sync can be attempted against this server.
   ///
   /// Expressed through [hasScope]: only a *denied* playtime group stops it,
@@ -450,15 +464,17 @@ class RommService {
         () =>
             _httpClient.get(_uri('/api/heartbeat')).timeout(_heartbeatTimeout),
       );
-    } on TimeoutException {
+    } on TimeoutException catch (e) {
       _capabilities = null;
+      onTransportFailure?.call(e);
       _log.w(
         'RomM heartbeat failed: url=$url endpoint=heartbeat '
         'reason=timeout',
       );
       return;
-    } on HandshakeException {
+    } on HandshakeException catch (e) {
       _capabilities = null;
+      onTransportFailure?.call(e);
       _log.w(
         'RomM heartbeat failed: url=$url endpoint=heartbeat '
         'reason=tls_handshake',
@@ -466,6 +482,7 @@ class RommService {
       return;
     } on SocketException catch (e) {
       _capabilities = null;
+      onTransportFailure?.call(e);
       _log.w(
         'RomM heartbeat failed: url=$url endpoint=heartbeat '
         'reason=socket cause=${e.message}',
@@ -479,6 +496,10 @@ class RommService {
       );
       return;
     }
+
+    // Whatever it answered, it answered: the server is reachable.
+    // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Reachability"
+    onTransportSuccess?.call();
 
     if (resp.statusCode != 200) {
       _capabilities = null;
@@ -980,9 +1001,12 @@ class RommService {
     T resp;
     try {
       resp = await send();
-    } on TimeoutException {
+      onTransportSuccess?.call();
+    } on TimeoutException catch (e) {
+      onTransportFailure?.call(e);
       throw RommException('Request timed out');
     } on SocketException catch (e) {
+      onTransportFailure?.call(e);
       throw RommException('Cannot reach server: ${e.message}');
     }
     if (usesApiKey) return resp;

@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:neostation/data/datasources/sqlite_service.dart';
 import 'package:neostation/models/database_game_model.dart';
 import 'package:neostation/models/romm_platform.dart';
 import 'package:neostation/models/romm_rom.dart';
@@ -12,6 +13,7 @@ import 'package:neostation/providers/romm_provider.dart';
 import 'package:neostation/repositories/romm_save_map_repository.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/neosync/neo_sync_service.dart';
+import 'package:neostation/services/romm/romm_catalog_refresh.dart';
 import 'package:neostation/services/romm/romm_library_linker.dart';
 import 'package:neostation/services/romm_service.dart';
 import 'package:neostation/sync/providers/romm_provider.dart';
@@ -111,6 +113,31 @@ class _FakeLinker extends RommLibraryLinker {
   }
 }
 
+/// Records each catalog refresh and the reason it was given, and answers with
+/// whatever [result] a test wants — including a skip, which is what the hourly
+/// guard produces.
+class _FakeRefresh extends RommCatalogRefresh {
+  final List<RommRefreshReason> reasons = [];
+  RommCatalogRefreshSummary result = const RommCatalogRefreshSummary();
+
+  _FakeRefresh()
+    : super(
+        listPlatforms: () async => const [],
+        resolveSystem: (_) async => null,
+        fetchPage: ({required platformId, required limit, required offset}) =>
+            throw UnimplementedError(),
+        serverUrl: () => 'https://romm.example',
+      );
+
+  @override
+  Future<RommCatalogRefreshSummary> run({
+    RommRefreshReason reason = RommRefreshReason.scheduled,
+  }) async {
+    reasons.add(reason);
+    return result;
+  }
+}
+
 /// The provider with the sweep replaced by a recorder, so the order of the
 /// connect-time work can be asserted without any saves on disk.
 class _RecordingProvider extends RomMSyncProvider {
@@ -121,6 +148,7 @@ class _RecordingProvider extends RomMSyncProvider {
     super.neoSync, {
     required this.events,
     required super.linker,
+    super.catalogRefresh,
     super.autoSweep,
   }) : super(sweepStartupDelay: Duration.zero);
 
@@ -209,12 +237,14 @@ void main() {
   Future<void> build({
     bool autoSweep = true,
     RommLibraryLinker? withLinker,
+    RommCatalogRefresh? withRefresh,
   }) async {
     provider = _RecordingProvider(
       browse,
       NeoSyncProvider(NeoSyncService()),
       events: events,
       linker: withLinker ?? linker,
+      catalogRefresh: withRefresh,
       autoSweep: autoSweep,
     );
     SyncManager.instance.register(provider);
@@ -223,6 +253,115 @@ void main() {
       persist: (_) async {},
     );
   }
+
+  // Governing: ADR-0020 (show RomM library inside the local library),
+  // SPEC-0019 REQ "Reachability" — scenario "Comes back"
+  group('on reconnect', () {
+    test('the browse provider\'s hook refreshes the catalog', () async {
+      final refresh = _FakeRefresh();
+      await build(withRefresh: refresh);
+      browse.connected = true;
+
+      expect(
+        browse.onReconnected,
+        isNotNull,
+        reason: 'the sync provider installs itself on construction',
+      );
+      await browse.onReconnected!();
+
+      expect(refresh.reasons, [RommRefreshReason.reconnect]);
+    });
+
+    // Governing: SPEC-0019 REQ "Catalog Refresh Shares The Walk" — "One walk"
+    test('with the unified library on, the refresh owns the walk', () async {
+      final refresh = _FakeRefresh();
+      await build(autoSweep: false, withRefresh: refresh);
+      browse.connected = true;
+      await SqliteService.saveUserConfig(rommShowLibrary: 1);
+
+      await provider.linkLibrary();
+
+      expect(refresh.reasons, [RommRefreshReason.connect]);
+      expect(
+        linker.runs,
+        0,
+        reason: 'the link pass rides the refresh\'s walk, it does not make one',
+      );
+    });
+
+    // ADR-0020 decision 2 bounds the refresh by the hourly guard alone — there
+    // is no toggle condition on it — so connect must behave exactly as the
+    // reconnect hook does, which never read the toggle either.
+    // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Refresh Shares The Walk"
+    test('with it off the refresh still owns the walk', () async {
+      final refresh = _FakeRefresh();
+      await build(autoSweep: false, withRefresh: refresh);
+      browse.connected = true;
+      await SqliteService.saveUserConfig(rommShowLibrary: 0);
+
+      await provider.linkLibrary();
+
+      expect(refresh.reasons, [RommRefreshReason.connect]);
+      expect(
+        linker.runs,
+        0,
+        reason: 'the toggle is a display setting, not a walk condition',
+      );
+    });
+
+    // The catalog's hourly guard must never become a guard on the link pass:
+    // a user who copies ROMs across and reconnects ten minutes later still
+    // gets their mapping rows.
+    // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Connect-Time Link Pass"
+    test('a refresh skipped as too soon still runs the link pass', () async {
+      final refresh = _FakeRefresh();
+      refresh.result = const RommCatalogRefreshSummary(
+        skipped: RommRefreshSkip.tooSoon,
+      );
+      await build(autoSweep: false, withRefresh: refresh);
+      browse.connected = true;
+      await SqliteService.saveUserConfig(rommShowLibrary: 1);
+      linker.result = const RommLinkPassSummary(
+        rowsAdded: 2,
+        linkedRomnames: ['A', 'B'],
+      );
+
+      final summary = await provider.linkLibrary();
+
+      expect(refresh.reasons, [RommRefreshReason.connect]);
+      expect(linker.runs, 1, reason: 'the pass walks on its own instead');
+      expect(summary?.rowsAdded, 2);
+      expect(browse.cacheInvalidations, 1);
+    });
+
+    // The provider-level guards (no server, another walk in flight) answer
+    // null rather than a summary; that is a skip too.
+    // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Connect-Time Link Pass"
+    test('a refresh the provider refused still runs the link pass', () async {
+      await build(autoSweep: false);
+      browse.connected = true;
+
+      await provider.linkLibrary();
+
+      expect(
+        linker.runs,
+        1,
+        reason: 'the real refresh has no server url, so it does nothing',
+      );
+    });
+
+    test('a disposed provider refreshes nothing', () async {
+      final refresh = _FakeRefresh();
+      await build(withRefresh: refresh);
+      browse.connected = true;
+      final hook = browse.onReconnected!;
+      provider.dispose();
+
+      await hook();
+
+      expect(refresh.reasons, isEmpty);
+    });
+  });
 
   group('on connect', () {
     test('the pass runs, then the sweep', () async {
@@ -315,6 +454,11 @@ void main() {
       final second = await provider.linkLibrary();
 
       expect(second, isNull);
+      // linkLibrary reads the unified-library toggle before it chooses between
+      // the standalone pass and the catalog refresh (SPEC-0019), so the run
+      // itself starts a few microtasks after the call. The in-flight guard is
+      // set synchronously, which is what the assertion above proves.
+      await pumpEventQueue();
       expect(linker.runs, 1);
       linker.release();
       expect(await first, isNotNull);

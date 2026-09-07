@@ -101,6 +101,16 @@ class RommRom {
   /// 4-digit release year from `metadatum.first_release_date`, or null.
   final String? releaseYear;
 
+  /// RomM's own `updated_at` stamp for the ROM row, verbatim, or null when the
+  /// server did not send one.
+  ///
+  /// Kept as the server's string rather than a parsed [DateTime]: the catalog
+  /// stores it only to compare one walk's answer with the next (and, later, to
+  /// ask for changes since a date), so re-formatting it would only invent a
+  /// timezone the server never claimed.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Tables"
+  final String? serverUpdatedAt;
+
   const RommRom({
     required this.id,
     required this.name,
@@ -120,6 +130,7 @@ class RommRom {
     this.genres = const [],
     this.companies = const [],
     this.releaseYear,
+    this.serverUpdatedAt,
   });
 
   /// Primary genre, or null when unknown — the list UI shows a single compact
@@ -165,7 +176,14 @@ class RommRom {
       genres: _parseStringList(json, 'genres'),
       companies: _parseStringList(json, 'companies'),
       releaseYear: _parseReleaseYear(json),
+      serverUpdatedAt: _nonEmpty(json['updated_at']),
     );
+  }
+
+  /// [value] as a trimmed string, or null when it is absent or blank.
+  static String? _nonEmpty(Object? value) {
+    final text = value?.toString().trim() ?? '';
+    return text.isEmpty ? null : text;
   }
 
   /// Non-empty strings under `metadatum.<key>`, in server order.
