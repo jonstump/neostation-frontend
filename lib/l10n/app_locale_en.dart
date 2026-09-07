@@ -1431,4 +1431,6 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.collectionUnlinkRomm: 'Unlink from RomM',
   AppLocale.collectionUnlinkRommConfirm:
       'This collection will stop following the RomM collection. Its games stay.',
+  AppLocale.rommPairServerTooOld:
+      'This RomM server is too old for pairing (needs 4.8.0 or newer)',
 };

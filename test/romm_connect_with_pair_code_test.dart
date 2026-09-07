@@ -8,7 +8,9 @@ import 'package:neostation/data/datasources/sqlite_service.dart';
 import 'package:neostation/providers/romm_provider.dart';
 import 'package:neostation/repositories/romm_repository.dart';
 import 'package:neostation/services/credential_store.dart';
+import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/services/romm_service.dart';
+import 'package:neostation/utils/romm_pair_error_message.dart';
 
 import 'database_test_helper.dart';
 import 'fake_credential_backends.dart';
@@ -37,11 +39,16 @@ void main() {
   void serve({
     required http.Response Function() exchange,
     required http.Response Function(http.Request) me,
+    http.Response Function()? heartbeat,
   }) {
     RommService.debugUseHttpClient(
       MockClient((request) async {
         requests.add(request);
         switch (request.url.path) {
+          // ADR-0010's capability probe runs before the exchange; without a
+          // heartbeat hook this server has none, so pairing runs on "unknown".
+          case '/api/heartbeat':
+            return heartbeat?.call() ?? http.Response('not found', 404);
           case '/api/client-tokens/exchange':
             return exchange();
           case '/api/users/me':
@@ -125,10 +132,13 @@ void main() {
       expect(provider.pairedTokenExpiresAt, DateTime.utc(2027, 3, 4, 5, 6, 7));
 
       expect(requests.map((r) => r.url.path).toList(), [
+        // The capability probe (ADR-0010) runs before the exchange; this
+        // scripted server has no heartbeat, so pairing proceeds on "unknown".
+        '/api/heartbeat',
         '/api/client-tokens/exchange',
         '/api/users/me',
       ]);
-      expect(requests.first.body, '{"code":"ABCD2345"}');
+      expect(requests[1].body, '{"code":"ABCD2345"}');
     });
 
     test('a token that never expires stores a null expiry', () async {
@@ -189,6 +199,7 @@ void main() {
       expect(secureStore.values, isEmpty);
       expect(await RommRepository.getConfig(), isNull);
       expect(requests.map((r) => r.url.path).toList(), [
+        '/api/heartbeat',
         '/api/client-tokens/exchange',
       ], reason: 'no verification without a token');
     });
@@ -240,11 +251,66 @@ void main() {
         expect(secureStore.values, isEmpty, reason: 'token not persisted');
         expect(await RommRepository.getConfig(), isNull);
         expect(requests.map((r) => r.url.path).toList(), [
+          '/api/heartbeat',
           '/api/client-tokens/exchange',
           '/api/users/me',
         ]);
       },
     );
+
+    test('a server too old for pairing is refused without a request', () async {
+      serve(
+        exchange: tokenOk,
+        me: meOk,
+        heartbeat: () => json(200, {
+          'SYSTEM': {'VERSION': '4.7.0'},
+        }),
+      );
+      final provider = RommProvider();
+
+      final error = await provider.connectWithPairCode(
+        serverUrl: 'https://romm.local',
+        code: 'ABCD2345',
+      );
+
+      expect(error, isNotNull);
+      expect(provider.status, RommConnectionStatus.error);
+      expect(provider.lastErrorKind, RommErrorKind.unsupported);
+      expect(
+        rommPairErrorKey(provider.lastErrorKind),
+        AppLocale.rommPairServerTooOld,
+        reason: 'the connect screen shows the localized sentence',
+      );
+      expect(requests.map((r) => r.url.path).toList(), [
+        '/api/heartbeat',
+      ], reason: 'the exchange is never sent');
+      expect(await RommRepository.getConfig(), isNull);
+      expect(secureStore.values, isEmpty);
+    });
+
+    test('a server new enough for pairing is not gated', () async {
+      serve(
+        exchange: tokenOk,
+        me: meOk,
+        heartbeat: () => json(200, {
+          'SYSTEM': {'VERSION': '4.8.0'},
+        }),
+      );
+      final provider = RommProvider();
+
+      final error = await provider.connectWithPairCode(
+        serverUrl: 'https://romm.local',
+        code: 'ABCD2345',
+      );
+
+      expect(error, isNull);
+      expect(provider.status, RommConnectionStatus.connected);
+      expect(requests.map((r) => r.url.path).toList(), [
+        '/api/heartbeat',
+        '/api/client-tokens/exchange',
+        '/api/users/me',
+      ]);
+    });
 
     test('disconnect clears the token, its name and its expiry', () async {
       serve(exchange: tokenOk, me: meOk);

@@ -1447,4 +1447,6 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.collectionUnlinkRomm: 'Отвязать от RomM',
   AppLocale.collectionUnlinkRommConfirm:
       'Эта коллекция больше не будет следовать за коллекцией RomM. Её игры останутся.',
+  AppLocale.rommPairServerTooOld:
+      'Этот сервер RomM слишком старый для сопряжения (требуется 4.8.0 или новее)',
 };

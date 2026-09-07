@@ -16,6 +16,7 @@ import '../models/romm_platform.dart';
 import '../models/romm_rom_page.dart';
 import '../models/romm_play_session.dart';
 import '../models/romm_rom.dart';
+import '../models/romm_server_capabilities.dart';
 import 'logger_service.dart';
 
 /// Failure modes a caller needs to tell apart programmatically (the connect
@@ -41,6 +42,13 @@ enum RommErrorKind {
   /// allowed.
   // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "Firmware Model And Service"
   scopeDenied,
+
+  /// The endpoint this call needs does not exist on this RomM: the heartbeat
+  /// reported a version older than the release that introduced it, so nothing
+  /// was sent.
+  // Governing: ADR-0010 (RomM heartbeat capability probe),
+  // SPEC-0010 REQ "Gated Call Sites"
+  unsupported,
 }
 
 /// Raised when a RomM API call fails; [message] is safe to surface to the user.
@@ -104,6 +112,11 @@ class RommService {
   /// Maximum sessions RomM accepts in one `/api/play-sessions` POST.
   static const int maxPlaySessionBatch = 100;
 
+  /// Cap on the capability probe. It is one small body on the connect path, so
+  /// a slow or unreachable server must not hold up the login behind it.
+  // Governing: ADR-0010, SPEC-0010 REQ "Heartbeat Probe"
+  static const Duration _heartbeatTimeout = Duration(seconds: 5);
+
   /// Shared client that tolerates self-signed certificates (homelab servers).
   static final http.Client _sharedHttpClient = () {
     final inner = HttpClient()
@@ -149,9 +162,35 @@ class RommService {
   /// so a RomM older than the feature isn't probed on every sync.
   bool _playSessionsSupported = true;
 
+  /// What the last heartbeat said this server can do, or null when the probe
+  /// has not run or did not land. Null means every feature reads as
+  /// [RommFeatureSupport.unknown], which never gates.
+  // Governing: ADR-0010 (RomM heartbeat capability probe),
+  // SPEC-0010 REQ "Heartbeat Probe"
+  RommServerCapabilities? _capabilities;
+
+  /// Whether [fetchHeartbeat] has run since the last base-URL change. Set even
+  /// when the probe fails, so a server that blocks `/api/heartbeat` is asked
+  /// once per connection rather than before every authenticated call.
+  bool _probed = false;
+
+  /// Features already reported as gated on this connection, so the "not on
+  /// this server" line is logged once per feature rather than once per call.
+  final Set<RommFeature> _gatesLogged = <RommFeature>{};
+
   /// Whether playtime sync can be attempted against this server.
   bool get playtimeSyncAvailable =>
       _playtimeScopeGranted && _playSessionsSupported;
+
+  /// The parsed heartbeat for this connection, or null when unknown.
+  RommServerCapabilities? get capabilities => _capabilities;
+
+  /// Whether this server answers [feature]'s endpoint. [RommFeatureSupport
+  /// .unknown] when the probe never landed — callers then behave exactly as
+  /// they did before ADR-0010.
+  // Governing: ADR-0010, SPEC-0010 REQ "Heartbeat Probe"
+  RommFeatureSupport supports(RommFeature feature) =>
+      _capabilities?.supports(feature) ?? RommFeatureSupport.unknown;
 
   String get baseUrl => _baseUrl;
 
@@ -191,7 +230,17 @@ class RommService {
     String? refreshToken,
     int? tokenExpiresMs,
   }) {
+    final previousUrl = _baseUrl;
     _setServerUrl(serverUrl);
+    // Capabilities describe the server, not the credentials: a different URL
+    // is a different server, so its heartbeat has to be fetched again. Editing
+    // the credentials for the same URL keeps what the last probe learned.
+    // Governing: ADR-0010, SPEC-0010 REQ "Heartbeat Probe"
+    if (_baseUrl != previousUrl) {
+      _capabilities = null;
+      _probed = false;
+      _gatesLogged.clear();
+    }
     _apiKey = apiKey.trim();
     _username = username;
     _password = _apiKey.isEmpty ? password : '';
@@ -203,6 +252,7 @@ class RommService {
     // instead of inheriting the previous server's verdict.
     _playtimeScopeGranted = true;
     _playSessionsSupported = true;
+    _applyCapabilityGates();
   }
 
   /// Points the service at [serverUrl] without touching credentials or cached
@@ -270,13 +320,152 @@ class RommService {
     );
   }
 
+  // ── Capabilities (heartbeat probe) ────────────────────────────────────────
+
+  /// Fetches RomM's public `GET /api/heartbeat` and stores what it reports.
+  ///
+  /// Unauthenticated (the endpoint is public and the probe runs *before* the
+  /// token grant, so it can shape the scopes we ask for), capped at
+  /// [_heartbeatTimeout], and routed through the same client and TLS policy as
+  /// every other call — including the HTTPS→HTTP fallback for homelab servers.
+  ///
+  /// Never throws. Any failure — timeout, socket error, TLS, a non-2xx status,
+  /// a body that is not a JSON object — leaves [capabilities] null, which reads
+  /// as [RommFeatureSupport.unknown] and gates nothing. Exactly one line is
+  /// logged either way.
+  ///
+  /// Pass [serverUrl] to point the service at a server first, the way
+  /// [exchangePairCode] does, for the pairing flow that probes before it has
+  /// any credentials to [configure] with.
+  // Governing: ADR-0010 (RomM heartbeat capability probe),
+  // SPEC-0010 REQ "Heartbeat Probe", REQ "Error Handling Standards"
+  Future<void> fetchHeartbeat({String? serverUrl}) async {
+    if (serverUrl != null) {
+      final previousUrl = _baseUrl;
+      _setServerUrl(serverUrl);
+      if (_baseUrl != previousUrl) {
+        _capabilities = null;
+        _gatesLogged.clear();
+      }
+    }
+    _probed = true;
+    if (_baseUrl.isEmpty) {
+      _log.w('RomM heartbeat skipped: url= endpoint=heartbeat reason=no_url');
+      _capabilities = null;
+      return;
+    }
+
+    final url = _baseUrl;
+    http.Response resp;
+    try {
+      resp = await _withSchemeFallback(
+        () =>
+            _httpClient.get(_uri('/api/heartbeat')).timeout(_heartbeatTimeout),
+      );
+    } on TimeoutException {
+      _capabilities = null;
+      _log.w(
+        'RomM heartbeat failed: url=$url endpoint=heartbeat '
+        'reason=timeout',
+      );
+      return;
+    } on HandshakeException {
+      _capabilities = null;
+      _log.w(
+        'RomM heartbeat failed: url=$url endpoint=heartbeat '
+        'reason=tls_handshake',
+      );
+      return;
+    } on SocketException catch (e) {
+      _capabilities = null;
+      _log.w(
+        'RomM heartbeat failed: url=$url endpoint=heartbeat '
+        'reason=socket cause=${e.message}',
+      );
+      return;
+    } catch (e) {
+      _capabilities = null;
+      _log.w(
+        'RomM heartbeat failed: url=$url endpoint=heartbeat '
+        'reason=error cause=$e',
+      );
+      return;
+    }
+
+    if (resp.statusCode != 200) {
+      _capabilities = null;
+      _log.w(
+        'RomM heartbeat failed: url=$url endpoint=heartbeat '
+        'reason=status status=${resp.statusCode}',
+      );
+      return;
+    }
+
+    final RommServerCapabilities parsed;
+    try {
+      final decoded = jsonDecode(resp.body);
+      if (decoded is! Map<String, dynamic>) {
+        throw const FormatException('heartbeat body is not a JSON object');
+      }
+      parsed = RommServerCapabilities.fromJson(decoded);
+    } catch (e) {
+      _capabilities = null;
+      _log.w(
+        'RomM heartbeat failed: url=$url endpoint=heartbeat '
+        'reason=unparseable_body cause=$e',
+      );
+      return;
+    }
+
+    _capabilities = parsed;
+    _log.i(
+      'RomM heartbeat ok: url=$url version=${parsed.version} '
+      'password_login_disabled=${parsed.passwordLoginDisabled}',
+    );
+    _applyCapabilityGates();
+  }
+
+  /// Folds a known-unsupported feature into the per-connection state its call
+  /// sites already consult, so "this server predates play sessions" and "this
+  /// account was denied the scope" settle into one flag with one meaning.
+  // Governing: ADR-0010, SPEC-0010 REQ "Gated Call Sites"
+  void _applyCapabilityGates() {
+    if (supports(RommFeature.playSessions) == RommFeatureSupport.unsupported) {
+      _logGateOnce(RommFeature.playSessions);
+      _playSessionsSupported = false;
+    }
+  }
+
+  /// One info line per gated feature per connection: which feature, and the
+  /// version that gated it.
+  // Governing: ADR-0010, SPEC-0010 REQ "Error Handling Standards"
+  void _logGateOnce(RommFeature feature) {
+    if (!_gatesLogged.add(feature)) return;
+    _log.i(
+      'RomM feature gated: feature=${feature.name} '
+      'version=${_capabilities?.version} '
+      'min_version=${feature.minVersion}',
+    );
+  }
+
   /// Establishes (or confirms) a usable credential, dispatching on the mode the
   /// service was configured in. Throws [RommException] with a user-facing
   /// message on failure.
+  ///
+  /// The heartbeat probe runs first when this connection has not been probed
+  /// since the last [configure]: it is unauthenticated, so it is the one place
+  /// that can shape the scopes the password grant asks for, and putting it here
+  /// means every login mode (password, API key, paired token) gets it without
+  /// remembering to ask.
+  // Governing: ADR-0010 (RomM heartbeat capability probe),
+  // SPEC-0010 REQ "Probe Before The Token Grant"
   Future<void> authenticate() async {
     if (_baseUrl.isEmpty) {
       throw RommException('Server URL is empty');
     }
+    // API-key mode probes too: the key's scopes are fixed, but the server
+    // version still gates which endpoints exist.
+    if (!_probed) await fetchHeartbeat();
     if (usesApiKey) return _verifyApiKey();
     return _authenticateWithPassword();
   }
@@ -451,6 +640,16 @@ class RommService {
   }
 
   /// Performs the OAuth2 password grant and stores the resulting tokens.
+  ///
+  /// The heartbeat (run by [authenticate] before this) decides which scopes are
+  /// worth asking for: on a server older than [RommFeature.playSessions] the
+  /// playtime scopes do not exist, so asking for them only earns a 403 and a
+  /// second POST. That is the *version* question. Whether *this account* holds
+  /// the scopes is a different question the heartbeat cannot answer, so the
+  /// 403-fallback below stays exactly as it was for supported and unknown
+  /// servers.
+  // Governing: ADR-0010 (RomM heartbeat capability probe),
+  // SPEC-0010 REQ "Probe Before The Token Grant"
   Future<void> _authenticateWithPassword() async {
     Map<String, String> bodyFor(String scope) => {
       'grant_type': 'password',
@@ -461,22 +660,34 @@ class RommService {
       'scope': scope,
     };
 
+    final playtimeUnsupported =
+        supports(RommFeature.playSessions) == RommFeatureSupport.unsupported;
+
     http.Response resp;
     try {
-      resp = await _postTokenRequest(bodyFor('$_readScopes $_playtimeScopes'));
-      if (resp.statusCode == 403) {
-        // Either the account lacks the playtime scopes or the server predates
-        // them — indistinguishable here, and both mean the same thing: keep the
-        // connection, drop playtime sync. Bad credentials fail the retry too,
-        // so the error path below is unchanged for them.
-        final base = await _postTokenRequest(bodyFor(_readScopes));
-        if (base.statusCode == 200) {
-          _playtimeScopeGranted = false;
-          _log.w('RomM denied $_playtimeScopes — playtime sync disabled');
+      if (playtimeUnsupported) {
+        // Known-old server: one POST, read scopes only, no 403 round trip.
+        _logGateOnce(RommFeature.playSessions);
+        _playtimeScopeGranted = false;
+        resp = await _postTokenRequest(bodyFor(_readScopes));
+      } else {
+        resp = await _postTokenRequest(
+          bodyFor('$_readScopes $_playtimeScopes'),
+        );
+        if (resp.statusCode == 403) {
+          // Either the account lacks the playtime scopes or the server predates
+          // them — indistinguishable here, and both mean the same thing: keep
+          // the connection, drop playtime sync. Bad credentials fail the retry
+          // too, so the error path below is unchanged for them.
+          final base = await _postTokenRequest(bodyFor(_readScopes));
+          if (base.statusCode == 200) {
+            _playtimeScopeGranted = false;
+            _log.w('RomM denied $_playtimeScopes — playtime sync disabled');
+          }
+          resp = base.statusCode == 200 ? base : resp;
+        } else if (resp.statusCode == 200) {
+          _playtimeScopeGranted = true;
         }
-        resp = base.statusCode == 200 ? base : resp;
-      } else if (resp.statusCode == 200) {
-        _playtimeScopeGranted = true;
       }
     } on TimeoutException {
       throw RommException('Connection timed out');
@@ -1602,6 +1813,21 @@ class RommService {
   Future<RommPlaySessionIngestResult> ingestPlaySessions(
     List<RommPlaySession> sessions,
   ) async {
+    // Known-old server: the endpoint does not exist, so nothing is sent and
+    // the connection settles into the same "no playtime sync here" state a 404
+    // would have produced — [playtimeSyncAvailable] reads false and the outbox
+    // stops being drained.
+    // Governing: ADR-0010 (RomM heartbeat capability probe),
+    // SPEC-0010 REQ "Gated Call Sites"
+    if (supports(RommFeature.playSessions) == RommFeatureSupport.unsupported) {
+      _logGateOnce(RommFeature.playSessions);
+      _playSessionsSupported = false;
+      throw RommException(
+        'This RomM server predates play-session sync '
+        '(needs ${RommFeature.playSessions.minVersion} or newer)',
+        kind: RommErrorKind.unsupported,
+      );
+    }
     if (sessions.isEmpty) {
       return const RommPlaySessionIngestResult(
         acceptedIndexes: {},
@@ -1653,6 +1879,17 @@ class RommService {
   /// given, so an epoch `start_after` is passed to get the complete history —
   /// the aggregate is meaningless if it silently stops at the newest 50.
   Future<List<RommPlaySession>> getPlaySessions({required int romId}) async {
+    // Same gate as the upload: no request to an endpoint this server predates.
+    // Governing: ADR-0010, SPEC-0010 REQ "Gated Call Sites"
+    if (supports(RommFeature.playSessions) == RommFeatureSupport.unsupported) {
+      _logGateOnce(RommFeature.playSessions);
+      _playSessionsSupported = false;
+      throw RommException(
+        'This RomM server predates play-session sync '
+        '(needs ${RommFeature.playSessions.minVersion} or newer)',
+        kind: RommErrorKind.unsupported,
+      );
+    }
     final uri = Uri.parse('$_baseUrl/api/play-sessions').replace(
       queryParameters: {
         'rom_id': '$romId',

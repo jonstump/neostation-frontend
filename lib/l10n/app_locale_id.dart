@@ -1446,4 +1446,6 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.collectionUnlinkRomm: 'Putuskan tautan dari RomM',
   AppLocale.collectionUnlinkRommConfirm:
       'Koleksi ini tidak akan lagi mengikuti koleksi RomM. Gim di dalamnya tetap ada.',
+  AppLocale.rommPairServerTooOld:
+      'Server RomM ini terlalu lama untuk pemasangan (perlu 4.8.0 atau lebih baru)',
 };
