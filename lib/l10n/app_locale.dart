@@ -1478,6 +1478,51 @@ mixin AppLocale {
       'collection_unlink_romm_confirm';
   static const String rommPairServerTooOld = 'romm_pair_server_too_old';
 
+  // RomM firmware/BIOS panel (SPEC-0012 REQ "Firmware Panel")
+  static const String rommFirmwareRowTitle = 'romm_firmware_row_title';
+  static const String rommFirmwareRowSubtitle = 'romm_firmware_row_subtitle';
+  static const String rommFirmwareRowRequiresConnection =
+      'romm_firmware_row_requires_connection';
+  static const String rommFirmwarePanelTitle = 'romm_firmware_panel_title';
+  static const String rommFirmwareLoading = 'romm_firmware_loading';
+  static const String rommFirmwareEmpty = 'romm_firmware_empty';
+  static const String rommFirmwareScopeDenied = 'romm_firmware_scope_denied';
+  static const String rommFirmwareListFailed = 'romm_firmware_list_failed';
+  static const String rommFirmwareStatePresent = 'romm_firmware_state_present';
+  static const String rommFirmwareStateMissing = 'romm_firmware_state_missing';
+  static const String rommFirmwareStateServerMissing =
+      'romm_firmware_state_server_missing';
+  static const String rommFirmwareStateNoFolder =
+      'romm_firmware_state_no_folder';
+  static const String rommFirmwareVerifiedByServer =
+      'romm_firmware_verified_by_server';
+  static const String rommFirmwareVerifyChecking =
+      'romm_firmware_verify_checking';
+  static const String rommFirmwareVerifyMatch = 'romm_firmware_verify_match';
+  static const String rommFirmwareVerifyMismatch =
+      'romm_firmware_verify_mismatch';
+  static const String rommFirmwareVerifyUnreadable =
+      'romm_firmware_verify_unreadable';
+  static const String rommFirmwareActionDownload =
+      'romm_firmware_action_download';
+  static const String rommFirmwareActionVerify = 'romm_firmware_action_verify';
+  static const String rommFirmwareActionDownloadAll =
+      'romm_firmware_action_download_all';
+  static const String rommFirmwareActionChooseFolder =
+      'romm_firmware_action_choose_folder';
+  static const String rommFirmwareDestination = 'romm_firmware_destination';
+  static const String rommFirmwareDestinationMissing =
+      'romm_firmware_destination_missing';
+  static const String rommFirmwareFolderFailed = 'romm_firmware_folder_failed';
+  static const String rommFirmwareDownloadProgress =
+      'romm_firmware_download_progress';
+  static const String rommFirmwareDownloadSummary =
+      'romm_firmware_download_summary';
+  static const String rommFirmwareDownloadCancelled =
+      'romm_firmware_download_cancelled';
+  static const String rommFirmwareDownloadFailedFile =
+      'romm_firmware_download_failed_file';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================

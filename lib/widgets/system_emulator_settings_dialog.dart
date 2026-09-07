@@ -38,6 +38,7 @@ import '../utils/image_utils.dart';
 import '../widgets/core_footer.dart';
 import '../services/permission_service.dart';
 import '../widgets/tv_directory_picker.dart';
+import 'romm_firmware_panel.dart';
 import 'romm_system_fetch_mode_dialog.dart';
 import '../screens/romm_screen/romm_metadata_fetch_runner.dart';
 
@@ -46,6 +47,7 @@ part 'system_emulator_settings_dialog/row_builders.dart';
 part 'system_emulator_settings_dialog/chrome.dart';
 part 'system_emulator_settings_dialog/tabs.dart';
 part 'system_emulator_settings_dialog/romm_fetch.dart';
+part 'system_emulator_settings_dialog/romm_firmware.dart';
 
 /// Steam-style dialog to configure emulators/cores for a system
 class SystemEmulatorSettingsDialog extends StatefulWidget {
@@ -87,8 +89,15 @@ class _SystemEmulatorSettingsDialogState
   // 0: Prefer filename, 1: Hide ext, 2: (), 3: [], 4: Recursive (only when
   // [_offersRecursiveScan]), 5: Show subfolders (only when
   // [_offersSubfolderView]), then "Fetch metadata from RomM" at
-  // [_rommFetchIndex] (only when [_offersRommFetch]).
+  // [_rommFetchIndex] (only when [_offersRommFetch]) and "BIOS files from
+  // RomM" at [_rommFirmwareIndex] (only once a RomM platform resolves).
   late int _totalGeneralItems;
+
+  /// The RomM platform this system resolved to, or null while the lookup is
+  /// running, when RomM is not connected, or when RomM has no such platform.
+  /// Non-null is what puts the BIOS row on the General tab.
+  // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "Firmware Panel"
+  int? _rommFirmwarePlatformId;
   late List<GlobalKey> _generalItemKeys;
   late List<GlobalKey> _appearanceItemKeys;
 
@@ -135,8 +144,10 @@ class _SystemEmulatorSettingsDialogState
 
     _generalScrollController = ScrollController();
     _hiddenScrollController = ScrollController();
+    // One slot more than the current count: the BIOS row appears only once the
+    // asynchronous platform lookup answers, and its key must already exist.
     _generalItemKeys = List.generate(
-      _totalGeneralItems,
+      _totalGeneralItems + 1,
       (index) => GlobalKey(
         debugLabel:
             'general_item_${_system.folderName}_${index}_${identityHashCode(this)}',
@@ -154,6 +165,13 @@ class _SystemEmulatorSettingsDialogState
     _loadCores();
     _loadHiddenGames();
     _initializeGamepad();
+    // Deferred: the lookup reads a provider and may fetch the platform list, so
+    // it runs once the first frame is up rather than inside initState.
+    // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "Firmware Panel"
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(_resolveRommFirmwarePlatform());
+    });
   }
 
   @override
@@ -381,6 +399,15 @@ class _SystemEmulatorSettingsDialogState
   /// existing indices are untouched whichever optional rows are offered.
   int get _rommFetchIndex =>
       4 + (_offersRecursiveScan ? 1 : 0) + (_offersSubfolderView ? 1 : 0);
+
+  /// Whether the "BIOS files from RomM" row is offered — only once this
+  /// system's name has resolved to a RomM platform.
+  // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "Firmware Panel"
+  bool get _offersRommFirmware => _rommFirmwarePlatformId != null;
+
+  /// General-tab index of the BIOS row: after the RomM fetch row, so the rows
+  /// above it keep the indices they had before the lookup answered.
+  int get _rommFirmwareIndex => _rommFetchIndex + (_offersRommFetch ? 1 : 0);
 
   // ── Hidden games ──────────────────────────────────────────────────────────
 

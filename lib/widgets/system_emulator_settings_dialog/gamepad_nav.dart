@@ -210,6 +210,9 @@ extension _GamepadNav on _SystemEmulatorSettingsDialogState {
       } else if (_offersRommFetch && _generalIndex == _rommFetchIndex) {
         // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
         _activateRommFetch();
+      } else if (_offersRommFirmware && _generalIndex == _rommFirmwareIndex) {
+        // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "Firmware Panel"
+        _activateRommFirmware();
       }
     } else if (_currentTab == 2) {
       if (_appearanceIndex == 0) {

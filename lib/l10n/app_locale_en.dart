@@ -1433,4 +1433,39 @@ const Map<String, dynamic> appLocaleEn = {
       'This collection will stop following the RomM collection. Its games stay.',
   AppLocale.rommPairServerTooOld:
       'This RomM server is too old for pairing (needs 4.8.0 or newer)',
+
+  // RomM firmware/BIOS panel (SPEC-0012)
+  AppLocale.rommFirmwareRowTitle: 'BIOS files from RomM',
+  AppLocale.rommFirmwareRowSubtitle:
+      'Check which BIOS files this system needs and download the missing ones',
+  AppLocale.rommFirmwareRowRequiresConnection:
+      'Connect to RomM to manage BIOS files',
+  AppLocale.rommFirmwarePanelTitle: 'BIOS files for {system}',
+  AppLocale.rommFirmwareLoading: 'Loading BIOS files…',
+  AppLocale.rommFirmwareEmpty: 'RomM has no BIOS files for this platform',
+  AppLocale.rommFirmwareScopeDenied: 'This RomM account has no firmware access',
+  AppLocale.rommFirmwareListFailed: 'Could not load BIOS files: {error}',
+  AppLocale.rommFirmwareStatePresent: 'Present',
+  AppLocale.rommFirmwareStateMissing: 'Missing',
+  AppLocale.rommFirmwareStateServerMissing: 'Not stored on the server',
+  AppLocale.rommFirmwareStateNoFolder: 'No BIOS folder chosen',
+  AppLocale.rommFirmwareVerifiedByServer: 'Verified by RomM',
+  AppLocale.rommFirmwareVerifyChecking: 'Checking…',
+  AppLocale.rommFirmwareVerifyMatch: 'Matches the server copy',
+  AppLocale.rommFirmwareVerifyMismatch: 'Differs from the server copy',
+  AppLocale.rommFirmwareVerifyUnreadable: 'The local file could not be read',
+  AppLocale.rommFirmwareActionDownload: 'Download',
+  AppLocale.rommFirmwareActionVerify: 'Verify',
+  AppLocale.rommFirmwareActionDownloadAll: 'Download all missing',
+  AppLocale.rommFirmwareActionChooseFolder: 'Choose BIOS folder',
+  AppLocale.rommFirmwareDestination: 'Destination: {path}',
+  AppLocale.rommFirmwareDestinationMissing:
+      'Choose a BIOS folder before downloading',
+  AppLocale.rommFirmwareFolderFailed:
+      'That folder cannot be used for BIOS files',
+  AppLocale.rommFirmwareDownloadProgress: 'Downloading {file} ({done}/{total})',
+  AppLocale.rommFirmwareDownloadSummary:
+      'BIOS files: {downloaded} downloaded, {failed} failed',
+  AppLocale.rommFirmwareDownloadCancelled: 'BIOS download stopped — {summary}',
+  AppLocale.rommFirmwareDownloadFailedFile: '{file} could not be downloaded',
 };

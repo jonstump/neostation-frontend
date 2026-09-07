@@ -1449,4 +1449,41 @@ const Map<String, dynamic> appLocaleRu = {
       'Эта коллекция больше не будет следовать за коллекцией RomM. Её игры останутся.',
   AppLocale.rommPairServerTooOld:
       'Этот сервер RomM слишком старый для сопряжения (требуется 4.8.0 или новее)',
+
+  // RomM firmware/BIOS panel (SPEC-0012)
+  AppLocale.rommFirmwareRowTitle: 'Файлы BIOS из RomM',
+  AppLocale.rommFirmwareRowSubtitle:
+      'Проверьте, какие файлы BIOS нужны этой системе, и скачайте недостающие',
+  AppLocale.rommFirmwareRowRequiresConnection:
+      'Подключитесь к RomM, чтобы управлять файлами BIOS',
+  AppLocale.rommFirmwarePanelTitle: 'Файлы BIOS для {system}',
+  AppLocale.rommFirmwareLoading: 'Загрузка файлов BIOS…',
+  AppLocale.rommFirmwareEmpty: 'В RomM нет файлов BIOS для этой платформы',
+  AppLocale.rommFirmwareScopeDenied:
+      'У этой учётной записи RomM нет доступа к прошивкам',
+  AppLocale.rommFirmwareListFailed: 'Не удалось загрузить файлы BIOS: {error}',
+  AppLocale.rommFirmwareStatePresent: 'Есть',
+  AppLocale.rommFirmwareStateMissing: 'Отсутствует',
+  AppLocale.rommFirmwareStateServerMissing: 'Не хранится на сервере',
+  AppLocale.rommFirmwareStateNoFolder: 'Папка BIOS не выбрана',
+  AppLocale.rommFirmwareVerifiedByServer: 'Проверено RomM',
+  AppLocale.rommFirmwareVerifyChecking: 'Проверка…',
+  AppLocale.rommFirmwareVerifyMatch: 'Совпадает с копией на сервере',
+  AppLocale.rommFirmwareVerifyMismatch: 'Отличается от копии на сервере',
+  AppLocale.rommFirmwareVerifyUnreadable: 'Не удалось прочитать локальный файл',
+  AppLocale.rommFirmwareActionDownload: 'Скачать',
+  AppLocale.rommFirmwareActionVerify: 'Проверить',
+  AppLocale.rommFirmwareActionDownloadAll: 'Скачать все недостающие',
+  AppLocale.rommFirmwareActionChooseFolder: 'Выбрать папку BIOS',
+  AppLocale.rommFirmwareDestination: 'Назначение: {path}',
+  AppLocale.rommFirmwareDestinationMissing:
+      'Выберите папку BIOS перед загрузкой',
+  AppLocale.rommFirmwareFolderFailed:
+      'Эту папку нельзя использовать для файлов BIOS',
+  AppLocale.rommFirmwareDownloadProgress: 'Загрузка {file} ({done}/{total})',
+  AppLocale.rommFirmwareDownloadSummary:
+      'Файлы BIOS: скачано {downloaded}, с ошибками {failed}',
+  AppLocale.rommFirmwareDownloadCancelled:
+      'Загрузка BIOS остановлена — {summary}',
+  AppLocale.rommFirmwareDownloadFailedFile: 'Не удалось скачать {file}',
 };

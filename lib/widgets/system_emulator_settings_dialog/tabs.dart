@@ -540,6 +540,14 @@ extension _Tabs on _SystemEmulatorSettingsDialogState {
             key: _generalItemKeys[_rommFetchIndex],
           ),
         ],
+        // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "Firmware Panel"
+        if (_offersRommFirmware) ...[
+          SizedBox(height: 4.r),
+          _buildRommFirmwareItem(
+            index: _rommFirmwareIndex,
+            key: _generalItemKeys[_rommFirmwareIndex],
+          ),
+        ],
       ],
     );
   }
