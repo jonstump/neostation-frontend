@@ -21,10 +21,10 @@ NeoStation has no BIOS model. `RetroArchConfigService` parses `system_directory`
 
 ### Destination resolver in a small service
 
-**Choice**: `BiosDestinationService.resolve(system)` returns RetroArch's `system_directory` when known and existing, else `user_config.bios_directory`, else null; the panel calls a picker and persists through `ConfigRepository.setBiosDirectory`.
+**Choice**: `BiosDestinationService.resolve(system)` returns an explicitly chosen `user_config.bios_directory` when set, existing and writable; else RetroArch's `system_directory` when known, existing and writable; else null. The panel always offers a picker and persists through `ConfigRepository.setBiosDirectory`, and names the winning candidate so the precedence is visible. Existence is checked before writability on each candidate, because the writability probe creates the directory — probing first would recreate a deleted choice and RetroArch could never win back.
 **Rationale**: one place to grow per-emulator rules later (a `bios_dir` in the emulator JSON) without touching the panel.
 **Alternatives considered**:
-- Always ask: annoying when RetroArch already tells us.
+- RetroArch always wins: what this originally said. It reads well until you notice the picker is then unreachable, so a wrong `system_directory` cannot be corrected in-app (PR #142 → #151 → #157).
 - Per-system column: more schema for a need not yet seen.
 
 ### Presence by name and size, md5 on request
