@@ -1525,4 +1525,26 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommMaintenanceQueued: 'Tugas diantrekan di server',
   AppLocale.rommMaintenanceBusy: 'Tugas itu sudah berjalan',
   AppLocale.rommMaintenanceFailed: 'Tugas tidak dapat dimulai',
+  AppLocale.rommFixMatchAction: 'Perbaiki kecocokan di RomM',
+  AppLocale.rommChangeCoverAction: 'Ganti sampul',
+  AppLocale.rommFixMatchTitle: 'Perbaiki kecocokan di RomM',
+  AppLocale.rommChangeCoverTitle: 'Ganti sampul di RomM',
+  AppLocale.rommFixMatchSearchHint: 'Cari di sumber metadata server',
+  AppLocale.rommFixMatchLoading: 'Menanyakan RomM…',
+  AppLocale.rommFixMatchNoResults: 'Tidak ada kandidat yang ditemukan',
+  AppLocale.rommFixMatchNoSource:
+      'Server RomM ini tidak mengaktifkan sumber metadata apa pun',
+  AppLocale.rommFixMatchFailed:
+      'Pencarian RomM gagal — pilih untuk mencoba lagi',
+  AppLocale.rommFixMatchConfirmTitle: 'Terapkan kecocokan ini?',
+  AppLocale.rommFixMatchConfirmBody:
+      'RomM akan menyimpan “{name}” sebagai game ini untuk semua klien, dan metadata lokal akan diganti dari RomM.',
+  AppLocale.rommChangeCoverConfirmTitle: 'Terapkan sampul ini?',
+  AppLocale.rommChangeCoverConfirmBody:
+      'RomM akan menyimpan sampul ini untuk “{name}” bagi semua klien, dan gambar lokal akan diganti dari RomM.',
+  AppLocale.rommFixMatchApply: 'Terapkan di RomM',
+  AppLocale.rommFixMatchApplying: 'Menerapkan di RomM…',
+  AppLocale.rommFixMatchApplied: 'Kecocokan diterapkan di RomM',
+  AppLocale.rommChangeCoverApplied: 'Sampul diterapkan di RomM',
+  AppLocale.rommFixMatchApplyFailed: 'Perubahan tidak dapat diterapkan di RomM',
 };

@@ -28,6 +28,12 @@ String? rommPairErrorKey(RommErrorKind? kind) {
     // Governing: ADR-0019 (expose RomM library filters, search and
     // maintenance), SPEC-0018 REQ "Maintenance Tasks"
     RommErrorKind.taskBusy => null,
+    // Not a pairing outcome either: an unconfigured metadata provider only
+    // surfaces from the match picker's own server-side search, which has its
+    // own sentence for it.
+    // Governing: ADR-0019 (expose RomM library filters, search and
+    // maintenance), SPEC-0018 REQ "Metadata Search And Apply"
+    RommErrorKind.noMetadataSource => null,
     // Every non-pairing kind falls back to the provider's own message, the
     // same as [RommErrorKind.other]: they cannot arise from an exchange.
     RommErrorKind.other || RommErrorKind.payloadTooLarge || null => null,

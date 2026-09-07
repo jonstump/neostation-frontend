@@ -1574,4 +1574,28 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.rommMaintenanceQueued: 'Aufgabe auf dem Server eingereiht',
   AppLocale.rommMaintenanceBusy: 'Diese Aufgabe läuft bereits',
   AppLocale.rommMaintenanceFailed: 'Die Aufgabe konnte nicht gestartet werden',
+  AppLocale.rommFixMatchAction: 'Zuordnung auf RomM korrigieren',
+  AppLocale.rommChangeCoverAction: 'Cover ändern',
+  AppLocale.rommFixMatchTitle: 'Zuordnung auf RomM korrigieren',
+  AppLocale.rommChangeCoverTitle: 'Cover auf RomM ändern',
+  AppLocale.rommFixMatchSearchHint:
+      'Die Metadatenquellen des Servers durchsuchen',
+  AppLocale.rommFixMatchLoading: 'RomM wird abgefragt…',
+  AppLocale.rommFixMatchNoResults: 'Keine Treffer gefunden',
+  AppLocale.rommFixMatchNoSource:
+      'Auf diesem RomM-Server ist keine Metadatenquelle aktiviert',
+  AppLocale.rommFixMatchFailed:
+      'Die RomM-Suche ist fehlgeschlagen — zum erneuten Versuch auswählen',
+  AppLocale.rommFixMatchConfirmTitle: 'Diese Zuordnung übernehmen?',
+  AppLocale.rommFixMatchConfirmBody:
+      'RomM speichert „{name}“ für alle Clients als dieses Spiel, und die lokalen Metadaten werden aus RomM ersetzt.',
+  AppLocale.rommChangeCoverConfirmTitle: 'Dieses Cover übernehmen?',
+  AppLocale.rommChangeCoverConfirmBody:
+      'RomM speichert dieses Cover für alle Clients zu „{name}“, und das lokale Bild wird aus RomM ersetzt.',
+  AppLocale.rommFixMatchApply: 'Auf RomM übernehmen',
+  AppLocale.rommFixMatchApplying: 'Wird auf RomM übernommen…',
+  AppLocale.rommFixMatchApplied: 'Zuordnung auf RomM übernommen',
+  AppLocale.rommChangeCoverApplied: 'Cover auf RomM übernommen',
+  AppLocale.rommFixMatchApplyFailed:
+      'Die Änderung konnte auf RomM nicht übernommen werden',
 };

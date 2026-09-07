@@ -1527,4 +1527,26 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommMaintenanceQueued: 'Задача поставлена в очередь на сервере',
   AppLocale.rommMaintenanceBusy: 'Эта задача уже выполняется',
   AppLocale.rommMaintenanceFailed: 'Не удалось запустить задачу',
+  AppLocale.rommFixMatchAction: 'Исправить совпадение в RomM',
+  AppLocale.rommChangeCoverAction: 'Сменить обложку',
+  AppLocale.rommFixMatchTitle: 'Исправить совпадение в RomM',
+  AppLocale.rommChangeCoverTitle: 'Сменить обложку в RomM',
+  AppLocale.rommFixMatchSearchHint: 'Поиск по источникам метаданных сервера',
+  AppLocale.rommFixMatchLoading: 'Запрос к RomM…',
+  AppLocale.rommFixMatchNoResults: 'Подходящих вариантов не найдено',
+  AppLocale.rommFixMatchNoSource:
+      'На этом сервере RomM не включён ни один источник метаданных',
+  AppLocale.rommFixMatchFailed:
+      'Поиск в RomM не удался — выберите, чтобы повторить',
+  AppLocale.rommFixMatchConfirmTitle: 'Применить это совпадение?',
+  AppLocale.rommFixMatchConfirmBody:
+      'RomM сохранит «{name}» как эту игру для всех клиентов, а локальные метаданные будут заменены данными из RomM.',
+  AppLocale.rommChangeCoverConfirmTitle: 'Применить эту обложку?',
+  AppLocale.rommChangeCoverConfirmBody:
+      'RomM сохранит эту обложку для «{name}» для всех клиентов, а локальное изображение будет заменено данными из RomM.',
+  AppLocale.rommFixMatchApply: 'Применить в RomM',
+  AppLocale.rommFixMatchApplying: 'Применение в RomM…',
+  AppLocale.rommFixMatchApplied: 'Совпадение применено в RomM',
+  AppLocale.rommChangeCoverApplied: 'Обложка применена в RomM',
+  AppLocale.rommFixMatchApplyFailed: 'Не удалось применить изменение в RomM',
 };

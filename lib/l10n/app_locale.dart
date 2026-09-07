@@ -1582,6 +1582,30 @@ mixin AppLocale {
   static const String rommMaintenanceBusy = 'romm_maintenance_busy';
   static const String rommMaintenanceFailed = 'romm_maintenance_failed';
 
+  // ── RomM metadata fix-up in the match picker (SPEC-0018) ────────────────
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Localized User-Facing Text"
+  static const String rommFixMatchAction = 'romm_fix_match_action';
+  static const String rommChangeCoverAction = 'romm_change_cover_action';
+  static const String rommFixMatchTitle = 'romm_fix_match_title';
+  static const String rommChangeCoverTitle = 'romm_change_cover_title';
+  static const String rommFixMatchSearchHint = 'romm_fix_match_search_hint';
+  static const String rommFixMatchLoading = 'romm_fix_match_loading';
+  static const String rommFixMatchNoResults = 'romm_fix_match_no_results';
+  static const String rommFixMatchNoSource = 'romm_fix_match_no_source';
+  static const String rommFixMatchFailed = 'romm_fix_match_failed';
+  static const String rommFixMatchConfirmTitle = 'romm_fix_match_confirm_title';
+  static const String rommFixMatchConfirmBody = 'romm_fix_match_confirm_body';
+  static const String rommChangeCoverConfirmTitle =
+      'romm_change_cover_confirm_title';
+  static const String rommChangeCoverConfirmBody =
+      'romm_change_cover_confirm_body';
+  static const String rommFixMatchApply = 'romm_fix_match_apply';
+  static const String rommFixMatchApplying = 'romm_fix_match_applying';
+  static const String rommFixMatchApplied = 'romm_fix_match_applied';
+  static const String rommChangeCoverApplied = 'romm_change_cover_applied';
+  static const String rommFixMatchApplyFailed = 'romm_fix_match_apply_failed';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================
