@@ -290,6 +290,15 @@ class RommService {
   /// once per connection rather than before every authenticated call.
   bool _probed = false;
 
+  /// Whether this connection has already verified its API key — and, with it,
+  /// learned the scopes that key holds — since the last [configure].
+  ///
+  /// Set even when the attempt fails, so a key the server keeps rejecting is
+  /// asked about once per connection rather than before every call.
+  // Governing: ADR-0013 (push play state to RomM),
+  // SPEC-0013 REQ "Optional Scope Groups", ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
+  bool _apiKeyVerified = false;
+
   /// Features already reported as gated on this connection, so the "not on
   /// this server" line is logged once per feature rather than once per call.
   final Set<RommFeature> _gatesLogged = <RommFeature>{};
@@ -423,6 +432,7 @@ class RommService {
       _scopeStates[group] = RommScopeState.unknown;
     }
     _scopeGatesLogged.clear();
+    _apiKeyVerified = false;
     _favouritesCollectionId = null;
     _playSessionsSupported = true;
     _applyCapabilityGates();
@@ -466,6 +476,7 @@ class RommService {
       _scopeStates[group] = RommScopeState.unknown;
     }
     _scopeGatesLogged.clear();
+    _apiKeyVerified = false;
   }
 
   static String _normalizeBaseUrl(String raw) {
@@ -723,7 +734,10 @@ class RommService {
     // API-key mode probes too: the key's scopes are fixed, but the server
     // version still gates which endpoints exist.
     if (!_probed) await fetchHeartbeat();
-    if (usesApiKey) return _verifyApiKey();
+    if (usesApiKey) {
+      _apiKeyVerified = true;
+      return _verifyApiKey();
+    }
     return _authenticateWithPassword();
   }
 
@@ -767,10 +781,74 @@ class RommService {
       if (decoded is Map<String, dynamic>) {
         final name = decoded['username']?.toString();
         if (name != null && name.isNotEmpty) _username = name;
+        _learnScopesFromUser(decoded);
       }
     } catch (_) {
-      // The key works; a surprising body shape only costs us the display name.
+      // The key works; a surprising body shape only costs us the display name
+      // and leaves the scope groups where they were: unknown, not denied.
     }
+  }
+
+  /// Settles the optional scope groups from the `oauth_scopes` RomM reports for
+  /// the current credential, for the login modes that have no token grant to
+  /// negotiate with.
+  ///
+  /// A password login learns its scopes by asking for them and reading the
+  /// server's 403s ([_negotiateScopeGroups]). An API key — and therefore a
+  /// paired client token, which [RommProvider] hands to [configure] as one —
+  /// has fixed scopes and never sends a grant, so every group used to stay
+  /// [RommScopeState.unknown] for the whole connection. That is the state
+  /// [RommProvider.canRunServerTasks] refuses to act on, which made the server
+  /// maintenance menu unreachable on the pairing/QR path — the primary way a
+  /// handheld connects (issue #168).
+  ///
+  /// `GET /api/users/me` already answers with the scope list, so this costs no
+  /// extra request: [_verifyApiKey] simply stops discarding the rest of the
+  /// body it has.
+  ///
+  /// Deliberately conservative about what counts as an answer. A missing,
+  /// malformed, or **empty** `oauth_scopes` is "learned nothing" and leaves
+  /// every group unknown, because a server that does not report scopes must not
+  /// be read as a server that grants none — that would newly disable features
+  /// like playtime, which run on `!= denied` and work today precisely because
+  /// unknown is permissive. Only a non-empty list settles anything.
+  /// Note on the governing artifacts: ADR-0013 decision 1, SPEC-0013 REQ
+  /// "Optional Scope Groups" and SPEC-0018 REQ "Maintenance Tasks" each
+  /// specified the *inverse* of this method — groups stay `unknown` in API-key
+  /// mode until a 403, and the resulting blind spot for pair-code and restored
+  /// sessions is deliberate. Issue #168 is the report that the blind spot made
+  /// the maintenance menu unreachable on the primary handheld login. All three
+  /// are amended to match this code in the docs PR #171, which must land
+  /// alongside this change.
+  // Governing: ADR-0013 (push play state to RomM) decision 1 (amended, #171),
+  // SPEC-0013 REQ "Optional Scope Groups" (amended, #171),
+  // ADR-0019, SPEC-0018 REQ "Maintenance Tasks" (amended, #171)
+  void _learnScopesFromUser(Map<String, dynamic> user) {
+    final raw = user['oauth_scopes'];
+    if (raw is! List || raw.isEmpty) return;
+    final held = <String>{
+      for (final scope in raw)
+        if (scope != null) scope.toString().trim(),
+    }..removeWhere((s) => s.isEmpty);
+    if (held.isEmpty) return;
+
+    for (final group in RommScopeGroup.values) {
+      // A group the server version rules out is denied without consulting the
+      // list, exactly as the password path decides it before requesting.
+      final gate = group.gate;
+      if (gate != null && supports(gate) == RommFeatureSupport.unsupported) {
+        _logGateOnce(gate);
+        _scopeStates[group] = RommScopeState.denied;
+        continue;
+      }
+      // Every scope in the group, or the group is not usable: the group is the
+      // unit a feature needs, so a half-held pair is not a grant.
+      final needed = group.scopes.split(' ').where((s) => s.isNotEmpty);
+      _scopeStates[group] = needed.every(held.contains)
+          ? RommScopeState.granted
+          : RommScopeState.denied;
+    }
+    _logScopeNegotiation();
   }
 
   /// Exchanges a RomM pairing code for a client token.
@@ -1116,7 +1194,46 @@ class RommService {
   }
 
   /// Ensures a usable access token, authenticating or refreshing as needed.
+  ///
+  /// API-key mode has nothing to refresh, but it does have something to
+  /// *learn*: the scopes the key carries, which only `GET /api/users/me`
+  /// reports. [RommProvider.initialize] restores a saved connection without
+  /// touching the network — by design — so a session resumed at launch never
+  /// calls [authenticate], and before this the scope groups stayed unknown for
+  /// the entire run. Every `granted`-gated feature was then invisible until the
+  /// user re-connected by hand, which is how the server maintenance menu came
+  /// to be missing on a paired handheld across restarts (issue #168).
+  ///
+  /// Verifying here rather than in `initialize` keeps the restore offline: the
+  /// cost is paid by the first call that actually needs the network, once per
+  /// connection, and a failure is logged and swallowed because this is a
+  /// best-effort enrichment of a request that is about to be sent anyway.
+  // Governing: ADR-0010 (RomM heartbeat capability probe),
+  // SPEC-0010 REQ "Probe Before The Token Grant" (amended, #171 — the clause
+  // tying the probe to authenticate() did not cover a restored session),
+  // ADR-0013, SPEC-0013 REQ "Optional Scope Groups" (amended, #171)
   Future<void> _ensureToken() async {
+    if (usesApiKey && !_apiKeyVerified) {
+      _apiKeyVerified = true;
+      try {
+        await authenticate();
+      } on RommAuthException catch (e) {
+        // The server answered, and its answer was "no". Asking again with the
+        // same key would only repeat it, so the attempt stays spent.
+        _log.w('RomM API-key rejected during verification: ${e.message}');
+      } catch (e) {
+        // The server did not answer at all — a timeout, a dropped socket, a
+        // TLS failure. Re-arm: a handheld commonly resumes and issues its
+        // first request before Wi-Fi is up, and latching on a transport error
+        // would leave the groups unknown and the capabilities null for the
+        // rest of the process. That is issue #168's exact symptom with a
+        // narrower trigger, and `_reprobe()` does not cover it because it
+        // restores capabilities without re-running verification.
+        _apiKeyVerified = false;
+        _log.w('RomM API-key verification could not reach the server: $e');
+      }
+      return;
+    }
     if (_tokenLikelyValid) return;
     if (_accessToken != null && _refreshToken != null) {
       await _refreshAccessToken();

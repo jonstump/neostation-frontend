@@ -34,6 +34,15 @@ void main() {
     late Directory tempDir;
     final requests = <http.Request>[];
 
+    /// The requests this test cares about. An API-key connection now verifies
+    /// itself once — a heartbeat plus `GET /api/users/me`, where it learns the
+    /// scopes its key holds — before its first authenticated call.
+    // Governing: ADR-0013, SPEC-0013 REQ "Optional Scope Groups",
+    // ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
+    Iterable<http.Request> calls() => requests.where(
+      (r) => !const {'/api/heartbeat', '/api/users/me'}.contains(r.url.path),
+    );
+
     void serve(FutureOr<http.Response> Function(http.Request) respond) {
       RommService.debugUseHttpClient(
         MockClient((request) async {
@@ -79,8 +88,8 @@ void main() {
 
       final result = await service().uploadScreenshot(7, shot('Game-a.png'));
 
-      expect(requests, hasLength(1));
-      final request = requests.single;
+      expect(calls(), hasLength(1));
+      final request = calls().single;
       expect(request.method, 'POST');
       expect(request.url.path, '/api/screenshots');
       expect(request.url.queryParameters['rom_id'], '7');
