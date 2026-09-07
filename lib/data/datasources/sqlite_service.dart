@@ -459,7 +459,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 163;
+  static const int _databaseVersion = 164;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -2143,6 +2143,8 @@ class SqliteService {
       SqliteMigrations.createAppRommPlaySessionsTableSql,
       SqliteMigrations.createAppRommPlaytimeStateTableSql,
       SqliteMigrations.createAppRommScreenshotMapTableSql,
+      // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Props Outbox"
+      SqliteMigrations.createAppRommPropsOutboxTableSql,
       SqliteMigrations.createUserRetroArchConfigTableSql,
       SqliteMigrations.createUserCollectionsTableSql,
       SqliteMigrations.createUserCollectionItemsTableSql,

@@ -104,6 +104,30 @@ class SqliteMigrations {
     );
   ''';
 
+  /// CREATE for the play-state push outbox (v164).
+  ///
+  /// One row per linked game with a change RomM has not been told about yet.
+  /// Keyed by `rom_path` rather than by RomM id because the link row can
+  /// arrive after the change (a game favourited before it was linked links
+  /// later, and the flush resolves the id then), and because one row per game
+  /// is what makes a burst of toggles cost one request.
+  ///
+  /// The intent columns are deliberately nullable: NULL means "nothing to say
+  /// about this field", so a favourite toggle never overwrites a pending hide.
+  /// `touch_last_played` is a flag rather than a timestamp — RomM sets its own
+  /// `last_played` from `?update_last_played=true`, so the device only has to
+  /// remember *that* a session ended.
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Props Outbox"
+  static const String createAppRommPropsOutboxTableSql = '''
+    CREATE TABLE IF NOT EXISTS app_romm_props_outbox (
+      rom_path TEXT PRIMARY KEY,
+      hidden INTEGER,
+      favourite INTEGER,
+      touch_last_played INTEGER NOT NULL DEFAULT 0,
+      updated_at TEXT
+    );
+  ''';
+
   /// CREATE for the singleton RetroArch directory row (v35; the screenshot
   /// columns added in v163).
   ///
@@ -704,6 +728,9 @@ class SqliteMigrations {
         break;
       case 163:
         await _migrateToVersion163(db);
+        break;
+      case 164:
+        await _migrateToVersion164(db);
         break;
       default:
         _log.w('No migration defined for version $version');
@@ -7332,6 +7359,32 @@ class SqliteMigrations {
       _log.i('Migration v163 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v163: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v164: the RomM play-state push outbox
+  /// ([createAppRommPropsOutboxTableSql]).
+  ///
+  /// Queues `hidden`, favourite membership and "a session just ended" per
+  /// linked game so the changes survive being made offline and reach RomM on
+  /// the next flush.
+  ///
+  /// **Numbered 164.** 165 is claimed by the in-flight RomM catalog branch;
+  /// two lineages cannot both own a number, because a device that ran the
+  /// other branch's migration is already past it and would skip this one.
+  ///
+  /// `CREATE TABLE IF NOT EXISTS`, so re-running is a no-op and a database
+  /// that already has the table is left exactly as it is.
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Database Operation Standards"
+  static Future<void> _migrateToVersion164(Database db) async {
+    _log.i('Migration v164: Creating the RomM play-state push outbox');
+    try {
+      db.execute(createAppRommPropsOutboxTableSql);
+      _log.i('Migration v164 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v164: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

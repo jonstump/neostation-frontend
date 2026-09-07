@@ -200,30 +200,40 @@ void main() {
     });
 
     test(
-      'a failed probe leaves the grant and its 403 fallback unchanged',
+      'a failed probe still asks for every group and drops only the denied one',
       () async {
-        var posts = 0;
+        // A server that refuses the playtime scopes and allows the rest. With
+        // no heartbeat every group reads as unknown, so all of them are asked
+        // for and the negotiation settles them one at a time (ADR-0013).
         serve(
           heartbeat: () => http.Response('blocked', 502),
-          token: (request) {
-            posts++;
-            return posts == 1
-                ? http.Response('forbidden', 403)
-                : json(200, {'access_token': 'tok', 'expires': 3600});
-          },
+          token: (request) =>
+              request.bodyFields['scope']!.contains('roms.user.')
+              ? http.Response('forbidden', 403)
+              : json(200, {'access_token': 'tok', 'expires': 3600}),
         );
         final service = configured();
 
         await service.authenticate();
 
-        expect(paths(), ['/api/heartbeat', '/api/token', '/api/token']);
         expect(
           requests[1].bodyFields['scope'],
           contains('roms.user.write'),
           reason: 'unknown never gates',
         );
-        expect(requests[2].bodyFields['scope'], isNot(contains('roms.user.')));
+        expect(
+          requests.last.bodyFields['scope'],
+          isNot(contains('roms.user.')),
+        );
+        expect(
+          requests.last.bodyFields['scope'],
+          contains('collections.write'),
+        );
         expect(service.playtimeSyncAvailable, isFalse);
+        expect(
+          service.hasScope(RommScopeGroup.collectionsWrite),
+          RommScopeState.granted,
+        );
       },
     );
 

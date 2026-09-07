@@ -1351,4 +1351,5 @@ const Map<String, dynamic> appLocaleKo = {
       'BIOS 파일: {downloaded}개 완료, {failed}개 실패',
   AppLocale.rommFirmwareDownloadCancelled: 'BIOS 다운로드가 중지되었습니다 — {summary}',
   AppLocale.rommFirmwareDownloadFailedFile: '{file}을(를) 다운로드하지 못했습니다',
+  AppLocale.rommFavoritesCollectionName: '즐겨찾기',
 };

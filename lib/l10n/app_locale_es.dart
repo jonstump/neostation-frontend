@@ -1525,4 +1525,5 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.rommFirmwareDownloadCancelled:
       'Descarga de BIOS detenida — {summary}',
   AppLocale.rommFirmwareDownloadFailedFile: 'No se pudo descargar {file}',
+  AppLocale.rommFavoritesCollectionName: 'Favoritos',
 };

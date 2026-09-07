@@ -164,7 +164,26 @@ enum RommFeature {
   ///
   /// Verified: `/api/roms/by-hash` first shipped in commit 8a66ac81
   /// (2025-12-12), released in RomM 4.5.0.
-  romLookupByHash(RommServerVersion(4, 5, 0));
+  romLookupByHash(RommServerVersion(4, 5, 0)),
+
+  /// `PUT /api/roms/{id}/props` taking a *bare* `RomUserData` body plus the
+  /// `update_last_played` / `remove_last_played` query flags. Older servers
+  /// expect a `{"data": ...}` wrapper, which is a different call shape rather
+  /// than a missing field, so NeoStation gates on the release instead of
+  /// carrying two encoders.
+  ///
+  /// Verified: the bare-body props endpoint is part of the RomM 4.9.0 release
+  /// (published 2026-06-12), the threshold recorded in ADR-0013.
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Props Update Call"
+  romPropsBareBody(RommServerVersion(4, 9, 0)),
+
+  /// `POST|DELETE /api/collections/{id}/roms` — adding and removing ROMs from
+  /// a collection by id, which is how the favourites collection is edited.
+  ///
+  /// Verified: the collection rom add/remove endpoints are part of the RomM
+  /// 4.9.0 release (published 2026-06-12), the threshold recorded in ADR-0013.
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Favourites Collection"
+  collectionRomsAddRemove(RommServerVersion(4, 9, 0));
 
   const RommFeature(this.minVersion);
 

@@ -1290,4 +1290,5 @@ const Map<String, dynamic> appLocaleZh = {
       'BIOS 文件：已下载 {downloaded} 个，失败 {failed} 个',
   AppLocale.rommFirmwareDownloadCancelled: 'BIOS 下载已停止 — {summary}',
   AppLocale.rommFirmwareDownloadFailedFile: '无法下载 {file}',
+  AppLocale.rommFavoritesCollectionName: '收藏',
 };

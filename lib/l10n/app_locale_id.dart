@@ -1485,4 +1485,5 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommFirmwareDownloadCancelled:
       'Unduhan BIOS dihentikan — {summary}',
   AppLocale.rommFirmwareDownloadFailedFile: '{file} gagal diunduh',
+  AppLocale.rommFavoritesCollectionName: 'Favorit',
 };
