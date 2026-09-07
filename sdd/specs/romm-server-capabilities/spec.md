@@ -67,7 +67,7 @@ The system SHALL define `RommFeature` with one entry per gated endpoint and the 
 
 ### Requirement: Probe Before The Token Grant
 
-`authenticate()` SHALL call `fetchHeartbeat()` first when the connection has not been probed since the last `configure()`. When `supports(playSessions)` is `unsupported`, the password grant MUST request only the read scopes and MUST NOT retry with the playtime scopes; the playtime-scope-granted flag MUST be false. When `supported` or `unknown`, the grant and its 403 fallback MUST behave exactly as before this spec. API-key mode MUST still probe (the key's scopes are fixed, the version still gates endpoints).
+`authenticate()` SHALL call `fetchHeartbeat()` first when the connection has not been probed since the last `configure()`. When `supports(playSessions)` is `unsupported`, the password grant MUST request only the read scopes and MUST NOT retry with the playtime scopes; the playtime-scope-granted flag MUST be false. When `supported` or `unknown`, the grant and its 403 fallback MUST behave as SPEC-0013 REQ "Optional Scope Groups" defines. (Until SPEC-0013, that was the binary playtime grant with a single 403 retry; ADR-0013 `extends` ADR-0010 and replaced it with per-group negotiation. This clause originally read "exactly as before this spec", which is stale now that SPEC-0013 has superseded the fallback it referred to.) API-key mode MUST still probe (the key's scopes are fixed, the version still gates endpoints).
 
 #### Scenario: Old server, password grant
 
