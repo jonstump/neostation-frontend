@@ -26,14 +26,40 @@ import 'package:path/path.dart' as p;
 const _mainActivityPath =
     'android/app/src/main/kotlin/com/neogamelab/neostation/MainActivity.kt';
 
-/// The game channel is the one this guard exists for, so its discovery is held
-/// to a floor as well as to "not empty" — a scan that collapses to a couple of
-/// files has broken even if it still finds something.
+/// Channels Dart may invoke on that `MainActivity.kt` deliberately does not
+/// register, with where their handler actually lives.
 ///
-/// Both numbers are comfortably below today's counts (11 files, 27 names).
-/// Lower them only alongside a real reduction in callers, never to make a
-/// suddenly-shrunken scan pass.
-const _minGameChannelCallerFiles = 8;
+/// Every *other* channel a `lib/` file sends on must appear in the
+/// `MainActivity.kt` scan, or its calls would be dropped from every check below
+/// — a channel nobody answers is the same bug class as a method nobody answers.
+/// So the exceptions are named here rather than falling through silently, and
+/// adding one is a deliberate act with a reason attached.
+const _channelsHandledOutsideMainActivity = <String, String>{
+  'com.neogamelab.neostation/secondary_apps':
+      'registered by SecondaryAppsPresentation.kt on the second display '
+      'engine; its handler names are not scanned yet',
+};
+
+/// The game channel is the one this guard exists for, so its discovery is held
+/// to floors as well as to "not empty".
+///
+/// The name floor tracks features: 27 distinct names are sent today, and that
+/// number moves only when platform methods are genuinely added or removed, so
+/// 20 is a real assertion about the scan still matching call sites.
+///
+/// The file floor is deliberately structural rather than tight. It used to sit
+/// at 8 against 11, but six of those callers make one or two calls each, so
+/// folding a couple of them behind a shared service — an ordinary refactor —
+/// would trip it and print a message reading like a broken scan, inviting the
+/// next person to just lower the number. What actually guards resolution is
+/// elsewhere and is not refactor-sensitive: a caller whose channel cannot be
+/// resolved fails as unresolved, a channel nobody registers fails as
+/// unregistered, and `openSafDirectoryPicker` is pinned to its file by name. So
+/// this only asserts the scan has not collapsed onto a single file.
+///
+/// Lower either number only alongside a real reduction in callers, never to
+/// make a suddenly-shrunken scan pass.
+const _minGameChannelCallerFiles = 3;
 const _minGameChannelInvokedNames = 20;
 
 void main() {
@@ -135,6 +161,35 @@ void main() {
           'invokeMethod names cannot be attributed to one of them. Split the '
           'file or teach this test to resolve per call site: $ambiguous',
     );
+
+    // Resolving to a channel is not enough: the last test iterates the
+    // *handler* map, so a file resolving to a channel MainActivity.kt never
+    // registers has every one of its calls dropped with nothing asserted. A
+    // stale or mistyped channel string is the same bug as a stale or mistyped
+    // method name — every call on it throws — so it fails here.
+    final unregistered = <String, List<String>>{};
+    dartChannelsByFile.forEach((file, channels) {
+      for (final channel in channels) {
+        if (handlersByChannel.containsKey(channel)) continue;
+        if (_channelsHandledOutsideMainActivity.containsKey(channel)) continue;
+        unregistered.putIfAbsent(channel, () => <String>[]).add(file);
+      }
+    });
+    for (final files in unregistered.values) {
+      files.sort();
+    }
+
+    expect(
+      unregistered,
+      isEmpty,
+      reason:
+          'these files send method calls on channels no handler in '
+          '$_mainActivityPath registers, so every call on them is a '
+          'MissingPluginException and none of them is checked by this test. '
+          'Fix the channel name, register the handler, or — if the handler '
+          'genuinely lives elsewhere — add it to '
+          '_channelsHandledOutsideMainActivity with the reason: $unregistered',
+    );
   });
 
   test('the caller scan finds the game channel callers it is meant to '
@@ -203,6 +258,101 @@ void main() {
           '$missing',
     );
   });
+
+  // The two scans above are regexes over source text, so their own failure
+  // modes are best pinned on source we control rather than on MainActivity.kt
+  // as it happens to be written today.
+  group('the scans themselves', () {
+    test('a commented-out when arm is not a handler', () {
+      const kotlin = '''
+class MainActivity {
+  private val CHANNEL = "com.neogamelab.neostation/game"
+  fun configure() {
+    channel = MethodChannel(messenger, CHANNEL)
+    channel.setMethodCallHandler { call, result ->
+      when (call.method) {
+        "liveHandler" -> { result.success(true) }
+        // "commentedOut" -> { removed for now
+        /* "blockCommented" -> { also removed */
+        else -> result.notImplemented()
+      }
+    }
+  }
+}
+''';
+
+      final handlers = _handlersByChannel(kotlin)[_gameChannel];
+      expect(handlers, contains('liveHandler'));
+      for (final ghost in const ['commentedOut', 'blockCommented']) {
+        expect(
+          handlers,
+          isNot(contains(ghost)),
+          reason:
+              '$ghost is written in a comment, not registered. Reading it as a '
+              'live handler would let a note in MainActivity.kt about a '
+              'deleted method silently re-authorise that method for callers.',
+        );
+      }
+    });
+
+    test('handler names inside string literals survive the comment mask', () {
+      // The comment mask must not blank string literals: the handler names are
+      // string literals. This is the assertion that stops the B1 fix from
+      // being "mask everything", which would empty the handler set instead.
+      const kotlin = '''
+class MainActivity {
+  fun configure() {
+    channel = MethodChannel(messenger, "com.neogamelab.neostation/game")
+    channel.setMethodCallHandler { call, result ->
+      // a comment mentioning } and " to skew a naive scan
+      val message = "an unbalanced } and a \\" inside a string"
+      when (call.method) {
+        "realHandler" -> { result.success(message) }
+        else -> result.notImplemented()
+      }
+    }
+  }
+}
+''';
+
+      expect(_handlersByChannel(kotlin)[_gameChannel], contains('realHandler'));
+    });
+
+    test('the caller pattern sees every MethodChannel invoke form', () {
+      const dart = '''
+        await platform.invokeMethod('plainSingle');
+        await platform.invokeMethod("plainDouble");
+        await platform.invokeMethod<bool>('generic');
+        await platform.invokeListMethod<String>('listForm');
+        await platform.invokeMapMethod<String, dynamic>("mapForm");
+        await platform.invokeMethod(
+          'wrappedOntoTheNextLine',
+        );
+      ''';
+
+      expect(
+        _invokePattern.allMatches(dart).map(_invokedName).toSet(),
+        {
+          'plainSingle',
+          'plainDouble',
+          'generic',
+          'listForm',
+          'mapForm',
+          'wrappedOntoTheNextLine',
+        },
+        reason:
+            'a call form the pattern misses is worse than unchecked: a file '
+            'whose only platform calls use it never enters the scan at all, so '
+            'it is not even reported as unresolved',
+      );
+
+      expect(
+        _invokePattern.hasMatch("platform.invokeMethod('mismatched\")"),
+        isFalse,
+        reason: 'the opening and closing quote must match',
+      );
+    });
+  });
 }
 
 const _gameChannel = 'com.neogamelab.neostation/game';
@@ -212,10 +362,21 @@ final _channelNamePattern = RegExp(
   r'com\.neogamelab\.neostation/[A-Za-z0-9_]+',
 );
 
-/// Callers look like:  `invokeMethod('name'`  /  `invokeMethod<T>('name'`
+/// Callers look like:  `invokeMethod('name'`  /  `invokeMethod<T>('name'`.
+///
+/// `invokeListMethod` / `invokeMapMethod` are ordinary `MethodChannel` APIs and
+/// a double-quoted name is ordinary Dart, so both are matched too. Nothing in
+/// `lib/` writes them today, but a file whose *only* platform calls took one of
+/// those forms would not even enter the scan — it would be invisible rather
+/// than reported as unresolved.
+///
+/// The quote is captured and back-referenced so `'name"` cannot match.
 final _invokePattern = RegExp(
-  r"""invokeMethod(?:<[^>]*>)?\(\s*'([A-Za-z][A-Za-z0-9_]*)'""",
+  r"""invoke(?:List|Map)?Method(?:<[^>]*>)?\(\s*(['"])([A-Za-z][A-Za-z0-9_]*)\1""",
 );
+
+/// The method name captured by [_invokePattern] (group 1 is the quote).
+String _invokedName(RegExpMatch match) => match.group(2)!;
 
 // ---------------------------------------------------------------------------
 // Kotlin side
@@ -228,26 +389,33 @@ final _invokePattern = RegExp(
 /// file, so a scan of the whole file merges them and can only ever make the
 /// guard more permissive.
 Map<String, Set<String>> _handlersByChannel(String kotlin) {
-  final masked = _maskKotlinStringsAndComments(kotlin);
+  // Two masks, because the two scans need opposite things. Brace matching has
+  // to ignore string contents (a `}` in a message or a `${...}` template would
+  // skew the depth); the handler-name scan must keep them, because the names
+  // *are* string literals. Both must ignore comments — a commented-out `when`
+  // arm is not a handler, and reading one as live is how a deleted method name
+  // would silently re-authorise itself.
+  final masked = _maskKotlin(kotlin, maskStrings: true);
+  final live = _maskKotlin(kotlin, maskStrings: false);
 
   // `private val CHANNEL = "com.neogamelab.neostation/game"` and friends: the
   // registration sites name the constant, not the string.
   final constants = <String, String>{};
   for (final match in RegExp(
     r'\bval\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*"([^"]+)"',
-  ).allMatches(kotlin)) {
+  ).allMatches(live)) {
     constants[match.group(1)!] = match.group(2)!;
   }
 
   final result = <String, Set<String>>{};
   for (final match in RegExp(
     r'([A-Za-z_][A-Za-z0-9_]*)\s*=\s*MethodChannel\([^,]+,\s*([^)]+?)\s*\)',
-  ).allMatches(kotlin)) {
+  ).allMatches(live)) {
     final variable = match.group(1)!;
     final channel = _resolveKotlinChannelExpression(match.group(2)!, constants);
     if (channel == null) continue;
 
-    final block = _handlerBlock(kotlin, masked, variable, match.end);
+    final block = _handlerBlock(live, masked, variable, match.end);
     if (block == null) continue;
 
     // Handlers look like:  "methodName" -> {
@@ -276,7 +444,13 @@ String? _resolveKotlinChannelExpression(
 
 /// Source of the `variable.setMethodCallHandler { ... }` lambda that follows
 /// [from], or null when the variable never gets a handler.
-String? _handlerBlock(String kotlin, String masked, String variable, int from) {
+///
+/// [masked] (strings *and* comments blanked) locates the block, because only it
+/// gives a reliable brace depth. The block is then sliced out of [live]
+/// (comments blanked, string literals kept) so that whatever scans the result
+/// sees the handler names but not anything written in a comment. Both masks
+/// preserve length, so the offsets are interchangeable.
+String? _handlerBlock(String live, String masked, String variable, int from) {
   final registration = RegExp(
     RegExp.escape(variable) + r'\s*\??\s*\.setMethodCallHandler',
   ).firstMatch(masked.substring(from));
@@ -288,7 +462,7 @@ String? _handlerBlock(String kotlin, String masked, String variable, int from) {
   final close = _matchingBrace(masked, open);
   if (close < 0) return null;
 
-  return kotlin.substring(open, close + 1);
+  return live.substring(open, close + 1);
 }
 
 /// Index of the `}` closing the `{` at [open], or -1 when unbalanced.
@@ -309,9 +483,18 @@ int _matchingBrace(String source, int open) {
   return -1;
 }
 
-/// Blanks every Kotlin string literal, char literal and comment with spaces,
-/// preserving length so offsets still line up with the original source.
-String _maskKotlinStringsAndComments(String source) {
+/// Blanks Kotlin comments — and, when [maskStrings], single-line string and
+/// char literals too — with spaces, preserving length so offsets still line up
+/// with the original source and with the other mask of the same source.
+///
+/// Raw (`"""`) strings are always blanked: they can hold arbitrary text,
+/// including braces and quotes, and no handler arm is written as one.
+/// Single-line literals are kept when [maskStrings] is false, because that mask
+/// exists to read `"handlerName" ->` arms out of live code.
+///
+/// The walk is the same either way — string literals still have to be traversed
+/// so that a `//` inside one is not mistaken for a comment.
+String _maskKotlin(String source, {required bool maskStrings}) {
   final out = List<String>.generate(source.length, (i) => source[i]);
   void blank(int from, int to) {
     for (var i = from; i < to && i < source.length; i++) {
@@ -343,7 +526,7 @@ String _maskKotlinStringsAndComments(String source) {
         j += source[j] == r'\' ? 2 : 1;
       }
       final stop = j < source.length ? j + 1 : source.length;
-      blank(i, stop);
+      if (maskStrings) blank(i, stop);
       i = stop;
     } else {
       i++;
@@ -497,7 +680,7 @@ Map<String, List<String>> _invokedNamesOnChannel(
   for (final path in _filesOnChannel(channelsByFile, channel)) {
     final source = File(path).readAsStringSync();
     for (final match in _invokePattern.allMatches(source)) {
-      invoked.putIfAbsent(match.group(1)!, () => <String>[]).add(path);
+      invoked.putIfAbsent(_invokedName(match), () => <String>[]).add(path);
     }
   }
   return invoked;
