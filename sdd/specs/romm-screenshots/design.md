@@ -19,9 +19,9 @@ NeoStation's `ScreenshotService` only triggers a system screenshot on Android; s
 
 ## Decisions
 
-### Collector keyed by ROM stem and session window
+### Collector keyed by content stems and session window
 
-**Choice**: name prefix match on the ROM stem plus an mtime window from session start.
+**Choice**: name prefix match on any of the game's content stems (the ROM filename stem, plus a `.zip`'s largest-member stem) plus an mtime window from session start.
 **Rationale**: RetroArch names captures `<content>-<date>-<time>.png`; the window bounds the listing to this session's files even in a large folder.
 
 ### Ledger instead of hash comparison

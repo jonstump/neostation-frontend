@@ -34,12 +34,17 @@ The system SHALL provide `RommFirmware` (id, platformId, fileName, fileSizeBytes
 
 ### Requirement: BIOS Destination
 
-The system SHALL resolve a BIOS destination per system: the RetroArch `system_directory` when the RetroArch config is known and the directory exists; otherwise `user_config.bios_directory`, added by a versioned, `PRAGMA table_info`-guarded, idempotent migration; otherwise none. When none, the panel MUST offer to pick a folder (native picker on desktop, SAF tree on Android) and MUST persist the choice. SAF trees MUST be translated to a real path with the existing `safUriToRealPath` before writing.
+The system SHALL resolve a BIOS destination per system: an explicitly chosen `user_config.bios_directory` when one is set and writable; otherwise the RetroArch `system_directory` when the RetroArch config is known and the directory is writable; otherwise none. `bios_directory` is added by a versioned, `PRAGMA table_info`-guarded, idempotent migration. The panel MUST always offer to pick a folder (native picker on desktop, SAF tree on Android) and MUST persist the choice. SAF trees MUST be translated to a real path with the existing `safUriToRealPath` before writing.
 
-#### Scenario: RetroArch known
+#### Scenario: RetroArch known, nothing chosen
 
-- **WHEN** `retroarch.cfg` has a `system_directory` that exists
-- **THEN** the destination is that directory and no picker is offered
+- **WHEN** `retroarch.cfg` has a `system_directory` that exists and no `bios_directory` is set
+- **THEN** the destination is that directory, and the panel says so while still offering the picker
+
+#### Scenario: An explicit choice outranks RetroArch
+
+- **WHEN** the user picks a BIOS folder while `retroarch.cfg` also supplies a writable `system_directory`
+- **THEN** the chosen folder is the destination, and it survives reopening the panel
 
 #### Scenario: Nothing known
 

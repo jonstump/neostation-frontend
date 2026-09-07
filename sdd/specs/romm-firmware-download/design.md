@@ -56,7 +56,7 @@ Layering: UI → provider → service/repository → datasource; the destination
 
 ## Risks / Trade-offs
 
-- **Wrong destination for standalone emulators** → documented as RetroArch-first; the picker lets the user point at any folder.
+- **Wrong destination for standalone emulators** → documented as RetroArch-first; the picker is always available and an explicit choice outranks the RetroArch default.
 - **Large files over Wi-Fi** → explicit per-file actions, progress, cancel.
 - **Android write permission** → same translation and writability check as ROM downloads (`dirIfWritable`).
 

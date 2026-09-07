@@ -30,7 +30,7 @@ After a play session of a linked game, new RetroArch screenshots for that game a
 
 ### Requirement: Collector
 
-`ScreenshotCollector.collect(game, sessionStart)` SHALL list files in the screenshot directory (and the content subdirectory when enabled) with an image extension, whose name starts with the game's ROM stem, and whose modification time is at or after `sessionStart` minus 5 seconds, excluding files present in the ledger with the same size. It MUST run off the UI isolate and MUST NOT read file contents.
+`ScreenshotCollector.collect(game, sessionStart)` SHALL list files in the screenshot directory (and the content subdirectory when enabled) with an image extension, whose name starts with **any** of the game's content stems, and whose modification time is at or after `sessionStart` minus 5 seconds, excluding files present in the ledger with the same size. The content stems are the ROM filename stem and, for a `.zip`, the stem of its largest member — RetroArch names captures after the content it loaded, which for an archive is the inner ROM. It MUST run off the UI isolate and MUST NOT read the contents of the *candidate screenshot* files. Reading an archive's central directory to derive its content stem is permitted: it is bounded (a few ranged reads), happens once per session end rather than per candidate, and is never on the launch path.
 
 #### Scenario: Two new captures
 
