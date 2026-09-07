@@ -1,3 +1,4 @@
+import '../models/config_model.dart';
 import '../data/datasources/sqlite_service.dart';
 
 /// Repository for user configuration data access.
@@ -18,13 +19,21 @@ class ConfigRepository {
   /// should behave like the feature's shipped default rather than silently
   /// off. Any read failure also reads as the default — the caller still
   /// checks the connection and the link before it uploads anything.
+  ///
+  /// Read through [ConfigModel.readBool] rather than an inline `!= 0`, so this
+  /// repository, `SqliteConfigService.loadConfig` and [ConfigModel.fromJson]
+  /// coerce the same column identically. The inline form this replaced read a
+  /// stored `'false'` or `'off'` as **true**, because `int.tryParse` fails on
+  /// them and fell through to the `?? 1` default.
   // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload Toggle"
   static Future<bool> getRommUploadScreenshots() async {
     final row = await SqliteService.getUserConfig();
-    final raw = row?['romm_upload_screenshots'];
-    if (raw == null) return true;
-    if (raw is bool) return raw;
-    return (int.tryParse(raw.toString()) ?? 1) != 0;
+    return ConfigModel.readBool(
+      row,
+      'rommUploadScreenshots',
+      'romm_upload_screenshots',
+      true,
+    );
   }
 
   /// Persists the "Upload screenshots to RomM" choice.
@@ -43,13 +52,19 @@ class ConfigRepository {
   /// Defaults to false when the row or the column is missing: the feature is
   /// opt-in, and a database that has not reached v165 yet must behave exactly
   /// as it did before it existed.
+  ///
+  /// Read through [ConfigModel.readBool] for the same reason as
+  /// [getRommUploadScreenshots]. The inline form this replaced read a stored
+  /// `'true'` or `'on'` as **false** (`int.tryParse` fails, `?? 0` wins).
   // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Tables"
   static Future<bool> getRommShowLibrary() async {
     final row = await SqliteService.getUserConfig();
-    final raw = row?['romm_show_library'];
-    if (raw == null) return false;
-    if (raw is bool) return raw;
-    return (int.tryParse(raw.toString()) ?? 0) != 0;
+    return ConfigModel.readBool(
+      row,
+      'rommShowLibrary',
+      'romm_show_library',
+      false,
+    );
   }
 
   /// The scope a game list opens in — `all` or `downloaded`

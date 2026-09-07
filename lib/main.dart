@@ -17,6 +17,7 @@ import 'package:neostation/sync/providers/romm_provider.dart';
 import 'package:neostation/services/notification_service.dart';
 import 'package:neostation/services/game_service.dart';
 import 'package:neostation/services/secondary_apps_service.dart';
+import 'package:neostation/models/config_model.dart';
 import 'package:neostation/repositories/config_repository.dart';
 import 'package:neostation/repositories/scraper_repository.dart';
 import 'package:neostation/services/steam_scraper_service.dart';
@@ -857,17 +858,27 @@ Future<void> subDisplay() async {
       initLang = rawConfig['app_language'].toString();
     }
     initThemeName = rawConfig?['theme_name']?.toString();
-    initUse12HourClock =
-        (int.tryParse(rawConfig?['use_12_hour_clock']?.toString() ?? '0') ??
-            0) ==
-        1;
+    // Read through [ConfigModel.readBool], the same coercion
+    // SqliteConfigService.loadConfig applies on the main engine. The two
+    // engines share no memory and each parses this row for itself, so an
+    // inline rule here is a rule that can disagree with the other screen: the
+    // form this replaced read a stored 'false'/'off' as true for sfx_enabled
+    // and a stored 'true'/'on' as false for use_12_hour_clock, either of which
+    // would leave the bottom screen sounding — or clocked — differently from
+    // the top one off the very same column.
+    initUse12HourClock = ConfigModel.readBool(
+      rawConfig,
+      'use12HourClock',
+      'use_12_hour_clock',
+      false,
+    );
     // Same story for UI sounds: this engine has its own SfxService singleton,
     // so the main engine's setEnabled/setVolume never reach it. The main engine
     // also pushes these through the shared state, but that can land after the
     // first tap — seed from the same config row so the very first sound already
     // respects the setting.
     SfxService().setEnabled(
-      (int.tryParse(rawConfig?['sfx_enabled']?.toString() ?? '1') ?? 1) == 1,
+      ConfigModel.readBool(rawConfig, 'sfxEnabled', 'sfx_enabled', true),
     );
     SfxService().setVolume(
       double.tryParse(rawConfig?['sfx_volume']?.toString() ?? '0.75') ?? 0.75,
