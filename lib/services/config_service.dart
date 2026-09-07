@@ -7,7 +7,6 @@ import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:neostation/services/logger_service.dart';
 import '../models/system_model.dart';
-import '../models/config_model.dart';
 import '../models/emulator_model.dart';
 import '../repositories/system_repository.dart';
 
@@ -336,47 +335,10 @@ class ConfigService {
     }
   }
 
-  /// Returns the path to the application's global JSON configuration file.
-  static Future<String> getConfigFilePath() async {
-    final userDataPath = await getUserDataPath();
-    return path.join(userDataPath, 'config.json');
-  }
-
   /// Returns the path to the current session log file.
   static Future<String> getLogFilePath() async {
     final userDataPath = await getUserDataPath();
     return path.join(userDataPath, 'app.log');
-  }
-
-  /// Deserializes the application configuration from the local `config.json` file.
-  static Future<ConfigModel> loadConfig() async {
-    try {
-      final configPath = await getConfigFilePath();
-      final file = File(configPath);
-      if (await file.exists()) {
-        final content = await file.readAsString();
-        final json = jsonDecode(content) as Map<String, dynamic>;
-        final config = ConfigModel.fromJson(json);
-        return config;
-      }
-    } catch (e) {
-      _log.e('Error loading configuration: $e');
-    }
-    return ConfigModel.empty;
-  }
-
-  /// Serializes and persists the provided [ConfigModel] to disk.
-  static Future<void> saveConfig(ConfigModel config) async {
-    try {
-      final configPath = await getConfigFilePath();
-      final file = File(configPath);
-      await file.parent.create(recursive: true);
-      final json = jsonEncode(config.toJson());
-      await file.writeAsString(json);
-    } catch (e) {
-      _log.e('Error saving configuration: $e');
-      rethrow;
-    }
   }
 
   /// Loads the static registry of supported systems from application assets.
