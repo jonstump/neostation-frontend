@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 
 import '../../models/game_model.dart';
 import '../../models/retroarch_config_model.dart';
@@ -126,21 +127,60 @@ class ScreenshotCollector {
       return const [];
     }
 
-    final directory = config.screenshotDirectory?.trim() ?? '';
-    if (directory.isEmpty) {
+    final configured = config.screenshotDirectory?.trim() ?? '';
+    final contentDirectory = contentDirectoryFor(game);
+    final directories = <String>[];
+
+    if (config.screenshotsInContentDir && contentDirectory != null) {
+      // `screenshots_in_content_dir` is not a fallback — in RetroArch's
+      // `screenshot_dump` it overwrites the directory the block above it just
+      // built, so both `screenshot_directory` and the sort-by-content
+      // subfolder are dead and the capture can only be beside the ROM.
+      // Listing the configured folder as well would be listing a folder
+      // RetroArch never writes to.
+      directories.add(contentDirectory);
+    } else {
+      if (config.screenshotsInContentDir) {
+        // The flag is on but the ROM path maps to no filesystem directory (no
+        // path at all, or a SAF URI from a provider with no real-path form).
+        // Fall back to the configured folder rather than collecting nothing:
+        // worst case it is empty, which is where this stood before the flag
+        // was read at all.
+        _log.w(
+          'Screenshot collect: screenshots_in_content_dir is on but no content '
+          'directory resolves from romPath="${game.romPath}"; falling back to '
+          'dir="$configured"',
+        );
+      }
+      if (configured.isNotEmpty) {
+        directories.add(configured);
+        if (config.sortScreenshotsByContent) {
+          final subdirectory = contentSubdirectoryFor(game);
+          if (subdirectory != null && subdirectory.isNotEmpty) {
+            directories.add(
+              '$configured${Platform.pathSeparator}$subdirectory',
+            );
+          }
+        }
+      }
+      // RetroArch also writes beside the content when it ends up with no
+      // screenshot directory at all (`!*new_screenshot_dir`). That case is
+      // invisible from here because the fallback fills a *guess* in, so the
+      // content directory is added whenever that guess is not on disk — one
+      // extra listing, behind the same stem, mtime and ledger filters.
+      final guessIsReal =
+          configured.isNotEmpty && Directory(configured).existsSync();
+      if (contentDirectory != null && !guessIsReal) {
+        directories.add(contentDirectory);
+      }
+    }
+
+    if (directories.isEmpty) {
       _log.i(
         'Screenshot collect skipped: no screenshot_directory in '
         'cfg="${config.configPath}"',
       );
       return const [];
-    }
-
-    final directories = <String>[directory];
-    if (config.sortScreenshotsByContent) {
-      final subdirectory = contentSubdirectoryFor(game);
-      if (subdirectory != null && subdirectory.isNotEmpty) {
-        directories.add('$directory${Platform.pathSeparator}$subdirectory');
-      }
     }
 
     final ledger = romPath.isEmpty
@@ -249,6 +289,86 @@ class ScreenshotCollector {
       _log.i('Screenshot collect: archive entry unreadable "$romPath": $e');
       return null;
     }
+  }
+
+  /// The filesystem directory the ROM itself sits in — where RetroArch writes
+  /// captures when `screenshots_in_content_dir` is on, and where it falls back
+  /// to when it has no screenshot directory at all. Null when no such
+  /// directory can be named.
+  ///
+  /// Distinct from [contentSubdirectoryFor], which yields only the folder's
+  /// *name* to append to a configured directory. This is an absolute path the
+  /// collector lists directly, so on Android the SAF `content://` URI has to
+  /// be turned back into a real path rather than merely decoded:
+  /// [normalizeRomPath] strips the storage volume and returns the
+  /// volume-relative `emu/roms/nes/Game.zip`, which no `Directory` can open.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Collector"
+  @visibleForTesting
+  static String? contentDirectoryFor(GameModel game) {
+    final romPath = game.romPath?.trim() ?? '';
+    if (romPath.isEmpty) return null;
+
+    if (romPath.startsWith('content://')) {
+      final real = safDocumentRealPath(romPath);
+      if (real == null) return null;
+      final lastSlash = real.lastIndexOf('/');
+      if (lastSlash <= 0) return null;
+      return real.substring(0, lastSlash);
+    }
+
+    final parent = p.dirname(romPath);
+    return (parent.isEmpty || parent == '.' || parent == romPath)
+        ? null
+        : parent;
+  }
+
+  /// The real filesystem path an Android SAF *document* URI names, or null.
+  ///
+  /// Only `com.android.externalstorage.documents` is mapped, because it is the
+  /// only provider whose document id is a storage volume plus a path
+  /// (`primary:emu/roms/nes/Game.zip`). Anything else — a downloads provider,
+  /// our own `NeoDocumentsProvider` — has no filesystem form to offer, and
+  /// guessing one would point the collector at a directory that does not
+  /// exist; the caller falls back to the configured folder instead.
+  ///
+  /// Deliberately not `UserDataLocationService.safUriToRealPath`: that reads
+  /// the `/tree/` segment, which for a ROM is the *root folder the user
+  /// picked*, not the ROM. A ROM URI carries both segments, so reusing it
+  /// would silently resolve every game in a library to the same directory.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Collector"
+  @visibleForTesting
+  static String? safDocumentRealPath(String romPath) {
+    const marker = '/document/';
+    final index = romPath.indexOf(marker);
+    if (index == -1) return null;
+
+    final Uri uri;
+    try {
+      uri = Uri.parse(romPath);
+    } on FormatException {
+      return null;
+    }
+    if (uri.host != 'com.android.externalstorage.documents') return null;
+
+    String documentId;
+    try {
+      documentId = Uri.decodeComponent(
+        romPath.substring(index + marker.length),
+      );
+    } on ArgumentError {
+      return null;
+    }
+
+    final colon = documentId.indexOf(':');
+    if (colon == -1) return null;
+    final volume = documentId.substring(0, colon);
+    final relative = documentId.substring(colon + 1);
+    if (volume.isEmpty || relative.isEmpty) return null;
+
+    final root = volume == 'primary'
+        ? '/storage/emulated/0'
+        : '/storage/$volume';
+    return '$root/$relative';
   }
 
   /// The per-content subdirectory RetroArch sorts captures into when

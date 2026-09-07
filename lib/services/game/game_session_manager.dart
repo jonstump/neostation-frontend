@@ -393,7 +393,11 @@ class GameSessionManager {
   /// it used to reach for the RomM adapter by id and downcast to it, which
   /// inverts the dependency direction and makes one provider a hard-coded
   /// dependency of the session lifecycle.
-  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Concurrency Safety"
+  ///
+  /// Runs immediately after [_recordRommPlaySession] on the same session-end
+  /// path, so it inherits that hook's ordering contract: the local play-state
+  /// write comes first and this never delays it.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), ADR-0013 (push play state to RomM), SPEC-0016 REQ "Concurrency Safety"
   static void _uploadScreenshotsAfterClose(
     GameModel game,
     DateTime sessionStart,

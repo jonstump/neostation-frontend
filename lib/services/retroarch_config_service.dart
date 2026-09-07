@@ -144,10 +144,15 @@ class RetroArchConfigService {
   /// useful "no screenshot directory configured", and it costs nothing: the
   /// collector skips a directory that is not there.
   ///
-  /// A directory the config *does* name is never second-guessed.
+  /// A directory the config *does* name is never second-guessed, and neither
+  /// is a config with `screenshots_in_content_dir` on: RetroArch then writes
+  /// beside the content whatever this field says, so guessing a folder here
+  /// would only put a path in the log that nothing ever writes to. The
+  /// collector resolves the content directory per game instead.
   // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Screenshot Directory From RetroArch Config"
   @visibleForTesting
   static RetroArchConfig withScreenshotFallback(RetroArchConfig config) {
+    if (config.screenshotsInContentDir) return config;
     final configured = config.screenshotDirectory?.trim() ?? '';
     if (configured.isNotEmpty) return config;
 
@@ -191,7 +196,10 @@ class RetroArchConfigService {
   /// Parses the `retroarch.cfg` file and extracts directory configurations.
   ///
   /// Targets `system_directory`, `savefile_directory`, `savestate_directory`
-  /// and `screenshot_directory`, plus the three "sort into subfolders" flags.
+  /// and `screenshot_directory`, plus the three "sort into subfolders" flags
+  /// and `screenshots_in_content_dir` — the flag that makes
+  /// `screenshot_directory` irrelevant by sending every capture to the ROM's
+  /// own folder.
   // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Screenshot Directory From RetroArch Config"
   Future<RetroArchConfig> parseConfig(String configPath) async {
     final file = File(configPath);
@@ -206,6 +214,7 @@ class RetroArchConfigService {
     var sortSaves = false;
     var sortStates = false;
     var sortScreenshots = false;
+    var screenshotsInContentDir = false;
 
     try {
       final lines = await file.readAsLines();
@@ -230,6 +239,10 @@ class RetroArchConfigService {
           'sort_screenshots_by_content_enable',
         )) {
           sortScreenshots = _extractBool(timmedLine);
+        } else if (timmedLine.startsWith('screenshots_in_content_dir')) {
+          // Checked after `screenshot_directory` above only for readability:
+          // neither key is a prefix of the other, so the order is free.
+          screenshotsInContentDir = _extractBool(timmedLine);
         }
       }
     } catch (e) {
@@ -246,6 +259,7 @@ class RetroArchConfigService {
       sortSavestatesByCore: sortStates,
       screenshotDirectory: _normalizePath(screenshotDir, configPath),
       sortScreenshotsByContent: sortScreenshots,
+      screenshotsInContentDir: screenshotsInContentDir,
     );
 
     return resolvedConfig;
@@ -540,7 +554,8 @@ class RetroArchConfigService {
     final signature =
         '${cfg.configPath}|${cfg.savefileDirectory}|${cfg.savestateDirectory}|'
         '${cfg.sortSavefilesByCore}|${cfg.sortSavestatesByCore}|'
-        '${cfg.screenshotDirectory}|${cfg.sortScreenshotsByContent}';
+        '${cfg.screenshotDirectory}|${cfg.sortScreenshotsByContent}|'
+        '${cfg.screenshotsInContentDir}';
     if (signature == _lastLoggedResolution) return;
     _lastLoggedResolution = signature;
     _log.i(
@@ -549,7 +564,8 @@ class RetroArchConfigService {
       'shots="${cfg.screenshotDirectory}" '
       'sortSaves=${cfg.sortSavefilesByCore} '
       'sortStates=${cfg.sortSavestatesByCore} '
-      'sortShots=${cfg.sortScreenshotsByContent}',
+      'sortShots=${cfg.sortScreenshotsByContent} '
+      'shotsInContentDir=${cfg.screenshotsInContentDir}',
     );
   }
 

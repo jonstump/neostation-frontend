@@ -63,6 +63,7 @@ void main() {
   ScreenshotCollector collector({
     String? directory,
     bool sortByContent = false,
+    bool inContentDir = false,
     Map<String, int?> ledger = const {},
     String? archiveStem,
   }) => ScreenshotCollector(
@@ -70,6 +71,7 @@ void main() {
       configPath: '/cfg/retroarch.cfg',
       screenshotDirectory: directory ?? shotsDir.path,
       sortScreenshotsByContent: sortByContent,
+      screenshotsInContentDir: inContentDir,
     ),
     loadLedger: (_) async => ledger,
     loadArchiveStem: (_) async => archiveStem,
@@ -375,6 +377,188 @@ void main() {
       File(path).writeAsBytesSync(List<int>.filled(64, 0));
 
       expect(await ScreenshotCollector.archiveContentStem(path), isNull);
+    });
+  });
+
+  /// `screenshots_in_content_dir` — the mode where RetroArch ignores
+  /// `screenshot_directory` outright and writes each capture beside the ROM.
+  ///
+  /// The directory fallback added earlier could not see this: it filled in a
+  /// guessed `screenshots/` folder, the collector walked it, found nothing,
+  /// and the upload stayed silently inert on exactly the installs the
+  /// fallback was meant to rescue.
+  ///
+  /// Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ
+  /// "Collector"
+  group('screenshots_in_content_dir', () {
+    late Directory romsDir;
+
+    setUp(() {
+      romsDir = Directory.systemTemp.createTempSync('romm_content_test');
+    });
+
+    tearDown(() {
+      if (romsDir.existsSync()) romsDir.deleteSync(recursive: true);
+    });
+
+    /// A game whose ROM lives in [romsDir] rather than beside the captures.
+    GameModel contentGame() =>
+        game(romPath: '${romsDir.path}${Platform.pathSeparator}Game.zip');
+
+    test('collects beside the ROM instead of the configured folder', () async {
+      write(
+        'Game-in-content-dir.png',
+        offset: const Duration(minutes: 5),
+        into: romsDir,
+      );
+      // Same stem, same window, in the folder the config names: RetroArch
+      // cannot have written it in this mode, so it must not be offered.
+      write('Game-in-configured-dir.png', offset: const Duration(minutes: 6));
+
+      final found = await collector(
+        inContentDir: true,
+      ).collect(contentGame(), sessionStart);
+
+      expect(found.map((s) => s.fileName), ['Game-in-content-dir.png']);
+    });
+
+    test('overrides the sort-by-content subfolder too', () async {
+      // RetroArch builds the subfolder path first and then overwrites it, so
+      // enabling both flags must not resurrect the configured tree.
+      final sub = Directory(
+        '${shotsDir.path}${Platform.pathSeparator}${romsDir.path.split(Platform.pathSeparator).last}',
+      )..createSync(recursive: true);
+      write('Game-sorted.png', offset: const Duration(minutes: 5), into: sub);
+      write(
+        'Game-beside-rom.png',
+        offset: const Duration(minutes: 5),
+        into: romsDir,
+      );
+
+      final found = await collector(
+        inContentDir: true,
+        sortByContent: true,
+      ).collect(contentGame(), sessionStart);
+
+      expect(found.map((s) => s.fileName), ['Game-beside-rom.png']);
+    });
+
+    test(
+      'falls back to the configured folder when no content directory resolves',
+      () async {
+        // A game with no ROM path names no directory. Collecting nothing here
+        // would be a regression on where this stood before the flag was read.
+        write('Game-in-configured-dir.png', offset: const Duration(minutes: 5));
+
+        final found = await collector(
+          inContentDir: true,
+        ).collect(game(withPath: false), sessionStart);
+
+        expect(found.map((s) => s.fileName), ['Game-in-configured-dir.png']);
+      },
+    );
+
+    test(
+      'also looks beside the ROM when the guessed folder is not on disk',
+      () async {
+        // RetroArch falls back to the content directory whenever it ends up with
+        // no screenshot directory at all. That case is invisible from here
+        // because the fallback fills a *guess* in, so a guess that is not on
+        // disk is treated as one.
+        write(
+          'Game-beside-rom.png',
+          offset: const Duration(minutes: 5),
+          into: romsDir,
+        );
+
+        final found = await collector(
+          directory: '${shotsDir.path}${Platform.pathSeparator}nonexistent',
+        ).collect(contentGame(), sessionStart);
+
+        expect(found.map((s) => s.fileName), ['Game-beside-rom.png']);
+      },
+    );
+
+    test('leaves a real configured folder as the only source', () async {
+      write('Game-in-configured-dir.png', offset: const Duration(minutes: 5));
+      write(
+        'Game-beside-rom.png',
+        offset: const Duration(minutes: 6),
+        into: romsDir,
+      );
+
+      final found = await collector().collect(contentGame(), sessionStart);
+
+      expect(found.map((s) => s.fileName), ['Game-in-configured-dir.png']);
+    });
+  });
+
+  /// Resolving the *absolute* directory the ROM sits in.
+  ///
+  /// The Android cases are the reason this is not `dirname`: a SAF document
+  /// URI decodes to a volume-relative path, which no `Directory` can open.
+  ///
+  /// Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ
+  /// "Collector"
+  group('contentDirectoryFor', () {
+    test('is the ROM\'s parent directory on desktop', () {
+      expect(
+        ScreenshotCollector.contentDirectoryFor(
+          game(romPath: '/roms/snes/Game.sfc'),
+        ),
+        '/roms/snes',
+      );
+    });
+
+    test('maps a SAF document URI onto primary storage', () {
+      // normalizeRomPath would yield `emu/roms/nes/Game.zip` — the volume
+      // stripped off — which resolves to nothing.
+      expect(
+        ScreenshotCollector.contentDirectoryFor(
+          game(
+            romPath:
+                'content://com.android.externalstorage.documents/tree/'
+                'primary%3Aemu/document/primary%3Aemu%2Froms%2Fnes%2FGame.zip',
+          ),
+        ),
+        '/storage/emulated/0/emu/roms/nes',
+      );
+    });
+
+    test('maps a removable-volume document URI onto /storage/<id>', () {
+      expect(
+        ScreenshotCollector.contentDirectoryFor(
+          game(
+            romPath:
+                'content://com.android.externalstorage.documents/tree/'
+                '1A2B-3C4D%3Aroms/document/1A2B-3C4D%3Aroms%2Fpsx%2FGame.chd',
+          ),
+        ),
+        '/storage/1A2B-3C4D/roms/psx',
+      );
+    });
+
+    test('is null for a provider with no filesystem form', () {
+      // Guessing a path for a downloads-style provider would point the
+      // collector at a directory that does not exist; the caller then keeps
+      // the configured folder.
+      expect(
+        ScreenshotCollector.contentDirectoryFor(
+          game(
+            romPath:
+                'content://com.android.providers.downloads.documents/'
+                'document/msf%3A1234',
+          ),
+        ),
+        isNull,
+      );
+    });
+
+    test('is null when the game has no path', () {
+      expect(
+        ScreenshotCollector.contentDirectoryFor(game(withPath: false)),
+        isNull,
+      );
     });
   });
 }

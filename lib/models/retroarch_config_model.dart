@@ -43,6 +43,28 @@ class RetroArchConfig {
   // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Screenshot Directory From RetroArch Config"
   final bool sortScreenshotsByContent;
 
+  /// Whether RetroArch ignores [screenshotDirectory] entirely and writes each
+  /// capture beside the content it was taken from
+  /// (`screenshots_in_content_dir`).
+  ///
+  /// This is not another fallback: in `screenshot_dump` the content directory
+  /// *overwrites* whatever the directory logic produced —
+  ///
+  /// ```c
+  /// if (     !*new_screenshot_dir
+  ///       || settings->bools.screenshots_in_content_dir)
+  ///    fill_pathname_basedir(new_screenshot_dir, name_base,
+  ///          sizeof(new_screenshot_dir));
+  /// ```
+  ///
+  /// — so when this is on, both [screenshotDirectory] and the
+  /// [sortScreenshotsByContent] subfolder computed just above it are dead, and
+  /// the only place a capture can be is the ROM's own directory. Not parsing
+  /// it left the collector walking a folder RetroArch never writes to, which
+  /// looks exactly like "the user took no screenshots".
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Screenshot Directory From RetroArch Config"
+  final bool screenshotsInContentDir;
+
   const RetroArchConfig({
     this.id,
     required this.configPath,
@@ -53,6 +75,7 @@ class RetroArchConfig {
     this.sortSavestatesByCore = false,
     this.screenshotDirectory,
     this.sortScreenshotsByContent = false,
+    this.screenshotsInContentDir = false,
   });
 
   /// Creates a [RetroArchConfig] instance from a JSON-compatible map.
@@ -81,6 +104,9 @@ class RetroArchConfig {
             json['sort_screenshots_by_content'] ??
             json['sortScreenshotsByContent'],
       ),
+      screenshotsInContentDir: _asBool(
+        json['screenshots_in_content_dir'] ?? json['screenshotsInContentDir'],
+      ),
     );
   }
 
@@ -105,6 +131,7 @@ class RetroArchConfig {
       'sort_savestates_by_core': sortSavestatesByCore,
       'screenshot_directory': screenshotDirectory,
       'sort_screenshots_by_content_enable': sortScreenshotsByContent,
+      'screenshots_in_content_dir': screenshotsInContentDir,
     };
   }
 
@@ -119,6 +146,7 @@ class RetroArchConfig {
     bool? sortSavestatesByCore,
     String? screenshotDirectory,
     bool? sortScreenshotsByContent,
+    bool? screenshotsInContentDir,
   }) {
     return RetroArchConfig(
       id: id ?? this.id,
@@ -131,6 +159,8 @@ class RetroArchConfig {
       screenshotDirectory: screenshotDirectory ?? this.screenshotDirectory,
       sortScreenshotsByContent:
           sortScreenshotsByContent ?? this.sortScreenshotsByContent,
+      screenshotsInContentDir:
+          screenshotsInContentDir ?? this.screenshotsInContentDir,
     );
   }
 
