@@ -1352,4 +1352,9 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommFirmwareDownloadCancelled: 'BIOS 다운로드가 중지되었습니다 — {summary}',
   AppLocale.rommFirmwareDownloadFailedFile: '{file}을(를) 다운로드하지 못했습니다',
   AppLocale.rommFavoritesCollectionName: '즐겨찾기',
+  AppLocale.rommGalleryTitle: 'RomM 갤러리',
+  AppLocale.rommGalleryEmpty: 'RomM에 아직 스크린샷이 없습니다',
+  AppLocale.rommGalleryError: 'RomM 갤러리를 불러오지 못했습니다',
+  AppLocale.rommUploadScreenshots: '스크린샷을 RomM에 업로드',
+  AppLocale.rommUploadScreenshotsHint: '플레이가 끝나면 새 RetroArch 스크린샷을 RomM으로 보냅니다',
 };

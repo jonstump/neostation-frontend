@@ -1292,4 +1292,9 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.rommFirmwareDownloadCancelled: 'BIOS 下載已停止 — {summary}',
   AppLocale.rommFirmwareDownloadFailedFile: '無法下載 {file}',
   AppLocale.rommFavoritesCollectionName: '收藏',
+  AppLocale.rommGalleryTitle: 'RomM 圖庫',
+  AppLocale.rommGalleryEmpty: 'RomM 上還沒有截圖',
+  AppLocale.rommGalleryError: '無法載入 RomM 圖庫',
+  AppLocale.rommUploadScreenshots: '將截圖上傳到 RomM',
+  AppLocale.rommUploadScreenshotsHint: '每次遊玩結束後，將新的 RetroArch 截圖傳送到 RomM',
 };

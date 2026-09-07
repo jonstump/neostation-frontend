@@ -1534,4 +1534,10 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.rommFirmwareDownloadFailedFile:
       '{file} konnte nicht heruntergeladen werden',
   AppLocale.rommFavoritesCollectionName: 'Favoriten',
+  AppLocale.rommGalleryTitle: 'RomM-Galerie',
+  AppLocale.rommGalleryEmpty: 'Noch keine Screenshots auf RomM',
+  AppLocale.rommGalleryError: 'Die RomM-Galerie konnte nicht geladen werden',
+  AppLocale.rommUploadScreenshots: 'Screenshots zu RomM hochladen',
+  AppLocale.rommUploadScreenshotsHint:
+      'Sendet neue RetroArch-Aufnahmen nach jeder Sitzung an RomM',
 };

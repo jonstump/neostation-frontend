@@ -1486,4 +1486,10 @@ const Map<String, dynamic> appLocaleId = {
       'Unduhan BIOS dihentikan — {summary}',
   AppLocale.rommFirmwareDownloadFailedFile: '{file} gagal diunduh',
   AppLocale.rommFavoritesCollectionName: 'Favorit',
+  AppLocale.rommGalleryTitle: 'Galeri RomM',
+  AppLocale.rommGalleryEmpty: 'Belum ada tangkapan layar di RomM',
+  AppLocale.rommGalleryError: 'Galeri RomM tidak dapat dimuat',
+  AppLocale.rommUploadScreenshots: 'Unggah tangkapan layar ke RomM',
+  AppLocale.rommUploadScreenshotsHint:
+      'Kirim tangkapan layar RetroArch yang baru ke RomM setelah setiap sesi',
 };

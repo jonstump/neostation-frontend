@@ -180,6 +180,20 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     _notify();
   }
 
+  /// Persists whether a finished play session's RetroArch captures are pushed
+  /// to the connected RomM server.
+  ///
+  /// The upload pass reads the column straight from the database at session
+  /// end (it runs off the UI isolate's provider tree), so the write has to
+  /// land before the next session — hence the awaited repository call rather
+  /// than a fire-and-forget whole-config save.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload Toggle"
+  Future<void> updateRommUploadScreenshots(bool value) async {
+    _config = _config.copyWith(rommUploadScreenshots: value);
+    await ConfigRepository.setRommUploadScreenshots(value);
+    _notify();
+  }
+
   /// Updates whether hidden files/folders are ignored during ROM scans.
   Future<void> updateIgnoreHiddenFiles(bool ignoreHiddenFiles) async {
     _config = _config.copyWith(ignoreHiddenFiles: ignoreHiddenFiles);

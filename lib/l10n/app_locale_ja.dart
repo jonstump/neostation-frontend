@@ -1344,4 +1344,10 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommFirmwareDownloadCancelled: 'BIOS のダウンロードを停止しました — {summary}',
   AppLocale.rommFirmwareDownloadFailedFile: '{file} をダウンロードできませんでした',
   AppLocale.rommFavoritesCollectionName: 'お気に入り',
+  AppLocale.rommGalleryTitle: 'RomM ギャラリー',
+  AppLocale.rommGalleryEmpty: 'RomM にはまだスクリーンショットがありません',
+  AppLocale.rommGalleryError: 'RomM ギャラリーを読み込めませんでした',
+  AppLocale.rommUploadScreenshots: 'スクリーンショットを RomM にアップロード',
+  AppLocale.rommUploadScreenshotsHint:
+      'プレイ終了後に新しい RetroArch のスクリーンショットを RomM に送信します',
 };

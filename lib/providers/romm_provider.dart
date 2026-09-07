@@ -13,6 +13,7 @@ import '../models/romm_pairing.dart';
 import '../models/romm_platform.dart';
 import '../models/romm_rom.dart';
 import '../models/romm_scrape_step.dart';
+import '../models/romm_screenshot.dart';
 import '../models/romm_server_capabilities.dart';
 import '../models/system_model.dart';
 import '../repositories/collection_repository.dart';
@@ -36,6 +37,22 @@ import 'romm_bulk_sync.dart';
 
 /// High-level connection state for the RomM integration.
 enum RommConnectionStatus { disconnected, connecting, connected, error }
+
+/// A RomM gallery request that did not come back.
+///
+/// Distinct from an empty gallery, which is a perfectly good answer: the strip
+/// draws "couldn't load the RomM gallery" for this and "no screenshots yet"
+/// for an empty list, and the two must not be confused for a user who has just
+/// uploaded captures.
+// Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Gallery Strip"
+class RommGalleryException implements Exception {
+  final String message;
+
+  const RommGalleryException(this.message);
+
+  @override
+  String toString() => 'RommGalleryException: $message';
+}
 
 /// Per-ROM download lifecycle state.
 enum RommDownloadStatus { downloading, completed, failed, cancelled }
@@ -960,6 +977,111 @@ class RommProvider extends ChangeNotifier {
       _log.w('RomM RA lookup failed: $e');
     }
     return null;
+  }
+
+  // ── RomM screenshot gallery ─────────────────────────────────────────────
+
+  /// Whether the details card may draw the RomM gallery strip for a game.
+  ///
+  /// Three conditions, and all three are properties of *this* call rather than
+  /// of the widget tree, which is why they live here: a server has to be
+  /// connected, the game has to be linked to a RomM ROM ([linked]), and the
+  /// server has to be new enough to carry a gallery. [RommFeatureSupport
+  /// .unknown] passes — a heartbeat that never landed must not hide a feature
+  /// the server actually has (ADR-0010); the request then degrades on its own
+  /// if the endpoint is missing.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Gallery Strip"
+  static bool galleryStripVisible({
+    required bool connected,
+    required bool linked,
+    required RommFeatureSupport support,
+  }) => connected && linked && support != RommFeatureSupport.unsupported;
+
+  /// Live answer to [galleryStripVisible] for the connection this provider
+  /// holds, given a game already known to be [linked].
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Gallery Strip"
+  bool galleryStripVisibleFor({required bool linked}) => galleryStripVisible(
+    connected: isConnected,
+    linked: linked,
+    support: _service.supports(RommFeature.screenshotGallery),
+  );
+
+  /// The RomM ROM id [game] is linked to, or null when it is a local-only
+  /// game. Same link map the save sync and the playtime hooks resolve through.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Gallery Strip"
+  Future<int?> linkedRomId(GameModel game) async {
+    final systemFolder = game.systemFolderName;
+    if (systemFolder == null || systemFolder.isEmpty) return null;
+    return RommSaveMapRepository.getRommRomId(game.romname, systemFolder);
+  }
+
+  /// The RomM user screenshots for [game], newest first, or an empty list when
+  /// the game is not linked, nothing is connected, or the request failed.
+  ///
+  /// Reads the ROM detail rather than a screenshot list endpoint: `GET
+  /// /api/roms/{id}` already carries `user_screenshots`, and it is the one
+  /// request the app makes for a linked game anyway (ADR-0016). Throws
+  /// [RommGalleryException] on a failed request so the strip can say "could
+  /// not load" instead of silently showing the empty state — an empty gallery
+  /// and an unreachable server are different things to a user who just
+  /// uploaded three captures.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Gallery Strip"
+  Future<List<RommScreenshot>> galleryFor(GameModel game) async {
+    if (!isConnected) return const [];
+    final romId = await linkedRomId(game);
+    if (romId == null) return const [];
+
+    final Map<String, dynamic>? detail;
+    try {
+      detail = await _service.getRomDetail(romId);
+    } catch (e) {
+      _log.w('RomM gallery fetch failed rom=$romId game="${game.romname}": $e');
+      throw RommGalleryException('$e');
+    }
+    if (detail == null) {
+      _log.w('RomM gallery fetch returned no detail rom=$romId');
+      throw RommGalleryException('no ROM detail for rom=$romId');
+    }
+    return parseGallery(detail);
+  }
+
+  /// Reads `user_screenshots` out of a ROM-detail body, newest first.
+  ///
+  /// Split out so the parse is testable without a server: entries that are not
+  /// objects are skipped rather than failing the whole gallery, because one
+  /// malformed asset row must not cost the user the rest of their captures.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Gallery Strip"
+  @visibleForTesting
+  static List<RommScreenshot> parseGallery(Map<String, dynamic> detail) {
+    final raw = detail['user_screenshots'];
+    if (raw is! List) return const [];
+    final shots = <RommScreenshot>[];
+    for (final entry in raw) {
+      if (entry is! Map) continue;
+      shots.add(
+        RommScreenshot.fromJson(entry.map((k, v) => MapEntry(k.toString(), v))),
+      );
+    }
+    shots.sort(RommScreenshot.newestFirst);
+    return shots;
+  }
+
+  /// Absolute URL for [shot]'s bytes, or null when the server gave no path.
+  ///
+  /// Prefers `download_path` (present on every version that returns the
+  /// asset) and falls back to `/api/screenshots/{id}/content`, the 5.0.0
+  /// route. Relative paths are resolved against the connected server, and an
+  /// absolute one is passed through untouched.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Gallery Strip"
+  String? screenshotUrl(RommScreenshot shot) {
+    final base = _service.baseUrl;
+    if (base.isEmpty) return null;
+    final path = shot.downloadPath;
+    if (path == null || path.isEmpty) {
+      return shot.id > 0 ? '$base/api/screenshots/${shot.id}/content' : null;
+    }
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    return '$base${path.startsWith('/') ? '' : '/'}$path';
   }
 
   /// Enters a library-wide search: queries ROMs by [term] alone across the

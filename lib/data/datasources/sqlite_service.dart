@@ -2798,6 +2798,7 @@ class SqliteService {
     int? showCloudSyncIcon,
     int? raMatchOnStartup,
     int? subfolderViewAll,
+    int? rommUploadScreenshots,
     String? biosDirectory,
   }) async {
     final db = await instance.database;
@@ -2941,6 +2942,10 @@ class SqliteService {
     }
     if (subfolderViewAll != null) {
       updates['subfolder_view_all'] = subfolderViewAll;
+    }
+    // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload Toggle"
+    if (rommUploadScreenshots != null) {
+      updates['romm_upload_screenshots'] = rommUploadScreenshots;
     }
     if (biosDirectory != null) {
       updates['bios_directory'] = biosDirectory;

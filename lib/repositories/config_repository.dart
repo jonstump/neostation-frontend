@@ -27,6 +27,16 @@ class ConfigRepository {
     return (int.tryParse(raw.toString()) ?? 1) != 0;
   }
 
+  /// Persists the "Upload screenshots to RomM" choice.
+  ///
+  /// A single-column update rather than a whole-config write: the row is
+  /// shared with every other preference and [SqliteService.saveUserConfig]
+  /// only touches the columns it is handed, so a concurrent settings save
+  /// cannot revert this one from a stale read.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload Toggle"
+  static Future<void> setRommUploadScreenshots(bool value) =>
+      SqliteService.saveUserConfig(rommUploadScreenshots: value ? 1 : 0);
+
   // ── Theme settings ──────────────────────────────────────────────────────
 
   static Future<String> getThemeName() => SqliteService.getThemeName();

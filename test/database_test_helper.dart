@@ -160,7 +160,11 @@ class DatabaseTestHelper {
         show_achievements_badge INTEGER DEFAULT 0,
         show_cloud_sync_icon INTEGER DEFAULT 1,
         ra_match_on_startup INTEGER DEFAULT 0,
-        subfolder_view_all INTEGER DEFAULT 0
+        subfolder_view_all INTEGER DEFAULT 0,
+        -- Migration v163 (ADR-0016): "Upload screenshots to RomM", on by
+        -- default. Present here because SqliteConfigService.saveConfig writes
+        -- it on every whole-config save.
+        romm_upload_screenshots INTEGER DEFAULT 1
       )
     ''');
 

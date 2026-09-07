@@ -29,6 +29,16 @@ class RommScreenshot {
   /// are never marked public — RomM's own default is private.
   final bool isPublic;
 
+  /// When RomM filed the screenshot (`created_at`, falling back to
+  /// `updated_at`), or null when neither field is present or parseable.
+  ///
+  /// The gallery orders newest first and this is the only honest answer to
+  /// "newest": the file name is RetroArch's local clock and the id is only a
+  /// proxy. Both remain the tie-breakers when the server sends no timestamp —
+  /// see [newestFirst].
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Gallery Strip"
+  final DateTime? createdAt;
+
   const RommScreenshot({
     required this.id,
     required this.fileName,
@@ -36,7 +46,24 @@ class RommScreenshot {
     this.downloadPath,
     this.isGallery = false,
     this.isPublic = false,
+    this.createdAt,
   });
+
+  /// Orders a gallery newest first: by [createdAt] when the server sent one,
+  /// then by descending id, then by descending file name.
+  ///
+  /// The fallbacks matter because a server that omits the timestamps would
+  /// otherwise leave the strip in whatever order the JSON array happened to
+  /// carry. RomM asset ids increase, and RetroArch names its captures
+  /// `<content>-<date>-<time>`, so both sort the same way the clock does.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Gallery Strip"
+  static int newestFirst(RommScreenshot a, RommScreenshot b) {
+    final at = a.createdAt;
+    final bt = b.createdAt;
+    if (at != null && bt != null && at != bt) return bt.compareTo(at);
+    if (a.id != b.id) return b.id.compareTo(a.id);
+    return b.fileName.compareTo(a.fileName);
+  }
 
   factory RommScreenshot.fromJson(Map<String, dynamic> json) {
     return RommScreenshot(
@@ -47,6 +74,7 @@ class RommScreenshot {
       downloadPath: _nonEmpty(json['download_path']),
       isGallery: _asBool(json['is_gallery']),
       isPublic: _asBool(json['is_public']),
+      createdAt: _asDate(json['created_at']) ?? _asDate(json['updated_at']),
     );
   }
 
@@ -80,6 +108,15 @@ class RommScreenshot {
   static String? _nonEmpty(Object? raw) {
     final s = raw?.toString().trim() ?? '';
     return s.isEmpty ? null : s;
+  }
+
+  /// An ISO-8601 timestamp as RomM writes it, or null when the field is
+  /// absent, blank or unparseable — an unreadable date is not a reason to
+  /// drop the screenshot, only to fall back to the id when ordering.
+  static DateTime? _asDate(Object? raw) {
+    final s = raw?.toString().trim() ?? '';
+    if (s.isEmpty) return null;
+    return DateTime.tryParse(s);
   }
 
   /// RomM sends JSON booleans, but a few proxies stringify them; treat the

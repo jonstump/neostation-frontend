@@ -221,6 +221,18 @@ class ConfigModel {
   /// by a later systems update inherits.
   final bool subfolderViewAll;
 
+  /// Whether a finished play session's RetroArch captures are pushed to the
+  /// connected RomM server as user screenshots.
+  ///
+  /// On by default, matching the `DEFAULT 1` of `user_config
+  /// .romm_upload_screenshots` (migration v163): the feature exists because
+  /// captures are worth keeping, and a user who does not want them on the
+  /// server turns the row in the RomM panel off. Only read when a server is
+  /// connected and the game is linked — see `RomMSyncProvider
+  /// .uploadSessionScreenshots`.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload Toggle"
+  final bool rommUploadScreenshots;
+
   const ConfigModel({
     this.romFolders = const [],
     this.detectedSystems = const [],
@@ -269,6 +281,7 @@ class ConfigModel {
     this.showCloudSyncIcon = true,
     this.raMatchOnStartup = false,
     this.subfolderViewAll = false,
+    this.rommUploadScreenshots = true,
   });
 
   /// Convenience getter that returns the primary ROM folder, if any are configured.
@@ -494,7 +507,43 @@ class ConfigModel {
               '1' ||
           (json['subfolderViewAll'] ?? false).toString().toLowerCase() ==
               'true',
+      // Absent => on, matching the column's `DEFAULT 1`: a database that has
+      // not reached v163 must behave like the feature's shipped default.
+      //
+      // Read through [_boolOr] rather than the pair of `??`-chained string
+      // comparisons the fields above use. Those read the camelCase key first
+      // and then fall back to `true`/`false` *without* consulting the
+      // snake_case key again, so a `{'romm_upload_screenshots': 0}` row —
+      // exactly the shape [SqliteService.getUserConfig] returns — would come
+      // back as the default instead of as off.
+      // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload Toggle"
+      rommUploadScreenshots: _boolOr(
+        json,
+        'rommUploadScreenshots',
+        'romm_upload_screenshots',
+        true,
+      ),
     );
+  }
+
+  /// Reads a boolean stored under either spelling of its key.
+  ///
+  /// Accepts every shape the two sources use: a JSON `bool` from [toJson], and
+  /// the `0`/`1` integers (or their stringified forms) SQLite stores. Anything
+  /// unrecognised, and an absent key, yield [fallback].
+  static bool _boolOr(
+    Map<String, dynamic> json,
+    String camelKey,
+    String snakeKey,
+    bool fallback,
+  ) {
+    final raw = json[camelKey] ?? json[snakeKey];
+    if (raw == null) return fallback;
+    if (raw is bool) return raw;
+    final text = raw.toString().trim().toLowerCase();
+    if (text == '1' || text == 'true') return true;
+    if (text == '0' || text == 'false') return false;
+    return fallback;
   }
 
   /// Converts the configuration model into a JSON-compatible map.
@@ -552,6 +601,7 @@ class ConfigModel {
       'showCloudSyncIcon': showCloudSyncIcon,
       'raMatchOnStartup': raMatchOnStartup,
       'subfolderViewAll': subfolderViewAll,
+      'rommUploadScreenshots': rommUploadScreenshots,
     };
   }
 
@@ -604,6 +654,7 @@ class ConfigModel {
     bool? showCloudSyncIcon,
     bool? raMatchOnStartup,
     bool? subfolderViewAll,
+    bool? rommUploadScreenshots,
   }) {
     return ConfigModel(
       romFolders: romFolders ?? this.romFolders,
@@ -655,6 +706,8 @@ class ConfigModel {
       showCloudSyncIcon: showCloudSyncIcon ?? this.showCloudSyncIcon,
       raMatchOnStartup: raMatchOnStartup ?? this.raMatchOnStartup,
       subfolderViewAll: subfolderViewAll ?? this.subfolderViewAll,
+      rommUploadScreenshots:
+          rommUploadScreenshots ?? this.rommUploadScreenshots,
     );
   }
 

@@ -1469,4 +1469,10 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rommFirmwareDownloadCancelled: 'BIOS download stopped — {summary}',
   AppLocale.rommFirmwareDownloadFailedFile: '{file} could not be downloaded',
   AppLocale.rommFavoritesCollectionName: 'Favorites',
+  AppLocale.rommGalleryTitle: 'RomM gallery',
+  AppLocale.rommGalleryEmpty: 'No screenshots on RomM yet',
+  AppLocale.rommGalleryError: 'The RomM gallery could not be loaded',
+  AppLocale.rommUploadScreenshots: 'Upload screenshots to RomM',
+  AppLocale.rommUploadScreenshotsHint:
+      'Send new RetroArch captures to RomM after each session',
 };

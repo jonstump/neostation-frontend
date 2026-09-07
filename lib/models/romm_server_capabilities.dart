@@ -183,7 +183,18 @@ enum RommFeature {
   /// Verified: the collection rom add/remove endpoints are part of the RomM
   /// 4.9.0 release (published 2026-06-12), the threshold recorded in ADR-0013.
   // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Favourites Collection"
-  collectionRomsAddRemove(RommServerVersion(4, 9, 0));
+  collectionRomsAddRemove(RommServerVersion(4, 9, 0)),
+
+  /// The ROM detail's `user_screenshots` gallery: the `is_gallery` /
+  /// `is_public` flags and `GET /api/screenshots/{id}/content`, which the
+  /// details card's RomM gallery strip reads.
+  ///
+  /// Verified: RomM 5.0.0 is the release that added the gallery flags and the
+  /// screenshot content route to `backend/endpoints/screenshots.py`; earlier
+  /// servers accept the upload (`POST /api/screenshots?rom_id=`, 3.10+) but
+  /// carry no gallery to read back. Recorded in ADR-0016.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Gallery Strip"
+  screenshotGallery(RommServerVersion(5, 0, 0));
 
   const RommFeature(this.minVersion);
 

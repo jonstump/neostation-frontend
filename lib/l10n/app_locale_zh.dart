@@ -1291,4 +1291,9 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.rommFirmwareDownloadCancelled: 'BIOS 下载已停止 — {summary}',
   AppLocale.rommFirmwareDownloadFailedFile: '无法下载 {file}',
   AppLocale.rommFavoritesCollectionName: '收藏',
+  AppLocale.rommGalleryTitle: 'RomM 图库',
+  AppLocale.rommGalleryEmpty: 'RomM 上还没有截图',
+  AppLocale.rommGalleryError: '无法加载 RomM 图库',
+  AppLocale.rommUploadScreenshots: '将截图上传到 RomM',
+  AppLocale.rommUploadScreenshotsHint: '每次游玩结束后，将新的 RetroArch 截图发送到 RomM',
 };

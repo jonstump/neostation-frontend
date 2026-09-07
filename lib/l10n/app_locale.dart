@@ -1530,6 +1530,15 @@ mixin AppLocale {
   static const String rommFavoritesCollectionName =
       'romm_favorites_collection_name';
 
+  // ── RomM screenshot gallery (SPEC-0016) ─────────────────────────────────
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Localized User-Facing Text"
+  static const String rommGalleryTitle = 'romm_gallery_title';
+  static const String rommGalleryEmpty = 'romm_gallery_empty';
+  static const String rommGalleryError = 'romm_gallery_error';
+  static const String rommUploadScreenshots = 'romm_upload_screenshots';
+  static const String rommUploadScreenshotsHint =
+      'romm_upload_screenshots_hint';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================
