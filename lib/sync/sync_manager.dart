@@ -122,5 +122,13 @@ class SyncManager extends ChangeNotifier {
 
   bool isRegistered(String providerId) => _registry.containsKey(providerId);
 
+  /// Every registered provider, active or not, in registration order.
+  ///
+  /// For the hooks that are a broadcast rather than a delegation — a session's
+  /// screenshots go to whichever providers want them, so the caller offers the
+  /// session to all of them rather than reaching for one adapter by id and
+  /// downcasting it.
+  List<ISyncProvider> get providers => List.unmodifiable(_registry.values);
+
   ISyncProvider? operator [](String providerId) => _registry[providerId];
 }

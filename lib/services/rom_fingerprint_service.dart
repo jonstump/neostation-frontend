@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:archive/archive.dart';
 import 'package:crypto/crypto.dart' as crypto;
 import 'package:flutter/foundation.dart';
@@ -129,8 +131,16 @@ class RomFingerprintService {
     // stores the crc32 of its uncompressed content, and crc alone resolves a
     // ScreenScraper lookup.
     if (isArchive && lower.endsWith('.zip')) {
-      final cheap = await _fingerprintFromZipDirectory(romPath);
-      if (cheap != null) return (fingerprint: cheap, skipReason: null);
+      final entry = await _largestZipEntry(romPath);
+      if (entry != null) {
+        return (
+          fingerprint: RomFingerprint(
+            crc32: _hex32(entry.crc32),
+            sizeBytes: entry.sizeBytes,
+          ),
+          skipReason: null,
+        );
+      }
     }
 
     // Everything past here reads the whole ROM. A cheap-only caller stops now
@@ -176,11 +186,12 @@ class RomFingerprintService {
     }
   }
 
-  /// Reads the inner ROM's crc32 straight out of the zip central directory.
+  /// Reads the largest member of a zip — its crc32, uncompressed size and
+  /// name — straight out of the central directory.
   ///
-  /// A zip stores the crc32 and uncompressed size of every member in a
-  /// directory at the end of the file, so both are readable without touching
-  /// the compressed data. The stored checksum is of the *uncompressed*
+  /// A zip stores the crc32, uncompressed size and name of every member in a
+  /// directory at the end of the file, so all three are readable without
+  /// touching the compressed data. The stored checksum is of the *uncompressed*
   /// content — exactly the No-Intro value ScreenScraper indexes — and crc alone
   /// resolves a lookup, so a zipped ROM can be identified without decompressing
   /// or hashing anything.
@@ -194,7 +205,7 @@ class RomFingerprintService {
   ///
   /// Returns null for anything unexpected — zip64, a spanned archive, an empty
   /// or unreadable directory — leaving the caller to extract and hash instead.
-  static Future<RomFingerprint?> _fingerprintFromZipDirectory(
+  static Future<({int crc32, int sizeBytes, String name})?> _largestZipEntry(
     String zipPath,
   ) async {
     try {
@@ -246,6 +257,7 @@ class RomFingerprintService {
       // the ROM.
       int? bestCrc;
       int bestSize = 0;
+      var bestName = '';
       var offset = 0;
       while (offset + _centralHeaderLength <= directory.length) {
         if (_readUint32(directory, offset) != _centralHeaderSignature) break;
@@ -261,6 +273,17 @@ class RomFingerprintService {
         if (uncompressedSize != 0xFFFFFFFF && uncompressedSize > bestSize) {
           bestSize = uncompressedSize;
           bestCrc = crc;
+          final nameStart = offset + _centralHeaderLength;
+          final nameEnd = nameStart + nameLength;
+          // Zip stores names as bytes with no declared encoding unless the
+          // UTF-8 flag is set; decoding leniently keeps a name with an odd
+          // byte usable rather than throwing away the whole directory read.
+          bestName = nameEnd <= directory.length
+              ? utf8.decode(
+                  directory.sublist(nameStart, nameEnd),
+                  allowMalformed: true,
+                )
+              : '';
         }
 
         offset +=
@@ -268,11 +291,31 @@ class RomFingerprintService {
       }
 
       if (bestCrc == null || bestSize <= 0) return null;
-      return RomFingerprint(crc32: _hex32(bestCrc), sizeBytes: bestSize);
+      return (crc32: bestCrc, sizeBytes: bestSize, name: bestName);
     } catch (e) {
       _log.w('Zip directory read failed for $zipPath, will extract: $e');
       return null;
     }
+  }
+
+  /// The file name of the largest member of the zip at [zipPath], or null when
+  /// the directory cannot be read.
+  ///
+  /// The name RetroArch will show the core, and therefore the name it stamps
+  /// on the captures it writes: loading `Set.zip` whose member is
+  /// `Game (USA).nes` gives a content path of `…/Set.zip#Game (USA).nes`, and
+  /// RetroArch takes the capture's base name from the part after the `#`.
+  ///
+  /// Any directory components are stripped — a zip may store `roms/Game.nes`,
+  /// and only the leaf is the content name. Costs the two short reads
+  /// [_largestZipEntry] already does; nothing is decompressed.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Collector"
+  static Future<String?> largestZipEntryName(String zipPath) async {
+    final entry = await _largestZipEntry(zipPath);
+    final raw = entry?.name.trim() ?? '';
+    if (raw.isEmpty) return null;
+    final leaf = raw.replaceAll('\\', '/').split('/').last.trim();
+    return leaf.isEmpty ? null : leaf;
   }
 
   /// `PK\x05\x06` — end of central directory.

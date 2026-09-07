@@ -74,7 +74,8 @@ enum _RemoteGuard {
   unreadable,
 }
 
-class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
+class RomMSyncProvider extends ChangeNotifier
+    implements ISyncProvider, ISessionScreenshotSync {
   static const String kProviderId = 'romm';
 
   /// Tolerance (ms) for local-vs-recorded mtime comparisons, matching NeoSync.
@@ -1938,6 +1939,7 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
   /// upload so a disconnect mid-pass stops the pass with the remaining files
   /// unrecorded (they go up after the next session instead).
   // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload And Ledger"
+  @override
   Future<int> uploadSessionScreenshots(
     GameModel game,
     DateTime sessionStart,

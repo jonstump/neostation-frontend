@@ -5,6 +5,7 @@ import '../data/datasources/sqlite_database_service.dart';
 import '../data/datasources/sqlite_service.dart';
 import '../providers/file_provider.dart';
 import '../services/saf_directory_service.dart';
+import 'romm_screenshot_map_repository.dart';
 
 /// Repository for game data access operations.
 class GameRepository {
@@ -49,6 +50,12 @@ class GameRepository {
 
   /// Permanently deletes a game, its database metadata, and all associated
   /// scraped media files (screenshots, fanart, wheel, boxart, video) from disk.
+  ///
+  /// Also drops the game's RomM screenshot ledger rows. The ledger is keyed on
+  /// the ROM path, not on a row id that goes away with the game, so rows left
+  /// behind outlive the file: a ROM later re-added at the same path inherits
+  /// them, and its existing captures are then never offered for upload again.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload And Ledger"
   static Future<void> deleteGame({
     String? appSystemId,
     required String filename,
@@ -64,6 +71,18 @@ class GameRepository {
       return;
     }
     await SqliteService.deleteGame(appSystemId, filename);
+
+    if (romPath != null && romPath.isNotEmpty) {
+      final clearedLedger = await RommScreenshotMapRepository.removeFor(
+        romPath,
+      );
+      if (clearedLedger > 0) {
+        log.i(
+          'deleteGame: Cleared $clearedLedger RomM screenshot ledger rows '
+          'for $romPath',
+        );
+      }
+    }
 
     if (romPath != null) {
       try {
