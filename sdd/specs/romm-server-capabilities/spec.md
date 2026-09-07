@@ -100,12 +100,17 @@ A method whose endpoint is in the threshold table MUST return early, without sen
 
 ### Requirement: Provider Exposure And Re-Probe
 
-`RommProvider` SHALL expose `serverVersion` (nullable) and `passwordLoginDisabled` (false when unknown). `connect` and `connectWithPairCode` probe through `authenticate()`. `initialize()` (restored session) MUST schedule a probe after marking the connection connected, off the critical path, and MUST notify listeners when it lands; the probe MUST be skipped when the provider is disposed or the connection changed meanwhile. `disconnect` MUST clear the exposed values.
+`RommProvider` SHALL expose `serverVersion` (nullable) and `passwordLoginDisabled` (false when unknown). `connect` and `connectWithPairCode` probe through `authenticate()`. `initialize()` (restored session) MUST NOT probe: the restore reads the saved connection from the database and is deliberately offline, so it marks the connection connected with the capabilities still unknown. The probe for a restored session happens lazily instead, before its first authenticated request, per REQ "Probe Before The Token Grant" — which means a session that never issues one keeps `serverVersion` null, and that is correct rather than a missed probe. An offline connection additionally re-probes on the backoff timer SPEC-0019 REQ "Reachability" defines. Listeners MUST be notified when either lands. `disconnect` MUST clear the exposed values. (Amended after issue #168. This clause previously required `initialize()` to schedule a probe "off the critical path"; no such scheduling was ever implemented, and asserting it here left the spec claiming a restored session self-heals when it did not — the gap that let version-gated controls render against a server that cannot serve them.)
 
 #### Scenario: Restored session
 
 - **WHEN** the app starts with a saved RomM connection
-- **THEN** the connection is reported connected before the probe returns, and `serverVersion` becomes non-null once it does
+- **THEN** the connection is reported connected with `serverVersion` still null, and no request is sent by the restore itself
+
+#### Scenario: Restored session, first authenticated request
+
+- **WHEN** that restored connection sends its first authenticated request
+- **THEN** the capability probe and, in API-key mode, the scope verification run once before it, and `serverVersion` becomes non-null
 
 ### Requirement: Connect Screen Surfaces
 

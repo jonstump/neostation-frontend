@@ -40,7 +40,7 @@ Chosen option: "Heartbeat probe at connect time with a capability value object a
 2. **Probe in the service.** `RommService.fetchHeartbeat()` does an unauthenticated GET of `/api/heartbeat` with a short timeout, stores the result on the connection, logs one line, and never throws to its caller. `authenticate()` probes first when the connection has not been probed, and omits the playtime scopes from the grant when the feature is `unsupported`; the scope fallback stays for `supported` and `unknown`.
 3. **Gate at the call site.** A gated method returns early, without a request, when its feature is `unsupported`. `unknown` behaves as today: try, and degrade on 404 or a confirmed 403.
 4. **Provider and UI.** `RommProvider` re-probes on `connect` and `connectWithPairCode`; a session restored by `initialize` probes lazily on its first authenticated request instead (the restore itself stays offline by design, so the probe cannot happen there — see SPEC-0010 REQ "Probe Before The Token Grant", amended after issue #168), and exposes the version and the `FRONTEND.DISABLE_USERPASS_LOGIN` flag. The connect screen shows the server version and, when password login is disabled on the server, leads with pairing and API-key modes. The pairing flow reports "this server is too old for pairing" instead of a raw 404.
-5. **Not persisted.** Capabilities live in memory for the connection and are refreshed on every connect. A restored session runs with `unknown` until the background probe lands.
+5. **Not persisted.** Capabilities live in memory for the connection and are refreshed on every connect. A restored session runs with `unknown` until its first authenticated request probes (there is no background probe at restore; see SPEC-0010 REQ "Provider Exposure And Re-Probe", amended after issue #168).
 
 ### Consequences
 
@@ -49,7 +49,7 @@ Chosen option: "Heartbeat probe at connect time with a capability value object a
 * Good, because a blocked or broken heartbeat degrades to today's behaviour, so nothing that works now stops working.
 * Bad, because the threshold table is knowledge about another project's release history; a wrong entry gates a feature that exists. The table is one file, each entry carries the commit or release it was verified against, and `unknown` never gates.
 * Bad, because the heartbeat cannot say whether the account holds a scope; the 403 fallback and `_notePlaySessionFailure` remain, so there are two mechanisms, each with a clear job: version from the heartbeat, scope from the grant.
-* Neutral, because a restored session runs `unknown` for a few hundred milliseconds at startup; nothing is sent in that window that is not sent today.
+* Neutral, because a restored session runs `unknown` until its first authenticated request rather than for a fixed startup window; nothing is sent in that window that is not sent today. A session that issues no authenticated request stays `unknown`, which costs nothing because the gated call sites are the requests themselves.
 
 ### Confirmation
 
