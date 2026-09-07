@@ -9,6 +9,7 @@ import 'package:neostation/repositories/romm_save_map_repository.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/romm/romm_catalog_refresh.dart';
 import 'package:neostation/services/romm/romm_library_linker.dart';
+import 'package:neostation/services/romm/romm_platform_walk.dart';
 
 /// [RommCatalogRefresh] against in-memory fakes: a server of platforms and ROM
 /// pages, a catalog sink, and the real [RommLibraryLinker] riding along on the
@@ -450,6 +451,79 @@ void main() {
     });
   });
 
+  // Governing: ADR-0020 (show RomM library inside the local library),
+  // SPEC-0019 REQ "Catalog Refresh Shares The Walk" — "Deleted on server"
+  group('the page cap', () {
+    // A server that ignores `offset` (or a library past the cap) answers full
+    // page after full page, and the walk gives up at the cap. Reporting that
+    // truncation as "completed" made the refresh delete every catalog row the
+    // capped pages had not stamped — throwing away ROMs that are still on the
+    // server, on a server bug.
+    test('a capped platform is not pruned and keeps its rows', () async {
+      final page = [
+        for (var i = 0; i < 500; i++)
+          _rom(1000 + i, platformId: 1, fsName: 'Game $i.sfc'),
+      ];
+      var requests = 0;
+      final catalog = _FakeCatalog();
+      // A row from an earlier, complete run: still on the server, but past
+      // whatever the capped walk managed to see.
+      catalog.rows[99] = RommCatalogRow(
+        serverUrl: _server,
+        rommRomId: 99,
+        platformId: 1,
+        systemFolder: 'snes',
+        name: 'Beyond The Cap',
+        fsName: 'Beyond The Cap.sfc',
+        seenAt: DateTime.utc(2020),
+      );
+
+      final refresh = RommCatalogRefresh(
+        listPlatforms: () async => [_platform(1, 'snes')],
+        resolveSystem: (_) async => snes,
+        fetchPage:
+            ({required platformId, required limit, required offset}) async {
+              requests++;
+              // Never short, never reaching `total`: the loop can only end at the
+              // cap.
+              return RommRomPage(items: page, total: 1000000);
+            },
+        serverUrl: () => _server,
+        upsert: catalog.upsert,
+        deleteUnseen: catalog.deleteUnseen,
+        recordPlatform: catalog.recordPlatform,
+        newestRefreshedAt: catalog.newestRefreshedAt,
+      );
+
+      final summary = await refresh.run(reason: RommRefreshReason.manual);
+
+      expect(requests, RommPlatformWalk.pageCap, reason: 'stopped at the cap');
+      expect(
+        catalog.prunedPlatforms,
+        isEmpty,
+        reason: 'a truncated view must never delete rows',
+      );
+      expect(
+        catalog.rows.containsKey(99),
+        isTrue,
+        reason: 'the ROM past the cap is still on the server',
+      );
+      expect(
+        catalog.platformStamps.containsKey(1),
+        isFalse,
+        reason: 'no fresh stamp, so the next automatic run retries it',
+      );
+      expect(summary.platformsFailed, 1);
+      expect(summary.platformsProcessed, 0);
+      expect(
+        LoggerService.instance.takeCapture().where(
+          (l) => l.startsWith('w|') && l.contains('page cap'),
+        ),
+        hasLength(1),
+      );
+    });
+  });
+
   group('guards', () {
     // Governing: SPEC-0019 REQ "Catalog Refresh Shares The Walk" — "Hourly guard"
     test('an automatic refresh 10 minutes later is skipped', () async {
@@ -539,6 +613,33 @@ void main() {
 
       expect(summary.skipped, RommRefreshSkip.noServer);
       expect(server.requests, isEmpty);
+    });
+
+    // The guard used to be read before `newestRefreshedAt` was awaited and
+    // set only after, so on any reason that consults the stamp two callers
+    // both saw "not running" and both walked. Only the sync provider's own
+    // flag kept production safe.
+    // Governing: SPEC-0019 REQ "Concurrency Safety"
+    test('a second run is refused across the stamp read too', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes')],
+        romsByPlatform: {
+          1: [_rom(10, platformId: 1, fsName: 'Game.sfc')],
+        },
+        systemBySlug: {'snes': snes},
+      );
+      final catalog = _FakeCatalog();
+      final refresh = build(server, catalog);
+
+      // `connect` consults the last-refresh stamp, which suspends; the second
+      // call lands in that gap.
+      final first = refresh.run(reason: RommRefreshReason.connect);
+      final second = await refresh.run(reason: RommRefreshReason.connect);
+
+      expect(second.skipped, RommRefreshSkip.alreadyRunning);
+      expect((await first).ran, isTrue);
+      expect(server.requests, ['1@0'], reason: 'the server was walked once');
+      expect(refresh.isRunning, isFalse);
     });
 
     test('a second run while one is in flight is refused', () async {
