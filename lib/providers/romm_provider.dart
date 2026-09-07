@@ -6,6 +6,7 @@ import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
+import '../l10n/app_locale.dart';
 import '../models/game_model.dart';
 import '../models/romm_collection.dart';
 import '../models/romm_metadata_fetch.dart';
@@ -34,6 +35,7 @@ import '../services/storage_space_service.dart';
 import '../services/user_data_location_service.dart';
 import '../utils/dir_writability.dart';
 import '../utils/romm_local_matcher.dart';
+import '../utils/romm_pair_error_message.dart';
 import 'file_provider.dart';
 import 'romm_bulk_sync.dart';
 
@@ -175,7 +177,23 @@ class RommProvider extends ChangeNotifier {
   final RommService _service = RommService();
 
   RommConnectionStatus _status = RommConnectionStatus.disconnected;
-  String? _lastError;
+  String? _lastErrorMessage;
+  RommLocalizedError? _lastErrorLocalized;
+
+  /// The English sentence behind [lastError]. Reading and writing go through
+  /// the [_lastError] pair below so that no assignment can leave a stale
+  /// translation attached.
+  String? get _lastError => _lastErrorMessage;
+
+  /// Recording a message the provider cannot translate drops any translatable
+  /// form with it: [lastError] and [lastErrorLocalized] must never describe
+  /// two different failures. A failure the provider words itself goes through
+  /// [_setLocalizedError] instead, which sets both.
+  // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Localized User-Facing Text"
+  set _lastError(String? value) {
+    _lastErrorMessage = value;
+    _lastErrorLocalized = null;
+  }
 
   /// The sentinel behind [_lastError] when the failure was a [RommException];
   /// null while there is no error.
@@ -367,7 +385,21 @@ class RommProvider extends ChangeNotifier {
   // ── Getters ────────────────────────────────────────────────────────────────
   RommConnectionStatus get status => _status;
   bool get isConnected => _status == RommConnectionStatus.connected;
+
+  /// The last failure in English. It is a diagnostic and a log line, not the
+  /// user's text: a message the provider authored itself is untranslated here,
+  /// so a surface that shows a failure MUST prefer [lastErrorLocalized] (and,
+  /// for pairing, `rommPairErrorKey(lastErrorKind)`) and fall back to this
+  /// only for a [RommException.message], which is already user-facing.
+  // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Localized User-Facing Text"
   String? get lastError => _lastError;
+
+  /// [lastError] as something the widget layer can translate, for the
+  /// failures the provider worded itself; null when the message came from
+  /// [RommException.message] or when there is no error. Resolve it with
+  /// `rommLocalizedErrorText(context, …)`.
+  // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Localized User-Facing Text"
+  RommLocalizedError? get lastErrorLocalized => _lastErrorLocalized;
 
   /// What kind of failure [lastError] is, so the connect screen can pick a
   /// localized message (an expired pairing code reads differently from a rate
@@ -812,6 +844,22 @@ class RommProvider extends ChangeNotifier {
     }
   }
 
+  /// Records a failure the provider worded itself: [key] is the `AppLocale`
+  /// key the UI shows (translated, with [detail] substituted into its
+  /// `{error}` placeholder), and [fallback] is the English sentence kept in
+  /// [lastError] for the logs. Returns [fallback] so callers can return the
+  /// message the way the [RommException] paths do.
+  // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Localized User-Facing Text"
+  String _setLocalizedError(
+    String key, {
+    required String fallback,
+    String? detail,
+  }) {
+    _lastError = fallback;
+    _lastErrorLocalized = RommLocalizedError(key, detail: detail);
+    return fallback;
+  }
+
   /// Validates credentials against the server without persisting them.
   /// Returns null on success, or a user-facing error message.
   ///
@@ -872,10 +920,18 @@ class RommProvider extends ChangeNotifier {
       return e.message;
     } catch (e) {
       _status = RommConnectionStatus.error;
-      _lastError = 'Connection failed: $e';
       _lastErrorKind = RommErrorKind.other;
+      // Not a [RommException], so there is no user-facing message to pass on:
+      // the provider words this one, which means it has to be recorded as a
+      // key the connect screen can translate rather than as English.
+      // Governing: ADR-0007, SPEC-0007 REQ "Localized User-Facing Text"
+      final message = _setLocalizedError(
+        AppLocale.rommConnectionFailedDetail,
+        fallback: 'Connection failed: $e',
+        detail: '$e',
+      );
       notifyListeners();
-      return _lastError;
+      return message;
     }
 
     await RommRepository.saveConfig(
@@ -949,18 +1005,21 @@ class RommProvider extends ChangeNotifier {
           RommFeatureSupport.unsupported) {
         _status = RommConnectionStatus.error;
         _lastErrorKind = RommErrorKind.unsupported;
-        // [_lastErrorKind] is what the UI localizes through: the connect
-        // screen maps it with `rommPairErrorKey` and shows
-        // `AppLocale.rommPairServerTooOld`, so this English sentence is the
-        // diagnostic fallback (and the log line), never the user's text. Same
-        // contract as every other `_lastError = e.message` here — the provider
-        // has no BuildContext to translate with. Set the kind first, and any
-        // new pairing surface must read it rather than [lastError].
+        // Two routes to the same sentence, so no surface is left with the
+        // English one: the connect screen maps the kind with
+        // `rommPairErrorKey`, and anything reading the provider's own message
+        // gets the same `AppLocale.rommPairServerTooOld` through
+        // [lastErrorLocalized]. [lastError] keeps the English text as the log
+        // line and the diagnostic — the provider has no BuildContext to
+        // translate with — and never as the user's text.
         // Governing: ADR-0007, SPEC-0007 REQ "Error Handling Standards",
-        // SPEC-0010 REQ "Gated Call Sites"
-        _lastError =
-            'This RomM server is too old for pairing (needs '
-            '${RommFeature.clientTokenExchange.minVersion} or newer)';
+        // REQ "Localized User-Facing Text", SPEC-0010 REQ "Gated Call Sites"
+        final message = _setLocalizedError(
+          AppLocale.rommPairServerTooOld,
+          fallback:
+              'This RomM server is too old for pairing (needs '
+              '${RommFeature.clientTokenExchange.minVersion} or newer)',
+        );
         _log.w(
           'RomM pairing gated: '
           'feature=${RommFeature.clientTokenExchange.name} '
@@ -968,7 +1027,7 @@ class RommProvider extends ChangeNotifier {
           'min_version=${RommFeature.clientTokenExchange.minVersion}',
         );
         notifyListeners();
-        return _lastError;
+        return message;
       }
     }
 
@@ -983,10 +1042,17 @@ class RommProvider extends ChangeNotifier {
       return e.message;
     } catch (e) {
       _status = RommConnectionStatus.error;
-      _lastError = 'Pairing failed: $e';
+      // [RommErrorKind.other] has no pairing sentence of its own, so this is
+      // the message the connect screen shows: it must be translatable.
+      // Governing: ADR-0007, SPEC-0007 REQ "Localized User-Facing Text"
       _lastErrorKind = RommErrorKind.other;
+      final message = _setLocalizedError(
+        AppLocale.rommPairingFailedDetail,
+        fallback: 'Pairing failed: $e',
+        detail: '$e',
+      );
       notifyListeners();
-      return _lastError;
+      return message;
     }
 
     // The exchange may have downgraded https→http; connect against the URL

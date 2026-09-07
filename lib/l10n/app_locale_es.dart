@@ -1588,4 +1588,6 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.rommFixMatchApplied: 'Coincidencia aplicada en RomM',
   AppLocale.rommChangeCoverApplied: 'Carátula aplicada en RomM',
   AppLocale.rommFixMatchApplyFailed: 'No se pudo aplicar el cambio en RomM',
+  AppLocale.rommConnectionFailedDetail: 'Error de conexión: {error}',
+  AppLocale.rommPairingFailedDetail: 'Error de emparejamiento: {error}',
 };

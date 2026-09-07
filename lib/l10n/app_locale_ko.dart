@@ -1409,4 +1409,6 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommFixMatchApplied: 'RomM에 매칭을 적용했습니다',
   AppLocale.rommChangeCoverApplied: 'RomM에 커버를 적용했습니다',
   AppLocale.rommFixMatchApplyFailed: 'RomM에 변경을 적용하지 못했습니다',
+  AppLocale.rommConnectionFailedDetail: '연결에 실패했습니다: {error}',
+  AppLocale.rommPairingFailedDetail: '페어링에 실패했습니다: {error}',
 };

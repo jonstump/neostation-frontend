@@ -1598,4 +1598,6 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.rommChangeCoverApplied: 'Cover auf RomM übernommen',
   AppLocale.rommFixMatchApplyFailed:
       'Die Änderung konnte auf RomM nicht übernommen werden',
+  AppLocale.rommConnectionFailedDetail: 'Verbindung fehlgeschlagen: {error}',
+  AppLocale.rommPairingFailedDetail: 'Kopplung fehlgeschlagen: {error}',
 };

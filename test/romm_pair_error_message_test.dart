@@ -138,6 +138,78 @@ void main() {
     });
   });
 
+  group('rommLocalizedErrorText', () {
+    // The failures the provider words itself: it has no BuildContext, so it
+    // records an AppLocale key and the widget layer resolves it. A key that
+    // lost its `{error}` token in translation would swallow the exception
+    // text, which is the only diagnosis a network or TLS failure leaves.
+    // Governing: ADR-0007 (RomM pairing login),
+    // SPEC-0007 REQ "Localized User-Facing Text"
+    const detailKeys = {
+      AppLocale.rommConnectionFailedDetail,
+      AppLocale.rommPairingFailedDetail,
+    };
+
+    test('every language carries both keys with their placeholder', () {
+      expect(_allLanguages.length, 12);
+      for (final entry in _allLanguages.entries) {
+        for (final key in detailKeys) {
+          final value = entry.value[key];
+          expect(
+            value,
+            isA<String>().having((s) => s.trim().isNotEmpty, 'non-empty', true),
+            reason: '$key missing in ${entry.key}',
+          );
+          expect(
+            value as String,
+            contains('{error}'),
+            reason: '$key in ${entry.key}',
+          );
+        }
+      }
+    });
+
+    test('substitutes the detail into every language\'s sentence', () {
+      for (final entry in _allLanguages.entries) {
+        final template =
+            entry.value[AppLocale.rommPairingFailedDetail] as String;
+        final text = const RommLocalizedError(
+          AppLocale.rommPairingFailedDetail,
+          detail: 'SocketException: refused',
+        ).format(template);
+        expect(text, contains('SocketException: refused'), reason: entry.key);
+        expect(text, isNot(contains('{error}')), reason: entry.key);
+      }
+    });
+
+    test('English reads as the sentence the provider used to hardcode', () {
+      expect(
+        const RommLocalizedError(
+          AppLocale.rommPairingFailedDetail,
+          detail: 'SocketException: refused',
+        ).format(AppLocale.en[AppLocale.rommPairingFailedDetail] as String),
+        'Pairing failed: SocketException: refused',
+      );
+      expect(
+        const RommLocalizedError(
+          AppLocale.rommConnectionFailedDetail,
+          detail: 'HandshakeException',
+        ).format(AppLocale.en[AppLocale.rommConnectionFailedDetail] as String),
+        'Connection failed: HandshakeException',
+      );
+    });
+
+    test('a sentence without a detail is shown as it is', () {
+      final template = AppLocale.en[AppLocale.rommPairServerTooOld] as String;
+      expect(
+        const RommLocalizedError(
+          AppLocale.rommPairServerTooOld,
+        ).format(template),
+        template,
+      );
+    });
+  });
+
   group('rommTokenExpiryDate', () {
     test('formats yyyy-MM-dd in local time with zero padding', () {
       final local = DateTime(2027, 3, 4, 5, 6, 7);

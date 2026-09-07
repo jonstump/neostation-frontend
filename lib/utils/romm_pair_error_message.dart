@@ -1,3 +1,6 @@
+import 'package:flutter/widgets.dart';
+import 'package:flutter_localization/flutter_localization.dart';
+
 import '../l10n/app_locale.dart';
 import '../services/romm_service.dart';
 
@@ -49,3 +52,39 @@ String rommTokenExpiryDate(DateTime expiresAt) {
   final day = local.day.toString().padLeft(2, '0');
   return '${local.year}-$month-$day';
 }
+
+/// A failure the provider worded itself rather than taking from
+/// [RommException.message]: an `AppLocale` [localeKey] plus the optional
+/// [detail] to substitute into its `{error}` placeholder.
+///
+/// The provider has no `BuildContext`, so it cannot translate; it records the
+/// key here and the widget layer resolves it with [rommLocalizedErrorText].
+/// `RommProvider.lastError` keeps the English sentence as the log/diagnostic
+/// fallback, so a surface that has not adopted this still shows something.
+// Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Localized User-Facing Text"
+class RommLocalizedError {
+  const RommLocalizedError(this.localeKey, {this.detail});
+
+  /// The `AppLocale` key holding the translated sentence.
+  final String localeKey;
+
+  /// What replaces `{error}` in that sentence — the raw exception text, kept
+  /// so a network or TLS failure is still diagnosable. Null when the sentence
+  /// carries no placeholder.
+  final String? detail;
+
+  /// [template] is the translated sentence for [localeKey]; this fills its
+  /// `{error}` placeholder with [detail]. Split out from
+  /// [rommLocalizedErrorText] so the substitution can be exercised without a
+  /// `BuildContext`.
+  String format(String template) {
+    final value = detail;
+    return value == null ? template : template.replaceFirst('{error}', value);
+  }
+}
+
+/// The translated text for [error], with its [RommLocalizedError.detail]
+/// substituted into the `{error}` placeholder when there is one.
+// Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Localized User-Facing Text"
+String rommLocalizedErrorText(BuildContext context, RommLocalizedError error) =>
+    error.format(error.localeKey.getString(context));

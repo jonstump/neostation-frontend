@@ -112,6 +112,7 @@ void main() {
       expect(provider.status, RommConnectionStatus.connected);
       expect(provider.lastError, isNull);
       expect(provider.lastErrorKind, isNull);
+      expect(provider.lastErrorLocalized, isNull);
       expect(provider.serverUrl, 'https://romm.local');
       expect(provider.username, 'jon', reason: 'resolved from /api/users/me');
       expect(provider.service.usesApiKey, isTrue);
@@ -195,6 +196,10 @@ void main() {
       expect(provider.status, RommConnectionStatus.error);
       expect(provider.lastError, error);
       expect(provider.lastErrorKind, RommErrorKind.pairCodeExpired);
+      // A RommException message is already user-facing, so nothing is
+      // attached for the UI to translate a second time.
+      // Governing: ADR-0007, SPEC-0007 REQ "Localized User-Facing Text"
+      expect(provider.lastErrorLocalized, isNull);
       expect(provider.pairedTokenName, isNull);
       expect(secureStore.values, isEmpty);
       expect(await RommRepository.getConfig(), isNull);
@@ -281,6 +286,16 @@ void main() {
         AppLocale.rommPairServerTooOld,
         reason: 'the connect screen shows the localized sentence',
       );
+      // The kind is one route to that sentence; a surface that reads the
+      // provider's own message must reach the same one rather than the
+      // English fallback [lastError] keeps for the log.
+      // Governing: ADR-0007, SPEC-0007 REQ "Localized User-Facing Text"
+      expect(
+        provider.lastErrorLocalized?.localeKey,
+        AppLocale.rommPairServerTooOld,
+      );
+      expect(provider.lastErrorLocalized?.detail, isNull);
+      expect(provider.lastError, isNot(contains('{')));
       expect(requests.map((r) => r.url.path).toList(), [
         '/api/heartbeat',
       ], reason: 'the exchange is never sent');

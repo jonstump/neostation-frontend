@@ -1346,4 +1346,6 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.rommFixMatchApplied: '已在 RomM 上应用匹配',
   AppLocale.rommChangeCoverApplied: '已在 RomM 上应用封面',
   AppLocale.rommFixMatchApplyFailed: '无法在 RomM 上应用此更改',
+  AppLocale.rommConnectionFailedDetail: '连接失败：{error}',
+  AppLocale.rommPairingFailedDetail: '配对失败：{error}',
 };
