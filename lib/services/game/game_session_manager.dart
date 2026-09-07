@@ -6,6 +6,7 @@ import '../../models/game_model.dart';
 import '../../models/system_model.dart';
 import '../../repositories/game_repository.dart';
 import '../../repositories/system_repository.dart';
+import '../../sync/providers/romm_provider.dart';
 import '../../sync/sync_manager.dart';
 import '../game_session_persistence.dart';
 import '../retroachievements_hash_service.dart';
@@ -297,6 +298,11 @@ class GameSessionManager {
             start: launchTime,
             end: now,
           );
+
+          // Strictly after the playtime hooks, and detached: collecting and
+          // uploading captures is filesystem plus network work, while this
+          // path still has the launch dialog waiting on it.
+          _uploadRommScreenshotsAfterClose(game, launchTime);
         }
         _syncSavesAfterClose(game);
       }
@@ -367,6 +373,39 @@ class GameSessionManager {
         _log.e('Post-game save sync failed: $e');
       }
     });
+  }
+
+  /// Pushes the RetroArch captures the just-closed game left behind to RomM.
+  ///
+  /// Deliberately not awaited: it lists a directory and makes one request per
+  /// new capture, and the exit path has UI waiting on it. One pass per session
+  /// end, and the provider itself decides whether there is anything to do —
+  /// it checks the connection, the user's toggle and the game's RomM link, and
+  /// stops mid-pass if the connection drops. Failures are logged there and
+  /// dropped here: an unrecorded capture simply goes up after the next
+  /// session.
+  ///
+  /// Reached through [SyncManager.provider] rather than
+  /// [SyncManager.active] because a screenshot is content, not a save — it is
+  /// worth pushing whether or not RomM is the provider doing the saves.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Concurrency Safety"
+  static void _uploadRommScreenshotsAfterClose(
+    GameModel game,
+    DateTime sessionStart,
+  ) {
+    final provider = SyncManager.instance.provider(
+      RomMSyncProvider.kProviderId,
+    );
+    if (provider is! RomMSyncProvider) return;
+    unawaited(
+      Future<void>(() async {
+        try {
+          await provider.uploadSessionScreenshots(game, sessionStart);
+        } catch (e) {
+          _log.e('RomM screenshot upload failed after close: $e');
+        }
+      }),
+    );
   }
 
   /// Queues a finished session for RomM playtime sync. A local DB write only —

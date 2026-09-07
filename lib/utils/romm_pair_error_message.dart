@@ -23,7 +23,9 @@ String? rommPairErrorKey(RommErrorKind? kind) {
     // Governing: ADR-0010 (RomM heartbeat capability probe),
     // SPEC-0010 REQ "Gated Call Sites"
     RommErrorKind.unsupported => AppLocale.rommPairServerTooOld,
-    RommErrorKind.other || null => null,
+    // Every non-pairing kind falls back to the provider's own message, the
+    // same as [RommErrorKind.other]: they cannot arise from an exchange.
+    RommErrorKind.other || RommErrorKind.payloadTooLarge || null => null,
   };
 }
 

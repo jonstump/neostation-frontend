@@ -29,6 +29,20 @@ class RetroArchConfig {
   /// settings and users do enable just one.
   final bool sortSavestatesByCore;
 
+  /// Directory RetroArch writes its in-game captures to
+  /// (`screenshot_directory`). Null when the setting is `default` or absent,
+  /// in which case RetroArch decides at runtime and there is no folder we can
+  /// name — the screenshot collector treats that as "nothing to collect".
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Screenshot Directory From RetroArch Config"
+  final String? screenshotDirectory;
+
+  /// Whether RetroArch files captures into a per-content subfolder
+  /// (`sort_screenshots_by_content_enable`). When true a capture lands in
+  /// `<screenshotDirectory>/<content directory name>/` rather than the
+  /// directory root, so the collector has to look in both.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Screenshot Directory From RetroArch Config"
+  final bool sortScreenshotsByContent;
+
   const RetroArchConfig({
     this.id,
     required this.configPath,
@@ -37,6 +51,8 @@ class RetroArchConfig {
     this.savestateDirectory,
     this.sortSavefilesByCore = false,
     this.sortSavestatesByCore = false,
+    this.screenshotDirectory,
+    this.sortScreenshotsByContent = false,
   });
 
   /// Creates a [RetroArchConfig] instance from a JSON-compatible map.
@@ -57,7 +73,24 @@ class RetroArchConfig {
       sortSavestatesByCore:
           json['sort_savestates_by_core'] == true ||
           json['sortSavestatesByCore'] == true,
+      screenshotDirectory:
+          (json['screenshot_directory'] ?? json['screenshotDirectory'])
+              ?.toString(),
+      sortScreenshotsByContent: _asBool(
+        json['sort_screenshots_by_content_enable'] ??
+            json['sort_screenshots_by_content'] ??
+            json['sortScreenshotsByContent'],
+      ),
     );
+  }
+
+  /// Reads a flag that may arrive as a bool (from [toJson]) or as SQLite's
+  /// `0`/`1` integer (from the `user_retroarch_config` row).
+  static bool _asBool(Object? raw) {
+    if (raw is bool) return raw;
+    if (raw is num) return raw != 0;
+    final s = raw?.toString().toLowerCase();
+    return s == 'true' || s == '1';
   }
 
   /// Converts the configuration instance into a JSON-compatible map.
@@ -70,6 +103,8 @@ class RetroArchConfig {
       'savestate_directory': savestateDirectory,
       'sort_savefiles_by_core': sortSavefilesByCore,
       'sort_savestates_by_core': sortSavestatesByCore,
+      'screenshot_directory': screenshotDirectory,
+      'sort_screenshots_by_content_enable': sortScreenshotsByContent,
     };
   }
 
@@ -82,6 +117,8 @@ class RetroArchConfig {
     String? savestateDirectory,
     bool? sortSavefilesByCore,
     bool? sortSavestatesByCore,
+    String? screenshotDirectory,
+    bool? sortScreenshotsByContent,
   }) {
     return RetroArchConfig(
       id: id ?? this.id,
@@ -91,6 +128,9 @@ class RetroArchConfig {
       savestateDirectory: savestateDirectory ?? this.savestateDirectory,
       sortSavefilesByCore: sortSavefilesByCore ?? this.sortSavefilesByCore,
       sortSavestatesByCore: sortSavestatesByCore ?? this.sortSavestatesByCore,
+      screenshotDirectory: screenshotDirectory ?? this.screenshotDirectory,
+      sortScreenshotsByContent:
+          sortScreenshotsByContent ?? this.sortScreenshotsByContent,
     );
   }
 

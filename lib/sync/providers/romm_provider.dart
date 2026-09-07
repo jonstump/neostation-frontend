@@ -27,15 +27,18 @@ import 'package:neostation/models/romm_asset.dart';
 import 'package:neostation/models/romm_platform.dart';
 import 'package:neostation/models/romm_rom.dart';
 import 'package:neostation/providers/neo_sync_provider.dart';
+import 'package:neostation/repositories/config_repository.dart';
 import 'package:neostation/repositories/emulator_repository.dart';
 import 'package:neostation/repositories/game_repository.dart';
 import 'package:neostation/services/retroarch_config_service.dart';
 import 'package:neostation/providers/romm_provider.dart';
 import 'package:neostation/repositories/romm_save_map_repository.dart';
+import 'package:neostation/repositories/romm_screenshot_map_repository.dart';
 import 'package:neostation/repositories/sync_repository.dart';
 import 'package:neostation/repositories/system_repository.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/romm/romm_library_linker.dart';
+import 'package:neostation/services/romm/screenshot_collector.dart';
 import 'package:neostation/services/romm_playtime_service.dart';
 import 'package:neostation/services/romm_service.dart';
 
@@ -131,6 +134,12 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
   /// is enough to test the schedule without a server or a database).
   late final RommLibraryLinker _linker;
 
+  /// Finds the captures a finished session left in RetroArch's screenshot
+  /// directory. Injectable so tests can describe a folder without a
+  /// `retroarch.cfg` or a database behind it.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Collector"
+  final ScreenshotCollector _screenshots;
+
   RomMSyncProvider(
     this._browse,
     this._neoSync, {
@@ -140,11 +149,13 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
     @visibleForTesting bool autoSweep = true,
     @visibleForTesting RommLibraryLinker? linker,
     @visibleForTesting Duration sweepStartupDelay = _sweepStartupDelay,
+    @visibleForTesting ScreenshotCollector? screenshots,
   }) : _locateOverride = locateSaves,
        _resolveTargetsOverride = resolveTargets,
        _listGamesOverride = listGames,
        _autoSweep = autoSweep,
-       _startupDelay = sweepStartupDelay {
+       _startupDelay = sweepStartupDelay,
+       _screenshots = screenshots ?? ScreenshotCollector() {
     _linker = linker ?? _buildLinker();
     if (!_autoSweep) return;
     _wasConnected = _browse.isConnected;
@@ -1814,6 +1825,98 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
       'RomM playtime pull: ${paths.length} of ${recent.length} played games '
       'linked here, $applied updated',
     );
+  }
+
+  /// Uploads the RetroArch captures [game]'s just-finished session left
+  /// behind, and records each success in the ledger.
+  ///
+  /// Called detached from [GameSessionManager]'s teardown, *after* the
+  /// playtime hooks: it does filesystem work and one request per capture, and
+  /// the exit path has UI waiting on it. Returns how many files reached the
+  /// server; never throws.
+  ///
+  /// Not gated on RomM being the active save provider — a capture is content,
+  /// not a save, so pushing it decides nothing about which copy of a save
+  /// wins. It *is* gated on the connection, the user's toggle, and the game
+  /// being linked, and it re-checks disposal and connection before every
+  /// upload so a disconnect mid-pass stops the pass with the remaining files
+  /// unrecorded (they go up after the next session instead).
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload And Ledger"
+  Future<int> uploadSessionScreenshots(
+    GameModel game,
+    DateTime sessionStart,
+  ) async {
+    if (_disposed || !_browse.isConnected) return 0;
+
+    final romPath = game.romPath ?? '';
+    if (romPath.isEmpty) return 0;
+
+    if (!await ConfigRepository.getRommUploadScreenshots()) return 0;
+    if (_disposed || !_browse.isConnected) return 0;
+
+    final romId = await _resolveRomId(game);
+    if (romId == null) return 0; // not linked to RomM
+
+    final List<CollectedScreenshot> shots;
+    try {
+      shots = await _screenshots.collect(game, sessionStart);
+    } catch (e) {
+      _log.w('RomM screenshot collect failed game="${game.romname}": $e');
+      return 0;
+    }
+    if (shots.isEmpty) return 0;
+
+    var uploaded = 0;
+    var skipped = 0;
+    var failed = 0;
+    var stopped = false;
+
+    for (final shot in shots) {
+      if (_disposed || !_browse.isConnected) {
+        stopped = true;
+        break;
+      }
+      try {
+        final result = await _svc.uploadScreenshot(romId, File(shot.path));
+        await RommScreenshotMapRepository.recordUploaded(
+          romPath: romPath,
+          fileName: shot.fileName,
+          fileSize: shot.sizeBytes,
+          rommScreenshotId: result?.id,
+        );
+        uploaded++;
+      } on RommException catch (e) {
+        if (e.kind == RommErrorKind.payloadTooLarge) {
+          await RommScreenshotMapRepository.recordSkipped(
+            romPath: romPath,
+            fileName: shot.fileName,
+          );
+          skipped++;
+          _log.w(
+            'RomM screenshot skipped file="${shot.fileName}" '
+            'bytes=${shot.sizeBytes} status=413 reason=too_large',
+          );
+        } else {
+          failed++;
+          _log.w(
+            'RomM screenshot upload failed file="${shot.fileName}" '
+            'status=${e.statusCode} error=${e.message}',
+          );
+        }
+      } catch (e) {
+        failed++;
+        _log.w(
+          'RomM screenshot upload failed file="${shot.fileName}" error=$e',
+        );
+      }
+    }
+
+    _log.i(
+      'RomM screenshot upload: rom=$romId game="${game.romname}" '
+      'found=${shots.length} uploaded=$uploaded skipped=$skipped '
+      'failed=$failed stopped=$stopped',
+    );
+    return uploaded;
   }
 
   @override
