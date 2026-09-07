@@ -24,8 +24,14 @@ class SafDirectoryService {
     }
 
     try {
+      // `openSafDirectoryPicker`, not `openDirectoryPicker`: that is the name
+      // MainActivity registers on this channel, and `PermissionService` has
+      // always used it. This method carried the shortened name from the day it
+      // was written and had no caller until the RomM firmware panel, so the
+      // mismatch stayed dormant and surfaced as a MissingPluginException the
+      // first time a user pressed "Choose BIOS folder" on a device.
       final String? directoryUri = await platform.invokeMethod(
-        'openDirectoryPicker',
+        'openSafDirectoryPicker',
       );
 
       if (directoryUri != null) {
@@ -33,6 +39,13 @@ class SafDirectoryService {
       }
 
       return directoryUri;
+    } on MissingPluginException catch (e) {
+      // Not a PlatformException, so the clause below never caught it and it
+      // escaped as an unhandled error rather than the documented null. Keep the
+      // contract — a picker that cannot open returns null and the caller says
+      // no folder was chosen.
+      _log.e('SAF directory picker unavailable on this platform: ${e.message}');
+      return null;
     } on PlatformException catch (e) {
       _log.e('Error opening SAF directory picker: ${e.message}');
       return null;
