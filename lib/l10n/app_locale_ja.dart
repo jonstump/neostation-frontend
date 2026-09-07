@@ -1311,4 +1311,36 @@ const Map<String, dynamic> appLocaleJa = {
       'このコレクションは RomM のコレクションに追従しなくなります。ゲームはそのまま残ります。',
   AppLocale.rommPairServerTooOld:
       'この RomM サーバーはペアリングに対応していない古いバージョンです（4.8.0 以降が必要）',
+
+  // RomM firmware/BIOS panel (SPEC-0012)
+  AppLocale.rommFirmwareRowTitle: 'RomM の BIOS ファイル',
+  AppLocale.rommFirmwareRowSubtitle: 'このシステムに必要な BIOS ファイルを確認し、不足分をダウンロードします',
+  AppLocale.rommFirmwareRowRequiresConnection:
+      'BIOS ファイルを管理するには RomM に接続してください',
+  AppLocale.rommFirmwarePanelTitle: '{system} の BIOS ファイル',
+  AppLocale.rommFirmwareLoading: 'BIOS ファイルを読み込み中…',
+  AppLocale.rommFirmwareEmpty: 'RomM にこのプラットフォームの BIOS ファイルはありません',
+  AppLocale.rommFirmwareScopeDenied: 'この RomM アカウントにはファームウェアへのアクセス権がありません',
+  AppLocale.rommFirmwareListFailed: 'BIOS ファイルを読み込めませんでした: {error}',
+  AppLocale.rommFirmwareStatePresent: 'あり',
+  AppLocale.rommFirmwareStateMissing: 'なし',
+  AppLocale.rommFirmwareStateServerMissing: 'サーバーに保存されていません',
+  AppLocale.rommFirmwareStateNoFolder: 'BIOS フォルダーが未選択です',
+  AppLocale.rommFirmwareVerifiedByServer: 'RomM で検証済み',
+  AppLocale.rommFirmwareVerifyChecking: '確認中…',
+  AppLocale.rommFirmwareVerifyMatch: 'サーバー上のコピーと一致します',
+  AppLocale.rommFirmwareVerifyMismatch: 'サーバー上のコピーと一致しません',
+  AppLocale.rommFirmwareVerifyUnreadable: 'ローカルファイルを読み取れませんでした',
+  AppLocale.rommFirmwareActionDownload: 'ダウンロード',
+  AppLocale.rommFirmwareActionVerify: '照合',
+  AppLocale.rommFirmwareActionDownloadAll: '不足分をすべてダウンロード',
+  AppLocale.rommFirmwareActionChooseFolder: 'BIOS フォルダーを選択',
+  AppLocale.rommFirmwareDestination: '保存先: {path}',
+  AppLocale.rommFirmwareDestinationMissing: 'ダウンロードの前に BIOS フォルダーを選択してください',
+  AppLocale.rommFirmwareFolderFailed: 'このフォルダーは BIOS ファイルに使用できません',
+  AppLocale.rommFirmwareDownloadProgress: '{file} をダウンロード中 ({done}/{total})',
+  AppLocale.rommFirmwareDownloadSummary:
+      'BIOS ファイル: {downloaded} 件成功、{failed} 件失敗',
+  AppLocale.rommFirmwareDownloadCancelled: 'BIOS のダウンロードを停止しました — {summary}',
+  AppLocale.rommFirmwareDownloadFailedFile: '{file} をダウンロードできませんでした',
 };

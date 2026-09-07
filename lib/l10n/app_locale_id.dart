@@ -1448,4 +1448,41 @@ const Map<String, dynamic> appLocaleId = {
       'Koleksi ini tidak akan lagi mengikuti koleksi RomM. Gim di dalamnya tetap ada.',
   AppLocale.rommPairServerTooOld:
       'Server RomM ini terlalu lama untuk pemasangan (perlu 4.8.0 atau lebih baru)',
+
+  // RomM firmware/BIOS panel (SPEC-0012)
+  AppLocale.rommFirmwareRowTitle: 'Berkas BIOS dari RomM',
+  AppLocale.rommFirmwareRowSubtitle:
+      'Periksa berkas BIOS yang dibutuhkan sistem ini dan unduh yang belum ada',
+  AppLocale.rommFirmwareRowRequiresConnection:
+      'Sambungkan ke RomM untuk mengelola berkas BIOS',
+  AppLocale.rommFirmwarePanelTitle: 'Berkas BIOS untuk {system}',
+  AppLocale.rommFirmwareLoading: 'Memuat berkas BIOS…',
+  AppLocale.rommFirmwareEmpty:
+      'RomM tidak punya berkas BIOS untuk platform ini',
+  AppLocale.rommFirmwareScopeDenied: 'Akun RomM ini tidak punya akses firmware',
+  AppLocale.rommFirmwareListFailed: 'Gagal memuat berkas BIOS: {error}',
+  AppLocale.rommFirmwareStatePresent: 'Ada',
+  AppLocale.rommFirmwareStateMissing: 'Belum ada',
+  AppLocale.rommFirmwareStateServerMissing: 'Tidak tersimpan di server',
+  AppLocale.rommFirmwareStateNoFolder: 'Belum ada folder BIOS yang dipilih',
+  AppLocale.rommFirmwareVerifiedByServer: 'Diverifikasi oleh RomM',
+  AppLocale.rommFirmwareVerifyChecking: 'Memeriksa…',
+  AppLocale.rommFirmwareVerifyMatch: 'Sama dengan salinan di server',
+  AppLocale.rommFirmwareVerifyMismatch: 'Berbeda dari salinan di server',
+  AppLocale.rommFirmwareVerifyUnreadable: 'Berkas lokal tidak dapat dibaca',
+  AppLocale.rommFirmwareActionDownload: 'Unduh',
+  AppLocale.rommFirmwareActionVerify: 'Periksa',
+  AppLocale.rommFirmwareActionDownloadAll: 'Unduh semua yang belum ada',
+  AppLocale.rommFirmwareActionChooseFolder: 'Pilih folder BIOS',
+  AppLocale.rommFirmwareDestination: 'Tujuan: {path}',
+  AppLocale.rommFirmwareDestinationMissing:
+      'Pilih folder BIOS sebelum mengunduh',
+  AppLocale.rommFirmwareFolderFailed:
+      'Folder itu tidak bisa dipakai untuk berkas BIOS',
+  AppLocale.rommFirmwareDownloadProgress: 'Mengunduh {file} ({done}/{total})',
+  AppLocale.rommFirmwareDownloadSummary:
+      'Berkas BIOS: {downloaded} terunduh, {failed} gagal',
+  AppLocale.rommFirmwareDownloadCancelled:
+      'Unduhan BIOS dihentikan — {summary}',
+  AppLocale.rommFirmwareDownloadFailedFile: '{file} gagal diunduh',
 };

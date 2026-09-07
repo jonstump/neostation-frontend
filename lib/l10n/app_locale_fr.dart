@@ -1497,4 +1497,44 @@ const Map<String, dynamic> appLocaleFr = {
       'Cette collection ne suivra plus la collection RomM. Ses jeux sont conservés.',
   AppLocale.rommPairServerTooOld:
       'Ce serveur RomM est trop ancien pour l\'appairage (nécessite 4.8.0 ou plus récent)',
+
+  // RomM firmware/BIOS panel (SPEC-0012)
+  AppLocale.rommFirmwareRowTitle: 'Fichiers BIOS depuis RomM',
+  AppLocale.rommFirmwareRowSubtitle:
+      'Vérifiez les fichiers BIOS nécessaires à ce système et téléchargez ceux qui manquent',
+  AppLocale.rommFirmwareRowRequiresConnection:
+      'Connectez-vous à RomM pour gérer les fichiers BIOS',
+  AppLocale.rommFirmwarePanelTitle: 'Fichiers BIOS pour {system}',
+  AppLocale.rommFirmwareLoading: 'Chargement des fichiers BIOS…',
+  AppLocale.rommFirmwareEmpty:
+      "RomM n'a aucun fichier BIOS pour cette plateforme",
+  AppLocale.rommFirmwareScopeDenied:
+      "Ce compte RomM n'a pas accès aux firmwares",
+  AppLocale.rommFirmwareListFailed:
+      'Impossible de charger les fichiers BIOS : {error}',
+  AppLocale.rommFirmwareStatePresent: 'Présent',
+  AppLocale.rommFirmwareStateMissing: 'Manquant',
+  AppLocale.rommFirmwareStateServerMissing: 'Absent du serveur',
+  AppLocale.rommFirmwareStateNoFolder: 'Aucun dossier BIOS choisi',
+  AppLocale.rommFirmwareVerifiedByServer: 'Vérifié par RomM',
+  AppLocale.rommFirmwareVerifyChecking: 'Vérification…',
+  AppLocale.rommFirmwareVerifyMatch: 'Identique à la copie du serveur',
+  AppLocale.rommFirmwareVerifyMismatch: 'Différent de la copie du serveur',
+  AppLocale.rommFirmwareVerifyUnreadable: 'Impossible de lire le fichier local',
+  AppLocale.rommFirmwareActionDownload: 'Télécharger',
+  AppLocale.rommFirmwareActionVerify: 'Vérifier',
+  AppLocale.rommFirmwareActionDownloadAll: 'Télécharger tous les manquants',
+  AppLocale.rommFirmwareActionChooseFolder: 'Choisir le dossier BIOS',
+  AppLocale.rommFirmwareDestination: 'Destination : {path}',
+  AppLocale.rommFirmwareDestinationMissing:
+      'Choisissez un dossier BIOS avant de télécharger',
+  AppLocale.rommFirmwareFolderFailed:
+      'Ce dossier ne peut pas servir aux fichiers BIOS',
+  AppLocale.rommFirmwareDownloadProgress:
+      'Téléchargement de {file} ({done}/{total})',
+  AppLocale.rommFirmwareDownloadSummary:
+      'Fichiers BIOS : {downloaded} téléchargés, {failed} en échec',
+  AppLocale.rommFirmwareDownloadCancelled:
+      'Téléchargement des BIOS arrêté — {summary}',
+  AppLocale.rommFirmwareDownloadFailedFile: 'Impossible de télécharger {file}',
 };
