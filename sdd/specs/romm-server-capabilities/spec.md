@@ -67,7 +67,7 @@ The system SHALL define `RommFeature` with one entry per gated endpoint and the 
 
 ### Requirement: Probe Before The Token Grant
 
-`authenticate()` SHALL call `fetchHeartbeat()` first when the connection has not been probed since the last `configure()`. When `supports(playSessions)` is `unsupported`, the password grant MUST request only the read scopes and MUST NOT retry with the playtime scopes; the playtime-scope-granted flag MUST be false. When `supported` or `unknown`, the grant and its 403 fallback MUST behave as SPEC-0013 REQ "Optional Scope Groups" defines. (Until SPEC-0013, that was the binary playtime grant with a single 403 retry; ADR-0013 `extends` ADR-0010 and replaced it with per-group negotiation. This clause originally read "exactly as before this spec", which is stale now that SPEC-0013 has superseded the fallback it referred to.) API-key mode MUST still probe (the key's scopes are fixed, the version still gates endpoints).
+`authenticate()` SHALL call `fetchHeartbeat()` first when the connection has not been probed since the last `configure()`. When `supports(playSessions)` is `unsupported`, the password grant MUST request only the read scopes and MUST NOT retry with the playtime scopes; the playtime-scope-granted flag MUST be false. When `supported` or `unknown`, the grant and its 403 fallback MUST behave as SPEC-0013 REQ "Optional Scope Groups" defines. (Until SPEC-0013, that was the binary playtime grant with a single 403 retry; ADR-0013 `extends` ADR-0010 and replaced it with per-group negotiation. This clause originally read "exactly as before this spec", which is stale now that SPEC-0013 has superseded the fallback it referred to.) API-key mode MUST still probe (the version still gates endpoints, and since the amended SPEC-0013 REQ "Optional Scope Groups" the same call also settles the scope groups). A connection restored by `RommProvider.initialize()` never calls `authenticate()` — the restore is deliberately offline — so it MUST verify and probe lazily, at most once, before its first authenticated request rather than during the restore. (Added after issue #168. ADR-0010 already claimed a restored session re-probes "off the critical path"; it did not, so a resumed session ran with null capabilities and every scope group `unknown` for the life of the process. That made version-gated controls render on servers that cannot serve them — Surprise Me was visible against a 5.1.0 server and answered 422 — and left `granted` unreachable.)
 
 #### Scenario: Old server, password grant
 
@@ -100,12 +100,17 @@ A method whose endpoint is in the threshold table MUST return early, without sen
 
 ### Requirement: Provider Exposure And Re-Probe
 
-`RommProvider` SHALL expose `serverVersion` (nullable) and `passwordLoginDisabled` (false when unknown). `connect` and `connectWithPairCode` probe through `authenticate()`. `initialize()` (restored session) MUST schedule a probe after marking the connection connected, off the critical path, and MUST notify listeners when it lands; the probe MUST be skipped when the provider is disposed or the connection changed meanwhile. `disconnect` MUST clear the exposed values.
+`RommProvider` SHALL expose `serverVersion` (nullable) and `passwordLoginDisabled` (false when unknown). `connect` and `connectWithPairCode` probe through `authenticate()`. `initialize()` (restored session) MUST NOT probe: the restore reads the saved connection from the database and is deliberately offline, so it marks the connection connected with the capabilities still unknown. The probe for a restored session happens lazily instead, before its first authenticated request, per REQ "Probe Before The Token Grant" — which means a session that never issues one keeps `serverVersion` null, and that is correct rather than a missed probe. An offline connection additionally re-probes on the backoff timer SPEC-0019 REQ "Reachability" defines. Listeners MUST be notified when either lands. `disconnect` MUST clear the exposed values. (Amended after issue #168. This clause previously required `initialize()` to schedule a probe "off the critical path"; no such scheduling was ever implemented, and asserting it here left the spec claiming a restored session self-heals when it did not — the gap that let version-gated controls render against a server that cannot serve them.)
 
 #### Scenario: Restored session
 
 - **WHEN** the app starts with a saved RomM connection
-- **THEN** the connection is reported connected before the probe returns, and `serverVersion` becomes non-null once it does
+- **THEN** the connection is reported connected with `serverVersion` still null, and no request is sent by the restore itself
+
+#### Scenario: Restored session, first authenticated request
+
+- **WHEN** that restored connection sends its first authenticated request
+- **THEN** the capability probe and, in API-key mode, the scope verification run once before it, and `serverVersion` becomes non-null
 
 ### Requirement: Connect Screen Surfaces
 
