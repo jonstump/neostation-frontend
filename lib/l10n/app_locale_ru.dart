@@ -1493,4 +1493,6 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommUploadScreenshots: 'Загружать скриншоты в RomM',
   AppLocale.rommUploadScreenshotsHint:
       'Отправлять новые скриншоты RetroArch в RomM после каждой сессии',
+  AppLocale.rommFirmwareDestinationRetroArch:
+      'Назначение (из RetroArch): {path}',
 };

@@ -1539,6 +1539,11 @@ mixin AppLocale {
   static const String rommUploadScreenshotsHint =
       'romm_upload_screenshots_hint';
 
+  // ── RomM firmware destination supplied by RetroArch (SPEC-0012) ─────────
+  // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "Localized User-Facing Text"
+  static const String rommFirmwareDestinationRetroArch =
+      'romm_firmware_destination_retroarch';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================

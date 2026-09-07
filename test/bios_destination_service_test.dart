@@ -20,17 +20,20 @@ void main() {
 
   /// Builds a service whose collaborators are scripted: [retroArch] and
   /// [stored] are the two candidates, [existing] the directories that are on
-  /// disk, and [written] collects what would be persisted.
+  /// disk, [unwritable] those of them that exist but reject a write (Android
+  /// without All Files Access), and [written] collects what would be persisted.
   BiosDestinationService svc({
     String? retroArch,
     String? stored,
     Set<String> existing = const {},
+    Set<String> unwritable = const {},
     List<String>? written,
   }) => BiosDestinationService(
     retroArchSystemDirectory: () async => retroArch,
     storedBiosDirectory: () async => stored,
     persistBiosDirectory: (d) async => written?.add(d),
     directoryExists: (d) async => existing.contains(d),
+    directoryIsWritable: (d) async => !unwritable.contains(d),
   );
 
   group('resolve', () {
@@ -100,6 +103,62 @@ void main() {
       ).resolve(psx);
 
       expect(dir, '/roms/bios');
+    });
+
+    test('skips a directory that exists but cannot be written to', () async {
+      // Governing: ADR-0012, SPEC-0012 REQ "BIOS Destination" — the resolver
+      // promises a directory the download can write into, not merely one that
+      // is there. Before this the RetroArch folder won and the failure only
+      // appeared at the first byte.
+      final dir = await svc(
+        retroArch: '/storage/emulated/0/RetroArch/system',
+        stored: '/roms/bios',
+        existing: {'/storage/emulated/0/RetroArch/system', '/roms/bios'},
+        unwritable: {'/storage/emulated/0/RetroArch/system'},
+      ).resolve(psx);
+
+      expect(dir, '/roms/bios');
+    });
+
+    test('returns null when every candidate is read-only', () async {
+      final dir = await svc(
+        retroArch: '/ra/system',
+        stored: '/roms/bios',
+        existing: {'/ra/system', '/roms/bios'},
+        unwritable: {'/ra/system', '/roms/bios'},
+      ).resolve(psx);
+
+      expect(dir, isNull);
+    });
+  });
+
+  group('resolveDestination', () {
+    test('names RetroArch as the source when it wins', () async {
+      // Governing: ADR-0012 §2 — the panel offers the picker only when
+      // RetroArch supplies nothing, so it has to be able to tell which of the
+      // two candidates answered.
+      final resolved = await svc(
+        retroArch: '/ra/system',
+        stored: '/roms/bios',
+        existing: {'/ra/system', '/roms/bios'},
+      ).resolveDestination(psx);
+
+      expect(resolved?.directory, '/ra/system');
+      expect(resolved?.source, BiosDestinationSource.retroArch);
+    });
+
+    test('names the configured folder when RetroArch has none', () async {
+      final resolved = await svc(
+        stored: '/roms/bios',
+        existing: {'/roms/bios'},
+      ).resolveDestination(psx);
+
+      expect(resolved?.directory, '/roms/bios');
+      expect(resolved?.source, BiosDestinationSource.configured);
+    });
+
+    test('is null when neither candidate is usable', () async {
+      expect(await svc().resolveDestination(psx), isNull);
     });
   });
 

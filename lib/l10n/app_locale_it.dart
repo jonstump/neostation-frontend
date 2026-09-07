@@ -1526,4 +1526,6 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.rommUploadScreenshots: 'Carica gli screenshot su RomM',
   AppLocale.rommUploadScreenshotsHint:
       'Invia a RomM le nuove catture di RetroArch al termine di ogni sessione',
+  AppLocale.rommFirmwareDestinationRetroArch:
+      'Destinazione (da RetroArch): {path}',
 };

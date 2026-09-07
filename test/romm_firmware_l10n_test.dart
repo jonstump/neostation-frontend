@@ -51,6 +51,7 @@ void main() {
     AppLocale.rommFirmwareActionChooseFolder,
     AppLocale.rommFirmwareDestination,
     AppLocale.rommFirmwareDestinationMissing,
+    AppLocale.rommFirmwareDestinationRetroArch,
     AppLocale.rommFirmwareFolderFailed,
     AppLocale.rommFirmwareDownloadProgress,
     AppLocale.rommFirmwareDownloadSummary,
@@ -94,6 +95,10 @@ void main() {
   test('the strings the panel interpolates carry their placeholders', () {
     expect(appLocaleEn[AppLocale.rommFirmwarePanelTitle], contains('{system}'));
     expect(appLocaleEn[AppLocale.rommFirmwareDestination], contains('{path}'));
+    expect(
+      appLocaleEn[AppLocale.rommFirmwareDestinationRetroArch],
+      contains('{path}'),
+    );
     expect(appLocaleEn[AppLocale.rommFirmwareListFailed], contains('{error}'));
     expect(
       tokensOf(appLocaleEn[AppLocale.rommFirmwareDownloadProgress] as String),

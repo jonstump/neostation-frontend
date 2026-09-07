@@ -134,6 +134,23 @@ class RommCancelledException extends RommException {
   RommCancelledException([super.message = 'Download cancelled']);
 }
 
+/// Raised when the server rejected the *credential itself* — a wrong password,
+/// a changed password, a revoked or mistyped API key — rather than refusing one
+/// endpoint to an otherwise valid login.
+///
+/// A distinct type, not a message match, because the two are told apart by
+/// status alone otherwise: RomM answers 403 both for "this login is not valid"
+/// and for "this login may not touch that endpoint". The shared auth retry
+/// re-authenticates mid-request on a 403, so a bad credential surfaces from
+/// *inside* an ordinary endpoint call; without this marker the firmware calls
+/// rewrite it as a missing `firmware.read` scope and the user is told the wrong
+/// thing entirely. Extends [RommException] so every existing catch, status
+/// check and error message keeps working unchanged.
+// Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "Error Handling Standards"
+class RommAuthException extends RommException {
+  RommAuthException(super.message, {super.statusCode});
+}
+
 /// HTTP client for a remote RomM server (library browse + ROM download).
 ///
 /// Holds the server base URL and credentials for one connection. Two
@@ -617,7 +634,7 @@ class RommService {
     }
 
     if (resp.statusCode == 401 || resp.statusCode == 403) {
-      throw RommException('Invalid API key', statusCode: resp.statusCode);
+      throw RommAuthException('Invalid API key', statusCode: resp.statusCode);
     }
     if (resp.statusCode != 200) {
       throw RommException(
@@ -821,7 +838,7 @@ class RommService {
     }
 
     if (resp.statusCode == 401 || resp.statusCode == 403) {
-      throw RommException(
+      throw RommAuthException(
         'Invalid username or password',
         statusCode: resp.statusCode,
       );
@@ -1682,6 +1699,12 @@ class RommService {
   /// 403 surfaces as [RommErrorKind.scopeDenied]; every other failure is logged
   /// exactly once here, naming the file and the cause, and rethrown for the
   /// caller to report.
+  ///
+  /// A row the server flagged `missing_from_fs` is refused before any request
+  /// leaves: ADR-0012 has those "listed, but not downloadable", and this is the
+  /// layer that enforces it for every caller — the panel and
+  /// [RommFirmwareService.download] gate it too, but neither can speak for a
+  /// future caller holding only this service.
   // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "Firmware Model And Service"
   Future<void> downloadFirmware(
     RommFirmware firmware, {
@@ -1692,6 +1715,16 @@ class RommService {
     final fileName = firmware.fileName.isNotEmpty
         ? firmware.fileName
         : '${firmware.id}';
+    if (firmware.missingFromFs) {
+      // Governing: ADR-0012 Decision Outcome §1 ("listed but not downloadable")
+      _log.w(
+        'RomM firmware download refused: file=$fileName id=${firmware.id} '
+        'reason=missing_from_fs',
+      );
+      throw RommException(
+        'RomM no longer holds the bytes for this firmware file',
+      );
+    }
     try {
       await _streamToFile(
         '/api/firmware/${firmware.id}/content/'
@@ -1715,14 +1748,21 @@ class RommService {
     }
   }
 
-  /// Rewrites a 403 from a firmware call as a [RommErrorKind.scopeDenied]
-  /// exception, or returns null when [e] is not a scope problem.
+  /// Rewrites a 403 the *firmware endpoint itself* answered as a
+  /// [RommErrorKind.scopeDenied] exception, or returns null when [e] is not a
+  /// scope problem.
   ///
-  /// A 403 here has already survived the shared retry (a password-grant
+  /// Such a 403 has already survived the shared retry (a password-grant
   /// connection re-authenticates once before giving up), so the credential
   /// genuinely lacks `firmware.read` rather than holding a stale token.
+  ///
+  /// A [RommAuthException] is deliberately left alone: the shared retry
+  /// re-authenticates on a 403 and a rejected credential throws 403 out of
+  /// *that* step, so remapping every 403 told a user who had changed their RomM
+  /// password that their account has no firmware access.
   // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "Firmware Model And Service"
   static RommException? _asScopeDenied(RommException e) {
+    if (e is RommAuthException) return null;
     if (e.statusCode != 403) return null;
     return RommException(
       'This RomM account or API key has no firmware access',

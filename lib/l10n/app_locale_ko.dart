@@ -1357,4 +1357,5 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommGalleryError: 'RomM 갤러리를 불러오지 못했습니다',
   AppLocale.rommUploadScreenshots: '스크린샷을 RomM에 업로드',
   AppLocale.rommUploadScreenshotsHint: '플레이가 끝나면 새 RetroArch 스크린샷을 RomM으로 보냅니다',
+  AppLocale.rommFirmwareDestinationRetroArch: '저장 위치(RetroArch 설정): {path}',
 };
