@@ -49,17 +49,30 @@ class RommScreenshot {
     this.createdAt,
   });
 
-  /// Orders a gallery newest first: by [createdAt] when the server sent one,
-  /// then by descending id, then by descending file name.
+  /// Orders a gallery newest first: every timestamped screenshot ahead of
+  /// every untimestamped one, each group by its own key — [createdAt]
+  /// descending, then descending id, then descending file name.
   ///
   /// The fallbacks matter because a server that omits the timestamps would
   /// otherwise leave the strip in whatever order the JSON array happened to
   /// carry. RomM asset ids increase, and RetroArch names its captures
   /// `<content>-<date>-<time>`, so both sort the same way the clock does.
+  ///
+  /// The timestamped-first partition is what makes this a *total* order, and
+  /// it is not cosmetic. Ordering a mixed pair by the id while ordering a
+  /// timestamped pair by the date interleaves two comparison keys, and the
+  /// resulting relation is intransitive: `A(t=10, id=1)`, `B(no t, id=2)` and
+  /// `C(t=5, id=3)` give A after B, B after C and A before C. `List.sort` does
+  /// not detect a cycle — it just returns some arbitrary permutation — so the
+  /// strip appeared to shuffle between loads. Comparing "has a timestamp"
+  /// first is the comparator form of partitioning the two groups, sorting each
+  /// on its own key and concatenating them.
   // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Gallery Strip"
   static int newestFirst(RommScreenshot a, RommScreenshot b) {
     final at = a.createdAt;
     final bt = b.createdAt;
+    if (at != null && bt == null) return -1;
+    if (at == null && bt != null) return 1;
     if (at != null && bt != null && at != bt) return bt.compareTo(at);
     if (a.id != b.id) return b.id.compareTo(a.id);
     return b.fileName.compareTo(a.fileName);

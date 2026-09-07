@@ -152,7 +152,11 @@ class RommScreenshotMapRepository {
   /// Drops every ledger row for [romPath]; returns how many were removed.
   ///
   /// Deleting a game locally has to clear its ledger, or the rows outlive the
-  /// file and a later game that happens to reuse the path inherits them.
+  /// file and a later game that happens to reuse the path inherits them —
+  /// its existing captures then look already-uploaded and are never offered.
+  /// Called from `GameRepository.deleteGame`, the one path a game leaves the
+  /// library by.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload And Ledger"
   static Future<int> removeFor(String romPath) async {
     if (romPath.isEmpty) return 0;
     try {

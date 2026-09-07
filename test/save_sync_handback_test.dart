@@ -104,25 +104,83 @@ void main() {
       expect(notifications, greaterThan(0));
     },
   );
+
+  group('session screenshot capability', () {
+    // The regression: the session hook reached for the RomM adapter by id and
+    // downcast to the concrete RomMSyncProvider, which inverts the layering
+    // (a service naming one sync adapter) that the provider-agnostic sync
+    // layer exists to prevent. The hook now offers a finished session to every
+    // registered provider that declares the capability.
+    // Governing: ADR-0016, SPEC-0016 REQ "Concurrency Safety"
+    test('every registered provider is reachable, active or not', () {
+      final ids = SyncManager.instance.providers.map((p) => p.providerId);
+      expect(ids, containsAll([NeoSyncAdapter.kProviderId, 'romm']));
+    });
+
+    test('only providers that declare the capability are offered the '
+        'session', () async {
+      final capable = _ScreenshotFakeProvider('shots', 'Shots');
+      SyncManager.instance.register(capable);
+      addTearDown(() => SyncManager.instance.unregister('shots'));
+
+      final offered = SyncManager.instance.providers
+          .whereType<ISessionScreenshotSync>()
+          .toList();
+
+      expect(offered, [capable]);
+      expect(offered.single, isNot(same(romm)));
+
+      await offered.single.uploadSessionScreenshots(
+        _game('Game.sfc'),
+        DateTime(2026, 9, 6, 10),
+      );
+      expect(capable.uploaded, ['Game.sfc']);
+    });
+  });
+}
+
+GameModel _game(String romname) => GameModel(
+  romname: romname,
+  realname: romname,
+  name: romname,
+  year: '',
+  developer: '',
+  publisher: '',
+  genre: '',
+  players: '',
+  rating: 0,
+);
+
+/// A provider that also stores session screenshots, for the capability probe.
+class _ScreenshotFakeProvider extends _FakeProvider
+    implements ISessionScreenshotSync {
+  _ScreenshotFakeProvider(super.providerId, super.name);
+
+  final List<String> uploaded = [];
+
+  @override
+  Future<int> uploadSessionScreenshots(
+    GameModel game,
+    DateTime sessionStart,
+  ) async {
+    uploaded.add(game.romname);
+    return 1;
+  }
 }
 
 /// Minimal [ISyncProvider] stand-in: these tests only exercise registration and
 /// active-id bookkeeping, so every transfer method is left unimplemented.
 class _FakeProvider implements ISyncProvider {
-  _FakeProvider(this.providerId, this._name);
+  _FakeProvider(this.providerId, this.name);
 
   @override
   final String providerId;
 
-  final String _name;
+  final String name;
 
   @override
-  SyncProviderMeta get meta => SyncProviderMeta(
-    id: providerId,
-    name: _name,
-    description: '',
-    author: '',
-  );
+  SyncProviderMeta get meta =>
+      SyncProviderMeta(id: providerId, name: name, description: '', author: '');
 
   @override
   SyncProviderStatus get status => SyncProviderStatus.connected;

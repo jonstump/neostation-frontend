@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/data/datasources/sqlite_migrations.dart';
 import 'package:neostation/data/datasources/sqlite_service.dart';
 import 'package:neostation/repositories/config_repository.dart';
+import 'package:neostation/repositories/game_repository.dart';
 import 'package:neostation/repositories/romm_screenshot_map_repository.dart';
 import 'package:sqlite3/sqlite3.dart';
 
@@ -169,6 +170,38 @@ void main() {
 
     tearDown(() async {
       await helper.tearDown();
+    });
+
+    test('deleting the game clears its ledger rows', () async {
+      // The regression: removeFor existed and documented this, but nothing
+      // called it. Rows keyed on the ROM path outlive the file, so a ROM later
+      // re-added at the same path inherited them and its existing captures
+      // were never offered for upload again.
+      // Governing: ADR-0016, SPEC-0016 REQ "Upload And Ledger"
+      const otherRom = '/roms/snes/Other.sfc';
+      await RommScreenshotMapRepository.recordUploaded(
+        romPath: romPath,
+        fileName: 'Game-a.png',
+        fileSize: 10,
+      );
+      await RommScreenshotMapRepository.recordUploaded(
+        romPath: otherRom,
+        fileName: 'Other-a.png',
+        fileSize: 20,
+      );
+
+      await GameRepository.deleteGame(
+        appSystemId: 'snes',
+        filename: 'Game.sfc',
+        systemFolderName: 'snes',
+        romBaseName: 'Game.sfc',
+        romPath: romPath,
+      );
+
+      expect(await RommScreenshotMapRepository.recordedFor(romPath), isEmpty);
+      expect(await RommScreenshotMapRepository.recordedFor(otherRom), {
+        'Other-a.png': 20,
+      });
     });
 
     test('records an upload and reads it back by size', () async {

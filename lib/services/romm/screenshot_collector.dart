@@ -8,6 +8,7 @@ import '../../repositories/romm_screenshot_map_repository.dart';
 import '../../utils/rom_tree.dart';
 import '../logger_service.dart';
 import '../retroarch_config_service.dart';
+import '../rom_fingerprint_service.dart';
 
 /// One capture the collector decided is new for this session.
 ///
@@ -43,9 +44,10 @@ class CollectedScreenshot {
 /// RetroArch names a capture `<content basename>-<date>-<time>.png` in its
 /// `screenshot_directory` (plus a per-content subdirectory when
 /// `sort_screenshots_by_content_enable` is on). Two filters bound the listing
-/// of what can be a very large folder: the name must start with the game's ROM
-/// stem, and the file's modification time must fall inside the session window.
-/// A third filter — the upload ledger — removes what this device already sent.
+/// of what can be a very large folder: the name must start with one of the
+/// game's content stems, and the file's modification time must fall inside the
+/// session window. A third filter — the upload ledger — removes what this
+/// device already sent.
 ///
 /// The listing and the filtering run in a background isolate: a screenshot
 /// folder on a handheld's SD card can hold thousands of entries and each entry
@@ -82,12 +84,19 @@ class ScreenshotCollector {
   /// Reads the upload ledger for a ROM path. Injectable for the same reason.
   final Future<Map<String, int?>> Function(String romPath) _loadLedger;
 
+  /// Reads the name of the ROM inside an archive. Injectable so a test can
+  /// describe an archive's contents without building one.
+  final Future<String?> Function(String romPath) _loadArchiveStem;
+
   ScreenshotCollector({
     @visibleForTesting Future<RetroArchConfig> Function()? loadConfig,
     @visibleForTesting
     Future<Map<String, int?>> Function(String romPath)? loadLedger,
+    @visibleForTesting
+    Future<String?> Function(String romPath)? loadArchiveStem,
   }) : _loadConfig = loadConfig ?? RetroArchConfigService().getMergedConfig,
-       _loadLedger = loadLedger ?? RommScreenshotMapRepository.recordedFor;
+       _loadLedger = loadLedger ?? RommScreenshotMapRepository.recordedFor,
+       _loadArchiveStem = loadArchiveStem ?? archiveContentStem;
 
   /// Captures for [game] taken during the session that began at
   /// [sessionStart], oldest first.
@@ -138,9 +147,25 @@ class ScreenshotCollector {
         ? const <String, int?>{}
         : await _loadLedger(romPath);
 
+    // An archive's inner ROM is very often named differently from the archive
+    // — `Set.zip` holding `Game (USA).nes` — and RetroArch names the capture
+    // after the content it loaded, not after the file we handed it. The
+    // archive stem is added rather than substituted: an arcade set is its own
+    // content, a core that ignores the inner name stamps the archive's, and
+    // both stems cost one `startsWith` each.
+    final stems = <String>[stem];
+    if (romPath.isNotEmpty) {
+      final archiveStem = await _loadArchiveStem(romPath);
+      if (archiveStem != null &&
+          archiveStem.isNotEmpty &&
+          archiveStem.toLowerCase() != stem.toLowerCase()) {
+        stems.add(archiveStem);
+      }
+    }
+
     final rows = await compute(_scanForScreenshots, {
       'directories': directories,
-      'stem': stem.toLowerCase(),
+      'stems': [for (final s in stems) s.toLowerCase()],
       'cutoffMs': sessionStart.subtract(startTolerance).millisecondsSinceEpoch,
       'extensions': imageExtensions.toList(),
       // Encoded as name -> size, with -1 standing in for the null size of a
@@ -151,7 +176,7 @@ class ScreenshotCollector {
 
     if (rows.isEmpty) {
       _log.i(
-        'Screenshot collect: none new for stem="$stem" in '
+        'Screenshot collect: none new for stems="${stems.join('|')}" in '
         'dirs="${directories.join(Platform.pathSeparator == '/' ? ':' : ';')}"',
       );
       return const [];
@@ -169,7 +194,7 @@ class ScreenshotCollector {
         ),
     ];
     _log.i(
-      'Screenshot collect: found=${out.length} stem="$stem" '
+      'Screenshot collect: found=${out.length} stems="${stems.join('|')}" '
       'ledger=${ledger.length}',
     );
     return out;
@@ -193,6 +218,37 @@ class ScreenshotCollector {
         ? _baseName(normalizeRomPath(path))
         : game.romname;
     return _stripExtension(source.trim());
+  }
+
+  /// The stem of the ROM *inside* an archive, or null when there is no second
+  /// name to look for.
+  ///
+  /// RetroArch loading `Set.zip` opens the member itself, so its content path
+  /// is `…/Set.zip#Game (USA).nes` and the captures it writes are named
+  /// `Game (USA)-<date>-<time>.png`. Nothing on the launch path knows that
+  /// name: NeoStation hands the emulator the archive (`{file.path}` resolves
+  /// to [GameModel.romPath] and no entry is ever unpacked for a launch), the
+  /// emulator picks the member, and no column carries it. So it is read here,
+  /// out of the zip's central directory — the largest member wins, which is
+  /// the same rule `ArchiveService.extractRom` and the fingerprint reader
+  /// already use, so all three agree on which member is the ROM.
+  ///
+  /// Null for anything that is not a `.zip`. A `.7z` would need the archive
+  /// decoded to list it, which is far more than a name is worth on the exit
+  /// path; those games keep the archive stem alone.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Collector"
+  static Future<String?> archiveContentStem(String romPath) async {
+    if (!normalizeRomPath(romPath).toLowerCase().endsWith('.zip')) return null;
+    try {
+      final name = await RomFingerprintService.largestZipEntryName(romPath);
+      if (name == null) return null;
+      final stem = _stripExtension(name.trim());
+      return stem.isEmpty ? null : stem;
+    } catch (e) {
+      // Never a reason to abandon the pass: the archive stem still applies.
+      _log.i('Screenshot collect: archive entry unreadable "$romPath": $e');
+      return null;
+    }
   }
 
   /// The per-content subdirectory RetroArch sorts captures into when
@@ -232,7 +288,7 @@ class ScreenshotCollector {
 // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Collector"
 List<Map<String, Object>> _scanForScreenshots(Map<String, Object?> args) {
   final directories = (args['directories'] as List).cast<String>();
-  final stem = args['stem'] as String;
+  final stems = (args['stems'] as List).cast<String>();
   final cutoffMs = args['cutoffMs'] as int;
   final extensions = (args['extensions'] as List).cast<String>().toSet();
   final ledger = (args['ledger'] as Map).map(
@@ -257,7 +313,7 @@ List<Map<String, Object>> _scanForScreenshots(Map<String, Object?> args) {
       if (entry is! File) continue;
       final fileName = entry.path.split(Platform.pathSeparator).last;
       final lowerName = fileName.toLowerCase();
-      if (!lowerName.startsWith(stem)) continue;
+      if (!stems.any(lowerName.startsWith)) continue;
 
       final lastDot = lowerName.lastIndexOf('.');
       if (lastDot <= 0) continue;

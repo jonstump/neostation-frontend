@@ -27,6 +27,64 @@ void main() {
     return RetroArchConfigService().parseConfig(file.path);
   }
 
+  group('withScreenshotFallback', () {
+    // The regression: `screenshot_directory` ships as "default", and
+    // getMergedConfig's no-config path filled in savefile/savestate defaults
+    // but no screenshot default. Either way the field stayed null, the
+    // collector had nothing to walk, and the whole upload feature was inert
+    // with nothing on screen or in the log explaining why.
+    // Governing: ADR-0016, SPEC-0016 REQ "Screenshot Directory From RetroArch
+    // Config"
+    test('leaves a configured directory alone', () {
+      final config = RetroArchConfigService.withScreenshotFallback(
+        const RetroArchConfig(
+          configPath: '/cfg/retroarch.cfg',
+          screenshotDirectory: '/shots',
+        ),
+      );
+
+      expect(config.screenshotDirectory, '/shots');
+    });
+
+    test('prefers the screenshots folder beside retroarch.cfg', () {
+      final beside = Directory(
+        '${tempDir.path}${Platform.pathSeparator}screenshots',
+      )..createSync(recursive: true);
+
+      final config = RetroArchConfigService.withScreenshotFallback(
+        RetroArchConfig(
+          configPath: '${tempDir.path}${Platform.pathSeparator}retroarch.cfg',
+        ),
+      );
+
+      expect(config.screenshotDirectory, beside.path);
+    });
+
+    test('still names a directory when none of the candidates exist', () {
+      // A named directory that happens not to exist is what lets the collector
+      // log "nothing found in <path>"; a null one is indistinguishable from
+      // "nothing was captured".
+      final config = RetroArchConfigService.withScreenshotFallback(
+        RetroArchConfig(
+          configPath: '${tempDir.path}${Platform.pathSeparator}retroarch.cfg',
+        ),
+      );
+
+      expect(config.screenshotDirectory, isNotNull);
+      expect(config.screenshotDirectory, isNotEmpty);
+    });
+
+    test('offers candidates for a config that was never found', () {
+      final candidates = RetroArchConfigService.defaultScreenshotDirectories();
+
+      expect(candidates, isNotEmpty);
+      expect(candidates.toSet(), hasLength(candidates.length));
+      for (final candidate in candidates) {
+        expect(candidate.toLowerCase(), contains('screenshots'));
+      }
+    });
+  });
+
   group('parseConfig', () {
     test('exposes the configured screenshot directory', () async {
       final config = await parse('''

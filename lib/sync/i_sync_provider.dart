@@ -139,3 +139,24 @@ abstract class ISyncProvider {
     message: 'deleteRemote not supported by $providerId',
   );
 }
+
+/// Opt-in capability for a provider that also stores a game's in-game
+/// captures.
+///
+/// Deliberately *not* part of [ISyncProvider]: providers are written with
+/// `implements`, which inherits no bodies, so every method added there — even
+/// one with a default — has to be written out again by every provider and by
+/// every community implementation. A capability a single provider offers is
+/// declared separately and probed with `is`, which is what lets the session
+/// hook offer a finished session to whoever wants it without naming a
+/// concrete adapter or downcasting to one.
+///
+/// Implementations own their own gating (connection, user toggle, whether the
+/// game is linked) and MUST NOT throw: the caller runs this detached from the
+/// game-exit path and drops the result.
+// Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Concurrency Safety"
+abstract interface class ISessionScreenshotSync {
+  /// Pushes the captures [game]'s session, begun at [sessionStart], left
+  /// behind, and returns how many reached the remote.
+  Future<int> uploadSessionScreenshots(GameModel game, DateTime sessionStart);
+}

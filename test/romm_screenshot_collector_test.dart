@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/retroarch_config_model.dart';
@@ -63,6 +64,7 @@ void main() {
     String? directory,
     bool sortByContent = false,
     Map<String, int?> ledger = const {},
+    String? archiveStem,
   }) => ScreenshotCollector(
     loadConfig: () async => RetroArchConfig(
       configPath: '/cfg/retroarch.cfg',
@@ -70,6 +72,7 @@ void main() {
       sortScreenshotsByContent: sortByContent,
     ),
     loadLedger: (_) async => ledger,
+    loadArchiveStem: (_) async => archiveStem,
   );
 
   group('collect', () {
@@ -211,6 +214,43 @@ void main() {
       expect(await noDirectory.collect(game(), sessionStart), isEmpty);
     });
 
+    test('finds captures named after the ROM inside an archive', () async {
+      // The regression: the stem came from the ROM file name only. RetroArch
+      // loading `Set.zip` opens the member and names the capture after *it*,
+      // so a set whose inner ROM has a different name collected nothing at all
+      // and logged a zero count.
+      // Governing: ADR-0016, SPEC-0016 REQ "Collector"
+      write(
+        'Inner Game (USA)-260906-101500.png',
+        offset: const Duration(minutes: 15),
+      );
+      write('Other-260906-101500.png', offset: const Duration(minutes: 15));
+
+      final found = await collector(
+        archiveStem: 'Inner Game (USA)',
+      ).collect(game(romname: 'Set.zip'), sessionStart);
+
+      expect(found.map((s) => s.fileName), [
+        'Inner Game (USA)-260906-101500.png',
+      ]);
+    });
+
+    test('keeps the archive stem alongside the inner one', () async {
+      // An arcade set is its own content, and a core that ignores the inner
+      // name stamps the archive's, so the archive stem must not be replaced.
+      write('Set-260906-101500.png', offset: const Duration(minutes: 15));
+      write('Inner-260906-101800.png', offset: const Duration(minutes: 18));
+
+      final found = await collector(
+        archiveStem: 'Inner',
+      ).collect(game(romname: 'Set.zip'), sessionStart);
+
+      expect(found.map((s) => s.fileName), [
+        'Set-260906-101500.png',
+        'Inner-260906-101800.png',
+      ]);
+    });
+
     test('reports size and mtime without reading the file', () async {
       write('Game-a.png', offset: const Duration(minutes: 3), bytes: 77);
 
@@ -293,6 +333,48 @@ void main() {
         ScreenshotCollector.contentSubdirectoryFor(game(withPath: false)),
         isNull,
       );
+    });
+  });
+
+  group('archiveContentStem', () {
+    /// A zip whose largest member is [inner], written to [name].
+    String writeZip(String name, String inner) {
+      final archive = Archive()
+        ..addFile(ArchiveFile('readme.txt', 4, List<int>.filled(4, 0x41)))
+        ..addFile(ArchiveFile(inner, 4096, List<int>.filled(4096, 0x42)));
+      final bytes = ZipEncoder().encode(archive);
+      final path = '${shotsDir.path}${Platform.pathSeparator}$name';
+      File(path).writeAsBytesSync(bytes);
+      return path;
+    }
+
+    test('reads the largest member out of the zip directory', () async {
+      final zip = writeZip('Set.zip', 'Inner Game (USA).nes');
+
+      expect(
+        await ScreenshotCollector.archiveContentStem(zip),
+        'Inner Game (USA)',
+      );
+    });
+
+    test('strips a directory component', () async {
+      final zip = writeZip('Nested.zip', 'roms/nes/Inner Game.nes');
+
+      expect(await ScreenshotCollector.archiveContentStem(zip), 'Inner Game');
+    });
+
+    test('is null for a ROM that is not an archive', () async {
+      expect(
+        await ScreenshotCollector.archiveContentStem('/roms/nes/Game.nes'),
+        isNull,
+      );
+    });
+
+    test('is null for an unreadable archive rather than throwing', () async {
+      final path = '${shotsDir.path}${Platform.pathSeparator}Broken.zip';
+      File(path).writeAsBytesSync(List<int>.filled(64, 0));
+
+      expect(await ScreenshotCollector.archiveContentStem(path), isNull);
     });
   });
 }

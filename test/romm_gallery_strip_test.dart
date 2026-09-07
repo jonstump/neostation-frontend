@@ -162,6 +162,48 @@ void main() {
       expect(shots.map((s) => s.id), [9, 4]);
     });
 
+    test('orders a mixed set the same way whatever order it arrives in', () {
+      // The regression: falling through createdAt -> id interleaved two
+      // comparison keys, so a set where only some entries carry a timestamp
+      // had no total order. These three form a cycle under the old rule —
+      // b before a (id), a before c (date), c before b (id) — and List.sort
+      // does not detect that, it just returns some arbitrary permutation, so
+      // the strip reshuffled between loads.
+      final a = RommScreenshot(
+        id: 1,
+        fileName: 'a.png',
+        fileSizeBytes: 1,
+        createdAt: DateTime.utc(2026, 9, 6, 10),
+      );
+      final b = RommScreenshot(id: 2, fileName: 'b.png', fileSizeBytes: 1);
+      final c = RommScreenshot(
+        id: 3,
+        fileName: 'c.png',
+        fileSizeBytes: 1,
+        createdAt: DateTime.utc(2026, 9, 6, 5),
+      );
+
+      const permutations = [
+        [0, 1, 2],
+        [0, 2, 1],
+        [1, 0, 2],
+        [1, 2, 0],
+        [2, 0, 1],
+        [2, 1, 0],
+      ];
+      final source = [a, b, c];
+      for (final order in permutations) {
+        final list = [for (final i in order) source[i]]
+          ..sort(RommScreenshot.newestFirst);
+        expect(
+          list.map((s) => s.id),
+          // Timestamped newest first, then everything the server dated by id.
+          [1, 3, 2],
+          reason: 'input order $order',
+        );
+      }
+    });
+
     test('and to the file name when the ids tie', () {
       final a = RommScreenshot(
         id: 0,

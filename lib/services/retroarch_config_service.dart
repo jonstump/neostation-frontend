@@ -71,6 +71,98 @@ class RetroArchConfigService {
     return looksFlatpak ? [flatpakCfg, xdgCfg] : [xdgCfg, flatpakCfg];
   }
 
+  /// RetroArch's own capture locations, in probe order, for a config that
+  /// names none.
+  ///
+  /// `screenshot_directory` ships as `default`, which [_extractValue] reads as
+  /// null: RetroArch then writes captures into `screenshots/` under its own
+  /// base directory and never spells that folder out in the file. A stock
+  /// install therefore gives the collector nothing to walk, and the whole
+  /// screenshot upload is inert — silently, because "no directory configured"
+  /// and "nothing was captured" look identical from the outside.
+  ///
+  /// The folder beside `retroarch.cfg` comes first, because that is what
+  /// `default` means for a config we actually found. The platform paths after
+  /// it mirror the savefile/savestate fallbacks [getMergedConfig] already
+  /// applies when no config is found at all.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Screenshot Directory From RetroArch Config"
+  @visibleForTesting
+  static List<String> defaultScreenshotDirectories({String? configPath}) {
+    final candidates = <String>[];
+    final cfg = configPath?.trim() ?? '';
+    if (cfg.isNotEmpty) {
+      candidates.add(path.join(File(cfg).parent.path, 'screenshots'));
+    }
+
+    if (Platform.isAndroid) {
+      candidates.add('/storage/emulated/0/RetroArch/screenshots');
+    } else if (Platform.isLinux) {
+      final home = ConfigService.getRealHomePath();
+      candidates.add(path.join(home, '.config', 'retroarch', 'screenshots'));
+      candidates.add(
+        path.join(
+          home,
+          '.var',
+          'app',
+          _retroArchFlatpakId,
+          'config',
+          'retroarch',
+          'screenshots',
+        ),
+      );
+    } else if (Platform.isMacOS) {
+      final home = ConfigService.getRealHomePath();
+      candidates.add(path.join(home, 'Documents', 'RetroArch', 'screenshots'));
+      candidates.add(
+        path.join(
+          home,
+          'Library',
+          'Application Support',
+          'RetroArch',
+          'screenshots',
+        ),
+      );
+    } else if (Platform.isWindows) {
+      candidates.add('C:\\RetroArch-Win64\\screenshots');
+      candidates.add('C:\\RetroArch\\screenshots');
+      final appData = Platform.environment['APPDATA'] ?? '';
+      if (appData.isNotEmpty) {
+        candidates.add(path.join(appData, 'RetroArch', 'screenshots'));
+      }
+    }
+
+    // Order matters and duplicates are possible (a config that sits in the
+    // platform default directory yields the same path twice).
+    return candidates.toSet().toList();
+  }
+
+  /// [config] with a screenshot directory filled in when it names none.
+  ///
+  /// The first candidate that exists wins. When none exists the first is kept
+  /// anyway rather than leaving the field null: a named directory is what lets
+  /// the collector log "nothing found in `<path>`" instead of the far less
+  /// useful "no screenshot directory configured", and it costs nothing: the
+  /// collector skips a directory that is not there.
+  ///
+  /// A directory the config *does* name is never second-guessed.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Screenshot Directory From RetroArch Config"
+  @visibleForTesting
+  static RetroArchConfig withScreenshotFallback(RetroArchConfig config) {
+    final configured = config.screenshotDirectory?.trim() ?? '';
+    if (configured.isNotEmpty) return config;
+
+    final candidates = defaultScreenshotDirectories(
+      configPath: config.configPath,
+    );
+    if (candidates.isEmpty) return config;
+
+    final resolved = candidates.firstWhere(
+      (directory) => Directory(directory).existsSync(),
+      orElse: () => candidates.first,
+    );
+    return config.copyWith(screenshotDirectory: resolved);
+  }
+
   /// Attempts to locate the `retroarch.cfg` file on Android by checking
   /// standard package data directories.
   Future<String?> detectAndroidConfigPath() async {
@@ -338,7 +430,7 @@ class RetroArchConfigService {
 
     if (configPath != null) {
       try {
-        _cachedConfig = await parseConfig(configPath);
+        _cachedConfig = withScreenshotFallback(await parseConfig(configPath));
         _logResolution(_cachedConfig!);
         return _cachedConfig!;
       } catch (e) {
@@ -419,6 +511,13 @@ class RetroArchConfigService {
         savestateDirectory: stateDir,
       );
     }
+
+    // The screenshot default is applied here rather than inside the per-platform
+    // blocks above because it is the one directory Windows needs too: those
+    // blocks fill in saves and states for macOS, Linux and Android only, and a
+    // null screenshot directory silently disables the whole upload feature.
+    // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Screenshot Directory From RetroArch Config"
+    finalConfig = withScreenshotFallback(finalConfig);
 
     // Logged because this resolution is exactly where a save-sync failure hides:
     // when no config is found the directory *defaults* below are used, and if
