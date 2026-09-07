@@ -233,6 +233,25 @@ class ConfigModel {
   // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload Toggle"
   final bool rommUploadScreenshots;
 
+  /// Whether the RomM server's library is shown inside the local systems.
+  ///
+  /// Off by default: turning it on adds every RomM ROM that resolves to a
+  /// local system to that system's list as a remote entry, which is a
+  /// deliberate change to what "my library" means and must be asked for.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Tables"
+  final bool rommShowLibrary;
+
+  /// The scope a game list opens in — `all` (local plus remote) or
+  /// `downloaded` (local only). Ignored while the server is unreachable, which
+  /// forces `downloaded`.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Library Scope"
+  final String rommLibraryDefaultScope;
+
+  /// Cap in megabytes on the on-disk RomM cover cache, above which the least
+  /// recently used covers are evicted.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Cover Cache"
+  final int rommCoverCacheMb;
+
   const ConfigModel({
     this.romFolders = const [],
     this.detectedSystems = const [],
@@ -282,6 +301,9 @@ class ConfigModel {
     this.raMatchOnStartup = false,
     this.subfolderViewAll = false,
     this.rommUploadScreenshots = true,
+    this.rommShowLibrary = false,
+    this.rommLibraryDefaultScope = 'all',
+    this.rommCoverCacheMb = 200,
   });
 
   /// Convenience getter that returns the primary ROM folder, if any are configured.
@@ -523,6 +545,25 @@ class ConfigModel {
         'romm_upload_screenshots',
         true,
       ),
+      // Same reasoning: absent => 0 => off, matching the column default. The
+      // unified library is opt-in.
+      // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Tables"
+      rommShowLibrary:
+          (json['rommShowLibrary'] ?? json['romm_show_library'] ?? 0)
+                  .toString() ==
+              '1' ||
+          (json['rommShowLibrary'] ?? false).toString().toLowerCase() == 'true',
+      rommLibraryDefaultScope:
+          (json['rommLibraryDefaultScope'] ??
+                  json['romm_library_default_scope'] ??
+                  'all')
+              .toString(),
+      rommCoverCacheMb:
+          int.tryParse(
+            (json['rommCoverCacheMb'] ?? json['romm_cover_cache_mb'] ?? 200)
+                .toString(),
+          ) ??
+          200,
     );
   }
 
@@ -602,6 +643,9 @@ class ConfigModel {
       'raMatchOnStartup': raMatchOnStartup,
       'subfolderViewAll': subfolderViewAll,
       'rommUploadScreenshots': rommUploadScreenshots,
+      'rommShowLibrary': rommShowLibrary,
+      'rommLibraryDefaultScope': rommLibraryDefaultScope,
+      'rommCoverCacheMb': rommCoverCacheMb,
     };
   }
 
@@ -655,6 +699,9 @@ class ConfigModel {
     bool? raMatchOnStartup,
     bool? subfolderViewAll,
     bool? rommUploadScreenshots,
+    bool? rommShowLibrary,
+    String? rommLibraryDefaultScope,
+    int? rommCoverCacheMb,
   }) {
     return ConfigModel(
       romFolders: romFolders ?? this.romFolders,
@@ -708,6 +755,10 @@ class ConfigModel {
       subfolderViewAll: subfolderViewAll ?? this.subfolderViewAll,
       rommUploadScreenshots:
           rommUploadScreenshots ?? this.rommUploadScreenshots,
+      rommShowLibrary: rommShowLibrary ?? this.rommShowLibrary,
+      rommLibraryDefaultScope:
+          rommLibraryDefaultScope ?? this.rommLibraryDefaultScope,
+      rommCoverCacheMb: rommCoverCacheMb ?? this.rommCoverCacheMb,
     );
   }
 

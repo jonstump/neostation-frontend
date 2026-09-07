@@ -37,6 +37,7 @@ import 'package:neostation/repositories/romm_screenshot_map_repository.dart';
 import 'package:neostation/repositories/sync_repository.dart';
 import 'package:neostation/repositories/system_repository.dart';
 import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/services/romm/romm_catalog_refresh.dart';
 import 'package:neostation/services/romm/romm_library_linker.dart';
 import 'package:neostation/services/romm/screenshot_collector.dart';
 import 'package:neostation/services/romm_playtime_service.dart';
@@ -134,6 +135,15 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
   /// is enough to test the schedule without a server or a database).
   late final RommLibraryLinker _linker;
 
+  /// The catalog refresh, which owns the server walk when the unified library
+  /// is on and carries [_linker]'s stage along with it.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Refresh Shares The Walk"
+  late final RommCatalogRefresh _catalogRefresh;
+
+  /// True while [refreshCatalog] is in flight, so the reconnect hook and the
+  /// connect sweep cannot start two walks.
+  bool _refreshing = false;
+
   /// Finds the captures a finished session left in RetroArch's screenshot
   /// directory. Injectable so tests can describe a folder without a
   /// `retroarch.cfg` or a database behind it.
@@ -148,6 +158,7 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
     @visibleForTesting ListLocalGames? listGames,
     @visibleForTesting bool autoSweep = true,
     @visibleForTesting RommLibraryLinker? linker,
+    @visibleForTesting RommCatalogRefresh? catalogRefresh,
     @visibleForTesting Duration sweepStartupDelay = _sweepStartupDelay,
     @visibleForTesting ScreenshotCollector? screenshots,
   }) : _locateOverride = locateSaves,
@@ -157,7 +168,15 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
        _startupDelay = sweepStartupDelay,
        _screenshots = screenshots ?? ScreenshotCollector() {
     _linker = linker ?? _buildLinker();
+    _catalogRefresh = catalogRefresh ?? _buildCatalogRefresh();
     if (!_autoSweep) return;
+    // The browse provider knows when the server comes back; what to do about
+    // it lives here.
+    // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Reachability"
+    _browse.onReconnected = () async {
+      if (_disposed) return;
+      await refreshCatalog(reason: RommRefreshReason.reconnect);
+    };
     _wasConnected = _browse.isConnected;
     _browse.addListener(_onBrowseChanged);
     // Constructed *after* the browse provider restored its saved config (see
@@ -178,7 +197,10 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
   @override
   void dispose() {
     _disposed = true;
-    if (_autoSweep) _browse.removeListener(_onBrowseChanged);
+    if (_autoSweep) {
+      _browse.removeListener(_onBrowseChanged);
+      _browse.onReconnected = null;
+    }
     super.dispose();
   }
 
@@ -1701,6 +1723,17 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
     }
     _linking = true;
     try {
+      // With the unified library on, the catalog refresh owns the walk and the
+      // link pass rides along on it: one enumeration serves both. With it off
+      // there is no catalog to keep, so the pass walks on its own exactly as
+      // it did before — including its early exit when nothing is unlinked.
+      // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Refresh Shares The Walk"
+      if (await _unifiedLibraryEnabled()) {
+        final refreshed = await refreshCatalog(
+          reason: RommRefreshReason.connect,
+        );
+        return refreshed?.linkSummary;
+      }
       final summary = await _linker.run();
       if (summary.linkedRomnames.isNotEmpty) {
         invalidateGameSyncStates(summary.linkedRomnames);
@@ -1711,6 +1744,61 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
       return null;
     } finally {
       _linking = false;
+    }
+  }
+
+  /// Runs one catalog refresh under the sweep's guards.
+  ///
+  /// Skipped — with a log line saying why — when disconnected, when a bulk ROM
+  /// sync is walking the same server, or when a refresh is already in flight.
+  /// The refresh's own hourly guard decides whether an automatic [reason]
+  /// actually walks. Never throws: an unreadable platform list is logged here
+  /// and reads as "nothing refreshed". Returns the summary, or null when the
+  /// refresh was skipped or failed.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Refresh Shares The Walk"
+  Future<RommCatalogRefreshSummary?> refreshCatalog({
+    required RommRefreshReason reason,
+  }) async {
+    if (_disposed || !_browse.isConnected) {
+      _log.i('RomM catalog refresh skipped: disconnected');
+      return null;
+    }
+    if (_browse.bulkSync.isRunning) {
+      _log.i('RomM catalog refresh skipped: a bulk ROM sync is running');
+      return null;
+    }
+    if (_refreshing) {
+      _log.i('RomM catalog refresh skipped: a refresh is already running');
+      return null;
+    }
+    _refreshing = true;
+    try {
+      final summary = await _catalogRefresh.run(reason: reason);
+      final linked = summary.linkSummary?.linkedRomnames ?? const <String>[];
+      if (linked.isNotEmpty) invalidateGameSyncStates(linked);
+      return summary;
+    } on RommCatalogRefreshException catch (e) {
+      _log.w(e.toString());
+      return null;
+    } on RommLinkPassException catch (e) {
+      _log.w(e.toString());
+      return null;
+    } finally {
+      _refreshing = false;
+    }
+  }
+
+  /// Whether the user asked for the RomM library inside their systems.
+  ///
+  /// A read failure reads as "off": the catalog is an addition, and the pass
+  /// that predates it still runs.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Error Handling Standards"
+  Future<bool> _unifiedLibraryEnabled() async {
+    try {
+      return await ConfigRepository.getRommShowLibrary();
+    } catch (e) {
+      _log.w('RomM catalog refresh: the library toggle was unreadable: $e');
+      return false;
     }
   }
 
@@ -1725,6 +1813,20 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
     listGames: GameRepository.getAllGames,
     loadRomIdIndex: RommSaveMapRepository.getRomIdIndex,
     putMappingsIfAbsent: RommSaveMapRepository.putMappingsIfAbsent,
+    shouldStop: () => _disposed || !_browse.isConnected,
+  );
+
+  /// The production catalog refresh: the same server access the linker uses,
+  /// the catalog through its repository, the link stage from [_linker], and a
+  /// stop check tied to this provider's lifetime.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Refresh Shares The Walk"
+  RommCatalogRefresh _buildCatalogRefresh() => RommCatalogRefresh(
+    listPlatforms: listPlatformsForLinkPass,
+    resolveSystem: _browse.systemForPlatform,
+    fetchPage: ({required platformId, required limit, required offset}) => _svc
+        .getRomsPage(platformIds: [platformId], limit: limit, offset: offset),
+    serverUrl: () => _browse.serverUrl,
+    linker: _linker,
     shouldStop: () => _disposed || !_browse.isConnected,
   );
 

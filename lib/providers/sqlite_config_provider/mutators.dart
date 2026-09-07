@@ -106,6 +106,35 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     _notify();
   }
 
+  /// Persists whether the RomM library is shown inside the local systems.
+  ///
+  /// The three unified-library settings are grouped here: the toggle, the
+  /// default list scope, and the cover-cache cap.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Tables"
+  Future<void> updateRommShowLibrary(bool value) async {
+    _config = _config.copyWith(rommShowLibrary: value);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  /// Persists the scope a game list opens in: `all` or `downloaded`.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Library Scope"
+  Future<void> updateRommLibraryDefaultScope(String value) async {
+    if (_config.rommLibraryDefaultScope == value) return;
+    _config = _config.copyWith(rommLibraryDefaultScope: value);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
+  /// Persists the cap in megabytes on the on-disk RomM cover cache.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Cover Cache"
+  Future<void> updateRommCoverCacheMb(int value) async {
+    if (_config.rommCoverCacheMb == value) return;
+    _config = _config.copyWith(rommCoverCacheMb: value);
+    await SqliteConfigService.saveConfig(_config);
+    _notify();
+  }
+
   /// Persists the game details card tab last chosen with L1/R1, as the
   /// `DetailTab` enum name, so it carries across games, systems and restarts.
   Future<void> updateGameDetailsTab(String tabName) async {

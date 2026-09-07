@@ -164,7 +164,10 @@ class DatabaseTestHelper {
         -- Migration v163 (ADR-0016): "Upload screenshots to RomM", on by
         -- default. Present here because SqliteConfigService.saveConfig writes
         -- it on every whole-config save.
-        romm_upload_screenshots INTEGER DEFAULT 1
+        romm_upload_screenshots INTEGER DEFAULT 1,
+        romm_show_library INTEGER DEFAULT 0,
+        romm_library_default_scope TEXT DEFAULT 'all',
+        romm_cover_cache_mb INTEGER DEFAULT 200
       )
     ''');
 

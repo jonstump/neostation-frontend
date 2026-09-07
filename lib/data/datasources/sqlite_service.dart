@@ -459,7 +459,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 164;
+  static const int _databaseVersion = 165;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -1967,7 +1967,13 @@ class SqliteService {
         -- (migration v163). On by default; only takes effect while RomM is
         -- connected and the game is linked.
         -- Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload Toggle"
-        romm_upload_screenshots INTEGER DEFAULT 1
+        romm_upload_screenshots INTEGER DEFAULT 1,
+        -- The unified-library settings (migration v165). Opt-in: until
+        -- romm_show_library is on, the catalog changes nothing about the lists.
+        -- Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Tables"
+        romm_show_library INTEGER DEFAULT 0,
+        romm_library_default_scope TEXT DEFAULT 'all',
+        romm_cover_cache_mb INTEGER DEFAULT 200
       );
       ''',
       '''
@@ -2145,6 +2151,8 @@ class SqliteService {
       SqliteMigrations.createAppRommScreenshotMapTableSql,
       // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Props Outbox"
       SqliteMigrations.createAppRommPropsOutboxTableSql,
+      SqliteMigrations.createAppRommCatalogTableSql,
+      SqliteMigrations.createAppRommCatalogPlatformsTableSql,
       SqliteMigrations.createUserRetroArchConfigTableSql,
       SqliteMigrations.createUserCollectionsTableSql,
       SqliteMigrations.createUserCollectionItemsTableSql,
@@ -2225,6 +2233,10 @@ class SqliteService {
       SqliteMigrations.createAppRommPlaySessionsIndexSql,
       // 9. Index for user_collection_items ("which collections is this ROM in?")
       SqliteMigrations.createUserCollectionItemsIndexSql,
+      // 10. Index for app_romm_catalog ("what does this server hold for this
+      // system?") — the read every unified-library list build makes.
+      // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Database Operation Standards"
+      SqliteMigrations.createAppRommCatalogIndexSql,
     ];
 
     for (final sql in indexes) {
@@ -2800,6 +2812,12 @@ class SqliteService {
     int? subfolderViewAll,
     int? rommUploadScreenshots,
     String? biosDirectory,
+    // The unified-library settings (SPEC-0019). Grouped together so the
+    // column set the feature owns reads as one block.
+    // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Tables"
+    int? rommShowLibrary,
+    String? rommLibraryDefaultScope,
+    int? rommCoverCacheMb,
   }) async {
     final db = await instance.database;
 
@@ -2949,6 +2967,15 @@ class SqliteService {
     }
     if (biosDirectory != null) {
       updates['bios_directory'] = biosDirectory;
+    }
+    if (rommShowLibrary != null) {
+      updates['romm_show_library'] = rommShowLibrary;
+    }
+    if (rommLibraryDefaultScope != null) {
+      updates['romm_library_default_scope'] = rommLibraryDefaultScope;
+    }
+    if (rommCoverCacheMb != null) {
+      updates['romm_cover_cache_mb'] = rommCoverCacheMb;
     }
 
     if (showAchievementsBadge != null) {
