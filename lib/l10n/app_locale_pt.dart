@@ -1506,4 +1506,10 @@ const Map<String, dynamic> appLocalePt = {
       'Download de BIOS interrompido — {summary}',
   AppLocale.rommFirmwareDownloadFailedFile: 'Não foi possível baixar {file}',
   AppLocale.rommFavoritesCollectionName: 'Favoritos',
+  AppLocale.rommGalleryTitle: 'Galeria do RomM',
+  AppLocale.rommGalleryEmpty: 'Ainda não há capturas no RomM',
+  AppLocale.rommGalleryError: 'Não foi possível carregar a galeria do RomM',
+  AppLocale.rommUploadScreenshots: 'Enviar capturas para o RomM',
+  AppLocale.rommUploadScreenshotsHint:
+      'Envia as novas capturas do RetroArch para o RomM no fim de cada sessão',
 };

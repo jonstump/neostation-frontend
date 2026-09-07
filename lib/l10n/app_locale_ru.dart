@@ -1487,4 +1487,10 @@ const Map<String, dynamic> appLocaleRu = {
       'Загрузка BIOS остановлена — {summary}',
   AppLocale.rommFirmwareDownloadFailedFile: 'Не удалось скачать {file}',
   AppLocale.rommFavoritesCollectionName: 'Избранное',
+  AppLocale.rommGalleryTitle: 'Галерея RomM',
+  AppLocale.rommGalleryEmpty: 'В RomM пока нет скриншотов',
+  AppLocale.rommGalleryError: 'Не удалось загрузить галерею RomM',
+  AppLocale.rommUploadScreenshots: 'Загружать скриншоты в RomM',
+  AppLocale.rommUploadScreenshotsHint:
+      'Отправлять новые скриншоты RetroArch в RomM после каждой сессии',
 };

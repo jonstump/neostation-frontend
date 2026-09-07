@@ -333,10 +333,6 @@ void main() {
     test('does nothing when the toggle is off', () async {
       await link();
       write('Game-a.png');
-      await db.execute(
-        'ALTER TABLE user_config ADD COLUMN '
-        'romm_upload_screenshots INTEGER DEFAULT 1',
-      );
       await db.execute('UPDATE user_config SET romm_upload_screenshots = 0');
 
       expect(await build().uploadSessionScreenshots(game, sessionStart), 0);

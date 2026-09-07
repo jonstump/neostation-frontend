@@ -97,7 +97,10 @@ class _RommConnectContentState extends State<RommConnectContent>
   @override
   List<FocusNode?> get selectionSlots {
     if (context.read<RommProvider>().isConnected) {
-      return const [null, null, null];
+      // Browse, save sync, screenshot upload, disconnect — four action rows,
+      // none of them a text field.
+      // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload Toggle"
+      return const [null, null, null, null];
     }
     return _focusOrder.map(_focusNodeFor).toList(growable: false);
   }
@@ -210,6 +213,9 @@ class _RommConnectContentState extends State<RommConnectContent>
       } else if (isSelected(1)) {
         _toggleSaveSync();
       } else if (isSelected(2)) {
+        // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload Toggle"
+        _toggleUploadScreenshots();
+      } else if (isSelected(3)) {
         _disconnect();
       }
       return;
@@ -463,6 +469,24 @@ class _RommConnectContentState extends State<RommConnectContent>
     await SyncManager.instance.setActive(target, persist: persist);
     if (!mounted) return;
     setState(() {});
+  }
+
+  /// Whether finished sessions push their RetroArch captures to RomM.
+  ///
+  /// Read from the config provider rather than the database so the row redraws
+  /// the moment it is flipped; the upload pass re-reads the column itself at
+  /// session end.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload Toggle"
+  bool get _uploadsScreenshots =>
+      context.watch<SqliteConfigProvider>().config.rommUploadScreenshots;
+
+  /// Flips "Upload screenshots to RomM" and persists it.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload Toggle"
+  Future<void> _toggleUploadScreenshots() async {
+    final config = context.read<SqliteConfigProvider>();
+    await config.updateRommUploadScreenshots(
+      !config.config.rommUploadScreenshots,
+    );
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -975,9 +999,25 @@ class _RommConnectContentState extends State<RommConnectContent>
       ),
       _buildSaveSyncCaption(theme),
       SizedBox(height: 10.r),
+      // Only shown while connected, which is the only state in which it means
+      // anything — the whole list is the connected view.
+      // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload Toggle"
       _buildActionRow(
         theme,
         index: 2,
+        icon: Symbols.photo_library_rounded,
+        label: AppLocale.rommUploadScreenshots.getString(context),
+        toggleValue: _uploadsScreenshots,
+        onTap: _toggleUploadScreenshots,
+      ),
+      _buildCaption(
+        theme,
+        AppLocale.rommUploadScreenshotsHint.getString(context),
+      ),
+      SizedBox(height: 10.r),
+      _buildActionRow(
+        theme,
+        index: 3,
         icon: Symbols.logout_rounded,
         label: AppLocale.rommDisconnect.getString(context),
         onTap: _disconnect,
@@ -1015,6 +1055,25 @@ class _RommConnectContentState extends State<RommConnectContent>
         style: TextStyle(
           fontSize: 9.r,
           color: scheme.onSurface.withValues(alpha: 0.7),
+        ),
+        maxLines: 2,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
+  /// A non-focusable explanatory line under an action row.
+  ///
+  /// Same styling as [_buildSaveSyncCaption], which stays separate because it
+  /// computes its own text from the sync manager rather than being handed one.
+  Widget _buildCaption(ThemeData theme, String text) {
+    return Padding(
+      padding: EdgeInsets.only(top: 4.r, left: 12.r, right: 12.r),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontSize: 9.r,
+          color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
         ),
         maxLines: 2,
         overflow: TextOverflow.ellipsis,

@@ -293,6 +293,12 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
   final GlobalKey<GameDetailsAchievementsTabState> _achievementsTabKey =
       GlobalKey<GameDetailsAchievementsTabState>();
 
+  /// The media panel, so the card can hand the D-pad to its RomM gallery
+  /// strip the same way it does to the other two drivable panels.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Gallery Strip"
+  final GlobalKey<GameDetailsScreenshotVideoTabState> _mediaTabKey =
+      GlobalKey<GameDetailsScreenshotVideoTabState>();
+
   /// Determines if the screenshot/video tab should be suppressed when secondary display is active.
   bool get _isGameInfoHidden {
     if (!widget.isSecondaryScreenActive) return false;
@@ -453,18 +459,22 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
       moveUp: () => _movePanel(
         achievements: (state) => state.moveUp(),
         gameInfo: (state) => state.moveUp(),
+        media: (state) => state.moveUp(),
       ),
       moveDown: () => _movePanel(
         achievements: (state) => state.moveDown(),
         gameInfo: (state) => state.moveDown(),
+        media: (state) => state.moveDown(),
       ),
       moveLeft: () => _movePanel(
         achievements: (state) => state.moveLeft(),
         gameInfo: (state) => state.moveLeft(),
+        media: (state) => state.moveLeft(),
       ),
       moveRight: () => _movePanel(
         achievements: (state) => state.moveRight(),
         gameInfo: (state) => state.moveRight(),
+        media: (state) => state.moveRight(),
       ),
     );
     widget.onRegisterTriggerAction?.call(_handleTriggerAction);
@@ -941,6 +951,8 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
                       maintainAnimation: true,
                       maintainInteractivity: true,
                       child: GameDetailsScreenshotVideoTab(
+                        key: _mediaTabKey,
+                        game: _game,
                         bottomOffset: panelBottomOffset,
                         screenshotPath: screenshotPath,
                         isVideoDelayActive: _isVideoDelayActive,
@@ -1276,6 +1288,9 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
         _achievementsTabKey.currentState?.isPanelActive ?? false,
       DetailTab.gameInfo =>
         _gameInfoTabKey.currentState?.isPanelActive ?? false,
+      // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Gallery Strip"
+      DetailTab.screenshotVideo =>
+        _mediaTabKey.currentState?.isPanelActive ?? false,
       _ => false,
     };
   }
@@ -1284,6 +1299,7 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
   void _movePanel({
     required void Function(GameDetailsAchievementsTabState) achievements,
     required void Function(GameDetailsGameInfoTabState) gameInfo,
+    required void Function(GameDetailsScreenshotVideoTabState) media,
   }) {
     if (!mounted) return;
     switch (_currentTab) {
@@ -1293,6 +1309,10 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
       case DetailTab.gameInfo:
         final state = _gameInfoTabKey.currentState;
         if (state != null) gameInfo(state);
+      // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Gallery Strip"
+      case DetailTab.screenshotVideo:
+        final state = _mediaTabKey.currentState;
+        if (state != null) media(state);
       default:
         break;
     }
@@ -1320,6 +1340,16 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
         // A stays consumed so it cannot launch the game from under a panel the
         // user is reading.
         return state.isPanelActive || state.enterPanel();
+      // The media panel only has something to drive when a RomM gallery strip
+      // is under it; with no strip [enterPanel] refuses and A stays the card's
+      // launch button, exactly as it was.
+      // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Gallery Strip"
+      case DetailTab.screenshotVideo:
+        final state = _mediaTabKey.currentState;
+        if (state == null) return false;
+        return state.isPanelActive
+            ? state.activateFocused()
+            : state.enterPanel();
       default:
         return false;
     }
@@ -1334,6 +1364,9 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
       DetailTab.achievements =>
         _achievementsTabKey.currentState?.exitPanel() ?? false,
       DetailTab.gameInfo => _gameInfoTabKey.currentState?.exitPanel() ?? false,
+      // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Gallery Strip"
+      DetailTab.screenshotVideo =>
+        _mediaTabKey.currentState?.exitPanel() ?? false,
       _ => false,
     };
   }

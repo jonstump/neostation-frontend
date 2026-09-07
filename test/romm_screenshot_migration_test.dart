@@ -268,14 +268,19 @@ void main() {
     });
 
     test('defaults to on when the column has not been migrated in', () async {
+      // A pre-v163 row: the shared test schema carries the column now (the
+      // whole-config save writes it), so the old shape has to be rebuilt.
+      await adapter.execute('DROP TABLE user_config');
+      await adapter.execute(
+        'CREATE TABLE user_config ('
+        'id INTEGER PRIMARY KEY CHECK (id = 1), last_scan TEXT)',
+      );
+      await adapter.execute('INSERT INTO user_config (id) VALUES (1)');
+
       expect(await ConfigRepository.getRommUploadScreenshots(), isTrue);
     });
 
     test('reads the stored 0/1', () async {
-      await adapter.execute(
-        'ALTER TABLE user_config ADD COLUMN '
-        'romm_upload_screenshots INTEGER DEFAULT 1',
-      );
       expect(await ConfigRepository.getRommUploadScreenshots(), isTrue);
 
       await adapter.execute(

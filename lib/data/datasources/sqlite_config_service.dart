@@ -280,6 +280,16 @@ class SqliteConfigService {
                 ) ??
                 0) ==
             1,
+        // Defaults to 1 (on), matching the column's own `DEFAULT 1` and
+        // [ConfigRepository.getRommUploadScreenshots], which the session-end
+        // upload pass reads straight from the database.
+        // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload Toggle"
+        rommUploadScreenshots:
+            (int.tryParse(
+                  userConfig?['romm_upload_screenshots']?.toString() ?? '1',
+                ) ??
+                1) ==
+            1,
       );
     } catch (e) {
       _log.e('Error applying configuration in loadConfig: $e');
@@ -346,6 +356,7 @@ class SqliteConfigService {
         showCloudSyncIcon: config.showCloudSyncIcon ? 1 : 0,
         raMatchOnStartup: config.raMatchOnStartup ? 1 : 0,
         subfolderViewAll: config.subfolderViewAll ? 1 : 0,
+        rommUploadScreenshots: config.rommUploadScreenshots ? 1 : 0,
       );
 
       await SqliteService.saveUserRomFolders(config.romFolders);
