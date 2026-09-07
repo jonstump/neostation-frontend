@@ -1505,4 +1505,5 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.rommFirmwareDownloadCancelled:
       'Download de BIOS interrompido — {summary}',
   AppLocale.rommFirmwareDownloadFailedFile: 'Não foi possível baixar {file}',
+  AppLocale.rommFavoritesCollectionName: 'Favoritos',
 };

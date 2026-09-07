@@ -59,6 +59,53 @@ enum RommErrorKind {
   payloadTooLarge,
 }
 
+/// One *optional* bundle of RomM OAuth scopes, negotiated at login.
+///
+/// RomM rejects the whole password grant with a 403 when any requested scope
+/// is outside the account's allowance, and its answer never says *which* one.
+/// Grouping the optional scopes by the feature that needs them lets the login
+/// probe each group on its own and keep the ones the account actually holds,
+/// so a single denial disables one feature instead of the connection.
+///
+/// The read scopes ([RommService.readScopes]) are never part of a group: a
+/// login without them is not a usable connection.
+// Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Optional Scope Groups"
+enum RommScopeGroup {
+  /// Play sessions and per-user ROM props (`hidden`, `last_played`).
+  playtime('roms.user.read roms.user.write', RommFeature.playSessions),
+
+  /// Editing collections, including the favourites collection.
+  collectionsWrite('collections.write', RommFeature.collectionRomsAddRemove),
+
+  /// Uploading ROMs to the server's library (SPEC-0014).
+  romsWrite('roms.write', null),
+
+  /// Triggering server-side tasks such as a rescan (SPEC-0019).
+  tasksRun('tasks.run', null),
+
+  /// RomM's device registry behind negotiated save sync (SPEC-0018).
+  devices('devices.read devices.write', null);
+
+  const RommScopeGroup(this.scopes, this.gate);
+
+  /// The space-separated scope string requested for this group.
+  final String scopes;
+
+  /// The capability whose absence means the group's endpoints do not exist on
+  /// this server, so the group is not worth requesting at all. Null for a
+  /// group with no version gate in [RommFeature] yet — those are always
+  /// requested and settle on the server's answer.
+  final RommFeature? gate;
+}
+
+/// What the current connection knows about one [RommScopeGroup].
+///
+/// [unknown] is the API-key case and the pre-login case: nothing has proven
+/// the group either way, so callers behave as they did before ADR-0013 — try,
+/// and let a 403 settle it. Only [denied] gates.
+// Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Optional Scope Groups"
+enum RommScopeState { granted, denied, unknown }
+
 /// Raised when a RomM API call fails; [message] is safe to surface to the user.
 class RommException implements Exception {
   final String message;
@@ -106,16 +153,14 @@ class RommService {
   /// Scopes requested in the password grant. RomM grants the intersection of
   /// these and the user's allowed scopes; covers library browse + download plus
   /// save/state sync (`assets.write`).
-  static const String _readScopes =
+  ///
+  /// These are *not* optional: a token without them is not a usable
+  /// connection, so a 403 on a grant that asks only for these is a credential
+  /// problem, never a scope problem. Everything beyond them is a
+  /// [RommScopeGroup] negotiated per login.
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Optional Scope Groups"
+  static const String readScopes =
       'me.read roms.read platforms.read assets.read assets.write collections.read firmware.read';
-
-  /// Extra scopes needed for playtime sync (`/api/play-sessions`). Requested on
-  /// top of [_readScopes], but *optionally*: RomM's token endpoint rejects the
-  /// whole grant with a 403 if any requested scope is outside the user's
-  /// allowance, and these two don't exist at all on servers older than the
-  /// play-session feature. [authenticate] therefore falls back to the base
-  /// scope set rather than turning "no playtime sync" into "cannot log in".
-  static const String _playtimeScopes = 'roms.user.read roms.user.write';
 
   /// Maximum sessions RomM accepts in one `/api/play-sessions` POST.
   static const int maxPlaySessionBatch = 100;
@@ -160,10 +205,26 @@ class RommService {
   String? _refreshToken;
   int? _tokenExpiresMs;
 
-  /// Whether the server granted the playtime scopes at the last authentication.
-  /// Starts optimistic: a token restored from disk may predate the scopes, and
-  /// the shared 403-retry re-authenticates (picking them up) before giving up.
-  bool _playtimeScopeGranted = true;
+  /// What this connection knows about each optional scope group.
+  ///
+  /// Starts optimistic (`unknown` everywhere, which never gates): a token
+  /// restored from disk may predate a group, and the shared 403-retry
+  /// re-authenticates — picking the group up — before giving up.
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Optional Scope Groups"
+  final Map<RommScopeGroup, RommScopeState> _scopeStates = {
+    for (final group in RommScopeGroup.values) group: RommScopeState.unknown,
+  };
+
+  /// Scope groups already reported as gating a call on this connection, so the
+  /// "denied, not sending" line is logged once per group rather than per call.
+  // Governing: ADR-0013, SPEC-0013 REQ "Error Handling Standards"
+  final Set<RommScopeGroup> _scopeGatesLogged = <RommScopeGroup>{};
+
+  /// The id of this account's `is_favorite` collection once
+  /// [ensureFavouritesCollection] has found or created it. RomM allows exactly
+  /// one per user, so it is looked up once per connection.
+  // Governing: ADR-0013, SPEC-0013 REQ "Favourites Collection"
+  int? _favouritesCollectionId;
 
   /// Cleared for the rest of this connection once the server proves it has no
   /// play-session API (404) or won't grant access to it (403 after a re-auth),
@@ -187,8 +248,20 @@ class RommService {
   final Set<RommFeature> _gatesLogged = <RommFeature>{};
 
   /// Whether playtime sync can be attempted against this server.
+  ///
+  /// Expressed through [hasScope]: only a *denied* playtime group stops it,
+  /// so `unknown` (API-key mode, a restored token) still tries, exactly as it
+  /// did before the groups existed.
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Optional Scope Groups"
   bool get playtimeSyncAvailable =>
-      _playtimeScopeGranted && _playSessionsSupported;
+      hasScope(RommScopeGroup.playtime) != RommScopeState.denied &&
+      _playSessionsSupported;
+
+  /// What this connection knows about [group]. [RommScopeState.unknown] until
+  /// a login negotiates it or an endpoint answers 403.
+  // Governing: ADR-0013, SPEC-0013 REQ "Optional Scope Groups"
+  RommScopeState hasScope(RommScopeGroup group) =>
+      _scopeStates[group] ?? RommScopeState.unknown;
 
   /// The parsed heartbeat for this connection, or null when unknown.
   RommServerCapabilities? get capabilities => _capabilities;
@@ -257,8 +330,15 @@ class RommService {
     _tokenExpiresMs = _apiKey.isEmpty ? tokenExpiresMs : null;
     // Playtime support is a property of the server we're pointed at, so a
     // reconfigure (different server, or the same one after an edit) re-probes
-    // instead of inheriting the previous server's verdict.
-    _playtimeScopeGranted = true;
+    // instead of inheriting the previous server's verdict. Scope grants belong
+    // to the *credential*, which a reconfigure may also have changed, so they
+    // go back to "unknown" for the same reason.
+    // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Optional Scope Groups"
+    for (final group in RommScopeGroup.values) {
+      _scopeStates[group] = RommScopeState.unknown;
+    }
+    _scopeGatesLogged.clear();
+    _favouritesCollectionId = null;
     _playSessionsSupported = true;
     _applyCapabilityGates();
   }
@@ -649,53 +729,51 @@ class RommService {
 
   /// Performs the OAuth2 password grant and stores the resulting tokens.
   ///
-  /// The heartbeat (run by [authenticate] before this) decides which scopes are
-  /// worth asking for: on a server older than [RommFeature.playSessions] the
-  /// playtime scopes do not exist, so asking for them only earns a 403 and a
+  /// The heartbeat (run by [authenticate] before this) decides which optional
+  /// [RommScopeGroup]s are worth asking for: a group whose endpoints this
+  /// server predates does not exist, so asking for it only earns a 403 and a
   /// second POST. That is the *version* question. Whether *this account* holds
-  /// the scopes is a different question the heartbeat cannot answer, so the
-  /// 403-fallback below stays exactly as it was for supported and unknown
-  /// servers.
+  /// a group is a different question the heartbeat cannot answer, which is
+  /// what [_negotiateScopeGroups] settles on a 403 — per group, so one denial
+  /// costs one feature rather than every optional one.
   // Governing: ADR-0010 (RomM heartbeat capability probe),
-  // SPEC-0010 REQ "Probe Before The Token Grant"
+  // SPEC-0010 REQ "Probe Before The Token Grant",
+  // ADR-0013 (push play state to RomM), SPEC-0013 REQ "Optional Scope Groups"
   Future<void> _authenticateWithPassword() async {
-    Map<String, String> bodyFor(String scope) => {
+    Map<String, String> bodyFor(Iterable<RommScopeGroup> groups) => {
       'grant_type': 'password',
       'username': _username,
       'password': _password,
       // RomM issues an empty-scope token (403 on every read endpoint) unless
       // the requested scopes are passed explicitly.
-      'scope': scope,
+      'scope': [readScopes, for (final g in groups) g.scopes].join(' '),
     };
 
-    final playtimeUnsupported =
-        supports(RommFeature.playSessions) == RommFeatureSupport.unsupported;
+    // A group whose endpoints this server does not have is not worth a scope:
+    // asking would only earn a 403 and a probe round trip. Those settle as
+    // denied without a request, exactly as the old playtime special case did.
+    // Governing: ADR-0010, SPEC-0013 REQ "Optional Scope Groups"
+    final requested = <RommScopeGroup>[];
+    for (final group in RommScopeGroup.values) {
+      final gate = group.gate;
+      if (gate != null && supports(gate) == RommFeatureSupport.unsupported) {
+        _logGateOnce(gate);
+        _scopeStates[group] = RommScopeState.denied;
+        continue;
+      }
+      _scopeStates[group] = RommScopeState.unknown;
+      requested.add(group);
+    }
 
     http.Response resp;
     try {
-      if (playtimeUnsupported) {
-        // Known-old server: one POST, read scopes only, no 403 round trip.
-        _logGateOnce(RommFeature.playSessions);
-        _playtimeScopeGranted = false;
-        resp = await _postTokenRequest(bodyFor(_readScopes));
-      } else {
-        resp = await _postTokenRequest(
-          bodyFor('$_readScopes $_playtimeScopes'),
-        );
-        if (resp.statusCode == 403) {
-          // Either the account lacks the playtime scopes or the server predates
-          // them — indistinguishable here, and both mean the same thing: keep
-          // the connection, drop playtime sync. Bad credentials fail the retry
-          // too, so the error path below is unchanged for them.
-          final base = await _postTokenRequest(bodyFor(_readScopes));
-          if (base.statusCode == 200) {
-            _playtimeScopeGranted = false;
-            _log.w('RomM denied $_playtimeScopes — playtime sync disabled');
-          }
-          resp = base.statusCode == 200 ? base : resp;
-        } else if (resp.statusCode == 200) {
-          _playtimeScopeGranted = true;
+      resp = await _postTokenRequest(bodyFor(requested));
+      if (resp.statusCode == 200) {
+        for (final group in requested) {
+          _scopeStates[group] = RommScopeState.granted;
         }
+      } else if (resp.statusCode == 403 && requested.isNotEmpty) {
+        resp = await _negotiateScopeGroups(requested, bodyFor, resp);
       }
     } on TimeoutException {
       throw RommException('Connection timed out');
@@ -723,6 +801,80 @@ class RommService {
     }
 
     _applyTokenResponse(resp.body);
+    _logScopeNegotiation();
+  }
+
+  /// Works out which of [requested] this account actually holds after the
+  /// combined grant came back 403, and returns the response the caller should
+  /// treat as the login's answer.
+  ///
+  /// One probe per group (the read scopes plus that group alone), then one
+  /// final grant for the read scopes plus the granted union — `groups + 2`
+  /// token POSTs at the very worst, once per login. A probe answering anything
+  /// other than 200 or 403 is not a scope verdict (a rate limit, a 500, a
+  /// credential that expired mid-negotiation), so probing stops there and that
+  /// response is handed back for the shared error mapping.
+  ///
+  /// With a single requested group there is nothing to learn: the combined
+  /// grant *was* the probe, so its 403 settles the group and only the final
+  /// grant is sent.
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Optional Scope Groups"
+  Future<http.Response> _negotiateScopeGroups(
+    List<RommScopeGroup> requested,
+    Map<String, String> Function(Iterable<RommScopeGroup>) bodyFor,
+    http.Response combined,
+  ) async {
+    if (requested.length == 1) {
+      _scopeStates[requested.single] = RommScopeState.denied;
+    } else {
+      for (final group in requested) {
+        final probe = await _postTokenRequest(bodyFor([group]));
+        if (probe.statusCode == 200) {
+          _scopeStates[group] = RommScopeState.granted;
+        } else if (probe.statusCode == 403) {
+          _scopeStates[group] = RommScopeState.denied;
+        } else {
+          // Not a scope answer — stop spending requests and let the caller
+          // map this status the way it maps any other failed grant.
+          return probe;
+        }
+      }
+    }
+
+    final granted = [
+      for (final group in requested)
+        if (_scopeStates[group] == RommScopeState.granted) group,
+    ];
+    final base = await _postTokenRequest(bodyFor(granted));
+    // A final grant that fails too means the read scopes themselves were
+    // refused: report the original 403 rather than pretending we learned
+    // something about the groups.
+    if (base.statusCode != 200) {
+      for (final group in requested) {
+        _scopeStates[group] = RommScopeState.unknown;
+      }
+      return combined;
+    }
+    return base;
+  }
+
+  /// One info line per login naming what the negotiation settled, so a support
+  /// log says which features this account can use without re-deriving it.
+  // Governing: ADR-0013, SPEC-0013 REQ "Error Handling Standards"
+  void _logScopeNegotiation() {
+    String names(RommScopeState state) {
+      final matches = [
+        for (final group in RommScopeGroup.values)
+          if (hasScope(group) == state) group.name,
+      ];
+      return matches.isEmpty ? 'none' : matches.join(',');
+    }
+
+    _log.i(
+      'RomM scope groups: granted=${names(RommScopeState.granted)} '
+      'denied=${names(RommScopeState.denied)} '
+      'unknown=${names(RommScopeState.unknown)}',
+    );
   }
 
   Future<void> _refreshAccessToken() async {
@@ -1995,11 +2147,268 @@ class RommService {
     if (statusCode == 404 || statusCode == 403) {
       if (_playSessionsSupported) {
         _log.w(
-          'RomM play-session API unavailable ($statusCode) — '
+          'RomM play-session API unavailable ($statusCode) - '
           'playtime sync disabled for this connection',
         );
       }
       _playSessionsSupported = false;
+      // A 403 here is the scope answer the login could not get (API-key mode)
+      // or one that survived a re-auth: either way the playtime group is not
+      // held on this connection, so every other call that needs it stops too.
+      // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Optional Scope Groups"
+      _noteScopeDenial(RommScopeGroup.playtime, statusCode);
+    }
+  }
+
+  /// Records a conclusive per-endpoint 403 as "this connection does not hold
+  /// [group]".
+  ///
+  /// Conclusive because every authenticated call already runs through
+  /// [_sendWithAuthRetry], which re-authenticates once on a 403 — so a 403 that
+  /// reaches a caller was answered by a freshly minted token. In API-key mode
+  /// there is no re-auth to widen the key's fixed scopes, so the first 403 is
+  /// conclusive by construction. This is how an API key issued without a group
+  /// settles into "everything but that feature" instead of erroring forever.
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Optional Scope Groups"
+  void _noteScopeDenial(RommScopeGroup group, int statusCode) {
+    if (statusCode != 403) return;
+    if (_scopeStates[group] == RommScopeState.denied) return;
+    _scopeStates[group] = RommScopeState.denied;
+    _log.w(
+      'RomM scope denied: group=${group.name} scopes="${group.scopes}" '
+      'status=403',
+    );
+  }
+
+  /// True when [group] is known not to be held, logging the reason once per
+  /// group per connection so a silently skipped push is explainable.
+  // Governing: ADR-0013, SPEC-0013 REQ "Error Handling Standards"
+  bool _scopeGated(RommScopeGroup group) {
+    if (hasScope(group) != RommScopeState.denied) return false;
+    if (_scopeGatesLogged.add(group)) {
+      _log.i(
+        'RomM write skipped: group=${group.name} reason=scope_denied '
+        'scopes="${group.scopes}"',
+      );
+    }
+    return true;
+  }
+
+  // -- Play-state write-back (props and favourites) --------------------------
+
+  /// Writes per-user ROM props (`PUT /api/roms/{id}/props`).
+  ///
+  /// The body carries only the fields given — RomM 4.9.0 takes a bare
+  /// `RomUserData` object, so an absent key means "leave it alone" — and
+  /// `?update_last_played=true` is added when [updateLastPlayed] is set, which
+  /// is how a finished session moves the server's `last_played` forward.
+  ///
+  /// Returns false without sending anything when this server predates the bare
+  /// body ([RommFeature.romPropsBareBody]) or this connection is known not to
+  /// hold [RommScopeGroup.playtime]; true when the server confirmed the write.
+  /// Throws [RommException] on a failure worth retrying, with the rom id and
+  /// status in the message; a 404 carries its status so the caller can drop the
+  /// queued row for a ROM the server no longer has.
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Props Update Call"
+  Future<bool> updateRomProps(
+    int romId, {
+    bool? hidden,
+    bool updateLastPlayed = false,
+  }) async {
+    if (supports(RommFeature.romPropsBareBody) ==
+        RommFeatureSupport.unsupported) {
+      _logGateOnce(RommFeature.romPropsBareBody);
+      return false;
+    }
+    if (_scopeGated(RommScopeGroup.playtime)) return false;
+    if (hidden == null && !updateLastPlayed) return false;
+
+    final body = <String, dynamic>{'hidden': ?hidden};
+    var uri = _uri('/api/roms/$romId/props');
+    if (updateLastPlayed) {
+      uri = uri.replace(queryParameters: {'update_last_played': 'true'});
+    }
+
+    final resp = await _sendWithAuthRetry<http.Response>(
+      () => _httpClient
+          .put(
+            uri,
+            headers: {..._authHeaders, 'Content-Type': 'application/json'},
+            body: jsonEncode(body),
+          )
+          .timeout(const Duration(seconds: 30)),
+      statusOf: (r) => r.statusCode,
+    );
+
+    if (resp.statusCode == 200 || resp.statusCode == 201) return true;
+    if (resp.statusCode == 403) {
+      _noteScopeDenial(RommScopeGroup.playtime, resp.statusCode);
+    }
+    throw RommException(
+      'RomM props update failed: rom=$romId status=${resp.statusCode}',
+      statusCode: resp.statusCode,
+      kind: resp.statusCode == 403
+          ? RommErrorKind.scopeDenied
+          : RommErrorKind.other,
+    );
+  }
+
+  /// The id of this account's favourites collection, creating it when the
+  /// server has none.
+  ///
+  /// RomM models favourites as an ordinary collection flagged `is_favorite`,
+  /// one per user, so the list is read once per connection and the id cached.
+  /// [name] is the localized "Favourites" the collection is created with; it is
+  /// only used on the create path, since an existing collection keeps whatever
+  /// the user named it.
+  ///
+  /// Returns null without sending anything when the server predates
+  /// [RommFeature.collectionRomsAddRemove] or the connection is known not to
+  /// hold [RommScopeGroup.collectionsWrite].
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Favourites Collection"
+  Future<int?> ensureFavouritesCollection({String name = 'Favorites'}) async {
+    if (supports(RommFeature.collectionRomsAddRemove) ==
+        RommFeatureSupport.unsupported) {
+      _logGateOnce(RommFeature.collectionRomsAddRemove);
+      return null;
+    }
+    if (_scopeGated(RommScopeGroup.collectionsWrite)) return null;
+    final cached = _favouritesCollectionId;
+    if (cached != null) return cached;
+
+    final http.Response listing;
+    try {
+      listing = await _authedGet('/api/collections');
+    } on RommException catch (e) {
+      if (e.statusCode == 403) {
+        _noteScopeDenial(RommScopeGroup.collectionsWrite, 403);
+        return null;
+      }
+      rethrow;
+    }
+
+    final existing = _favouritesIdOf(listing.body);
+    if (existing != null) {
+      _favouritesCollectionId = existing;
+      return existing;
+    }
+
+    final createName = name.trim().isEmpty ? 'Favorites' : name.trim();
+    final uri = _uri(
+      '/api/collections',
+    ).replace(queryParameters: {'is_favorite': 'true'});
+
+    final resp = await _sendWithAuthRetry<http.StreamedResponse>(
+      () => _httpClient.send(
+        http.MultipartRequest('POST', uri)
+          ..headers.addAll(_authHeaders)
+          ..fields['name'] = createName,
+      ),
+      statusOf: (r) => r.statusCode,
+    );
+    final body = await resp.stream.bytesToString();
+    if (resp.statusCode != 200 && resp.statusCode != 201) {
+      if (resp.statusCode == 403) {
+        _noteScopeDenial(RommScopeGroup.collectionsWrite, 403);
+        return null;
+      }
+      throw RommException(
+        'RomM favourites collection create failed: '
+        'status=${resp.statusCode}',
+        statusCode: resp.statusCode,
+      );
+    }
+
+    final created = _idOfCollectionBody(body);
+    if (created == null) {
+      throw RommException('RomM returned no id for the favourites collection');
+    }
+    _log.i('RomM favourites collection created: id=$created name=$createName');
+    _favouritesCollectionId = created;
+    return created;
+  }
+
+  /// Adds [romId] to the favourites collection
+  /// (`POST /api/collections/{id}/roms`).
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Favourites Collection"
+  Future<bool> addFavourite(int romId, {String collectionName = 'Favorites'}) =>
+      _editFavourites(romId, add: true, collectionName: collectionName);
+
+  /// Removes [romId] from the favourites collection
+  /// (`DELETE /api/collections/{id}/roms`).
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Favourites Collection"
+  Future<bool> removeFavourite(
+    int romId, {
+    String collectionName = 'Favorites',
+  }) => _editFavourites(romId, add: false, collectionName: collectionName);
+
+  /// Shared body of [addFavourite] and [removeFavourite]: same URL, same
+  /// `{"rom_ids": [...]}` payload, only the verb differs.
+  ///
+  /// Returns false without a request when the feature is gated; true when the
+  /// server confirmed the change.
+  // Governing: ADR-0013, SPEC-0013 REQ "Favourites Collection"
+  Future<bool> _editFavourites(
+    int romId, {
+    required bool add,
+    required String collectionName,
+  }) async {
+    final collectionId = await ensureFavouritesCollection(name: collectionName);
+    if (collectionId == null) return false;
+
+    final uri = _uri('/api/collections/$collectionId/roms');
+    final headers = {..._authHeaders, 'Content-Type': 'application/json'};
+    final body = jsonEncode({
+      'rom_ids': [romId],
+    });
+
+    final resp = await _sendWithAuthRetry<http.Response>(
+      () =>
+          (add
+                  ? _httpClient.post(uri, headers: headers, body: body)
+                  : _httpClient.delete(uri, headers: headers, body: body))
+              .timeout(const Duration(seconds: 30)),
+      statusOf: (r) => r.statusCode,
+    );
+
+    if (resp.statusCode >= 200 && resp.statusCode < 300) return true;
+    if (resp.statusCode == 403) {
+      _noteScopeDenial(RommScopeGroup.collectionsWrite, 403);
+    }
+    throw RommException(
+      'RomM favourite ${add ? 'add' : 'remove'} failed: rom=$romId '
+      'collection=$collectionId status=${resp.statusCode}',
+      statusCode: resp.statusCode,
+      kind: resp.statusCode == 403
+          ? RommErrorKind.scopeDenied
+          : RommErrorKind.other,
+    );
+  }
+
+  /// The id of the `is_favorite` collection in a `/api/collections` body, or
+  /// null when the account has none. Tolerates both the bare list and the
+  /// `{items: [...]}` envelope, like every other list read here.
+  // Governing: ADR-0013, SPEC-0013 REQ "Favourites Collection"
+  static int? _favouritesIdOf(String body) {
+    final decoded = jsonDecode(body);
+    for (final item in _itemsOf(decoded)) {
+      if (item is! Map) continue;
+      if (item['is_favorite'] != true) continue;
+      final id = int.tryParse(item['id'].toString());
+      if (id != null) return id;
+    }
+    return null;
+  }
+
+  /// The `id` of a single-collection response body, or null for any other
+  /// shape.
+  static int? _idOfCollectionBody(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map) return null;
+      return int.tryParse(decoded['id'].toString());
+    } catch (_) {
+      return null;
     }
   }
 }

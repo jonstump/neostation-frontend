@@ -1486,4 +1486,5 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommFirmwareDownloadCancelled:
       'Загрузка BIOS остановлена — {summary}',
   AppLocale.rommFirmwareDownloadFailedFile: 'Не удалось скачать {file}',
+  AppLocale.rommFavoritesCollectionName: 'Избранное',
 };

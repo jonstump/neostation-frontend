@@ -1533,4 +1533,5 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.rommFirmwareDownloadCancelled: 'BIOS-Download gestoppt — {summary}',
   AppLocale.rommFirmwareDownloadFailedFile:
       '{file} konnte nicht heruntergeladen werden',
+  AppLocale.rommFavoritesCollectionName: 'Favoriten',
 };

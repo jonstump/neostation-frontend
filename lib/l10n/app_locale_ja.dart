@@ -1343,4 +1343,5 @@ const Map<String, dynamic> appLocaleJa = {
       'BIOS ファイル: {downloaded} 件成功、{failed} 件失敗',
   AppLocale.rommFirmwareDownloadCancelled: 'BIOS のダウンロードを停止しました — {summary}',
   AppLocale.rommFirmwareDownloadFailedFile: '{file} をダウンロードできませんでした',
+  AppLocale.rommFavoritesCollectionName: 'お気に入り',
 };

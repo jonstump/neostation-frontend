@@ -1523,6 +1523,13 @@ mixin AppLocale {
   static const String rommFirmwareDownloadFailedFile =
       'romm_firmware_download_failed_file';
 
+  /// Name the favourites collection is created with on a RomM server that has
+  /// none. Only used on the create path — an existing collection keeps
+  /// whatever the user named it.
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Favourites Collection"
+  static const String rommFavoritesCollectionName =
+      'romm_favorites_collection_name';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================

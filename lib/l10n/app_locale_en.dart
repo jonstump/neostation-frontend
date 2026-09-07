@@ -1468,4 +1468,5 @@ const Map<String, dynamic> appLocaleEn = {
       'BIOS files: {downloaded} downloaded, {failed} failed',
   AppLocale.rommFirmwareDownloadCancelled: 'BIOS download stopped — {summary}',
   AppLocale.rommFirmwareDownloadFailedFile: '{file} could not be downloaded',
+  AppLocale.rommFavoritesCollectionName: 'Favorites',
 };
