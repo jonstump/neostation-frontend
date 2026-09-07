@@ -767,10 +767,65 @@ class RommService {
       if (decoded is Map<String, dynamic>) {
         final name = decoded['username']?.toString();
         if (name != null && name.isNotEmpty) _username = name;
+        _learnScopesFromUser(decoded);
       }
     } catch (_) {
-      // The key works; a surprising body shape only costs us the display name.
+      // The key works; a surprising body shape only costs us the display name
+      // and leaves the scope groups where they were: unknown, not denied.
     }
+  }
+
+  /// Settles the optional scope groups from the `oauth_scopes` RomM reports for
+  /// the current credential, for the login modes that have no token grant to
+  /// negotiate with.
+  ///
+  /// A password login learns its scopes by asking for them and reading the
+  /// server's 403s ([_negotiateScopeGroups]). An API key — and therefore a
+  /// paired client token, which [RommProvider] hands to [configure] as one —
+  /// has fixed scopes and never sends a grant, so every group used to stay
+  /// [RommScopeState.unknown] for the whole connection. That is the state
+  /// [RommProvider.canRunServerTasks] refuses to act on, which made the server
+  /// maintenance menu unreachable on the pairing/QR path — the primary way a
+  /// handheld connects (issue #168).
+  ///
+  /// `GET /api/users/me` already answers with the scope list, so this costs no
+  /// extra request: [_verifyApiKey] simply stops discarding the rest of the
+  /// body it has.
+  ///
+  /// Deliberately conservative about what counts as an answer. A missing,
+  /// malformed, or **empty** `oauth_scopes` is "learned nothing" and leaves
+  /// every group unknown, because a server that does not report scopes must not
+  /// be read as a server that grants none — that would newly disable features
+  /// like playtime, which run on `!= denied` and work today precisely because
+  /// unknown is permissive. Only a non-empty list settles anything.
+  // Governing: ADR-0013 (push play state to RomM),
+  // SPEC-0013 REQ "Optional Scope Groups", ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
+  void _learnScopesFromUser(Map<String, dynamic> user) {
+    final raw = user['oauth_scopes'];
+    if (raw is! List || raw.isEmpty) return;
+    final held = <String>{
+      for (final scope in raw)
+        if (scope != null) scope.toString().trim(),
+    }..removeWhere((s) => s.isEmpty);
+    if (held.isEmpty) return;
+
+    for (final group in RommScopeGroup.values) {
+      // A group the server version rules out is denied without consulting the
+      // list, exactly as the password path decides it before requesting.
+      final gate = group.gate;
+      if (gate != null && supports(gate) == RommFeatureSupport.unsupported) {
+        _logGateOnce(gate);
+        _scopeStates[group] = RommScopeState.denied;
+        continue;
+      }
+      // Every scope in the group, or the group is not usable: the group is the
+      // unit a feature needs, so a half-held pair is not a grant.
+      final needed = group.scopes.split(' ').where((s) => s.isNotEmpty);
+      _scopeStates[group] = needed.every(held.contains)
+          ? RommScopeState.granted
+          : RommScopeState.denied;
+    }
+    _logScopeNegotiation();
   }
 
   /// Exchanges a RomM pairing code for a client token.
