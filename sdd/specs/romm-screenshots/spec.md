@@ -21,7 +21,9 @@ After a play session of a linked game, new RetroArch screenshots for that game a
 
 ### Requirement: Screenshot Directory From RetroArch Config
 
-`RetroArchConfigService` SHALL parse `screenshot_directory` and `sort_screenshots_by_content_enable` from `retroarch.cfg`, store them on the RetroArch config table (versioned, guarded migration), and expose them on `RetroArchConfig`. When `sort_screenshots_by_content_enable` is true the collector MUST also look in the per-content subdirectory.
+`RetroArchConfigService` SHALL parse `screenshot_directory`, `sort_screenshots_by_content_enable` and `screenshots_in_content_dir` from `retroarch.cfg` and expose them on `RetroArchConfig`. When `sort_screenshots_by_content_enable` is true the collector MUST also look in the per-content subdirectory. When `screenshots_in_content_dir` is true it **overrides** both: RetroArch discards the assembled path and writes beside the content, so the content's own directory is the only place a capture can be.
+
+*Amended.* This requirement previously also said the values are stored on the RetroArch config table. They are not, and should not be: `user_retroarch_config` has had no reader and no writer anywhere in the app since migration v35 created it, and `RetroArchConfig` is parsed fresh from `retroarch.cfg` on each resolve. Persisting would add a writer with no reader whose rows go stale on any out-of-app edit of `retroarch.cfg`. The v163 columns are idempotent and harmless, so nothing needs reverting. Raised as #122, ruled on in PR #155.
 
 #### Scenario: Directory parsed
 
@@ -30,7 +32,7 @@ After a play session of a linked game, new RetroArch screenshots for that game a
 
 ### Requirement: Collector
 
-`ScreenshotCollector.collect(game, sessionStart)` SHALL list files in the screenshot directory (and the content subdirectory when enabled) with an image extension, whose name starts with **any** of the game's content stems, and whose modification time is at or after `sessionStart` minus 5 seconds, excluding files present in the ledger with the same size. The content stems are the ROM filename stem and, for a `.zip`, the stem of its largest member — RetroArch names captures after the content it loaded, which for an archive is the inner ROM. It MUST run off the UI isolate and MUST NOT read the contents of the *candidate screenshot* files. Reading an archive's central directory to derive its content stem is permitted: it is bounded (a few ranged reads), happens once per session end rather than per candidate, and is never on the launch path.
+`ScreenshotCollector.collect(game, sessionStart)` SHALL list files in the screenshot directory (and the per-content subdirectory when `sort_screenshots_by_content_enable` is set) — or, when `screenshots_in_content_dir` is set, in the content's own directory instead of both with an image extension, whose name starts with **any** of the game's content stems, and whose modification time is at or after `sessionStart` minus 5 seconds, excluding files present in the ledger with the same size. The content stems are the ROM filename stem and, for a `.zip`, the stem of its largest member — RetroArch names captures after the content it loaded, which for an archive is the inner ROM. It MUST run off the UI isolate and MUST NOT read the contents of the *candidate screenshot* files. Reading an archive's central directory to derive its content stem is permitted: it is bounded (a few ranged reads), happens once per session end rather than per candidate, and is never on the launch path.
 
 #### Scenario: Two new captures
 

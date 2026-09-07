@@ -26,7 +26,7 @@ NeoStation pushes `hidden`, favourite membership, and last-played to RomM for li
 #### Scenario: One group denied
 
 - **WHEN** the account allows playtime but not collections.write
-- **THEN** the login succeeds with the read scopes plus playtime, `hasScope(collectionsWrite)` is `denied`, and at most five token POSTs were sent (combined, three probes, final)
+- **THEN** the login succeeds with the read scopes plus playtime, `hasScope(collectionsWrite)` is `denied`, and at most `requested groups + 2` token POSTs were sent — seven for the five groups in the enum today (combined, five probes, final)
 
 #### Scenario: Bad credentials
 
