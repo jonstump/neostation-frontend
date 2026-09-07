@@ -8,6 +8,7 @@ import 'package:neostation/models/romm_rom_page.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/providers/romm_bulk_sync.dart';
 import 'package:neostation/providers/romm_provider.dart';
+import 'package:neostation/utils/dir_writability.dart';
 
 /// Covers the bulk-sync engine: enumeration paging, the already-downloaded
 /// filter, the bounded worker pool, and cancellation.
@@ -521,7 +522,8 @@ void main() {
 }
 
 /// Regression: a bulk sync resolves destinations for several ROMs of the same
-/// system at once, and the writability probe used to be a single shared
+/// system at once, and the writability probe (now `lib/utils/dir_writability`,
+/// shared with the BIOS destination resolver) used to be a single shared
 /// filename. Concurrent probes then deleted each other's file, the loser's
 /// delete threw, and the folder was reported unwritable — ROMs failed with
 /// "no writable folder" on a bulk sync and then downloaded fine on a retry.
@@ -539,7 +541,7 @@ void _writeProbeTests() {
     test('concurrent probes of the same directory all succeed', () async {
       final target = p.join(temp.path, 'msx');
       final results = await Future.wait([
-        for (var i = 0; i < 8; i++) RommProvider.dirIfWritable(target),
+        for (var i = 0; i < 8; i++) dirIfWritable(target),
       ]);
 
       expect(
@@ -552,9 +554,7 @@ void _writeProbeTests() {
 
     test('leaves no probe files behind', () async {
       final target = p.join(temp.path, 'snes');
-      await Future.wait([
-        for (var i = 0; i < 8; i++) RommProvider.dirIfWritable(target),
-      ]);
+      await Future.wait([for (var i = 0; i < 8; i++) dirIfWritable(target)]);
 
       final leftovers = Directory(target)
           .listSync()
@@ -567,10 +567,7 @@ void _writeProbeTests() {
     test('an unwritable destination still reports null', () async {
       // A path whose parent is a *file* can never be created as a directory.
       final blocker = File(p.join(temp.path, 'blocker'))..writeAsStringSync('');
-      expect(
-        await RommProvider.dirIfWritable(p.join(blocker.path, 'sub')),
-        isNull,
-      );
+      expect(await dirIfWritable(p.join(blocker.path, 'sub')), isNull);
     });
   });
 

@@ -2,9 +2,14 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/services/bios_destination_service.dart';
 
-/// [BiosDestinationService] precedence: RetroArch's `system_directory` first,
-/// the user-chosen `bios_directory` second, nothing third — plus the Android
-/// SAF translation both candidates go through.
+/// [BiosDestinationService] precedence: the explicitly chosen `bios_directory`
+/// first, RetroArch's `system_directory` second, nothing third — plus the
+/// Android SAF translation both candidates go through.
+///
+/// The order was the other way round until the SPEC-0012 amendment: with the
+/// discovered default winning, a folder the user picked in the panel was
+/// dropped on the next open, so there was no way to move BIOS files off
+/// whatever `retroarch.cfg` happened to name.
 ///
 /// Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ
 /// "BIOS Destination"
@@ -22,51 +27,66 @@ void main() {
   /// [stored] are the two candidates, [existing] the directories that are on
   /// disk, [unwritable] those of them that exist but reject a write (Android
   /// without All Files Access), and [written] collects what would be persisted.
+  /// [probed] collects every directory the writability probe was asked about,
+  /// which is how the "existence before writability" ordering is pinned: the
+  /// real probe *creates* the directory it is handed, so a candidate that is
+  /// not on disk must never reach it.
   BiosDestinationService svc({
     String? retroArch,
     String? stored,
     Set<String> existing = const {},
     Set<String> unwritable = const {},
     List<String>? written,
+    List<String>? probed,
   }) => BiosDestinationService(
     retroArchSystemDirectory: () async => retroArch,
     storedBiosDirectory: () async => stored,
     persistBiosDirectory: (d) async => written?.add(d),
     directoryExists: (d) async => existing.contains(d),
-    directoryIsWritable: (d) async => !unwritable.contains(d),
+    directoryIsWritable: (d) async {
+      probed?.add(d);
+      return !unwritable.contains(d);
+    },
   );
 
   group('resolve', () {
-    test('prefers the RetroArch system directory when it exists', () async {
+    test('prefers the folder the user chose over RetroArch', () async {
+      // Governing: SPEC-0012 REQ "BIOS Destination" scenario "An explicit
+      // choice outranks RetroArch". The chosen folder is the only signal that
+      // says where *this user* wants BIOS files; a discovered default must not
+      // silently overrule it on the next open.
       final dir = await svc(
         retroArch: '/home/deck/.config/retroarch/system',
         stored: '/roms/bios',
         existing: {'/home/deck/.config/retroarch/system', '/roms/bios'},
       ).resolve(psx);
 
+      expect(dir, '/roms/bios');
+    });
+
+    test('uses the RetroArch system directory when nothing is chosen', () async {
+      // Governing: SPEC-0012 REQ "BIOS Destination" scenario "RetroArch known,
+      // nothing chosen".
+      final dir = await svc(
+        retroArch: '/home/deck/.config/retroarch/system',
+        existing: {'/home/deck/.config/retroarch/system'},
+      ).resolve(psx);
+
       expect(dir, '/home/deck/.config/retroarch/system');
     });
 
-    test(
-      'falls back to the configured folder when RetroArch has none',
-      () async {
-        final dir = await svc(
-          stored: '/roms/bios',
-          existing: {'/roms/bios'},
-        ).resolve(psx);
-
-        expect(dir, '/roms/bios');
-      },
-    );
-
-    test('falls back when the RetroArch directory does not exist', () async {
+    test('falls back to RetroArch when the chosen folder is gone', () async {
       final dir = await svc(
-        retroArch: '/gone/system',
-        stored: '/roms/bios',
-        existing: {'/roms/bios'},
+        retroArch: '/home/deck/.config/retroarch/system',
+        stored: '/gone/bios',
+        existing: {'/home/deck/.config/retroarch/system'},
       ).resolve(psx);
 
-      expect(dir, '/roms/bios');
+      expect(dir, '/home/deck/.config/retroarch/system');
+    });
+
+    test('is nothing when the RetroArch directory does not exist', () async {
+      expect(await svc(retroArch: '/gone/system').resolve(psx), isNull);
     });
 
     test('returns null when neither candidate is usable', () async {
@@ -105,19 +125,47 @@ void main() {
       expect(dir, '/roms/bios');
     });
 
-    test('skips a directory that exists but cannot be written to', () async {
-      // Governing: ADR-0012, SPEC-0012 REQ "BIOS Destination" — the resolver
-      // promises a directory the download can write into, not merely one that
-      // is there. Before this the RetroArch folder won and the failure only
-      // appeared at the first byte.
+    test('skips a chosen folder that exists but cannot be written to', () async {
+      // Governing: ADR-0012, SPEC-0012 REQ "BIOS Destination" — both
+      // candidates must be *writable*, not merely present. Android without All
+      // Files Access hands back exactly this: a readable, unwritable folder
+      // whose failure would otherwise appear at the first byte.
       final dir = await svc(
         retroArch: '/storage/emulated/0/RetroArch/system',
         stored: '/roms/bios',
         existing: {'/storage/emulated/0/RetroArch/system', '/roms/bios'},
+        unwritable: {'/roms/bios'},
+      ).resolve(psx);
+
+      expect(dir, '/storage/emulated/0/RetroArch/system');
+    });
+
+    test('skips a RetroArch directory that cannot be written to', () async {
+      final dir = await svc(
+        retroArch: '/storage/emulated/0/RetroArch/system',
+        existing: {'/storage/emulated/0/RetroArch/system'},
         unwritable: {'/storage/emulated/0/RetroArch/system'},
       ).resolve(psx);
 
-      expect(dir, '/roms/bios');
+      expect(dir, isNull);
+    });
+
+    test('never probes a candidate that is not on disk', () async {
+      // The real probe calls `Directory.create(recursive: true)`, so probing
+      // before checking existence would recreate a BIOS folder the user
+      // deleted (or one on an unmounted card) instead of falling through to
+      // RetroArch. Swapping the two candidates did not change that: existence
+      // is still asked first, for each of them in turn.
+      final probed = <String>[];
+      final dir = await svc(
+        retroArch: '/ra/system',
+        stored: '/gone/bios',
+        existing: {'/ra/system'},
+        probed: probed,
+      ).resolve(psx);
+
+      expect(dir, '/ra/system');
+      expect(probed, ['/ra/system']);
     });
 
     test('returns null when every candidate is read-only', () async {
@@ -133,24 +181,24 @@ void main() {
   });
 
   group('resolveDestination', () {
-    test('names RetroArch as the source when it wins', () async {
-      // Governing: ADR-0012 §2 — the panel offers the picker only when
-      // RetroArch supplies nothing, so it has to be able to tell which of the
-      // two candidates answered.
+    test('names RetroArch as the source when nothing is chosen', () async {
+      // The panel always offers the picker, so the source is what lets it say
+      // whether the path on screen is the user's choice or a default the app
+      // discovered.
       final resolved = await svc(
         retroArch: '/ra/system',
-        stored: '/roms/bios',
-        existing: {'/ra/system', '/roms/bios'},
+        existing: {'/ra/system'},
       ).resolveDestination(psx);
 
       expect(resolved?.directory, '/ra/system');
       expect(resolved?.source, BiosDestinationSource.retroArch);
     });
 
-    test('names the configured folder when RetroArch has none', () async {
+    test('names the configured folder even when RetroArch has one', () async {
       final resolved = await svc(
+        retroArch: '/ra/system',
         stored: '/roms/bios',
-        existing: {'/roms/bios'},
+        existing: {'/ra/system', '/roms/bios'},
       ).resolveDestination(psx);
 
       expect(resolved?.directory, '/roms/bios');

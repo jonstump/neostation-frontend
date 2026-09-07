@@ -3,8 +3,8 @@ import 'dart:io';
 import 'package:path/path.dart' as path;
 
 import '../models/system_model.dart';
-import '../providers/romm_provider.dart' show RommProvider;
 import '../repositories/config_repository.dart';
+import '../utils/dir_writability.dart';
 import 'logger_service.dart';
 import 'retroarch_config_service.dart';
 import 'user_data_location_service.dart';
@@ -21,10 +21,10 @@ enum BiosDestinationSource {
 
 /// A resolved BIOS destination: the directory, and which candidate won.
 ///
-/// The source matters to the UI, not just to the log: ADR-0012 §2 has the
-/// picker offered only when RetroArch supplies nothing, so a panel that knows
-/// RetroArch won can leave the picker out rather than offering a choice
-/// [BiosDestinationService.resolve] would discard on the next open.
+/// The source matters to the UI, not just to the log: the picker is always
+/// offered (SPEC-0012 REQ "BIOS Destination"), so the panel needs to be able to
+/// say whether the path on screen is one the user chose or the one RetroArch
+/// supplied — otherwise "Destination: …" reads as a decision this app made.
 // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "BIOS Destination"
 class BiosDestination {
   /// The normalized, existing, writable directory firmware lands in.
@@ -41,16 +41,20 @@ class BiosDestination {
 
 /// Decides where a system's BIOS/firmware files belong on this device.
 ///
-/// Precedence, per ADR-0012:
+/// Precedence, per SPEC-0012 REQ "BIOS Destination":
 ///
-/// 1. RetroArch's `system_directory`, when `retroarch.cfg` names one and that
+/// 1. `user_config.bios_directory` — the folder the user picked, through the
+///    native picker on desktop or a SAF tree on Android — when it exists and
+///    is writable. An explicit choice outranks everything: it is the only
+///    signal that says where *this user* wants BIOS files, and a resolver that
+///    put a discovered default first would take the choice and forget it on
+///    the next open, leaving no in-app way to change the destination at all.
+/// 2. RetroArch's `system_directory`, when `retroarch.cfg` names one and that
 ///    directory exists and is writable. RetroArch is the one emulator whose
-///    BIOS location the app can discover, and if it is configured the user
-///    almost certainly wants the files there.
-/// 2. `user_config.bios_directory` — the folder the user picked once, through
-///    the native picker on desktop or a SAF tree on Android.
-/// 3. Nothing. The caller then offers the picker and persists the choice with
-///    [setBiosDirectory].
+///    BIOS location the app can discover, so it is the default worth having
+///    when the user has expressed no preference.
+/// 3. Nothing. The panel then says so and downloads stay disabled until the
+///    picker persists a choice through [setBiosDirectory].
 ///
 /// [system] is not consulted yet; it is part of the contract so a later
 /// per-emulator rule (a `bios_dir` in the emulator JSON, say) lands here rather
@@ -102,26 +106,18 @@ class BiosDestinationService {
   ///
   /// Both candidates are translated out of the Android SAF form, confirmed to
   /// exist, and then probed for writability with the same probe-file
-  /// round-trip the ROM download path uses ([RommProvider.dirIfWritable]) — so
-  /// a non-null answer is a directory the download can actually write into,
-  /// not merely one that is there. That distinction is the whole point on
-  /// Android without All Files Access, where an existing directory is readable
-  /// and unwritable and the failure would otherwise surface only at the first
-  /// byte written.
+  /// round-trip the ROM download path uses ([dirIfWritable]) — so a non-null
+  /// answer is a directory the download can actually write into, not merely
+  /// one that is there. That distinction is the whole point on Android without
+  /// All Files Access, where an existing directory is readable and unwritable
+  /// and the failure would otherwise surface only at the first byte written.
+  ///
+  /// The chosen folder is asked first and the RetroArch one second, so an
+  /// unusable choice (deleted, or on an unmounted card) still falls through to
+  /// the discovered default rather than leaving the panel with nowhere to
+  /// write.
   // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "BIOS Destination"
   Future<BiosDestination?> resolveDestination(SystemModel system) async {
-    final retroArch = await _usableDirectory(await _retroArchSystemDirectory());
-    if (retroArch != null) {
-      _log.i(
-        'BIOS destination: source=retroarch system=${system.folderName} '
-        'dir=$retroArch',
-      );
-      return BiosDestination(
-        directory: retroArch,
-        source: BiosDestinationSource.retroArch,
-      );
-    }
-
     final configured = await _usableDirectory(await _storedBiosDirectory());
     if (configured != null) {
       _log.i(
@@ -134,9 +130,21 @@ class BiosDestinationService {
       );
     }
 
+    final retroArch = await _usableDirectory(await _retroArchSystemDirectory());
+    if (retroArch != null) {
+      _log.i(
+        'BIOS destination: source=retroarch system=${system.folderName} '
+        'dir=$retroArch',
+      );
+      return BiosDestination(
+        directory: retroArch,
+        source: BiosDestinationSource.retroArch,
+      );
+    }
+
     _log.i(
       'BIOS destination: source=none system=${system.folderName} '
-      '(no RetroArch system_directory, no bios_directory)',
+      '(no bios_directory, no RetroArch system_directory)',
     );
     return null;
   }
@@ -184,7 +192,10 @@ class BiosDestinationService {
   /// Existence is checked before writability on purpose: the shared probe
   /// creates the directory it is handed, and a BIOS folder that has since been
   /// deleted (or lives on an unmounted card) must fall through to the next
-  /// candidate rather than be silently recreated somewhere useless.
+  /// candidate rather than be silently recreated somewhere useless. That
+  /// ordering matters more now that the chosen folder is asked first — probing
+  /// it up front would recreate a stale choice on every open and RetroArch's
+  /// directory could never win back.
   Future<String?> _usableDirectory(String? candidate) async {
     if (candidate == null) return null;
     final real = realPathFor(candidate);
@@ -219,7 +230,9 @@ class BiosDestinationService {
 
   /// Reuses the ROM download path's probe rather than repeating it: one
   /// definition of "writable" for every RomM download, and its concurrency fix
-  /// (a per-call probe filename) comes along for free.
+  /// (a per-call probe filename) comes along for free. The probe lives in
+  /// `lib/utils/` so this service does not have to import a provider to reach
+  /// it (ARCHITECTURE.md: services never depend upward).
   static Future<bool> _defaultDirectoryIsWritable(String directory) async =>
-      await RommProvider.dirIfWritable(directory) != null;
+      await dirIfWritable(directory) != null;
 }
