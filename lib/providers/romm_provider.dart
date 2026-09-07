@@ -888,6 +888,15 @@ class RommProvider extends ChangeNotifier {
           RommFeatureSupport.unsupported) {
         _status = RommConnectionStatus.error;
         _lastErrorKind = RommErrorKind.unsupported;
+        // [_lastErrorKind] is what the UI localizes through: the connect
+        // screen maps it with `rommPairErrorKey` and shows
+        // `AppLocale.rommPairServerTooOld`, so this English sentence is the
+        // diagnostic fallback (and the log line), never the user's text. Same
+        // contract as every other `_lastError = e.message` here — the provider
+        // has no BuildContext to translate with. Set the kind first, and any
+        // new pairing surface must read it rather than [lastError].
+        // Governing: ADR-0007, SPEC-0007 REQ "Error Handling Standards",
+        // SPEC-0010 REQ "Gated Call Sites"
         _lastError =
             'This RomM server is too old for pairing (needs '
             '${RommFeature.clientTokenExchange.minVersion} or newer)';

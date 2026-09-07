@@ -247,5 +247,66 @@ void main() {
       expect(e.message, contains('TLS handshake failed'));
       expect(requests, hasLength(1));
     });
+
+    // The user-facing gate lives in RommProvider.connectWithPairCode, which is
+    // where SPEC-0010 puts the localized message — but a gate that lives only
+    // in one caller is bypassed by the next one, which would then read a
+    // pre-4.8.0 server's raw 404 as "bad code". Governing: ADR-0010,
+    // SPEC-0010 REQ "Gated Call Sites".
+    test('a probed pre-4.8.0 server is refused without a request', () async {
+      serve(
+        (request) => request.url.path == '/api/heartbeat'
+            ? json(200, {
+                'SYSTEM': {'VERSION': '4.7.0'},
+              })
+            : json(200, tokenBody()),
+      );
+      final service = RommService();
+      await service.fetchHeartbeat(serverUrl: 'https://romm.local');
+      expect(requests.map((r) => r.url.path).toList(), ['/api/heartbeat']);
+
+      final e = await failure(
+        service.exchangePairCode('https://romm.local', 'ABCD2345'),
+      );
+
+      expect(e.kind, RommErrorKind.unsupported);
+      expect(e.message, contains('too old'));
+      expect(
+        requests.map((r) => r.url.path).toList(),
+        ['/api/heartbeat'],
+        reason: 'the exchange must not be sent to a server that cannot answer',
+      );
+    });
+
+    test('an unprobed server is still attempted', () async {
+      serve((_) => json(200, tokenBody()));
+      final token = await RommService().exchangePairCode(
+        'https://romm.local',
+        'ABCD2345',
+      );
+      expect(token.rawToken, rawToken);
+    });
+
+    // Capabilities belong to the server that answered them: pointing the
+    // service somewhere else must not let server A's version gate server B.
+    test('capabilities from another server do not gate the exchange', () async {
+      serve(
+        (request) => request.url.path == '/api/heartbeat'
+            ? json(200, {
+                'SYSTEM': {'VERSION': '4.7.0'},
+              })
+            : json(200, tokenBody()),
+      );
+      final service = RommService();
+      await service.fetchHeartbeat(serverUrl: 'https://old.local');
+
+      final token = await service.exchangePairCode(
+        'https://new.local',
+        'ABCD2345',
+      );
+
+      expect(token.rawToken, rawToken);
+      expect(service.capabilities, isNull);
+    });
   });
 }
