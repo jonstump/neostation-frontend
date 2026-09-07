@@ -1,3 +1,5 @@
+import 'romm_manual.dart';
+
 /// A single file belonging to a [RommRom] (RomM splits multi-disc / multi-part
 /// ROMs into multiple files served together as a zip).
 class RommRomFile {
@@ -75,6 +77,23 @@ class RommRom {
   final String? pathCoverLarge;
   final String? pathCoverSmall;
 
+  /// RomM's *locally cached* manual file, as a server-relative path under
+  /// `/assets/romm/resources/`, or null when RomM stored no manual.
+  ///
+  /// RomM has served a PDF manual since 3.10 and `.md`/`.txt` since 5.0.0, so
+  /// the extension is part of the answer rather than a constant — see
+  /// [RommManualKind]. Only the detail endpoint (`/api/roms/{id}`) carries it;
+  /// list responses leave it null, which is why the manual action resolves a
+  /// detail fetch rather than reading the browse page's row.
+  // Governing: ADR-0017 (view RomM manuals and notes on device), SPEC-0017 REQ "Manual Availability"
+  final String? pathManual;
+
+  /// RomM's own `has_manual` flag. Present alongside [pathManual] on the
+  /// detail endpoint; a server that sets it without a path has nothing to
+  /// serve, so [manual] answers on the path.
+  // Governing: ADR-0017 (view RomM manuals and notes on device), SPEC-0017 REQ "Manual Availability"
+  final bool hasManual;
+
   /// RetroAchievements game id RomM matched this ROM to, or null if none.
   /// A non-null id means the game has a RetroAchievements set.
   ///
@@ -115,6 +134,8 @@ class RommRom {
     this.urlCover,
     this.pathCoverLarge,
     this.pathCoverSmall,
+    this.pathManual,
+    this.hasManual = false,
     this.raId,
     this.raTotalAchievements = 0,
     this.genres = const [],
@@ -133,6 +154,13 @@ class RommRom {
 
   /// True when this ROM has a RetroAchievements set (per RomM metadata).
   bool get hasRetroAchievements => raId != null && raTotalAchievements > 0;
+
+  /// The manual RomM holds for this ROM, or null when there is none.
+  ///
+  /// Answers on [pathManual] rather than [hasManual]: the path is what the
+  /// static route needs, and a flag without a path is nothing to fetch.
+  // Governing: ADR-0017 (view RomM manuals and notes on device), SPEC-0017 REQ "Manual Availability"
+  RommManual? get manual => RommManual.fromPath(pathManual);
 
   factory RommRom.fromJson(Map<String, dynamic> json) {
     final filesJson = json['files'];
@@ -160,12 +188,22 @@ class RommRom {
       urlCover: json['url_cover']?.toString(),
       pathCoverLarge: json['path_cover_large']?.toString(),
       pathCoverSmall: json['path_cover_small']?.toString(),
+      pathManual: _nonEmpty(json['path_manual']),
+      hasManual: json['has_manual'] == true,
       raId: (json['ra_id'] as num?)?.toInt(),
       raTotalAchievements: _parseRaTotal(json),
       genres: _parseStringList(json, 'genres'),
       companies: _parseStringList(json, 'companies'),
       releaseYear: _parseReleaseYear(json),
     );
+  }
+
+  /// A trimmed string value, or null when the field is absent or blank.
+  /// RomM sends `path_manual` as `null` for a ROM without one, but an empty
+  /// string is just as common on hand-edited libraries.
+  static String? _nonEmpty(Object? value) {
+    final s = value?.toString().trim() ?? '';
+    return s.isEmpty ? null : s;
   }
 
   /// Non-empty strings under `metadatum.<key>`, in server order.

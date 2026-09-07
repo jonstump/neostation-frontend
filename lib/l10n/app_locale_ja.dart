@@ -1309,4 +1309,13 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.collectionUnlinkRomm: 'RomM とのリンクを解除',
   AppLocale.collectionUnlinkRommConfirm:
       'このコレクションは RomM のコレクションに追従しなくなります。ゲームはそのまま残ります。',
+  AppLocale.manual: 'マニュアル',
+  AppLocale.manualRefresh: 'マニュアルを更新',
+  AppLocale.manualDownloading: 'マニュアルをダウンロード中…',
+  AppLocale.manualNotAvailable: 'マニュアルがありません',
+  AppLocale.manualUnsupportedType: 'このマニュアルは .{extension} ファイルのため、ここでは表示できません',
+  AppLocale.manualOpenExternally: '外部アプリで開く',
+  AppLocale.manualPageIndicator: '{page}/{total}',
+  AppLocale.manualRenderFailed: 'このマニュアルを表示できませんでした',
+  AppLocale.manualOpenExternallyFailed: 'このデバイスにマニュアルを開けるアプリがありません',
 };

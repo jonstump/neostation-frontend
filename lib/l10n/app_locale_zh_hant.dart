@@ -1259,4 +1259,13 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.collectionRommMirrored: '已從 RomM 同步',
   AppLocale.collectionUnlinkRomm: '取消與 RomM 的連結',
   AppLocale.collectionUnlinkRommConfirm: '此合集將不再跟隨 RomM 合集。其中的遊戲會保留。',
+  AppLocale.manual: '說明書',
+  AppLocale.manualRefresh: '重新整理說明書',
+  AppLocale.manualDownloading: '正在下載說明書…',
+  AppLocale.manualNotAvailable: '沒有可用的說明書',
+  AppLocale.manualUnsupportedType: '此說明書是 .{extension} 檔案，無法在此顯示',
+  AppLocale.manualOpenExternally: '以外部應用程式開啟',
+  AppLocale.manualPageIndicator: '{page}/{total}',
+  AppLocale.manualRenderFailed: '無法顯示此說明書',
+  AppLocale.manualOpenExternallyFailed: '此裝置上沒有應用程式可以開啟此說明書',
 };

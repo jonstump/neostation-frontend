@@ -1316,10 +1316,14 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
       case DetailTab.gameInfo:
         final state = _gameInfoTabKey.currentState;
         if (state == null) return false;
-        // Nothing to run inside this one: it scrolls and that is all it does.
-        // A stays consumed so it cannot launch the game from under a panel the
+        // The first press activates the panel; a second runs whichever header
+        // action holds the cursor (MANUAL / REFRESH). With none focused A stays
+        // consumed anyway, so it cannot launch the game from under a panel the
         // user is reading.
-        return state.isPanelActive || state.enterPanel();
+        // Governing: ADR-0017 (view RomM manuals and notes on device), SPEC-0017 REQ "Manual Availability"
+        return state.isPanelActive
+            ? state.activateFocused()
+            : state.enterPanel();
       default:
         return false;
     }

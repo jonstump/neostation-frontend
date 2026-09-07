@@ -1477,6 +1477,18 @@ mixin AppLocale {
   static const String collectionUnlinkRommConfirm =
       'collection_unlink_romm_confirm';
 
+  // RomM manuals (SPEC-0017)
+  static const String manual = 'manual';
+  static const String manualRefresh = 'manual_refresh';
+  static const String manualDownloading = 'manual_downloading';
+  static const String manualNotAvailable = 'manual_not_available';
+  static const String manualUnsupportedType = 'manual_unsupported_type';
+  static const String manualOpenExternally = 'manual_open_externally';
+  static const String manualPageIndicator = 'manual_page_indicator';
+  static const String manualRenderFailed = 'manual_render_failed';
+  static const String manualOpenExternallyFailed =
+      'manual_open_externally_failed';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================

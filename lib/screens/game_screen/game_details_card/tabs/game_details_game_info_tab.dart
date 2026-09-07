@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:flutter_localization/flutter_localization.dart';
@@ -8,8 +10,16 @@ import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/services/sfx_service.dart';
 import '../../../../models/system_model.dart';
 import '../../../../models/game_model.dart';
+import '../../../../models/romm_manual.dart';
+import '../../../../models/romm_rom.dart';
 import '../../../../providers/file_provider.dart';
+import '../../../../repositories/romm_save_map_repository.dart';
+import '../../../../services/logger_service.dart';
+import '../../../../services/romm/romm_manual_cache.dart';
+import '../../../../services/romm_service.dart';
 import '../../../../services/screenscraper_service.dart';
+import '../../../manual_viewer/manual_viewer_screen.dart';
+import '../widgets/header_action_button.dart';
 import '../../../../themes/chrome_surface.dart';
 import '../../../../themes/corner_radii.dart';
 import '../../../../utils/game_utils.dart';
@@ -81,6 +91,56 @@ class GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
   /// Whether the panel currently owns the D-pad.
   bool get isPanelActive => _isPanelActive;
 
+  static final _log = LoggerService.instance;
+
+  /// Which header action holds focus, or -1 while the description does.
+  ///
+  /// Up from the top of the description lands here, down goes back to the
+  /// text, and left/right walk the actions — the same shape the achievements
+  /// panel uses, so MANUAL and REFRESH are reachable without a touchscreen.
+  // Governing: ADR-0017 (view RomM manuals and notes on device), SPEC-0017 REQ "Manual Availability"
+  int _headerFocusIndex = -1;
+
+  /// What RomM knows about this game's manual, once resolved.
+  ///
+  /// Resolved per game, debounced, and memoized per rom id: the details card
+  /// rebuilds for every game the cursor passes, and a detail fetch per row
+  /// would put the library scroll on the network.
+  // Governing: ADR-0017 (view RomM manuals and notes on device), SPEC-0017 REQ "Manual Availability"
+  static final Map<int, RommManual?> _manualByRomId = {};
+
+  Timer? _manualResolveTimer;
+
+  /// RomM rom id this game is linked to, or null when it is not linked.
+  int? _manualRomId;
+
+  /// The manual RomM reports for [_manualRomId], or null when it has none
+  /// (or the server has not been asked yet).
+  RommManual? _manualMeta;
+
+  /// Absolute path of the already-downloaded manual, or null when nothing is
+  /// cached. A cached manual keeps the action available offline.
+  String? _manualCachedPath;
+
+  /// Set while a manual is downloading, so the action reports itself and a
+  /// second press cannot start a second download.
+  bool _manualBusy = false;
+
+  /// Localized key of the line shown under the actions, or null for none.
+  String? _manualStatusKey;
+
+  /// Interpolation for [_manualStatusKey], when it takes one.
+  String? _manualStatusArg;
+
+  /// Whether this game has a manual to open: one cached on disk, or one the
+  /// server reported.
+  // Governing: ADR-0017 (view RomM manuals and notes on device), SPEC-0017 REQ "Manual Availability"
+  bool get _hasManual => _manualCachedPath != null || _manualMeta != null;
+
+  /// Whether "Refresh" can re-download: only with a server to ask.
+  bool get _canRefreshManual =>
+      _manualMeta != null && context.read<RommProvider>().isConnected;
+
   /// Whether the panel's edge is currently lit as enterable.
   ///
   /// It cannot be answered during a build: [_canScroll] reads a scroll metric
@@ -106,6 +166,7 @@ class GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
   void initState() {
     super.initState();
     _refreshDrivability();
+    _scheduleManualResolve();
   }
 
   /// Whether the description is longer than its pane.
@@ -121,9 +182,16 @@ class GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
   /// other half of this gate is gone.
   bool enterPanel() {
     if (_isPanelActive) return true; // Already inside — A stays consumed.
-    if (!_canScroll) return false;
+    // A manual to open is as good a reason to enter as text to scroll: a game
+    // whose description fits its pane still has an action in here.
+    final actions = _headerActions();
+    if (!_canScroll && actions.isEmpty) return false;
 
-    setState(() => _isPanelActive = true);
+    setState(() {
+      _isPanelActive = true;
+      // With nothing to scroll, the actions are the only place to be.
+      _headerFocusIndex = _canScroll ? -1 : 0;
+    });
     return true;
   }
 
@@ -131,15 +199,55 @@ class GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
   bool exitPanel() {
     if (!_isPanelActive) return false;
 
-    setState(() => _isPanelActive = false);
+    setState(() {
+      _isPanelActive = false;
+      _headerFocusIndex = -1;
+    });
     return true;
   }
 
-  /// Gamepad navigation delegate: scrolls the description up one step.
-  void moveUp() => _scrollDescription(-_scrollStep);
+  /// Runs the focused header action (gamepad A).
+  ///
+  /// Always reports the button consumed while the panel is active: A must not
+  /// fall through and launch the game from under a panel the user is reading.
+  // Governing: ADR-0017 (view RomM manuals and notes on device), SPEC-0017 REQ "Manual Availability"
+  bool activateFocused() {
+    if (!_isPanelActive) return false;
 
-  /// Gamepad navigation delegate: scrolls the description down one step.
-  void moveDown() => _scrollDescription(_scrollStep);
+    final actions = _headerActions();
+    if (_headerFocusIndex >= 0 && _headerFocusIndex < actions.length) {
+      SfxService().playNavSound();
+      actions[_headerFocusIndex].onTap();
+    }
+    return true;
+  }
+
+  /// Gamepad navigation delegate: scrolls the description up one step, or
+  /// steps onto the header actions once the text is already at the top.
+  void moveUp() {
+    if (_headerFocusIndex >= 0) return; // Already on the actions row.
+    if (_headerActions().isNotEmpty && _isDescriptionAtTop) {
+      setState(() => _headerFocusIndex = 0);
+      return;
+    }
+    _scrollDescription(-_scrollStep);
+  }
+
+  /// Gamepad navigation delegate: scrolls the description down one step, or
+  /// steps off the header actions back into the text.
+  void moveDown() {
+    if (_headerFocusIndex >= 0) {
+      setState(() => _headerFocusIndex = -1);
+      return;
+    }
+    _scrollDescription(_scrollStep);
+  }
+
+  /// Whether the description is at (or has no) scroll offset — the boundary
+  /// that hands the D-pad up to the actions row instead of scrolling further.
+  bool get _isDescriptionAtTop =>
+      !_descriptionController.hasClients ||
+      _descriptionController.position.pixels <= 0.5;
 
   /// Gamepad navigation delegate: nothing to the left or right in here.
   ///
@@ -149,10 +257,22 @@ class GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
   /// whichever panel holds the D-pad, and a panel that is being read should
   /// swallow them rather than let a stray press slide the tab out from under
   /// the text. B is the way out, as everywhere else.
-  void moveLeft() {}
+  void moveLeft() => _moveHeaderFocus(-1);
 
   /// Gamepad navigation delegate: see [moveLeft].
-  void moveRight() {}
+  void moveRight() => _moveHeaderFocus(1);
+
+  /// Moves header focus by [delta], clamped to the ends so the run of actions
+  /// has edges rather than wrapping under the user. A no-op while the
+  /// description holds the D-pad, which is what keeps left/right swallowed.
+  void _moveHeaderFocus(int delta) {
+    if (_headerFocusIndex < 0) return;
+    final actions = _headerActions();
+    if (actions.isEmpty) return;
+    final next = (_headerFocusIndex + delta).clamp(0, actions.length - 1);
+    if (next == _headerFocusIndex) return;
+    setState(() => _headerFocusIndex = next);
+  }
 
   void _scrollDescription(double delta) {
     if (!_isPanelActive || !_descriptionController.hasClients) return;
@@ -184,6 +304,8 @@ class GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
     // resolves one from the app's own language on every build.
     if (oldWidget.game.romPath != widget.game.romPath) {
       _isPanelActive = false;
+      _headerFocusIndex = -1;
+      _scheduleManualResolve();
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && _descriptionController.hasClients) {
           _descriptionController.jumpTo(0);
@@ -194,6 +316,7 @@ class GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
 
   @override
   void dispose() {
+    _manualResolveTimer?.cancel();
     _descriptionController.dispose();
     super.dispose();
   }
@@ -216,6 +339,279 @@ class GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
         .config
         .appLanguage;
     return _descriptionKeys[appLanguage] ?? appLanguage;
+  }
+
+  // ── Manual (SPEC-0017) ───────────────────────────────────────────────────
+
+  /// The ROM detail a manual download needs, kept per rom id so opening the
+  /// same manual twice costs one detail fetch at most. Only written when a
+  /// manual is actually opened, which is rare enough to keep it small.
+  static final Map<int, RommRom> _rommRomById = {};
+
+  /// How many rom ids [_manualByRomId] remembers before it starts forgetting
+  /// the oldest. A scroll through a large library resolves one entry per game,
+  /// and the answer is cheap to re-fetch.
+  static const int _manualMemoLimit = 500;
+
+  /// Memoizes the answer for [romId] — including "no manual" — dropping the
+  /// oldest entry once the cap is reached.
+  static void _rememberManual(int romId, RommManual? manual) {
+    if (!_manualByRomId.containsKey(romId) &&
+        _manualByRomId.length >= _manualMemoLimit) {
+      _manualByRomId.remove(_manualByRomId.keys.first);
+    }
+    _manualByRomId[romId] = manual;
+  }
+
+  /// Identity of the game on screen. Every async manual step re-checks it, so
+  /// an answer for the game the cursor just left cannot land on this one.
+  String get _gameToken => '${widget.system.folderName}/${widget.game.romname}';
+
+  /// Restarts manual resolution for the game now on screen.
+  ///
+  /// Debounced: the details card rebuilds for every game the cursor passes,
+  /// and resolving each one would put a mapping query (and possibly a detail
+  /// fetch) on the library scroll.
+  // Governing: ADR-0017 (view RomM manuals and notes on device), SPEC-0017 REQ "Manual Availability"
+  void _scheduleManualResolve() {
+    _manualResolveTimer?.cancel();
+    _manualRomId = null;
+    _manualMeta = null;
+    _manualCachedPath = null;
+    _manualBusy = false;
+    _manualStatusKey = null;
+    _manualStatusArg = null;
+
+    final token = _gameToken;
+    _manualResolveTimer = Timer(const Duration(milliseconds: 400), () {
+      if (!mounted || _gameToken != token) return;
+      unawaited(_resolveManual(token));
+    });
+  }
+
+  /// Works out whether this game has a manual, cheapest answer first: the link
+  /// row, then the cache (which answers offline), then — only for a rom id
+  /// nothing is memoized for — RomM's detail endpoint.
+  // Governing: ADR-0017 (view RomM manuals and notes on device), SPEC-0017 REQ "Manual Availability"
+  Future<void> _resolveManual(String token) async {
+    try {
+      final mapping = await RommSaveMapRepository.getMapping(
+        widget.game.romname,
+        widget.system.folderName,
+      );
+      if (!mounted || _gameToken != token || mapping == null) return;
+
+      final romId = mapping.rommRomId;
+      final cached = await RommManualCache.cachedPathFor(
+        mediaRoot: widget.fileProvider.getMediaDirectoryPath(),
+        romId: romId,
+      );
+      if (!mounted || _gameToken != token) return;
+
+      final memoized = _manualByRomId[romId];
+      setState(() {
+        _manualRomId = romId;
+        _manualCachedPath = cached;
+        _manualMeta = memoized ?? RommManual.fromPath(cached);
+      });
+
+      // A memoized answer — including a memoized "no manual" — is final for
+      // this run; nothing more to ask.
+      if (_manualByRomId.containsKey(romId)) return;
+
+      final romm = context.read<RommProvider>();
+      if (!romm.isConnected) return;
+
+      final rom = await romm.service.getRom(romId);
+      // Only the manual is memoized here, not the whole ROM: this runs for
+      // every game the cursor rests on, and holding a detail object per row
+      // would grow with the library.
+      _rememberManual(romId, rom.manual);
+      if (!mounted || _gameToken != token) return;
+      setState(() => _manualMeta = rom.manual ?? _manualMeta);
+    } catch (e) {
+      _log.w(
+        'Manual availability lookup failed: '
+        'game=${widget.game.romname} system=${widget.system.folderName} '
+        'error=$e',
+      );
+    }
+  }
+
+  /// Opens the manual, downloading it first when it is not already cached.
+  ///
+  /// With [refresh] the cached copy is ignored and the file is fetched again;
+  /// without it a cached manual opens with **no request at all**, which is
+  /// what makes a manual readable with the server unreachable.
+  // Governing: ADR-0017 (view RomM manuals and notes on device), SPEC-0017 REQ "Manual Download And Cache"
+  Future<void> _openManual({bool refresh = false}) async {
+    if (_manualBusy) return;
+    final romId = _manualRomId;
+    if (romId == null) return;
+
+    final meta = _manualMeta;
+    if (meta != null && !meta.isSupported) {
+      setState(() {
+        _manualStatusKey = AppLocale.manualUnsupportedType;
+        _manualStatusArg = meta.extension;
+      });
+      return;
+    }
+
+    final mediaRoot = widget.fileProvider.getMediaDirectoryPath();
+    if (!refresh) {
+      final cached =
+          _manualCachedPath ??
+          await RommManualCache.cachedPathFor(
+            mediaRoot: mediaRoot,
+            romId: romId,
+          );
+      if (!mounted) return;
+      if (cached != null) {
+        setState(() => _manualCachedPath = cached);
+        await _showManual(cached);
+        return;
+      }
+    }
+
+    final romm = context.read<RommProvider>();
+    if (!romm.isConnected) {
+      setState(() {
+        _manualStatusKey = AppLocale.manualNotAvailable;
+        _manualStatusArg = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _manualBusy = true;
+      _manualStatusKey = AppLocale.manualDownloading;
+      _manualStatusArg = null;
+    });
+    try {
+      var rom = _rommRomById[romId];
+      if (rom == null || refresh) {
+        rom = await romm.service.getRom(romId);
+        _rommRomById[romId] = rom;
+        _rememberManual(romId, rom.manual);
+      }
+      final manual = rom.manual;
+      if (manual == null) {
+        throw RommException('No manual for rom $romId');
+      }
+      if (!manual.isSupported) {
+        if (!mounted) return;
+        setState(() {
+          _manualBusy = false;
+          _manualStatusKey = AppLocale.manualUnsupportedType;
+          _manualStatusArg = manual.extension;
+        });
+        return;
+      }
+
+      final path = await RommManualCache.ensure(
+        service: romm.service,
+        rom: rom,
+        mediaRoot: mediaRoot,
+        refresh: refresh,
+      );
+      if (!mounted) return;
+      setState(() {
+        _manualBusy = false;
+        _manualCachedPath = path;
+        _manualMeta = manual;
+        _manualStatusKey = null;
+      });
+      await _showManual(path);
+    } catch (e) {
+      _log.w('Manual open failed: rom=$romId refresh=$refresh error=$e');
+      if (!mounted) return;
+      setState(() {
+        _manualBusy = false;
+        _manualStatusKey = AppLocale.manualNotAvailable;
+        _manualStatusArg = null;
+      });
+    }
+  }
+
+  /// Pushes the viewer for an on-disk manual. Returning from it (B) leaves the
+  /// action that opened it focused, because nothing here moves the cursor.
+  // Governing: ADR-0017 (view RomM manuals and notes on device), SPEC-0017 REQ "Manual Viewer"
+  Future<void> _showManual(String filePath) async {
+    final manual = RommManual.fromPath(filePath);
+    if (manual == null || !manual.isSupported) {
+      setState(() {
+        _manualStatusKey = AppLocale.manualUnsupportedType;
+        _manualStatusArg = manual?.extension ?? '';
+      });
+      return;
+    }
+    await ManualViewerScreen.show(
+      context,
+      filePath: filePath,
+      kind: manual.kind,
+      title: widget.game.romname,
+    );
+  }
+
+  /// The header actions the D-pad can reach, in the order they are drawn.
+  // Governing: ADR-0017 (view RomM manuals and notes on device), SPEC-0017 REQ "Manual Availability"
+  List<_HeaderAction> _headerActions() {
+    if (!_hasManual) return const [];
+    return [
+      _HeaderAction(label: AppLocale.manual, onTap: _openManual),
+      if (_canRefreshManual)
+        _HeaderAction(
+          label: AppLocale.manualRefresh,
+          onTap: () => _openManual(refresh: true),
+        ),
+    ];
+  }
+
+  /// The actions row, or nothing when this game has no manual.
+  Widget _buildHeaderActions() {
+    final actions = _headerActions();
+    if (actions.isEmpty) return const SizedBox.shrink();
+
+    final scheme = Theme.of(context).colorScheme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < actions.length; i++) ...[
+          if (i > 0) SizedBox(width: 4.r),
+          HeaderActionButton(
+            label: actions[i].label.getString(context).toUpperCase(),
+            onTap: actions[i].onTap,
+            backgroundColor: scheme.surfaceContainerHighest,
+            foregroundColor: scheme.onSurface,
+            isFocused: _isPanelActive && _headerFocusIndex == i,
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// The one-line manual status, or nothing when there is none to show.
+  Widget _buildManualStatus() {
+    final key = _manualStatusKey;
+    if (key == null) return const SizedBox.shrink();
+    var text = key.getString(context);
+    final arg = _manualStatusArg;
+    if (arg != null) text = text.replaceFirst('{extension}', arg);
+    return Padding(
+      padding: EdgeInsets.only(top: 4.r),
+      child: Text(
+        text,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 9.r,
+          color: key == AppLocale.manualDownloading
+              ? Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7)
+              : Theme.of(context).colorScheme.error,
+        ),
+      ),
+    );
   }
 
   @override
@@ -311,9 +707,13 @@ class GameDetailsGameInfoTabState extends State<GameDetailsGameInfoTab> {
                                 children: headerFacts,
                               ),
                             ),
-                          ),
+                          )
+                        else
+                          const Spacer(),
+                        _buildHeaderActions(),
                       ],
                     ),
+                    _buildManualStatus(),
                     Divider(
                       color: Theme.of(
                         context,
@@ -532,4 +932,13 @@ class _InfoPill extends StatelessWidget {
       ),
     );
   }
+}
+
+/// One reachable action in the info panel's header row.
+class _HeaderAction {
+  /// [AppLocale] key, resolved at build time.
+  final String label;
+  final VoidCallback onTap;
+
+  const _HeaderAction({required this.label, required this.onTap});
 }

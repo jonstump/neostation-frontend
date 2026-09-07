@@ -1145,11 +1145,34 @@ class RommService {
     required String destFilePath,
     void Function(int received, int? total)? onProgress,
     bool Function()? shouldCancel,
-  }) async {
+  }) {
     final fileName = rom.fsName.isNotEmpty ? rom.fsName : '${rom.id}';
-    final endpoint =
-        '/api/roms/${rom.id}/content/${Uri.encodeComponent(fileName)}';
+    return _streamToFile(
+      '/api/roms/${rom.id}/content/${Uri.encodeComponent(fileName)}',
+      destFilePath: destFilePath,
+      onProgress: onProgress,
+      shouldCancel: shouldCancel,
+    );
+  }
 
+  /// Streams the server-relative [endpoint] to [destFilePath].
+  ///
+  /// The shared body of every streamed download: [downloadRom] and
+  /// [downloadManual] differ only in the route they ask for. Writes to a
+  /// sibling `.part` temp file and renames it into place only on success, so
+  /// partial/cancelled downloads never leave a usable-looking file, and builds
+  /// a fresh request per attempt so the shared auth retry picks up a new token
+  /// on its second try.
+  ///
+  /// [endpoint] must already be percent-encoded — it is appended to the base
+  /// URL verbatim.
+  // Governing: ADR-0017 (view RomM manuals and notes on device), SPEC-0017 REQ "Manual Download And Cache"
+  Future<void> _streamToFile(
+    String endpoint, {
+    required String destFilePath,
+    void Function(int received, int? total)? onProgress,
+    bool Function()? shouldCancel,
+  }) async {
     final tmpPath = '$destFilePath.part';
     final tmpFile = File(tmpPath);
     if (await tmpFile.exists()) {
@@ -1207,6 +1230,83 @@ class RommService {
     }
     await tmpFile.rename(destFilePath);
     _log.i('RomM download complete: $destFilePath ($received bytes)');
+  }
+
+  // ── Manuals ──────────────────────────────────────────────────────────────
+
+  /// Absolute URL of [rom]'s manual on the static resource route, or null when
+  /// the ROM has no manual (or the service has no server yet).
+  ///
+  /// RomM serves manuals from `<base>/assets/romm/resources/<path_manual>`.
+  /// The path is stored raw — real file names, spaces and `#` included — so it
+  /// is percent-encoded segment by segment here, exactly as [_assetUri] does
+  /// for save/state paths.
+  // Governing: ADR-0017 (view RomM manuals and notes on device), SPEC-0017 REQ "Manual Availability"
+  String? manualUrlFor(RommRom rom) {
+    final endpoint = _manualEndpoint(rom);
+    return endpoint == null ? null : '$_baseUrl$endpoint';
+  }
+
+  /// The encoded, server-relative manual route for [rom], or null when there
+  /// is no manual to ask for.
+  String? _manualEndpoint(RommRom rom) {
+    final manual = rom.manual;
+    if (manual == null) return null;
+    final encoded = manual.path.split('/').map(Uri.encodeComponent).join('/');
+    return '/assets/romm/resources/$encoded';
+  }
+
+  /// Streams [rom]'s manual into [destFilePath].
+  ///
+  /// Refuses anything but `.pdf`, `.txt` and `.md` *before* a request: the
+  /// viewer has no way to show the rest, and a refusal that costs no bytes is
+  /// the one the UI can turn into a message immediately. The caller decides
+  /// where the file lands (`RommManualCache` puts it under
+  /// `<mediaCache>/manuals/<romId>.<ext>`); this only streams.
+  ///
+  /// Throws [RommException] with the HTTP status attached — a manual RomM no
+  /// longer has answers 404, which is what "manual not available" is made of.
+  // Governing: ADR-0017 (view RomM manuals and notes on device), SPEC-0017 REQ "Manual Download And Cache"
+  Future<void> downloadManual(
+    RommRom rom, {
+    required String destFilePath,
+    void Function(int received, int? total)? onProgress,
+    bool Function()? shouldCancel,
+  }) async {
+    final manual = rom.manual;
+    final endpoint = _manualEndpoint(rom);
+    if (manual == null || endpoint == null) {
+      _log.w('RomM manual download refused: rom=${rom.id} reason=no_manual');
+      throw RommException('No manual for rom ${rom.id}');
+    }
+    if (!manual.isSupported) {
+      _log.w(
+        'RomM manual download refused: rom=${rom.id} '
+        'reason=unsupported_type ext=${manual.extension}',
+      );
+      throw RommException(
+        'Unsupported manual type ".${manual.extension}" for rom ${rom.id}',
+      );
+    }
+
+    try {
+      await _streamToFile(
+        endpoint,
+        destFilePath: destFilePath,
+        onProgress: onProgress,
+        shouldCancel: shouldCancel,
+      );
+    } on RommCancelledException {
+      rethrow;
+    } on RommException catch (e) {
+      // One warning, naming the URL and the status, per SPEC-0017 REQ "Error
+      // Handling Standards" — then the failure goes back to the caller intact.
+      _log.w(
+        'RomM manual download failed: rom=${rom.id} '
+        'status=${e.statusCode} url=$_baseUrl$endpoint',
+      );
+      rethrow;
+    }
   }
 
   // ── Saves & states (asset sync) ──────────────────────────────────────────

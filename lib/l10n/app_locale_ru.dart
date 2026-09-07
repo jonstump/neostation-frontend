@@ -1447,4 +1447,15 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.collectionUnlinkRomm: 'Отвязать от RomM',
   AppLocale.collectionUnlinkRommConfirm:
       'Эта коллекция больше не будет следовать за коллекцией RomM. Её игры останутся.',
+  AppLocale.manual: 'Руководство',
+  AppLocale.manualRefresh: 'Обновить руководство',
+  AppLocale.manualDownloading: 'Загрузка руководства…',
+  AppLocale.manualNotAvailable: 'Руководство недоступно',
+  AppLocale.manualUnsupportedType:
+      'Это руководство — файл .{extension}, его нельзя показать здесь',
+  AppLocale.manualOpenExternally: 'Открыть во внешнем приложении',
+  AppLocale.manualPageIndicator: '{page}/{total}',
+  AppLocale.manualRenderFailed: 'Не удалось показать это руководство',
+  AppLocale.manualOpenExternallyFailed:
+      'Ни одно приложение на этом устройстве не смогло открыть руководство',
 };

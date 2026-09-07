@@ -35,6 +35,13 @@ This project includes or depends on the following third-party software:
   See: packages/flutter_chd/LICENSE
   See: packages/flutter_chd/src/libchdr/deps
 
+- PDFium (bundled as a native library by the pdfrx / pdfium_flutter /
+  pdfium_dart packages, used to render RomM game manuals)
+  PDFium is licensed under the BSD 3-Clause License by The PDFium Authors;
+  the pdfrx packages that wrap it are MIT.
+  See: https://pdfium.googlesource.com/pdfium/+/refs/heads/main/LICENSE
+  See: https://github.com/espresso3389/pdfrx/blob/master/LICENSE
+
 For full attribution and licensing details of all dependencies,
 please refer to the respective package repositories and license files.
 

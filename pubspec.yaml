@@ -68,6 +68,7 @@ dependencies:
   flutter_localization: ^0.4.1
   flutter_tilt: ^4.1.0
   mobile_scanner: 7.4.0
+  pdfrx: ^2.6.1
 
 dev_dependencies:
   flutter_test:

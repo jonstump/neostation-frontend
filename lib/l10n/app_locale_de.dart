@@ -1490,4 +1490,15 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.collectionUnlinkRomm: 'Von RomM trennen',
   AppLocale.collectionUnlinkRommConfirm:
       'Diese Sammlung folgt der RomM-Sammlung nicht mehr. Ihre Spiele bleiben erhalten.',
+  AppLocale.manual: 'Handbuch',
+  AppLocale.manualRefresh: 'Handbuch aktualisieren',
+  AppLocale.manualDownloading: 'Handbuch wird heruntergeladen…',
+  AppLocale.manualNotAvailable: 'Handbuch nicht verfügbar',
+  AppLocale.manualUnsupportedType:
+      'Dieses Handbuch ist eine .{extension}-Datei und kann hier nicht angezeigt werden',
+  AppLocale.manualOpenExternally: 'Extern öffnen',
+  AppLocale.manualPageIndicator: '{page}/{total}',
+  AppLocale.manualRenderFailed: 'Dieses Handbuch konnte nicht angezeigt werden',
+  AppLocale.manualOpenExternallyFailed:
+      'Keine App auf diesem Gerät konnte das Handbuch öffnen',
 };

@@ -1431,4 +1431,15 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.collectionUnlinkRomm: 'Unlink from RomM',
   AppLocale.collectionUnlinkRommConfirm:
       'This collection will stop following the RomM collection. Its games stay.',
+  AppLocale.manual: 'Manual',
+  AppLocale.manualRefresh: 'Refresh manual',
+  AppLocale.manualDownloading: 'Downloading manual…',
+  AppLocale.manualNotAvailable: 'Manual not available',
+  AppLocale.manualUnsupportedType:
+      'This manual is a .{extension} file, which cannot be shown here',
+  AppLocale.manualOpenExternally: 'Open externally',
+  AppLocale.manualPageIndicator: '{page}/{total}',
+  AppLocale.manualRenderFailed: 'This manual could not be displayed',
+  AppLocale.manualOpenExternallyFailed:
+      'No app on this device could open the manual',
 };

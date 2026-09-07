@@ -1318,4 +1318,13 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.collectionUnlinkRomm: 'RomM 연결 해제',
   AppLocale.collectionUnlinkRommConfirm:
       '이 컬렉션은 더 이상 RomM 컬렉션을 따르지 않습니다. 게임은 그대로 유지됩니다.',
+  AppLocale.manual: '매뉴얼',
+  AppLocale.manualRefresh: '매뉴얼 새로고침',
+  AppLocale.manualDownloading: '매뉴얼 다운로드 중…',
+  AppLocale.manualNotAvailable: '매뉴얼을 사용할 수 없음',
+  AppLocale.manualUnsupportedType: '이 매뉴얼은 .{extension} 파일이라 여기에서 표시할 수 없습니다',
+  AppLocale.manualOpenExternally: '외부 앱으로 열기',
+  AppLocale.manualPageIndicator: '{page}/{total}',
+  AppLocale.manualRenderFailed: '이 매뉴얼을 표시할 수 없습니다',
+  AppLocale.manualOpenExternallyFailed: '이 기기에서 매뉴얼을 열 수 있는 앱이 없습니다',
 };

@@ -1446,4 +1446,15 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.collectionUnlinkRomm: 'Putuskan tautan dari RomM',
   AppLocale.collectionUnlinkRommConfirm:
       'Koleksi ini tidak akan lagi mengikuti koleksi RomM. Gim di dalamnya tetap ada.',
+  AppLocale.manual: 'Manual',
+  AppLocale.manualRefresh: 'Segarkan manual',
+  AppLocale.manualDownloading: 'Mengunduh manual…',
+  AppLocale.manualNotAvailable: 'Manual tidak tersedia',
+  AppLocale.manualUnsupportedType:
+      'Manual ini berupa berkas .{extension} dan tidak dapat ditampilkan di sini',
+  AppLocale.manualOpenExternally: 'Buka di aplikasi lain',
+  AppLocale.manualPageIndicator: '{page}/{total}',
+  AppLocale.manualRenderFailed: 'Manual ini tidak dapat ditampilkan',
+  AppLocale.manualOpenExternallyFailed:
+      'Tidak ada aplikasi di perangkat ini yang dapat membuka manual',
 };
