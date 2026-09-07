@@ -850,9 +850,34 @@ class RomMSyncProvider extends ChangeNotifier
   /// These must abort the sync with an error status; swallowing them to a
   /// `false` (no-op) return would make a dropped save look like a clean,
   /// up-to-date sync — silently losing the user's progress.
+  ///
+  /// A [RommAuthException] is deliberately excluded: the shared retry
+  /// re-authenticates on a 403 and a *rejected credential* throws 403 out of
+  /// that step, so treating every 403 here as a scope problem told a user who
+  /// had changed their RomM password that their account may not touch their
+  /// saves. It is still fatal — see [isCredentialRejected] — just not this.
+  // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "Error Handling Standards"
   @visibleForTesting
   static bool isPermissionDenied(Object e) =>
-      e is RommException && e.statusCode == 403;
+      e is RommException && e is! RommAuthException && e.statusCode == 403;
+
+  /// The server rejected the *credential itself* — a changed password, a
+  /// revoked API key — rather than refusing one endpoint to a valid login.
+  ///
+  /// Every remaining game would fail identically, and swallowing it would make
+  /// a dropped save read as a clean sync, so it aborts exactly as a permission
+  /// denial does. Told apart from one only so the log and the reported error
+  /// name the right cause.
+  // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "Error Handling Standards"
+  @visibleForTesting
+  static bool isCredentialRejected(Object e) => e is RommAuthException;
+
+  /// Every authorization failure a per-file sync must abort on rather than
+  /// swallow into a no-op: the account may not (permission denied), or the
+  /// login itself is no longer valid (credential rejected).
+  @visibleForTesting
+  static bool isFatalAuthFailure(Object e) =>
+      isPermissionDenied(e) || isCredentialRejected(e);
 
   /// The local file's first four bytes, as a zip archive would start them.
   static const List<int> _zipMagic = [0x50, 0x4B, 0x03, 0x04];
@@ -1003,7 +1028,7 @@ class RomMSyncProvider extends ChangeNotifier
     try {
       bytes = await _fetchAssetBytes(match);
     } catch (e) {
-      if (isPermissionDenied(e)) rethrow;
+      if (isFatalAuthFailure(e)) rethrow;
       _log.e('RomM conflict guard: cannot read ${match.fileName}: $e');
       return _RemoteGuard.unreadable;
     }
@@ -1131,7 +1156,7 @@ class RomMSyncProvider extends ChangeNotifier
       );
       return true;
     } catch (e) {
-      if (isPermissionDenied(e)) rethrow;
+      if (isFatalAuthFailure(e)) rethrow;
       _log.e('RomM upload failed (${local.filePath}): $e');
       return false;
     }
@@ -1256,7 +1281,7 @@ class RomMSyncProvider extends ChangeNotifier
       }
       return (wrote: wroteAny, coreMismatch: skippedCoreMismatch);
     } catch (e) {
-      if (isPermissionDenied(e)) rethrow;
+      if (isFatalAuthFailure(e)) rethrow;
       _log.e('RomM download failed (${asset.fileName}): $e');
       return (wrote: false, coreMismatch: skippedCoreMismatch);
     }
@@ -1266,7 +1291,7 @@ class RomMSyncProvider extends ChangeNotifier
 
   /// Records [game] as failed in the visible sync state and returns the matching
   /// fail result. Used by every per-game sync entry point so a hard failure
-  /// (notably a RomM 5.0 permission denial that [isPermissionDenied] let bubble
+  /// (notably an authorization failure that [isFatalAuthFailure] let bubble
   /// up) surfaces as an error state instead of leaving stale state that would
   /// read as a clean, up-to-date sync.
   SyncResult _failGame(GameModel game, Object error) {
@@ -1515,9 +1540,10 @@ class RomMSyncProvider extends ChangeNotifier
   /// pending therefore costs no network at all, which is what makes this safe to
   /// fire automatically.
   ///
-  /// Never throws. A game that fails is counted and stepped over — except a
-  /// permission denial, which would fail identically for every remaining game
-  /// and so ends the sweep.
+  /// Never throws. A game that fails is counted and stepped over — except an
+  /// authorization failure (permission denied, or the credential itself
+  /// rejected), which would fail identically for every remaining game and so
+  /// ends the sweep.
   Future<SyncResult> retryPendingUploads() async {
     if (!_browse.isConnected) return SyncResult.fail(SyncError.authRequired);
     // Not an error: whichever call got here first is doing the same work.
@@ -1559,8 +1585,12 @@ class RomMSyncProvider extends ChangeNotifier
           _gameSyncStates[game.romname] = _buildState(game, status);
           touched.add(game.romname);
         } catch (e) {
-          if (isPermissionDenied(e)) {
-            _log.e('RomM upload sweep: permission denied, stopping: $e');
+          if (isFatalAuthFailure(e)) {
+            _log.e(
+              'RomM upload sweep: '
+              '${isCredentialRejected(e) ? 'credential rejected' : 'permission denied'}'
+              ', stopping: $e',
+            );
             _gameSyncStates[game.romname] = _buildState(
               game,
               GameSyncStatus.error,
@@ -1736,12 +1766,18 @@ class RomMSyncProvider extends ChangeNotifier
       // connect and the reconnect hook behave identically.
       // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Refresh Shares The Walk"
       final refreshed = await refreshCatalog(reason: RommRefreshReason.connect);
-      if (refreshed != null && refreshed.ran) return refreshed.linkSummary;
+      if (refreshed != null && refreshed.ran && !refreshed.linkStageFailed) {
+        return refreshed.linkSummary;
+      }
       // The refresh did nothing: the hourly guard, no server, another walk
-      // already in flight, or a failure. The catalog's guard must never become
-      // a guard on the link pass, which predates it and is a MUST on every
-      // connect — so the pass walks on its own, with its own early exit when
-      // nothing is unlinked.
+      // already in flight, or a failure. It may also have walked while the
+      // link stage refused to open (a library read that threw), which is a
+      // walk the pass did not get to ride — the one case where a refresh that
+      // `ran` still owes a pass.
+      //
+      // The catalog's guard must never become a guard on the link pass, which
+      // predates it and is a MUST on every connect — so the pass walks on its
+      // own, with its own early exit when nothing is unlinked.
       // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Connect-Time Link Pass"
       final summary = await _linker.run();
       if (summary.linkedRomnames.isNotEmpty) {

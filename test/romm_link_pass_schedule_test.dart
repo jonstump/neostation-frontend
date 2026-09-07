@@ -120,6 +120,12 @@ class _FakeRefresh extends RommCatalogRefresh {
   final List<RommRefreshReason> reasons = [];
   RommCatalogRefreshSummary result = const RommCatalogRefreshSummary();
 
+  /// Thrown instead of answering, for the failure paths the provider swallows
+  /// to a null.
+  Object? failure;
+
+  Completer<void>? _gate;
+
   _FakeRefresh()
     : super(
         listPlatforms: () async => const [],
@@ -129,11 +135,18 @@ class _FakeRefresh extends RommCatalogRefresh {
         serverUrl: () => 'https://romm.example',
       );
 
+  void hold() => _gate = Completer<void>();
+  void release() => _gate?.complete();
+
   @override
   Future<RommCatalogRefreshSummary> run({
     RommRefreshReason reason = RommRefreshReason.scheduled,
   }) async {
     reasons.add(reason);
+    final gate = _gate;
+    if (gate != null) await gate.future;
+    final fail = failure;
+    if (fail != null) throw fail;
     return result;
   }
 }
@@ -334,10 +347,10 @@ void main() {
       expect(browse.cacheInvalidations, 1);
     });
 
-    // The provider-level guards (no server, another walk in flight) answer
-    // null rather than a summary; that is a skip too.
+    // The refresh's own no-server skip: nothing is configured, so it answers
+    // a skip rather than a summary and the pass walks on its own.
     // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Connect-Time Link Pass"
-    test('a refresh the provider refused still runs the link pass', () async {
+    test('a refresh with no server url still runs the link pass', () async {
       await build(autoSweep: false);
       browse.connected = true;
 
@@ -543,6 +556,117 @@ void main() {
         );
       },
     );
+
+    // Every path on which `refreshCatalog` answers null rather than a
+    // summary. Each one leaves the connect-time link pass unserved, and
+    // SPEC-0001 makes that pass a MUST on every connect — so each must fall
+    // through to the standalone walk. The blocking finding this group exists
+    // for was fixed once by reading the code; these hold it fixed.
+    // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Connect-Time Link Pass"
+    // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Refresh Shares The Walk"
+    group('a refusal by the provider still runs the link pass', () {
+      test('a refresh already in flight', () async {
+        final refresh = _FakeRefresh()..hold();
+        await build(autoSweep: false, withRefresh: refresh);
+        browse.connected = true;
+
+        // Holds `_refreshing`, so the pass's own refresh is refused.
+        final held = provider.refreshCatalog(
+          reason: RommRefreshReason.scheduled,
+        );
+        await pumpEventQueue();
+
+        await provider.linkLibrary();
+
+        expect(linker.runs, 1, reason: 'the pass walked on its own');
+        expect(refresh.reasons, [RommRefreshReason.scheduled]);
+        refresh.release();
+        await held;
+      });
+
+      test('a refresh that threw', () async {
+        final refresh = _FakeRefresh()
+          ..failure = const RommCatalogRefreshException(
+            'platform enumeration failed',
+            'boom',
+          );
+        await build(autoSweep: false, withRefresh: refresh);
+        browse.connected = true;
+
+        final summary = await provider.linkLibrary();
+
+        expect(linker.runs, 1);
+        expect(summary, isNotNull, reason: 'the standalone pass answered');
+      });
+
+      test('a disposed provider', () async {
+        final refresh = _FakeRefresh();
+        await build(autoSweep: false, withRefresh: refresh);
+        browse.connected = true;
+        provider.dispose();
+
+        await provider.linkLibrary();
+
+        expect(refresh.reasons, isEmpty, reason: 'no walk after dispose');
+        expect(linker.runs, 1);
+      });
+
+      // The walk happened but the link stage never opened — a local library
+      // read that threw. The refresh `ran`, so the old condition returned its
+      // (null) link summary and the connect linked nothing at all.
+      test('a walk whose link stage could not start', () async {
+        final refresh = _FakeRefresh();
+        refresh.result = const RommCatalogRefreshSummary(linkStageFailed: true);
+        await build(autoSweep: false, withRefresh: refresh);
+        browse.connected = true;
+
+        await provider.linkLibrary();
+
+        expect(refresh.reasons, [RommRefreshReason.connect]);
+        expect(
+          linker.runs,
+          1,
+          reason: 'the walk carried no pass, so the pass is still owed',
+        );
+      });
+    });
+
+    // The two guards `linkLibrary` never reaches, because it refuses first.
+    // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Concurrency Safety"
+    group('refreshCatalog refuses', () {
+      test('when disconnected', () async {
+        final refresh = _FakeRefresh();
+        await build(autoSweep: false, withRefresh: refresh);
+
+        expect(
+          await provider.refreshCatalog(reason: RommRefreshReason.scheduled),
+          isNull,
+        );
+        expect(refresh.reasons, isEmpty);
+      });
+
+      test('while a bulk ROM sync is walking the same server', () async {
+        final refresh = _FakeRefresh();
+        await build(autoSweep: false, withRefresh: refresh);
+        browse.connected = true;
+        final firstPage = Completer<RommRomPage>();
+        final sync = browse.bulkSync.run(
+          sourceLabel: 'SNES',
+          fetchPage: ({required limit, required offset}) => firstPage.future,
+          isDownloaded: (_) async => false,
+          download: (_) async => throw UnimplementedError(),
+        );
+
+        expect(
+          await provider.refreshCatalog(reason: RommRefreshReason.scheduled),
+          isNull,
+        );
+        expect(refresh.reasons, isEmpty);
+
+        firstPage.complete(const RommRomPage(items: []));
+        await sync;
+      });
+    });
 
     test('a dispose mid-pass is not followed by a sweep', () async {
       await build();

@@ -30,10 +30,18 @@ typedef RommStopCheck = bool Function();
 
 /// How one platform's paging ended.
 enum RommWalkPlatformOutcome {
-  /// Every page was fetched (or the page cap was reached).
+  /// Every page the server has was fetched.
   completed,
 
-  /// A page request threw; the platform has not been fully seen.
+  /// A page request threw, or the page cap cut the paging short; either way
+  /// the platform has not been fully seen.
+  ///
+  /// The cap counts as a failure on purpose. Consumers read `completed` as
+  /// "this is the whole platform" and act destructively on it — the catalog
+  /// refresh deletes every row the run did not stamp — so a truncated walk
+  /// reported as complete prunes the catalog down to the cap and throws away
+  /// ROMs that are still on the server.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Refresh Shares The Walk"
   failed,
 
   /// The stop check fired before the platform finished.
@@ -63,7 +71,8 @@ class RommWalkResult {
   /// Platforms with no local system, named in [unresolvedSlugs].
   final int platformsUnresolved;
 
-  /// Platforms that threw part-way.
+  /// Platforms that threw part-way, or that the page cap cut short — either
+  /// way not fully seen, and never treated as complete.
   final int platformFailures;
 
   /// Server ROMs handed to the consumers, across every page fetched.
@@ -311,10 +320,16 @@ class RommPlatformWalk {
         return RommWalkPlatformOutcome.completed;
       }
     }
+    // Everything paged so far is kept — the pages already handed to the
+    // callbacks are good data — but the platform is *not* complete, and
+    // saying otherwise would let a consumer treat the truncation as the whole
+    // server: the catalog refresh would prune every row past the cap.
+    // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Refresh Shares The Walk"
     _log.w(
-      '$logLabel platform "${platform.slug}" hit the $pageCap-page cap, '
-      'using what was seen',
+      '$logLabel platform "${platform.slug}" (id ${platform.id}) hit the '
+      '$pageCap-page cap at offset $offset; keeping what was seen and '
+      'treating the platform as incomplete, so its rows are left alone',
     );
-    return RommWalkPlatformOutcome.completed;
+    return RommWalkPlatformOutcome.failed;
   }
 }

@@ -101,6 +101,15 @@ class RommCatalogRefreshSummary {
   /// What the link stage did, when one rode along.
   final RommLinkPassSummary? linkSummary;
 
+  /// True when the link stage could not be opened at all because the linker
+  /// threw — the catalog walked without it, so this run linked nothing and the
+  /// connect-time link pass (SPEC-0001) still owes its caller a run.
+  ///
+  /// Distinct from a null [linkSummary], which is also what a stage that had
+  /// nothing to do produces: only this says the pass was *owed* and missed.
+  // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Connect-Time Link Pass"
+  final bool linkStageFailed;
+
   const RommCatalogRefreshSummary({
     this.skipped,
     this.platformsProcessed = 0,
@@ -111,6 +120,7 @@ class RommCatalogRefreshSummary {
     this.stoppedEarly = false,
     this.elapsed = Duration.zero,
     this.linkSummary,
+    this.linkStageFailed = false,
   });
 
   /// True when the run walked the server rather than being skipped.
@@ -222,31 +232,40 @@ class RommCatalogRefresh {
         skipped: RommRefreshSkip.alreadyRunning,
       );
     }
-    final serverUrl = _serverUrl();
-    if (serverUrl.isEmpty) {
-      _log.i('$logLabel skipped: reason=${reason.name} cause=no_server');
-      return const RommCatalogRefreshSummary(skipped: RommRefreshSkip.noServer);
-    }
-
-    final started = _clock();
-    if (!reason.bypassesGuard) {
-      final newest = await _newestRefreshedAt(serverUrl);
-      if (newest != null &&
-          started.toUtc().difference(newest) < minInterval &&
-          !started.toUtc().isBefore(newest)) {
-        _log.i(
-          '$logLabel skipped: reason=${reason.name} cause=too_soon '
-          'last_refresh=${newest.toIso8601String()} '
-          'min_interval_minutes=${minInterval.inMinutes}',
-        );
-        return const RommCatalogRefreshSummary(
-          skipped: RommRefreshSkip.tooSoon,
-        );
-      }
-    }
-
+    // Claimed here, before the first `await`, and released by the `finally`
+    // below whatever the outcome. Reading the last-refresh stamp suspends, so
+    // a flag set only after it left the guard open across that gap: two
+    // callers both saw `false` and both walked the server. Nothing but
+    // `RomMSyncProvider._refreshing` stopped that in production, which made
+    // this class's own guard decorative.
+    // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Concurrency Safety"
     _running = true;
     try {
+      final serverUrl = _serverUrl();
+      if (serverUrl.isEmpty) {
+        _log.i('$logLabel skipped: reason=${reason.name} cause=no_server');
+        return const RommCatalogRefreshSummary(
+          skipped: RommRefreshSkip.noServer,
+        );
+      }
+
+      final started = _clock();
+      if (!reason.bypassesGuard) {
+        final newest = await _newestRefreshedAt(serverUrl);
+        if (newest != null &&
+            started.toUtc().difference(newest) < minInterval &&
+            !started.toUtc().isBefore(newest)) {
+          _log.i(
+            '$logLabel skipped: reason=${reason.name} cause=too_soon '
+            'last_refresh=${newest.toIso8601String()} '
+            'min_interval_minutes=${minInterval.inMinutes}',
+          );
+          return const RommCatalogRefreshSummary(
+            skipped: RommRefreshSkip.tooSoon,
+          );
+        }
+      }
+
       return await _run(reason: reason, serverUrl: serverUrl, started: started);
     } finally {
       _running = false;
@@ -264,12 +283,17 @@ class RommCatalogRefresh {
     // early exit that used to skip the walk altogether.
     // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Connect-Time Link Pass"
     RommLinkStage? stage;
+    var linkStageFailed = false;
     try {
       stage = await _linker?.beginStage();
     } on RommLinkPassException catch (e) {
       // The link stage needs the local library; the catalog does not. Log it
-      // once and walk anyway.
+      // once and walk anyway — but say so in the summary, because the walk
+      // that carried the pass has now happened and the pass has not, and its
+      // caller has to make it up with a standalone run.
       // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Error Handling Standards"
+      // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Connect-Time Link Pass"
+      linkStageFailed = true;
       _log.w('$logLabel: the link stage could not start: $e');
     }
 
@@ -382,6 +406,7 @@ class RommCatalogRefresh {
       stoppedEarly: result.stoppedEarly,
       elapsed: _clock().difference(started),
       linkSummary: linkSummary,
+      linkStageFailed: linkStageFailed,
     );
     _logSummary(summary, reason: reason);
     return summary;
