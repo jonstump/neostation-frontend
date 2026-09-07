@@ -371,7 +371,13 @@ class ConfigModel {
         'hide_bottom_screen',
         false,
       ),
-      videoSound: readBool(json, 'videoSound', 'video_sound', false),
+      // Absent => on, matching `user_config.video_sound INTEGER DEFAULT 1`,
+      // migration v24 (which mapped only the legacy text 'off' to 0), and
+      // `SqliteConfigService.loadConfig`. This was the last column whose two
+      // readers disagreed about a missing value (issue #150); the constructor
+      // default stays false because that is the pre-load / load-failed
+      // placeholder, where a muted preview is the quiet failure.
+      videoSound: readBool(json, 'videoSound', 'video_sound', true),
       // Read through [readBool] like every other flag. The old `??`-chain here
       // fell back to `1` in its *second* clause, so `{'sfxEnabled': false}` —
       // exactly what [toJson] writes — parsed back as `true` and SFX could not

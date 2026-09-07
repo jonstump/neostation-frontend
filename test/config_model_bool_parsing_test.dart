@@ -16,7 +16,7 @@ void main() {
     'ignoreHiddenFiles': (column: 'ignore_hidden_files', fallback: true),
     'setupCompleted': (column: 'setup_completed', fallback: false),
     'hideBottomScreen': (column: 'hide_bottom_screen', fallback: false),
-    'videoSound': (column: 'video_sound', fallback: false),
+    'videoSound': (column: 'video_sound', fallback: true),
     'sfxEnabled': (column: 'sfx_enabled', fallback: true),
     'use12HourClock': (column: 'use_12_hour_clock', fallback: false),
     'hideRecentCard': (column: 'hide_recent_card', fallback: false),
