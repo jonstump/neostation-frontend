@@ -1921,15 +1921,29 @@ class RommService {
   /// to hold [RommScopeGroup.romsWrite]; otherwise the ROM as RomM returned it
   /// after the update. Throws [RommException] with the endpoint and status on
   /// any other failure.
+  ///
+  /// A candidate with no name sends no `name` at all rather than a blank one,
+  /// for the same reason [applyRomCover] refuses an empty URL: RomM reads a
+  /// present-but-empty form field as a value, so a blank `name` would erase
+  /// the entry's title for every client of the server. The candidate is still
+  /// worth applying — its provider ids are what RomM re-matches on, and the
+  /// name it already holds is left alone.
   // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
   // SPEC-0018 REQ "Metadata Search And Apply"
   Future<RommRom?> applyRomMatch(int romId, RommSearchResult result) async {
     if (_scopeGated(RommScopeGroup.romsWrite)) return null;
     final cover = result.coverUrl;
+    final name = result.name.trim();
+    if (name.isEmpty) {
+      _log.w(
+        'RomM match update: rom=$romId omitting blank name '
+        'endpoint=/api/roms/$romId',
+      );
+    }
     final fields = <String, String>{
       for (final entry in result.providerIds.entries)
         entry.key: '${entry.value}',
-      'name': result.name,
+      if (name.isNotEmpty) 'name': name,
       if (cover != null && cover.isNotEmpty) 'url_cover': cover,
     };
     return _putRomForm(romId, fields, action: 'match');
@@ -1999,18 +2013,23 @@ class RommService {
   }) async {
     final uri = _uri('/api/roms/$romId');
 
+    // Capped like `_metadataSearchGet`: the body is a small form, and the
+    // dialog above this shows a modal the user cannot dismiss while a write is
+    // in flight, so a server that accepts the connection and never answers
+    // would otherwise strand a gamepad-only user with no way out.
+    // Governing: ADR-0019, SPEC-0018 REQ "Error Handling Standards"
     Future<http.StreamedResponse> send() async {
       final req = http.MultipartRequest('PUT', uri)
         ..headers.addAll(_authHeaders)
         ..fields.addAll(fields);
-      return _httpClient.send(req);
+      return _httpClient.send(req).timeout(_requestTimeout);
     }
 
     final resp = await _sendWithAuthRetry<http.StreamedResponse>(
       send,
       statusOf: (r) => r.statusCode,
     );
-    final body = await resp.stream.bytesToString();
+    final body = await resp.stream.bytesToString().timeout(_requestTimeout);
 
     if (resp.statusCode < 200 || resp.statusCode >= 300) {
       if (resp.statusCode == 403) {

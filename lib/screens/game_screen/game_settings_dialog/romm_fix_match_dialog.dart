@@ -177,11 +177,19 @@ class _RommFixMatchDialogState extends State<RommFixMatchDialog> {
     if (candidate != null) _confirmAndApply(candidate);
   }
 
-  /// B leaves the text field first, then closes. A write in flight ignores B:
-  /// the `PUT` is already on its way to the server and the replace-mode fetch
-  /// behind it is what makes the local row agree with it.
+  /// B leaves the text field first, then closes — including while a write is
+  /// in flight.
+  ///
+  /// The dialog is not dismissible by tapping the barrier, so B is the only
+  /// way out of it: refusing B while applying would strand a gamepad-only user
+  /// for as long as the server took to answer. Backing out only stops the
+  /// *waiting* — the `PUT` is already on its way and
+  /// [RommFixMatchController.apply] runs the replace-mode fetch behind it to
+  /// completion either way (it is disposal-safe), so the write and the local
+  /// row still agree. What is lost is the "applied" line, which is why B
+  /// during a write pops what has actually landed so far rather than `true`.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance), SPEC-0018 REQ "Fix Match In The Picker"
   void _handleBack() {
-    if (_controller.isApplying) return;
     if (_queryFocus.hasFocus) {
       _queryFocus.unfocus();
       return;
@@ -373,7 +381,34 @@ class _RommFixMatchDialogState extends State<RommFixMatchDialog> {
     );
   }
 
+  /// One centred line where the candidate list would be — loading, empty, and
+  /// the in-flight write all read the same way.
+  Widget _buildMessage(ThemeData theme, String message) {
+    return Padding(
+      padding: EdgeInsets.symmetric(vertical: 20.r),
+      child: Center(
+        child: Text(
+          message,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 11.r,
+            color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildResults(ThemeData theme) {
+    // A write is a modal moment: say what is happening rather than leaving the
+    // candidate list looking selectable while nothing responds to A.
+    if (_controller.isApplying) {
+      return _buildMessage(
+        theme,
+        AppLocale.rommFixMatchApplying.getString(context),
+      );
+    }
+
     if (_controller.status == RommFixStatus.error) {
       // A server with no provider configured is a different sentence from a
       // failed request: nothing the user does here will fix it.
@@ -396,20 +431,12 @@ class _RommFixMatchDialogState extends State<RommFixMatchDialog> {
     }
 
     if (_controller.results.isEmpty) {
-      final message = _controller.status == RommFixStatus.ready
-          ? AppLocale.rommFixMatchNoResults.getString(context)
-          : AppLocale.rommFixMatchLoading.getString(context);
-      return Padding(
-        padding: EdgeInsets.symmetric(vertical: 20.r),
-        child: Center(
-          child: Text(
-            message,
-            style: TextStyle(
-              fontSize: 11.r,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-            ),
-          ),
-        ),
+      return _buildMessage(
+        theme,
+        (_controller.status == RommFixStatus.ready
+                ? AppLocale.rommFixMatchNoResults
+                : AppLocale.rommFixMatchLoading)
+            .getString(context),
       );
     }
 

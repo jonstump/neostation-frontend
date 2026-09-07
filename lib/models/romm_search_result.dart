@@ -33,6 +33,15 @@ class RommSearchResult {
 
   /// Keys that look like a provider id but are not one: the ROM being fixed and
   /// the platform it sits on travel in the same object.
+  ///
+  /// This is a *deny* list over an `endsWith('_id')` rule, which assumes every
+  /// other `*_id` `/api/search/roms` answers with is a provider id — true of
+  /// every RomM release to date, and the whole point of collecting them
+  /// generically (a server that gains a provider needs no code change here).
+  /// The tail risk is the other direction: a future search schema that grew a
+  /// `user_id`, `collection_id` or `parent_id` would round-trip it into the
+  /// library-wide `PUT` [RommService.applyRomMatch] sends. Add such a key here
+  /// the moment RomM's search response gains one.
   static const Set<String> _notProviderIds = {'rom_id', 'platform_id', 'id'};
 
   /// Cover keys in the order they are preferred. `url_cover` is RomM's own

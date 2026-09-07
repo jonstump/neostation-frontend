@@ -281,6 +281,31 @@ void main() {
       expect(requests, isEmpty);
     });
 
+    test(
+      'a candidate with no name omits the field rather than blanking it',
+      () async {
+        // A blank `name` is not "leave it alone" to RomM: the field is present
+        // in the form, so it would erase the entry's title for every client of
+        // the server. Same hazard `applyRomCover` refuses an empty URL for.
+        // Governing: ADR-0019, SPEC-0018 REQ "Metadata Search And Apply"
+        final service = await connected();
+        final nameless = Map.of(candidate)..['name'] = '   ';
+
+        final updated = await service.applyRomMatch(
+          42,
+          RommSearchResult.fromJson(nameless),
+        );
+
+        // The write still happens: the provider ids are what RomM re-matches
+        // on, and the name it already holds survives untouched.
+        expect(updated, isNotNull);
+        expect(requests, hasLength(1));
+        final fields = multipartFields(requests.single);
+        expect(fields.containsKey('name'), isFalse);
+        expect(fields['igdb_id'], '123');
+      },
+    );
+
     test('a 403 records the denial and carries scopeDenied', () async {
       final service = await connected(updateStatus: 403);
 
