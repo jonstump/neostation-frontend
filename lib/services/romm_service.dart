@@ -190,6 +190,14 @@ class RommService {
   // Governing: ADR-0010, SPEC-0010 REQ "Heartbeat Probe"
   static const Duration _heartbeatTimeout = Duration(seconds: 5);
 
+  /// Cap on an ordinary request, the HTTPS→HTTP scheme fallback included.
+  ///
+  /// Like [_heartbeatTimeout] this is the budget for the whole call rather
+  /// than for one attempt: the login and pairing paths retry once over plain
+  /// HTTP, and a per-attempt cap let a TLS-misconfigured server keep a user
+  /// waiting for close to two minutes with no feedback.
+  static const Duration _requestTimeout = Duration(seconds: 30);
+
   /// Shared client that tolerates self-signed certificates (homelab servers).
   static final http.Client _sharedHttpClient = () {
     final inner = HttpClient()
@@ -345,17 +353,18 @@ class RommService {
     String? refreshToken,
     int? tokenExpiresMs,
   }) {
-    final previousUrl = _baseUrl;
-    _setServerUrl(serverUrl);
     // Capabilities describe the server, not the credentials: a different URL
-    // is a different server, so its heartbeat has to be fetched again. Editing
-    // the credentials for the same URL keeps what the last probe learned.
+    // is a different server, so [_setServerUrl] drops everything the last one
+    // taught this connection. Editing the credentials for the same URL keeps
+    // what the last probe learned.
     // Governing: ADR-0010, SPEC-0010 REQ "Heartbeat Probe"
-    if (_baseUrl != previousUrl) {
-      _capabilities = null;
-      _probed = false;
-      _gatesLogged.clear();
-    }
+    _setServerUrl(serverUrl);
+    // Gate logging is per *connection*, not per server: configuring is how a
+    // connection starts, so a reconnect to the same URL says again which
+    // features its version rules out. Clearing this only on a URL change left
+    // a support log from a reconnect with no gate lines at all.
+    // Governing: ADR-0010, SPEC-0010 REQ "Error Handling Standards"
+    _gatesLogged.clear();
     _apiKey = apiKey.trim();
     _username = username;
     _password = _apiKey.isEmpty ? password : '';
@@ -378,12 +387,43 @@ class RommService {
   }
 
   /// Points the service at [serverUrl] without touching credentials or cached
-  /// tokens — the URL half of [configure], shared with [exchangePairCode],
-  /// which has no credentials yet.
-  void _setServerUrl(String serverUrl) {
+  /// tokens — the URL half of [configure], shared with [fetchHeartbeat] and
+  /// [exchangePairCode], neither of which has credentials yet.
+  ///
+  /// A different URL is a different server, so everything the previous one
+  /// taught this connection is dropped here rather than at each call site.
+  /// Returns whether the URL actually moved.
+  bool _setServerUrl(String serverUrl) {
+    final previousUrl = _baseUrl;
     final raw = serverUrl.trim();
     _schemeExplicit = raw.startsWith('http://') || raw.startsWith('https://');
     _baseUrl = _normalizeBaseUrl(raw);
+    if (_baseUrl == previousUrl) return false;
+    _forgetServerState();
+    return true;
+  }
+
+  /// Drops every per-server fact this connection had learned, so nothing from
+  /// the old server survives a move to a new one.
+  ///
+  /// Capabilities and the probe flag are the version half; `_playSessionsSupported`
+  /// and the scope states are the "what did the server actually answer" half.
+  /// [configure] used to clear only the first group here, which was harmless
+  /// because pairing always reconfigured straight afterwards — but a caller
+  /// that probes a new server without a following [configure] would have
+  /// inherited the previous server's play-session verdict.
+  // Governing: ADR-0010, SPEC-0010 REQ "Heartbeat Probe",
+  // ADR-0013, SPEC-0013 REQ "Optional Scope Groups"
+  void _forgetServerState() {
+    _capabilities = null;
+    _probed = false;
+    _gatesLogged.clear();
+    _playSessionsSupported = true;
+    _favouritesCollectionId = null;
+    for (final group in RommScopeGroup.values) {
+      _scopeStates[group] = RommScopeState.unknown;
+    }
+    _scopeGatesLogged.clear();
   }
 
   static String _normalizeBaseUrl(String raw) {
@@ -417,12 +457,48 @@ class RommService {
   /// pin the scheme, downgrades the base URL to HTTP and retries once
   /// (plain-HTTP homelab servers are common). [send] must build its request
   /// fresh so the retry picks up the rewritten [_baseUrl].
+  ///
+  /// [timeout] is the budget for the *whole* call, retries included — never
+  /// one budget per attempt. A per-attempt cap let a server that fails TLS
+  /// slowly and then hangs on plain HTTP hold a caller for close to twice the
+  /// stated ceiling, which is what #141 fixed for the heartbeat and #146 for
+  /// the login and pairing paths. Pass null only for a caller that bounds
+  /// itself some other way.
   Future<http.Response> _withSchemeFallback(
+    Future<http.Response> Function() send, {
+    Duration? timeout,
+  }) {
+    if (timeout == null) return _sendWithSchemeFallback(send, () => false);
+    // The fallback has to know the budget is gone, not merely that someone
+    // stopped waiting: once the timeout fires, the caller has already been
+    // handed a TimeoutException, so a TLS failure landing afterwards must not
+    // rewrite [_baseUrl] to http:// and fire a request nobody is waiting for.
+    // That second request outlived the call it belonged to and quietly moved
+    // the connection's scheme behind the caller's back.
+    var expired = false;
+    return _sendWithSchemeFallback(send, () => expired).timeout(
+      timeout,
+      onTimeout: () {
+        expired = true;
+        throw TimeoutException('RomM request timed out', timeout);
+      },
+    );
+  }
+
+  /// The retry half of [_withSchemeFallback]. [budgetExpired] reports whether
+  /// the caller's timeout has already fired.
+  Future<http.Response> _sendWithSchemeFallback(
     Future<http.Response> Function() send,
+    bool Function() budgetExpired,
   ) async {
+    final attemptUrl = _baseUrl;
     try {
       return await send();
     } on HandshakeException {
+      // Nothing is waiting for this any more, or the service has since been
+      // pointed at a different server: either way the downgrade would apply to
+      // a connection this attempt no longer describes.
+      if (budgetExpired() || _baseUrl != attemptUrl) rethrow;
       if (!_schemeExplicit && _baseUrl.startsWith('https://')) {
         _baseUrl = _baseUrl.replaceFirst('https://', 'http://');
         _log.w('RomM HTTPS handshake failed; retrying over HTTP at $_baseUrl');
@@ -436,9 +512,8 @@ class RommService {
   Future<http.Response> _postTokenRequest(Map<String, String> body) {
     const headers = {'Content-Type': 'application/x-www-form-urlencoded'};
     return _withSchemeFallback(
-      () => _httpClient
-          .post(_uri('/api/token'), headers: headers, body: body)
-          .timeout(const Duration(seconds: 30)),
+      () => _httpClient.post(_uri('/api/token'), headers: headers, body: body),
+      timeout: _requestTimeout,
     );
   }
 
@@ -466,14 +541,13 @@ class RommService {
   // Governing: ADR-0010 (RomM heartbeat capability probe),
   // SPEC-0010 REQ "Heartbeat Probe", REQ "Error Handling Standards"
   Future<void> fetchHeartbeat({String? serverUrl}) async {
-    if (serverUrl != null) {
-      final previousUrl = _baseUrl;
-      _setServerUrl(serverUrl);
-      if (_baseUrl != previousUrl) {
-        _capabilities = null;
-        _gatesLogged.clear();
-      }
-    }
+    // A different URL is a different server: [_setServerUrl] forgets the old
+    // one's capabilities *and* the play-session/scope verdicts its answers
+    // settled, so a caller that probes without a following [configure] does
+    // not inherit them.
+    // Governing: ADR-0010, SPEC-0010 REQ "Heartbeat Probe",
+    // ADR-0013, SPEC-0013 REQ "Optional Scope Groups"
+    if (serverUrl != null) _setServerUrl(serverUrl);
     _probed = true;
     if (_baseUrl.isEmpty) {
       _log.w('RomM heartbeat skipped: url= endpoint=heartbeat reason=no_url');
@@ -488,11 +562,14 @@ class RommService {
       // scheme fallback re-sends the request, so a per-attempt cap let a
       // server that fails TLS slowly and then hangs on plain HTTP hold the
       // connect path for close to twice [_heartbeatTimeout]. The cap therefore
-      // sits outside [_withSchemeFallback], covering both attempts together.
+      // belongs to [_withSchemeFallback], covering both attempts together —
+      // and, since it owns the cap, it also knows not to downgrade the scheme
+      // on a TLS failure that lands after the budget is already gone.
       // Governing: ADR-0010, SPEC-0010 REQ "Heartbeat Probe" (at most 5 s)
       resp = await _withSchemeFallback(
         () => _httpClient.get(_uri('/api/heartbeat')),
-      ).timeout(_heartbeatTimeout);
+        timeout: _heartbeatTimeout,
+      );
     } on TimeoutException catch (e) {
       _capabilities = null;
       onTransportFailure?.call(e);
@@ -616,10 +693,10 @@ class RommService {
   Future<void> _verifyApiKey() async {
     http.Response resp;
     try {
+      // One budget across the scheme fallback, not one per attempt.
       resp = await _withSchemeFallback(
-        () => _httpClient
-            .get(_uri('/api/users/me'), headers: _authHeaders)
-            .timeout(const Duration(seconds: 30)),
+        () => _httpClient.get(_uri('/api/users/me'), headers: _authHeaders),
+        timeout: _requestTimeout,
       );
     } on TimeoutException {
       throw RommException('Connection timed out');
@@ -688,16 +765,41 @@ class RommService {
       throw RommException('Server URL is empty');
     }
 
+    // The user-facing half of this gate lives in
+    // [RommProvider.connectWithPairCode], which SPEC-0010 REQ "Gated Call
+    // Sites" names and which owns the localized message. This is the same gate
+    // at the layer that actually sends the request, so a second caller cannot
+    // bypass it and read a pre-4.8.0 server's raw 404 as "bad code".
+    //
+    // It can only fire on capabilities probed for *this* server: pointing at a
+    // different URL just above forgot them, so an unprobed server still reads
+    // as unknown and the exchange is still attempted.
+    // Governing: ADR-0010, SPEC-0010 REQ "Gated Call Sites",
+    // ADR-0007, SPEC-0007 REQ "Pairing Code Exchange"
+    if (supports(RommFeature.clientTokenExchange) ==
+        RommFeatureSupport.unsupported) {
+      _logGateOnce(RommFeature.clientTokenExchange);
+      _log.w(
+        'RomM pair exchange rejected before request: code=$shown '
+        'kind=${RommErrorKind.unsupported.name}',
+      );
+      throw RommException(
+        'This RomM server is too old for pairing (needs '
+        '${RommFeature.clientTokenExchange.minVersion} or newer)',
+        kind: RommErrorKind.unsupported,
+      );
+    }
+
     http.Response resp;
     try {
+      // One budget across the scheme fallback, not one per attempt.
       resp = await _withSchemeFallback(
-        () => _httpClient
-            .post(
-              _uri('/api/client-tokens/exchange'),
-              headers: const {'Content-Type': 'application/json'},
-              body: jsonEncode({'code': normalized}),
-            )
-            .timeout(const Duration(seconds: 30)),
+        () => _httpClient.post(
+          _uri('/api/client-tokens/exchange'),
+          headers: const {'Content-Type': 'application/json'},
+          body: jsonEncode({'code': normalized}),
+        ),
+        timeout: _requestTimeout,
       );
     } on TimeoutException {
       _log.w('RomM pair exchange failed: code=$shown error=timeout');
