@@ -337,7 +337,7 @@ void main() async {
   final sqliteDatabaseProvider = SqliteDatabaseProvider();
 
   try {
-    // 1. Inicializar ConfigProvider primero (sincroniza sistemas)
+    // 1. Initialize SqliteConfigProvider first (it syncs the systems).
     await sqliteConfigProvider.initialize();
 
     // 2. Inicializar DatabaseProvider (carga juegos basandose en sistemas sincronizados)

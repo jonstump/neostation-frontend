@@ -1,13 +1,10 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:io';
-import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:neostation/services/logger_service.dart';
 import '../models/system_model.dart';
-import '../models/emulator_model.dart';
 import '../repositories/system_repository.dart';
 
 /// Service responsible for managing application paths, file I/O for configurations,
@@ -341,44 +338,6 @@ class ConfigService {
     return path.join(userDataPath, 'app.log');
   }
 
-  /// Loads the static registry of supported systems from application assets.
-  static Future<List<SystemModel>> loadAvailableSystems() async {
-    try {
-      final content = await rootBundle.loadString(
-        'assets/system-data/systems.json',
-      );
-      final List<dynamic> json = jsonDecode(content);
-      return json.map((system) => SystemModel.fromJson(system)).toList();
-    } catch (e) {
-      _log.e('Error loading available systems: $e');
-      return [];
-    }
-  }
-
-  /// Loads the metadata and launch arguments for external emulators from assets.
-  static Future<Map<String, EmulatorModel>> loadAvailableEmulators() async {
-    try {
-      final content = await rootBundle.loadString(
-        'assets/system-data/emulator.json',
-      );
-      final Map<String, dynamic> json = jsonDecode(content);
-      final emulatorsData = json['emulators'] as Map<String, dynamic>;
-
-      final Map<String, EmulatorModel> emulators = {};
-      for (final entry in emulatorsData.entries) {
-        emulators[entry.key] = EmulatorModel.fromJson(
-          entry.key,
-          entry.value as Map<String, dynamic>,
-        );
-      }
-
-      return emulators;
-    } catch (e) {
-      _log.e('Error loading available emulators: $e');
-      return {};
-    }
-  }
-
   /// Identifies supported emulation systems based on the folder structure of [romFolders].
   ///
   /// Performs a shallow scan to match subdirectory names with [availableSystems].
@@ -468,53 +427,5 @@ class ConfigService {
       _log.e('Error counting ROMs in $folderPath: $e');
       return 0;
     }
-  }
-
-  /// Scans the host system for installed standalone emulators defined in [availableEmulators].
-  ///
-  /// Verifies existence across all platform-specific `possiblePaths`.
-  static Future<Map<String, EmulatorModel>> detectEmulators({
-    required Map<String, EmulatorModel> availableEmulators,
-  }) async {
-    final Map<String, EmulatorModel> detectedEmulators = {};
-
-    try {
-      for (final entry in availableEmulators.entries) {
-        final emulatorName = entry.key;
-        final emulator = entry.value;
-
-        String? detectedPath;
-        final platform = _getCurrentPlatform();
-        final possiblePaths = emulator.possiblePaths[platform] ?? [];
-
-        for (final possiblePath in possiblePaths) {
-          final file = File(possiblePath);
-          if (await file.exists()) {
-            detectedPath = possiblePath;
-            break;
-          }
-        }
-
-        detectedEmulators[emulatorName] = emulator.copyWith(
-          path: detectedPath ?? '',
-          detected: detectedPath != null,
-          lastDetection: detectedPath != null ? DateTime.now() : null,
-        );
-      }
-
-      return detectedEmulators;
-    } catch (e) {
-      _log.e('Error detecting emulators: $e');
-      return detectedEmulators;
-    }
-  }
-
-  /// Returns the current OS platform identifier.
-  static String _getCurrentPlatform() {
-    if (Platform.isWindows) return 'windows';
-    if (Platform.isLinux) return 'linux';
-    if (Platform.isMacOS) return 'macos';
-    if (Platform.isAndroid) return 'android';
-    return 'unknown';
   }
 }
