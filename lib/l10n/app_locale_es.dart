@@ -1533,4 +1533,36 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.rommUploadScreenshotsHint:
       'Envía a RomM las nuevas capturas de RetroArch al terminar cada sesión',
   AppLocale.rommFirmwareDestinationRetroArch: 'Destino (de RetroArch): {path}',
+  AppLocale.rommFilterMenuTitle: 'Filtros',
+  AppLocale.rommFilterMenuAction: 'Filtros',
+  AppLocale.rommFilterFavorites: 'Favoritos',
+  AppLocale.rommFilterHasSaves: 'Con partidas guardadas',
+  AppLocale.rommFilterHasStates: 'Con estados guardados',
+  AppLocale.rommFilterHasAchievements: 'Con logros',
+  AppLocale.rommFilterPlayable: 'Jugables',
+  AppLocale.rommFilterDuplicates: 'Duplicados',
+  AppLocale.rommFilterMissing: 'Archivos ausentes',
+  AppLocale.rommFilterChipsLabel: 'Filtros:',
+  AppLocale.rommFilterClearAll: 'Quitar filtros',
+  AppLocale.rommFilterNoMatches: 'Ninguna ROM coincide con estos filtros',
+  AppLocale.rommSurpriseMe: 'Sorpréndeme',
+  AppLocale.rommSurpriseMeEmpty: 'No hay nada que elegir aquí',
+  AppLocale.rommSurpriseMeUnsupported:
+      'Este servidor RomM es demasiado antiguo para una elección aleatoria',
+  AppLocale.rommSurpriseMeFailed: 'No se pudo cargar la elección aleatoria',
+  AppLocale.rommSurpriseMePicked: 'Elegido: {name}',
+  AppLocale.rommMaintenanceTitle: 'Mantenimiento del servidor',
+  AppLocale.rommMaintenanceRescan: 'Reanalizar la biblioteca',
+  AppLocale.rommMaintenanceRescanConfirm:
+      'RomM volverá a analizar toda la biblioteca. Puede tardar bastante en un servidor grande.',
+  AppLocale.rommMaintenanceSyncFolders: 'Sincronizar análisis de carpetas',
+  AppLocale.rommMaintenanceSyncFoldersConfirm:
+      'RomM releerá sus carpetas de ROM y detectará los archivos añadidos o eliminados fuera de la aplicación.',
+  AppLocale.rommMaintenanceCleanup: 'Limpiar ROM ausentes',
+  AppLocale.rommMaintenanceCleanupConfirm:
+      'RomM eliminará las entradas de la biblioteca cuyos archivos ya no estén en el servidor. Esto no se puede deshacer.',
+  AppLocale.rommMaintenanceRun: 'Ejecutar',
+  AppLocale.rommMaintenanceQueued: 'Tarea puesta en cola en el servidor',
+  AppLocale.rommMaintenanceBusy: 'Esa tarea ya se está ejecutando',
+  AppLocale.rommMaintenanceFailed: 'No se pudo iniciar la tarea',
 };

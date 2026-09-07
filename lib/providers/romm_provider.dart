@@ -12,6 +12,7 @@ import '../models/romm_metadata_fetch.dart';
 import '../models/romm_pairing.dart';
 import '../models/romm_platform.dart';
 import '../models/romm_rom.dart';
+import '../models/romm_rom_filters.dart';
 import '../models/romm_scrape_step.dart';
 import '../models/romm_screenshot.dart';
 import '../models/romm_server_capabilities.dart';
@@ -38,6 +39,39 @@ import 'romm_bulk_sync.dart';
 
 /// High-level connection state for the RomM integration.
 enum RommConnectionStatus { disconnected, connecting, connected, error }
+
+/// What "Surprise me" came back with.
+///
+/// [unsupported] and [empty] are deliberately separate: a server too old for
+/// `/api/roms/random` and a platform that really holds nothing need different
+/// sentences, and collapsing them would tell a user with a full library that
+/// it is empty.
+// Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+// SPEC-0018 REQ "Surprise Me"
+enum RommSurpriseOutcome { picked, empty, unsupported, failed }
+
+/// The result of one [RommProvider.surpriseMe] call.
+///
+/// [index] is where the pick sits in [RommProvider.roms] once the provider has
+/// paged far enough to reach it, or -1 when it is past the page cap (or the
+/// list is filtered so it is not in this query at all) — in which case the
+/// caller opens the ROM's card rather than moving a cursor to a row that is
+/// not there.
+// Governing: ADR-0019, SPEC-0018 REQ "Surprise Me"
+class RommSurprisePick {
+  final RommSurpriseOutcome outcome;
+  final RommRom? rom;
+  final int index;
+
+  const RommSurprisePick(this.outcome, {this.rom, this.index = -1});
+
+  const RommSurprisePick.empty() : this(RommSurpriseOutcome.empty);
+  const RommSurprisePick.unsupported() : this(RommSurpriseOutcome.unsupported);
+  const RommSurprisePick.failed() : this(RommSurpriseOutcome.failed);
+
+  /// Whether the pick can be focused in the list the user is looking at.
+  bool get isFocusable => rom != null && index >= 0;
+}
 
 /// A RomM gallery request that did not come back.
 ///
@@ -177,6 +211,28 @@ class RommProvider extends ChangeNotifier {
   // ROMs are queried by [_searchTerm] alone across the whole server.
   bool _librarySearch = false;
   static const int _pageSize = 50;
+
+  /// Server-side filters applied to the open platform or collection.
+  ///
+  /// Scoped to that source on purpose: they are cleared by every call that
+  /// changes it ([selectPlatform], [selectCollection], [backToPlatforms],
+  /// [searchLibrary], [disconnect]), so "with saves" set on the SNES never
+  /// silently narrows the Mega Drive the user opens next.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Filter Menu And Chips"
+  RommRomFilters _filters = RommRomFilters.none;
+
+  /// How many extra pages [surpriseMe] will pull looking for the picked ROM
+  /// before giving up and handing the caller the ROM without an index.
+  ///
+  /// A bound rather than "page until found": the pick is uniform over the
+  /// whole scope, so on a 20,000-ROM platform it is usually nowhere near the
+  /// pages already loaded, and walking there would be a hundred requests and
+  /// a tile per ROM. Twenty pages of [_pageSize] is 1,000 ROMs — a few
+  /// seconds at worst — after which the card is the better answer than a
+  /// scroll the user did not ask for.
+  // Governing: ADR-0019, SPEC-0018 REQ "Surprise Me"
+  static const int _surpriseMePageCap = 20;
 
   final Map<int, RommDownload> _downloads = {};
   final Map<String, RommRom?> _raGameLookupCache = {};
@@ -360,6 +416,10 @@ class RommProvider extends ChangeNotifier {
   bool get romsHasMore => _romsHasMore;
   String get searchTerm => _searchTerm;
   bool get librarySearch => _librarySearch;
+
+  /// The server-side filters narrowing the open platform or collection.
+  // Governing: ADR-0019, SPEC-0018 REQ "Filter Menu And Chips"
+  RommRomFilters get filters => _filters;
 
   RommService get service => _service;
   RommDownload? downloadFor(int romId) => _downloads[romId];
@@ -997,6 +1057,7 @@ class RommProvider extends ChangeNotifier {
     _currentPlatform = null;
     _currentCollection = null;
     _librarySearch = false;
+    _filters = RommRomFilters.none;
     _resetRoms();
     _searchTerm = '';
     _downloads.clear();
@@ -1084,11 +1145,16 @@ class RommProvider extends ChangeNotifier {
   Future<void> selectPlatform(
     RommPlatform platform, {
     String search = '',
+    RommRomFilters filters = RommRomFilters.none,
   }) async {
     _currentCollection = null;
     _currentPlatform = platform;
     _librarySearch = false;
     _searchTerm = search;
+    // A new source starts unfiltered: the chips belong to the platform they
+    // were set on, not to the browser.
+    // Governing: ADR-0019, SPEC-0018 REQ "Filter Menu And Chips"
+    _filters = filters;
     _resetRoms();
     notifyListeners();
     await loadMoreRoms();
@@ -1098,11 +1164,14 @@ class RommProvider extends ChangeNotifier {
   Future<void> selectCollection(
     RommCollection collection, {
     String search = '',
+    RommRomFilters filters = RommRomFilters.none,
   }) async {
     _currentPlatform = null;
     _currentCollection = collection;
     _librarySearch = false;
     _searchTerm = search;
+    // Governing: ADR-0019, SPEC-0018 REQ "Filter Menu And Chips"
+    _filters = RommRomFilters.none;
     _resetRoms();
     notifyListeners();
     await loadMoreRoms();
@@ -1111,13 +1180,185 @@ class RommProvider extends ChangeNotifier {
   /// Re-runs the current query (platform, collection or library-wide) with a
   /// new search term.
   Future<void> searchRoms(String term) async {
+    // Typing narrows the source the user is already in, so it must not throw
+    // their filters away — [selectPlatform] / [selectCollection] clear them as
+    // part of opening a *new* source, which is not what this is.
+    // Governing: ADR-0019, SPEC-0018 REQ "Filter Menu And Chips"
+    final keep = _filters;
     if (_currentCollection != null) {
-      await selectCollection(_currentCollection!, search: term);
+      await selectCollection(_currentCollection!, search: term, filters: keep);
     } else if (_currentPlatform != null) {
-      await selectPlatform(_currentPlatform!, search: term);
+      await selectPlatform(_currentPlatform!, search: term, filters: keep);
     } else if (_librarySearch) {
       await searchLibrary(term);
     }
+  }
+
+  /// Replaces the filters on the open platform or collection and reloads its
+  /// list from offset 0.
+  ///
+  /// No-op outside a platform or collection: the source menu and the lists
+  /// have nothing to filter, and a library-wide search is a different query.
+  /// Setting the same filters again is also a no-op, so a menu that closes
+  /// without a change does not re-page the grid.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Filter Menu And Chips"
+  Future<void> setFilters(RommRomFilters filters) async {
+    if (_currentPlatform == null && _currentCollection == null) return;
+    if (filters == _filters) return;
+    _filters = filters;
+    // A page still on the wire answers the *old* filters; [_resetRoms] bumps
+    // the generation so it is dropped rather than appended under the new ones.
+    // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Concurrency Safety"
+    _resetRoms();
+    notifyListeners();
+    await loadMoreRoms();
+  }
+
+  /// Whether "Surprise me" is worth offering: a platform or collection is open
+  /// and this server is not known to predate `/api/roms/random`.
+  ///
+  /// [RommFeatureSupport.unknown] counts as offered, per ADR-0010 — a
+  /// heartbeat that never landed must not hide a feature the server has, and
+  /// [RommService.getRandomRom] degrades on the 404 if it turns out not to.
+  // Governing: ADR-0010 (RomM heartbeat capability probe), SPEC-0010 REQ "Gated Call Sites",
+  // ADR-0019, SPEC-0018 REQ "Surprise Me"
+  bool get canSurpriseMe =>
+      isConnected &&
+      (_currentPlatform != null || _currentCollection != null) &&
+      _service.supports(RommFeature.randomRom) !=
+          RommFeatureSupport.unsupported;
+
+  /// Whether the server-maintenance menu is worth offering: this connection is
+  /// *known* to hold the `tasks.run` scope group.
+  ///
+  /// Stricter than [canSurpriseMe] on purpose. SPEC-0018 says the menu is
+  /// shown "only when `hasScope(tasksRun)` is granted", and unlike a random
+  /// pick these actions rescan or prune a whole library — offering them on a
+  /// maybe and letting the user find out via a 403 is the wrong way round.
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Optional Scope Groups",
+  // ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
+  bool get canRunServerTasks =>
+      isConnected &&
+      _service.hasScope(RommScopeGroup.tasksRun) == RommScopeState.granted;
+
+  /// Asks the server for one ROM out of the open platform or collection, and
+  /// locates it in the loaded list.
+  ///
+  /// The pick is uniform over the whole scope, so it is usually not in the
+  /// pages already fetched. Pages are then loaded in order until it turns up
+  /// or [_surpriseMePageCap] pages have been added — see that constant for why
+  /// the walk is bounded rather than exhaustive. A pick that is never reached
+  /// still comes back with its [RommSurprisePick.rom], so the caller can open
+  /// its card instead.
+  ///
+  /// Deliberately *unfiltered*: RomM's random endpoint takes the scope but not
+  /// the boolean filters, so a filtered list can return a pick that is not in
+  /// it. That is exactly the [RommSurprisePick.isFocusable] false case, and the
+  /// card is the honest answer there.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Surprise Me"
+  Future<RommSurprisePick> surpriseMe() async {
+    final platform = _currentPlatform;
+    final collection = _currentCollection;
+    if (platform == null && collection == null) {
+      return const RommSurprisePick.empty();
+    }
+    if (_service.supports(RommFeature.randomRom) ==
+        RommFeatureSupport.unsupported) {
+      return const RommSurprisePick.unsupported();
+    }
+
+    // The generation the pick was asked for. Backing out of the platform (or
+    // opening another) while the request is in flight invalidates the answer,
+    // and focusing a row in a list that has since been replaced is exactly the
+    // "cursor jumps under the user" failure.
+    // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Concurrency Safety"
+    final generation = _romsGeneration;
+
+    final RommRom? pick;
+    try {
+      pick = await _service.getRandomRom(
+        platformIds: platform == null ? const [] : [platform.id],
+        collectionId: (collection != null && !collection.isVirtual)
+            ? int.tryParse(collection.id)
+            : null,
+        virtualCollectionId: (collection != null && collection.isVirtual)
+            ? collection.id
+            : null,
+      );
+      await _persistRefreshedTokens();
+    } on RommException catch (e) {
+      _log.w(
+        'RomM surprise pick failed: endpoint=/api/roms/random '
+        'status=${e.statusCode} error=${e.message}',
+      );
+      _lastError = e.message;
+      notifyListeners();
+      return const RommSurprisePick.failed();
+    } catch (e) {
+      _log.w('RomM surprise pick failed: endpoint=/api/roms/random error=$e');
+      return const RommSurprisePick.failed();
+    }
+
+    if (generation != _romsGeneration) {
+      _log.d(
+        'RomM surprise pick dropped as stale: generation=$generation '
+        'current=$_romsGeneration',
+      );
+      return const RommSurprisePick.empty();
+    }
+    if (pick == null) {
+      // Null from a server that *has* the endpoint is an empty scope; null
+      // from one that does not is the gate, which [getRandomRom] logged.
+      return _service.supports(RommFeature.randomRom) ==
+              RommFeatureSupport.supported
+          ? const RommSurprisePick.empty()
+          : const RommSurprisePick.unsupported();
+    }
+
+    // Hoisted so the closures below capture a non-nullable value: `pick` is a
+    // `final` assigned inside the try, which type promotion does not reach
+    // through a closure.
+    final picked = pick;
+    var index = _roms.indexWhere((rom) => rom.id == picked.id);
+    var pagesAdded = 0;
+    while (index < 0 &&
+        _romsHasMore &&
+        pagesAdded < _surpriseMePageCap &&
+        generation == _romsGeneration) {
+      final before = _roms.length;
+      await loadMoreRoms();
+      if (generation != _romsGeneration) break;
+      // A page that added nothing means the list is exhausted (or the request
+      // failed); keep looping and this spins forever.
+      if (_roms.length == before) break;
+      pagesAdded++;
+      index = _roms.indexWhere((rom) => rom.id == picked.id);
+    }
+    if (generation != _romsGeneration) return const RommSurprisePick.empty();
+
+    return RommSurprisePick(
+      RommSurpriseOutcome.picked,
+      rom: picked,
+      index: index,
+    );
+  }
+
+  /// Queues one RomM maintenance task (`scan_library`, `sync_folder_scan`,
+  /// `cleanup_missing_roms`) and reports what happened.
+  ///
+  /// Returns the queued task id on success, or throws the service's
+  /// [RommException] — whose [RommException.kind] is
+  /// [RommErrorKind.taskBusy] when the task is already going — so the caller
+  /// can word the two outcomes differently. Null means the call was gated by a
+  /// missing `tasks.run` scope and nothing was sent.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Maintenance Tasks"
+  Future<String?> runServerTask(String name) async {
+    final id = await _service.runTask(name);
+    await _persistRefreshedTokens();
+    return id;
   }
 
   /// Finds a RomM title with the exact RetroAchievements game id.
@@ -1263,6 +1504,8 @@ class RommProvider extends ChangeNotifier {
     _currentCollection = null;
     _librarySearch = true;
     _searchTerm = term;
+    // Governing: ADR-0019, SPEC-0018 REQ "Filter Menu And Chips"
+    _filters = RommRomFilters.none;
     _resetRoms();
     notifyListeners();
     // An empty term would page the entire server library (and mass-init a tile
@@ -1277,6 +1520,8 @@ class RommProvider extends ChangeNotifier {
     _currentPlatform = null;
     _currentCollection = null;
     _librarySearch = false;
+    // Governing: ADR-0019, SPEC-0018 REQ "Filter Menu And Chips"
+    _filters = RommRomFilters.none;
     _resetRoms();
     _searchTerm = '';
     notifyListeners();
@@ -1317,6 +1562,11 @@ class RommProvider extends ChangeNotifier {
     final generation = _romsGeneration;
     final term = _searchTerm;
     final offset = _romsOffset;
+    // Captured with the generation: a page that lands after the filters
+    // changed is dropped by the generation check below, so this only ever
+    // describes the query it was actually sent with.
+    // Governing: ADR-0019, SPEC-0018 REQ "Filter Menu And Chips"
+    final filters = _filters;
     _loadingRoms = true;
     _lastError = null;
     notifyListeners();
@@ -1330,6 +1580,8 @@ class RommProvider extends ChangeNotifier {
             ? collection.id
             : null,
         search: term,
+        // Governing: ADR-0019, SPEC-0018 REQ "Filter Parameters"
+        filters: filters,
         limit: _pageSize,
         offset: offset,
       );

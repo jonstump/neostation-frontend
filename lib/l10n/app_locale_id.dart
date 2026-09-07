@@ -1493,4 +1493,36 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommUploadScreenshotsHint:
       'Kirim tangkapan layar RetroArch yang baru ke RomM setelah setiap sesi',
   AppLocale.rommFirmwareDestinationRetroArch: 'Tujuan (dari RetroArch): {path}',
+  AppLocale.rommFilterMenuTitle: 'Filter',
+  AppLocale.rommFilterMenuAction: 'Filter',
+  AppLocale.rommFilterFavorites: 'Favorit',
+  AppLocale.rommFilterHasSaves: 'Punya save',
+  AppLocale.rommFilterHasStates: 'Punya save state',
+  AppLocale.rommFilterHasAchievements: 'Punya pencapaian',
+  AppLocale.rommFilterPlayable: 'Bisa dimainkan',
+  AppLocale.rommFilterDuplicates: 'Duplikat',
+  AppLocale.rommFilterMissing: 'Berkas hilang',
+  AppLocale.rommFilterChipsLabel: 'Filter:',
+  AppLocale.rommFilterClearAll: 'Hapus filter',
+  AppLocale.rommFilterNoMatches: 'Tidak ada ROM yang cocok dengan filter ini',
+  AppLocale.rommSurpriseMe: 'Kejutkan saya',
+  AppLocale.rommSurpriseMeEmpty: 'Tidak ada yang bisa dipilih di sini',
+  AppLocale.rommSurpriseMeUnsupported:
+      'Server RomM ini terlalu lama untuk pilihan acak',
+  AppLocale.rommSurpriseMeFailed: 'Pilihan acak tidak dapat dimuat',
+  AppLocale.rommSurpriseMePicked: 'Terpilih: {name}',
+  AppLocale.rommMaintenanceTitle: 'Pemeliharaan server',
+  AppLocale.rommMaintenanceRescan: 'Pindai ulang pustaka',
+  AppLocale.rommMaintenanceRescanConfirm:
+      'RomM akan memindai seluruh pustaka lagi. Pada server besar ini bisa memakan waktu lama.',
+  AppLocale.rommMaintenanceSyncFolders: 'Sinkronkan pemindaian folder',
+  AppLocale.rommMaintenanceSyncFoldersConfirm:
+      'RomM akan membaca ulang folder ROM-nya dan menangkap berkas yang ditambah atau dihapus di luar aplikasi.',
+  AppLocale.rommMaintenanceCleanup: 'Bersihkan ROM yang hilang',
+  AppLocale.rommMaintenanceCleanupConfirm:
+      'RomM akan menghapus entri pustaka yang berkasnya sudah tidak ada di server. Ini tidak bisa dibatalkan.',
+  AppLocale.rommMaintenanceRun: 'Jalankan',
+  AppLocale.rommMaintenanceQueued: 'Tugas diantrekan di server',
+  AppLocale.rommMaintenanceBusy: 'Tugas itu sudah berjalan',
+  AppLocale.rommMaintenanceFailed: 'Tugas tidak dapat dimulai',
 };

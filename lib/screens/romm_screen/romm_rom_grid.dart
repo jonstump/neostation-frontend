@@ -52,6 +52,13 @@ class RommRomGrid extends StatefulWidget {
   /// Y — starts (or cancels) a bulk sync of the open platform/collection.
   final VoidCallback onSyncAll;
 
+  /// Select+Y — asks the server for a random ROM in the open source and moves
+  /// the cursor to it. Null when the server has no random endpoint, which
+  /// leaves the chord unbound rather than firing a no-op.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Surprise Me"
+  final VoidCallback? onSurpriseMe;
+
   /// Footer for the settled selection, built by the host so it keeps ownership
   /// of the open platform / collection context.
   final Widget Function(RommRom? focused) footerBuilder;
@@ -78,6 +85,7 @@ class RommRomGrid extends StatefulWidget {
     this.onExitTop,
     required this.onToggleView,
     required this.onSyncAll,
+    this.onSurpriseMe,
     required this.footerBuilder,
   });
 
@@ -253,6 +261,8 @@ class _RommRomGridState extends State<RommRomGrid> {
       onBack: widget.onBack,
       onXButton: widget.onToggleView,
       onFavorite: widget.onSyncAll, // Y — sync the whole source.
+      // Governing: ADR-0019, SPEC-0018 REQ "Surprise Me"
+      onSelectModifierY: widget.onSurpriseMe,
       onPreviousTab: AppNavigation.previousTab,
       onNextTab: AppNavigation.nextTab,
       onLeftBumper: AppNavigation.previousTab,

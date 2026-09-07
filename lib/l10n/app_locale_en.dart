@@ -1477,4 +1477,36 @@ const Map<String, dynamic> appLocaleEn = {
       'Send new RetroArch captures to RomM after each session',
   AppLocale.rommFirmwareDestinationRetroArch:
       'Destination (from RetroArch): {path}',
+  AppLocale.rommFilterMenuTitle: 'Filters',
+  AppLocale.rommFilterMenuAction: 'Filters',
+  AppLocale.rommFilterFavorites: 'Favourites',
+  AppLocale.rommFilterHasSaves: 'With saves',
+  AppLocale.rommFilterHasStates: 'With save states',
+  AppLocale.rommFilterHasAchievements: 'With achievements',
+  AppLocale.rommFilterPlayable: 'Playable',
+  AppLocale.rommFilterDuplicates: 'Duplicates',
+  AppLocale.rommFilterMissing: 'Missing files',
+  AppLocale.rommFilterChipsLabel: 'Filters:',
+  AppLocale.rommFilterClearAll: 'Clear filters',
+  AppLocale.rommFilterNoMatches: 'No ROMs match these filters',
+  AppLocale.rommSurpriseMe: 'Surprise me',
+  AppLocale.rommSurpriseMeEmpty: 'Nothing to pick from here',
+  AppLocale.rommSurpriseMeUnsupported:
+      'This RomM server is too old for a random pick',
+  AppLocale.rommSurpriseMeFailed: 'The random pick could not be loaded',
+  AppLocale.rommSurpriseMePicked: 'Picked {name}',
+  AppLocale.rommMaintenanceTitle: 'Server maintenance',
+  AppLocale.rommMaintenanceRescan: 'Rescan library',
+  AppLocale.rommMaintenanceRescanConfirm:
+      'RomM will scan the whole library again. This can take a while on a large server.',
+  AppLocale.rommMaintenanceSyncFolders: 'Sync folder scan',
+  AppLocale.rommMaintenanceSyncFoldersConfirm:
+      'RomM will re-read its ROM folders and pick up files added or removed outside the app.',
+  AppLocale.rommMaintenanceCleanup: 'Clean up missing ROMs',
+  AppLocale.rommMaintenanceCleanupConfirm:
+      'RomM will remove library entries whose files are no longer on the server. This cannot be undone.',
+  AppLocale.rommMaintenanceRun: 'Run',
+  AppLocale.rommMaintenanceQueued: 'Task queued on the server',
+  AppLocale.rommMaintenanceBusy: 'That task is already running',
+  AppLocale.rommMaintenanceFailed: 'The task could not be started',
 };

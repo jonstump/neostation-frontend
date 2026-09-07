@@ -194,7 +194,26 @@ enum RommFeature {
   /// servers accept the upload (`POST /api/screenshots?rom_id=`, 3.10+) but
   /// carry no gallery to read back. Recorded in ADR-0016.
   // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Gallery Strip"
-  screenshotGallery(RommServerVersion(5, 0, 0));
+  screenshotGallery(RommServerVersion(5, 0, 0)),
+
+  /// `GET /api/roms/random` — one ROM picked server-side, behind the browse
+  /// screen's "Surprise me".
+  ///
+  /// Verified against `rommapp/romm` itself, and the answer is **5.2.0**
+  /// (released 2026-08-20) — not the 4.8.0 that ADR-0019 and SPEC-0018 name.
+  /// The route (`@protected_route(router.get, "/random", [Scope.ROMS_READ])`
+  /// in `backend/endpoints/roms/__init__.py`) was added by commit 1ee6cea0,
+  /// "perf(roms): pick a random rom without paging to a random offset"
+  /// (2026-08-02, PR #4071, merged as d874cc17 on 2026-08-04). It is absent
+  /// from the 4.8.0, 4.9.0, 5.0.0 and 5.1.0 trees and present from
+  /// 5.1.1-beta.2 (2026-08-16) onward; 5.1.1 never shipped a final, so 5.2.0
+  /// is the first release that answers it. RomM's own web UI picked randomly
+  /// by paging to a random offset before that, which is why the *feature*
+  /// predates the *endpoint*. Recording 4.8.0 here would have offered
+  /// "Surprise me" on every 4.8–5.1 server and earned a 404 on every press.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Filter Parameters"
+  randomRom(RommServerVersion(5, 2, 0));
 
   const RommFeature(this.minVersion);
 

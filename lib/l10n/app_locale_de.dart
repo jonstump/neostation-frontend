@@ -1541,4 +1541,37 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.rommUploadScreenshotsHint:
       'Sendet neue RetroArch-Aufnahmen nach jeder Sitzung an RomM',
   AppLocale.rommFirmwareDestinationRetroArch: 'Ziel (aus RetroArch): {path}',
+  AppLocale.rommFilterMenuTitle: 'Filter',
+  AppLocale.rommFilterMenuAction: 'Filter',
+  AppLocale.rommFilterFavorites: 'Favoriten',
+  AppLocale.rommFilterHasSaves: 'Mit Spielständen',
+  AppLocale.rommFilterHasStates: 'Mit Savestates',
+  AppLocale.rommFilterHasAchievements: 'Mit Erfolgen',
+  AppLocale.rommFilterPlayable: 'Spielbar',
+  AppLocale.rommFilterDuplicates: 'Duplikate',
+  AppLocale.rommFilterMissing: 'Fehlende Dateien',
+  AppLocale.rommFilterChipsLabel: 'Filter:',
+  AppLocale.rommFilterClearAll: 'Filter zurücksetzen',
+  AppLocale.rommFilterNoMatches: 'Keine ROMs passen zu diesen Filtern',
+  AppLocale.rommSurpriseMe: 'Überrasch mich',
+  AppLocale.rommSurpriseMeEmpty: 'Hier gibt es nichts auszuwählen',
+  AppLocale.rommSurpriseMeUnsupported:
+      'Dieser RomM-Server ist zu alt für eine Zufallsauswahl',
+  AppLocale.rommSurpriseMeFailed:
+      'Die Zufallsauswahl konnte nicht geladen werden',
+  AppLocale.rommSurpriseMePicked: 'Ausgewählt: {name}',
+  AppLocale.rommMaintenanceTitle: 'Serverwartung',
+  AppLocale.rommMaintenanceRescan: 'Bibliothek neu einlesen',
+  AppLocale.rommMaintenanceRescanConfirm:
+      'RomM liest die gesamte Bibliothek erneut ein. Auf einem großen Server kann das eine Weile dauern.',
+  AppLocale.rommMaintenanceSyncFolders: 'Ordner-Scan abgleichen',
+  AppLocale.rommMaintenanceSyncFoldersConfirm:
+      'RomM liest seine ROM-Ordner erneut und erfasst Dateien, die außerhalb der App hinzugefügt oder entfernt wurden.',
+  AppLocale.rommMaintenanceCleanup: 'Fehlende ROMs aufräumen',
+  AppLocale.rommMaintenanceCleanupConfirm:
+      'RomM entfernt Bibliothekseinträge, deren Dateien nicht mehr auf dem Server liegen. Das lässt sich nicht rückgängig machen.',
+  AppLocale.rommMaintenanceRun: 'Ausführen',
+  AppLocale.rommMaintenanceQueued: 'Aufgabe auf dem Server eingereiht',
+  AppLocale.rommMaintenanceBusy: 'Diese Aufgabe läuft bereits',
+  AppLocale.rommMaintenanceFailed: 'Die Aufgabe konnte nicht gestartet werden',
 };

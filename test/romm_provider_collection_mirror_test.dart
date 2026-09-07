@@ -8,6 +8,7 @@ import 'package:neostation/models/collection_model.dart';
 import 'package:neostation/models/romm_collection.dart';
 import 'package:neostation/models/romm_platform.dart';
 import 'package:neostation/models/romm_rom.dart';
+import 'package:neostation/models/romm_rom_filters.dart';
 import 'package:neostation/models/romm_rom_page.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/providers/file_provider.dart';
@@ -72,6 +73,7 @@ class _FakeRommService extends RommService {
     String? search,
     List<String> genres = const [],
     List<String> companies = const [],
+    RommRomFilters filters = RommRomFilters.none,
     int limit = 50,
     int offset = 0,
   }) async {
@@ -80,6 +82,7 @@ class _FakeRommService extends RommService {
       'collectionId': collectionId,
       'virtualCollectionId': virtualCollectionId,
       'search': search,
+      'filters': filters,
       'limit': limit,
       'offset': offset,
     });

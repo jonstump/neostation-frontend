@@ -1495,4 +1495,36 @@ const Map<String, dynamic> appLocaleRu = {
       'Отправлять новые скриншоты RetroArch в RomM после каждой сессии',
   AppLocale.rommFirmwareDestinationRetroArch:
       'Назначение (из RetroArch): {path}',
+  AppLocale.rommFilterMenuTitle: 'Фильтры',
+  AppLocale.rommFilterMenuAction: 'Фильтры',
+  AppLocale.rommFilterFavorites: 'Избранное',
+  AppLocale.rommFilterHasSaves: 'С сохранениями',
+  AppLocale.rommFilterHasStates: 'С быстрыми сохранениями',
+  AppLocale.rommFilterHasAchievements: 'С достижениями',
+  AppLocale.rommFilterPlayable: 'Играбельные',
+  AppLocale.rommFilterDuplicates: 'Дубликаты',
+  AppLocale.rommFilterMissing: 'Отсутствующие файлы',
+  AppLocale.rommFilterChipsLabel: 'Фильтры:',
+  AppLocale.rommFilterClearAll: 'Сбросить фильтры',
+  AppLocale.rommFilterNoMatches: 'Нет ROM, подходящих под эти фильтры',
+  AppLocale.rommSurpriseMe: 'Удиви меня',
+  AppLocale.rommSurpriseMeEmpty: 'Здесь не из чего выбирать',
+  AppLocale.rommSurpriseMeUnsupported:
+      'Этот сервер RomM слишком старый для случайного выбора',
+  AppLocale.rommSurpriseMeFailed: 'Не удалось загрузить случайный выбор',
+  AppLocale.rommSurpriseMePicked: 'Выбрано: {name}',
+  AppLocale.rommMaintenanceTitle: 'Обслуживание сервера',
+  AppLocale.rommMaintenanceRescan: 'Пересканировать библиотеку',
+  AppLocale.rommMaintenanceRescanConfirm:
+      'RomM заново просканирует всю библиотеку. На большом сервере это может занять много времени.',
+  AppLocale.rommMaintenanceSyncFolders: 'Синхронизировать сканирование папок',
+  AppLocale.rommMaintenanceSyncFoldersConfirm:
+      'RomM перечитает свои папки с ROM и учтёт файлы, добавленные или удалённые вне приложения.',
+  AppLocale.rommMaintenanceCleanup: 'Убрать отсутствующие ROM',
+  AppLocale.rommMaintenanceCleanupConfirm:
+      'RomM удалит записи библиотеки, файлов которых больше нет на сервере. Это действие необратимо.',
+  AppLocale.rommMaintenanceRun: 'Запустить',
+  AppLocale.rommMaintenanceQueued: 'Задача поставлена в очередь на сервере',
+  AppLocale.rommMaintenanceBusy: 'Эта задача уже выполняется',
+  AppLocale.rommMaintenanceFailed: 'Не удалось запустить задачу',
 };
