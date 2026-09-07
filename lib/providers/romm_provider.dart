@@ -1170,8 +1170,11 @@ class RommProvider extends ChangeNotifier {
     _currentCollection = collection;
     _librarySearch = false;
     _searchTerm = search;
+    // As on the platform path: a new source starts unfiltered, but a caller
+    // that is only narrowing the source it is already in ([searchRoms]) hands
+    // the set back so the chips survive the keystroke.
     // Governing: ADR-0019, SPEC-0018 REQ "Filter Menu And Chips"
-    _filters = RommRomFilters.none;
+    _filters = filters;
     _resetRoms();
     notifyListeners();
     await loadMoreRoms();

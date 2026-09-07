@@ -12,10 +12,15 @@ import '../utils/gamepad_nav.dart';
 /// Checklist of RomM's server-side ROM filters for the open platform or
 /// collection.
 ///
-/// One row per [RommRomFilter], each a tick box: Up/Down walks them, A toggles
-/// the focused one, B closes. The result is the whole [RommRomFilters] set as
-/// the user left it, or null when nothing changed — closing without a change
-/// must not re-page the grid.
+/// One row per [RommRomFilter], each a tick box, then a "Clear all" row that
+/// unticks the lot: Up/Down walks them, A toggles (or clears), B closes. The
+/// result is the whole [RommRomFilters] set as the user left it, or null when
+/// nothing changed — closing without a change must not re-page the grid.
+///
+/// "Clear all" is appended rather than prepended so the filter rows keep the
+/// indices the D-pad already walked, and it is the controller-reachable twin of
+/// the chip row's tap-only "Clear filters" chip — CLAUDE.md requires every
+/// interactive element to be reachable by D-pad, not only by touch.
 ///
 /// Gamepad wiring follows [ConfirmActionDialog]: the layer is pushed in the
 /// same post-frame callback as `initialize()`, activation is left to the
@@ -91,6 +96,10 @@ class _RommFilterMenuDialogState extends State<RommFilterMenuDialog> {
   static const _layerName = 'romm_filter_menu_dialog';
   static const _filters = RommRomFilter.values;
 
+  /// The "Clear all" row sits one past the last filter.
+  static int get _clearRow => _filters.length;
+  static int get _rowCount => _filters.length + 1;
+
   late final GamepadNavigation _gamepadNav;
   late RommRomFilters _current;
   int _selected = 0;
@@ -102,9 +111,9 @@ class _RommFilterMenuDialogState extends State<RommFilterMenuDialog> {
     _gamepadNav = GamepadNavigation(
       onNavigateUp: () => _move(-1),
       onNavigateDown: () => _move(1),
-      onSelectItem: () => _toggle(_filters[_selected]),
+      onSelectItem: _confirmRow,
       onBack: _close,
-      // A fixed seven-row list: one move per press, as the other dialogs do.
+      // A fixed short list: one move per press, as the other dialogs do.
       allowRepeat: false,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -128,7 +137,26 @@ class _RommFilterMenuDialogState extends State<RommFilterMenuDialog> {
   void _move(int delta) {
     SfxService().playNavSound();
     setState(() {
-      _selected = (_selected + delta + _filters.length) % _filters.length;
+      _selected = (_selected + delta + _rowCount) % _rowCount;
+    });
+  }
+
+  /// A on the focused row: a filter row ticks, the last row clears the lot.
+  void _confirmRow() {
+    if (_selected == _clearRow) {
+      _clearAll();
+      return;
+    }
+    _toggle(_filters[_selected]);
+  }
+
+  /// Unticks every filter — the same outcome as the chip row's "Clear filters".
+  // Governing: ADR-0019, SPEC-0018 REQ "Filter Menu And Chips"
+  void _clearAll() {
+    SfxService().playNavSound();
+    setState(() {
+      _selected = _clearRow;
+      _current = RommRomFilters.none;
     });
   }
 
@@ -186,6 +214,8 @@ class _RommFilterMenuDialogState extends State<RommFilterMenuDialog> {
                 if (i > 0) SizedBox(height: 4.r),
                 _buildRow(theme, _filters[i], i),
               ],
+              SizedBox(height: 4.r),
+              _buildClearRow(theme),
             ],
           ),
         ),
@@ -217,6 +247,46 @@ class _RommFilterMenuDialogState extends State<RommFilterMenuDialog> {
           ),
         ),
       ],
+    );
+  }
+
+  /// The "Clear all" row. Dimmed when nothing is ticked, but still walkable so
+  /// the row count the D-pad sees never changes shape underneath it.
+  Widget _buildClearRow(ThemeData theme) {
+    final scheme = theme.colorScheme;
+    final focused = _selected == _clearRow;
+    final enabled = _current.active.isNotEmpty;
+    final tint = scheme.onSurface.withValues(alpha: enabled ? 0.8 : 0.4);
+    return InkWell(
+      onTap: _clearAll,
+      borderRadius: BorderRadius.circular(8.r),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 10.r, vertical: 8.r),
+        decoration: BoxDecoration(
+          color: focused
+              ? scheme.primary.withValues(alpha: 0.12)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8.r),
+          border: Border.all(
+            color: focused ? scheme.primary : Colors.transparent,
+            width: 1.5.r,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(Symbols.close_rounded, size: 18.r, color: tint),
+            SizedBox(width: 8.r),
+            Expanded(
+              child: Text(
+                AppLocale.rommFilterClearAll.getString(context),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12.r, color: tint),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

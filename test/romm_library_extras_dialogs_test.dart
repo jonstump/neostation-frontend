@@ -172,6 +172,35 @@ void main() {
       expect(result, RommRomFilters.none);
     });
 
+    // The chip row's "Clear filters" chip is a tap target; this row is its
+    // D-pad twin, so a controller user reaches the same outcome in one press.
+    // Governing: ADR-0019, SPEC-0018 REQ "Filter Menu And Chips"
+    testWidgets('"Clear all" is a D-pad row that unticks everything', (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      RommRomFilters? result;
+      unawaited(
+        RommFilterMenuDialog.show(
+          host,
+          filters: const RommRomFilters(favorite: true, hasRa: true),
+        ).then((value) => result = value),
+      );
+      await settle(tester);
+      expect(
+        find.text(AppLocale.rommFilterClearAll.getString(host)),
+        findsOneWidget,
+        reason: 'the menu has no "Clear all" row',
+      );
+
+      // Up from the first row wraps onto the last one, which is "Clear all".
+      await press(tester, LogicalKeyboardKey.arrowUp);
+      await press(tester, LogicalKeyboardKey.enter);
+      await press(tester, LogicalKeyboardKey.backspace);
+      await settle(tester);
+      expect(result, RommRomFilters.none);
+    });
+
     testWidgets('takes the controller from below and hands it back', (
       tester,
     ) async {

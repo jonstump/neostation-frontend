@@ -2284,10 +2284,15 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
     final previous = _romHeaderSlotsLastBuilt ?? slots;
     _romHeaderSlotsLastBuilt = slots;
     if (!_searchSelected) return;
-    final next = rommReanchorSlot(previous, slots, _searchSlot);
-    if (next == _searchSlot) return;
+    final parked = _searchSlot;
+    final next = rommReanchorSlot(previous, slots, parked);
+    if (next == parked) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_searchSelected) return;
+      // Re-check, as [_syncHeaderSlot] does: the cursor may have moved to
+      // another control between the build and this callback, and writing the
+      // index computed from the older one would drag it back.
+      if (_searchSlot != parked) return;
       setState(() => _searchSlot = next);
     });
   }
@@ -2551,9 +2556,10 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   /// The active filters, as chips under the search row.
   ///
   /// Nothing at all when no filter is set, so an unfiltered platform keeps the
-  /// row it always had. The trailing "Clear filters" chip is a tap target;
-  /// the D-pad clears from the filter menu itself, which is where the cursor
-  /// can reach every toggle.
+  /// row it always had. The trailing "Clear filters" chip is a tap shortcut for
+  /// the menu's own "Clear all" row, which is the D-pad's way to the same
+  /// outcome — so the control has a controller-reachable twin rather than
+  /// being tap-only.
   // Governing: ADR-0019, SPEC-0018 REQ "Filter Menu And Chips"
   Widget _buildFilterChips(ThemeData theme, RommProvider provider) {
     final active = provider.filters.active;
@@ -2566,6 +2572,14 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
         runSpacing: 4.r,
         crossAxisAlignment: WrapCrossAlignment.center,
         children: [
+          Text(
+            AppLocale.rommFilterChipsLabel.getString(context),
+            style: TextStyle(
+              fontSize: 10.r,
+              fontWeight: FontWeight.w600,
+              color: scheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
           for (final filter in active)
             Container(
               padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 3.r),

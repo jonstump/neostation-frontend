@@ -20,7 +20,7 @@ import 'package:neostation/services/romm_service.dart';
 ///   the wire under the old filters is dropped;
 /// * the filters belong to the *source*, so opening another platform, backing
 ///   out, or a library-wide search clears them — while typing in the same
-///   platform keeps them;
+///   platform or collection keeps them;
 /// * the random pick pages forward to reach its ROM, but only within the cap,
 ///   and a pick it cannot reach still comes back for the card.
 ///
@@ -175,6 +175,24 @@ void main() {
       serve(library: const [1, 2]);
       final p = await connected();
       await p.selectPlatform(snes);
+      await p.setFilters(const RommRomFilters(hasRa: true));
+      queries.clear();
+      await p.searchRoms('zel');
+      expect(p.filters.hasRa, isTrue);
+      expect(queries.last['has_ra'], 'true');
+      expect(queries.last['search_term'], 'zel');
+    });
+
+    // The collection twin of the test above. A collection is a *source* just
+    // as a platform is, so typing inside one narrows it rather than opening a
+    // different one — the filters and their chips must survive the keystroke.
+    // Governing: ADR-0019, SPEC-0018 REQ "Filter Menu And Chips"
+    test('typing in the same collection keeps them', () async {
+      serve(library: const [1, 2]);
+      final p = await connected();
+      await p.selectCollection(
+        RommCollection(id: '3', name: 'RPGs', romCount: 2),
+      );
       await p.setFilters(const RommRomFilters(hasRa: true));
       queries.clear();
       await p.searchRoms('zel');
