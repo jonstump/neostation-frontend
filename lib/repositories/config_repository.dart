@@ -24,6 +24,20 @@ class ConfigRepository {
   static Future<void> updateActiveTheme(String folder) =>
       SqliteService.updateActiveTheme(folder);
 
+  // ── BIOS / firmware destination ───────────────────────────────────────────
+
+  /// The folder the user picked for BIOS/firmware files, or null when none has
+  /// been chosen. Second in the destination precedence, behind RetroArch's own
+  /// `system_directory` — see `BiosDestinationService.resolve`.
+  // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "BIOS Destination"
+  static Future<String?> getBiosDirectory() => SqliteService.getBiosDirectory();
+
+  /// Persists the user-chosen BIOS/firmware folder, exactly as the picker
+  /// returned it (a plain path, or an Android SAF tree URI).
+  // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "BIOS Destination"
+  static Future<void> setBiosDirectory(String directory) =>
+      SqliteService.updateBiosDirectory(directory);
+
   // ── General user config (write) ───────────────────────────────────────────
 
   static Future<void> saveUserConfig({String? lastScan}) =>

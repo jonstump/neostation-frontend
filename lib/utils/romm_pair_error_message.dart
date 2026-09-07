@@ -14,6 +14,10 @@ String? rommPairErrorKey(RommErrorKind? kind) {
     RommErrorKind.pairCodeInvalid => AppLocale.rommPairCodeInvalid,
     RommErrorKind.pairCodeExpired => AppLocale.rommPairCodeExpired,
     RommErrorKind.pairRateLimited => AppLocale.rommPairRateLimited,
+    // Not a pairing outcome: a scope refusal comes from a later, authenticated
+    // call (firmware, say), and its own screen words it.
+    // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "Firmware Model And Service"
+    RommErrorKind.scopeDenied => null,
     RommErrorKind.other || null => null,
   };
 }

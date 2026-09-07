@@ -459,7 +459,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 161;
+  static const int _databaseVersion = 162;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -1957,7 +1957,12 @@ class SqliteService {
         show_achievements_badge INTEGER DEFAULT 0,
         show_cloud_sync_icon INTEGER DEFAULT 1,
         ra_match_on_startup INTEGER DEFAULT 0,
-        subfolder_view_all INTEGER DEFAULT 0
+        subfolder_view_all INTEGER DEFAULT 0,
+        -- Folder the user picked for BIOS/firmware files, used when RetroArch's
+        -- own `system_directory` is unknown. Null until chosen. See migration
+        -- v162.
+        -- Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "BIOS Destination"
+        bios_directory TEXT
       );
       ''',
       '''
@@ -2784,6 +2789,7 @@ class SqliteService {
     int? showCloudSyncIcon,
     int? raMatchOnStartup,
     int? subfolderViewAll,
+    String? biosDirectory,
   }) async {
     final db = await instance.database;
 
@@ -2926,6 +2932,9 @@ class SqliteService {
     }
     if (subfolderViewAll != null) {
       updates['subfolder_view_all'] = subfolderViewAll;
+    }
+    if (biosDirectory != null) {
+      updates['bios_directory'] = biosDirectory;
     }
 
     if (showAchievementsBadge != null) {
@@ -3233,6 +3242,24 @@ class SqliteService {
   /// Updates the active asset theme.
   static Future<void> updateActiveTheme(String themeFolder) async {
     await saveUserConfig(activeTheme: themeFolder);
+  }
+
+  /// Retrieves the user-chosen BIOS/firmware folder, or null when never set.
+  ///
+  /// Stored as the raw picker result: a plain path on desktop, and on Android
+  /// possibly a SAF `content://` tree URI, which callers translate before
+  /// writing. Blank collapses to null so "never chosen" has one representation.
+  // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "BIOS Destination"
+  static Future<String?> getBiosDirectory() async {
+    final config = await getUserConfig();
+    final value = config?['bios_directory']?.toString().trim() ?? '';
+    return value.isEmpty ? null : value;
+  }
+
+  /// Persists the user-chosen BIOS/firmware folder.
+  // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "BIOS Destination"
+  static Future<void> updateBiosDirectory(String directory) async {
+    await saveUserConfig(biosDirectory: directory);
   }
 
   /// Retrieves the locally stored systems manifest version.
