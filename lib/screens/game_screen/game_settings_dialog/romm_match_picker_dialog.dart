@@ -12,14 +12,56 @@ import 'package:neostation/models/system_model.dart';
 import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/providers/romm_provider.dart';
 import 'package:neostation/repositories/romm_save_map_repository.dart';
+import 'package:neostation/screens/game_screen/game_settings_dialog/romm_fix_match_controller.dart';
+import 'package:neostation/screens/game_screen/game_settings_dialog/romm_fix_match_dialog.dart';
 import 'package:neostation/screens/game_screen/game_settings_dialog/romm_match_picker_controller.dart';
 import 'package:neostation/services/gamepad/gamepad_navigation_manager.dart';
+import 'package:neostation/services/romm_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/sync/providers/romm_provider.dart';
 import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/utils/romm_link_state.dart';
 import 'package:neostation/widgets/custom_notification.dart';
+
+/// The picker's row layout: the one place that maps between a *slot* — the
+/// D-pad row index the dialog keeps in `_selectedIndex` — and what that slot
+/// means.
+///
+/// Slot 0 is the search field, slots `1..actionCount` are the RomM fix-up
+/// actions, and every slot after them is a search result (or the single retry
+/// row). Every index computation in the dialog goes through this rather than
+/// carrying its own offset: rows have already been inserted above the results
+/// once (the fix-up actions) and issue #81 plans a third, and a literal
+/// `+ 1` left behind by such an insertion silently highlights the wrong row —
+/// which A then confirms as the manual link.
+// Governing: ADR-0019 (expose RomM library filters, search and maintenance), SPEC-0018 REQ "Fix Match In The Picker"
+@immutable
+class RommMatchPickerSlots {
+  /// How many fix-up action rows sit between the field and the results.
+  final int actionCount;
+
+  const RommMatchPickerSlots({required this.actionCount});
+
+  /// The first slot a search result — or the retry row — can occupy.
+  int get resultBase => 1 + actionCount;
+
+  /// The slot showing the result at [resultIndex].
+  int slotForResult(int resultIndex) => resultBase + resultIndex;
+
+  /// The result [slot] shows, or null when it is the field or an action row.
+  int? resultForSlot(int slot) => slot < resultBase ? null : slot - resultBase;
+
+  /// The slot showing the fix-up action at [actionIndex].
+  int slotForAction(int actionIndex) => 1 + actionIndex;
+
+  /// The fix-up action [slot] shows, or null when [slot] is not an action row.
+  int? actionForSlot(int slot) =>
+      (slot < 1 || slot >= resultBase) ? null : slot - 1;
+
+  /// How many slots the dialog has with [rowCount] rows under the actions.
+  int itemCount(int rowCount) => resultBase + rowCount;
+}
 
 /// Lets the user link one local game to a RomM ROM by hand.
 ///
@@ -75,6 +117,8 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
 
   late final GamepadNavigation _gamepadNav;
   late final RommMatchPickerController _controller;
+  late final RommProvider _rommProvider;
+  late final FileProvider _fileProvider;
   final TextEditingController _queryController = TextEditingController();
   final FocusNode _queryFocus = FocusNode();
   final ScrollController _scrollController = ScrollController();
@@ -83,10 +127,41 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
   bool _isConfirming = false;
   int _selectedIndex = 0;
 
-  // Index 0 is the search field; the rows after it are either the results or
-  // the single retry row shown while the last search is in an error state.
+  // Index 0 is the search field, then the metadata fix-up actions when they
+  // are offered, then either the results or the single retry row shown while
+  // the last search is in an error state.
   bool get _showRetryRow => _controller.status == RommMatchPickerStatus.error;
-  int get _itemCount => 1 + (_showRetryRow ? 1 : _controller.results.length);
+
+  /// The RomM-side fix-up actions offered for this game, in row order.
+  ///
+  /// They only make sense once the game is linked — they rewrite the entry the
+  /// link points at — and only when this connection may write to the library
+  /// and the server has a metadata provider to ask.
+  ///
+  /// A `romsWrite` group in [RommScopeState.unknown] still shows them: that is
+  /// every API-key connection, which is what the pair-code and QR logins mint,
+  /// and ADR-0013 settled that only [RommScopeState.denied] gates. The service
+  /// refuses the write and records the denial if a 403 later proves otherwise,
+  /// and the actions disappear from that point on.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance), SPEC-0018 REQ "Fix Match In The Picker"
+  List<RommFixMode> get _fixActions {
+    if (_controller.currentRomId == null) return const [];
+    if (!_rommProvider.isConnected) return const [];
+    final service = _rommProvider.service;
+    if (service.hasScope(RommScopeGroup.romsWrite) == RommScopeState.denied) {
+      return const [];
+    }
+    if (!service.hasMetadataSource) return const [];
+    return const [RommFixMode.match, RommFixMode.cover];
+  }
+
+  /// The row layout as it stands right now — the one place that maps between
+  /// a slot and what the slot means. See [RommMatchPickerSlots].
+  RommMatchPickerSlots get _slots =>
+      RommMatchPickerSlots(actionCount: _fixActions.length);
+
+  int get _itemCount =>
+      _slots.itemCount(_showRetryRow ? 1 : _controller.results.length);
 
   @override
   void initState() {
@@ -95,6 +170,8 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
     final rommProvider = context.read<RommProvider>();
     final service = rommProvider.service;
     final fileProvider = context.read<FileProvider>();
+    _rommProvider = rommProvider;
+    _fileProvider = fileProvider;
     _controller = RommMatchPickerController(
       linkKey: rommLinkKeyFor(
         romPath: widget.game.romPath,
@@ -171,7 +248,11 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
       if (!mounted) return;
       final pinned = _controller.preselectedIndex;
       if (pinned >= 0) {
-        setState(() => _selectedIndex = pinned + 1);
+        // [RommMatchPickerSlots], not `pinned + 1`: the fix-up actions sit
+        // between the field and the results, so a raw offset here highlights
+        // an action row — or the wrong RomM entry, which A then writes.
+        // Governing: ADR-0019, SPEC-0018 REQ "Fix Match In The Picker"
+        setState(() => _selectedIndex = _slots.slotForResult(pinned));
         _scrollToSelection();
       }
     });
@@ -246,12 +327,22 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
       return;
     }
 
+    final slots = _slots;
+    final action = slots.actionForSlot(_selectedIndex);
+    if (action != null) {
+      _openFixDialog(_fixActions[action]);
+      return;
+    }
+
     if (_showRetryRow) {
       _retry();
       return;
     }
 
-    final rom = _controller.results.elementAtOrNull(_selectedIndex - 1);
+    final index = slots.resultForSlot(_selectedIndex);
+    final rom = index == null
+        ? null
+        : _controller.results.elementAtOrNull(index);
     if (rom != null) _confirm(rom);
   }
 
@@ -274,10 +365,8 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
     if (!_scrollController.hasClients) return;
     // Rows are a fixed height, so the offset can be computed directly rather
     // than measured.
-    final target = ((_selectedIndex - 1) * _rowHeight).clamp(
-      0.0,
-      _scrollController.position.maxScrollExtent,
-    );
+    final target = ((_slots.resultForSlot(_selectedIndex) ?? 0) * _rowHeight)
+        .clamp(0.0, _scrollController.position.maxScrollExtent);
     _scrollController.animateTo(
       target,
       duration: const Duration(milliseconds: 150),
@@ -308,6 +397,94 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
       AppLocale.rommLinkFailed.getString(context),
       type: NotificationType.error,
     );
+  }
+
+  /// Opens "Fix match on RomM" or "Change cover" for the linked ROM.
+  ///
+  /// Everything that reaches the server is built here and handed to
+  /// [RommFixMatchController], so the dialog stays a view: the two searches,
+  /// the two writes, and the replace-mode metadata fetch that makes the local
+  /// row agree with what RomM now holds. The fetch is *replace* rather than
+  /// fill-gaps because the user has just told the server this game is
+  /// something else — keeping the old local columns would leave the two
+  /// disagreeing.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance), SPEC-0018 REQ "Fix Match In The Picker"
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Fetch Modes"
+  Future<void> _openFixDialog(RommFixMode mode) async {
+    final romId = _controller.currentRomId;
+    if (romId == null) return;
+    SfxService().playNavSound();
+
+    final service = _rommProvider.service;
+    final controller = RommFixMatchController(
+      mode: mode,
+      romId: romId,
+      search: (term) async {
+        if (mode == RommFixMode.match) {
+          final found = await service.searchRomMetadata(romId, term);
+          return found.map(RommFixCandidate.fromMatch).toList();
+        }
+        final covers = await service.searchCovers(term);
+        return covers.map(RommFixCandidate.fromCover).toList();
+      },
+      applyCandidate: (candidate) async {
+        if (mode == RommFixMode.match) {
+          final match = candidate.match;
+          if (match == null) return false;
+          return await service.applyRomMatch(romId, match) != null;
+        }
+        final url = candidate.coverUrl;
+        if (url == null) return false;
+        return await service.applyRomCover(romId, url) != null;
+      },
+      refreshLocal: () async {
+        final outcome = await _rommProvider.fetchMetadata(
+          game: widget.game,
+          system: widget.system,
+          mode: RommMetadataMode.replace,
+          fileProvider: _fileProvider,
+        );
+        if (outcome.mediaWritten > 0) {
+          _rommProvider.scheduleLibraryRefresh(widget.system);
+        }
+      },
+    );
+
+    final wrote = await RommFixMatchDialog.show(
+      context,
+      controller: controller,
+      gameName: _fixSubjectName(),
+      imageHeaders: service.imageHeadersFor,
+    );
+    if (!mounted) return;
+
+    if (wrote == true) {
+      AppNotification.showNotification(
+        context,
+        (mode == RommFixMode.cover
+                ? AppLocale.rommChangeCoverApplied
+                : AppLocale.rommFixMatchApplied)
+            .getString(context),
+      );
+      setState(() {});
+      return;
+    }
+    // A cancelled dialog is not a failure; only a write that reached the
+    // server and did not take gets an error line.
+    if (controller.lastApplyFailed) {
+      AppNotification.showNotification(
+        context,
+        AppLocale.rommFixMatchApplyFailed.getString(context),
+        type: NotificationType.error,
+      );
+    }
+  }
+
+  /// The name the fix-up search is prefilled with and the confirmation names:
+  /// the cleaned title the picker itself searched by.
+  String _fixSubjectName() {
+    final cleaned = _controller.prefilledQuery.trim();
+    return cleaned.isEmpty ? widget.game.romname : cleaned;
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -352,6 +529,7 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
               SizedBox(height: 4.r),
               _buildCleanedQueryNote(theme),
             ],
+            ..._buildFixActions(theme),
             SizedBox(height: 8.r),
             Flexible(child: _buildResults(theme, platformNames)),
           ],
@@ -490,12 +668,45 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
     );
   }
 
+  /// The RomM-side fix-up rows, between the search field and the results, so
+  /// the D-pad reaches them on the way down without a separate menu.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance), SPEC-0018 REQ "Fix Match In The Picker"
+  List<Widget> _buildFixActions(ThemeData theme) {
+    final actions = _fixActions;
+    if (actions.isEmpty) return const [];
+    final slots = _slots;
+    return [
+      for (var i = 0; i < actions.length; i++) ...[
+        SizedBox(height: 6.r),
+        _RommFixActionRow(
+          label:
+              (actions[i] == RommFixMode.cover
+                      ? AppLocale.rommChangeCoverAction
+                      : AppLocale.rommFixMatchAction)
+                  .getString(context),
+          icon: actions[i] == RommFixMode.cover
+              ? Symbols.image_rounded
+              : Symbols.manage_search_rounded,
+          selected: _selectedIndex == slots.slotForAction(i),
+          onTap: () {
+            setState(() => _selectedIndex = slots.slotForAction(i));
+            _openFixDialog(actions[i]);
+          },
+        ),
+      ],
+    ];
+  }
+
   Widget _buildResults(ThemeData theme, Map<int, String> platformNames) {
     final status = _controller.status;
     final results = _controller.results;
+    final slots = _slots;
 
     if (status == RommMatchPickerStatus.error) {
-      return _RommRetryRow(selected: _selectedIndex == 1, onTap: _retry);
+      return _RommRetryRow(
+        selected: _selectedIndex == slots.slotForResult(0),
+        onTap: _retry,
+      );
     }
 
     if (results.isEmpty) {
@@ -526,10 +737,10 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
         return _RommMatchRow(
           rom: rom,
           platformName: platformNames[rom.platformId] ?? rom.platformSlug,
-          selected: _selectedIndex == i + 1,
+          selected: _selectedIndex == slots.slotForResult(i),
           isCurrent: rom.id == _controller.currentRomId,
           onTap: () {
-            setState(() => _selectedIndex = i + 1);
+            setState(() => _selectedIndex = slots.slotForResult(i));
             _confirm(rom);
           },
         );
@@ -673,6 +884,62 @@ class _RommRetryRow extends StatelessWidget {
               Symbols.refresh_rounded,
               size: 14.r,
               color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// One RomM-side fix-up action under the search field.
+class _RommFixActionRow extends StatelessWidget {
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  const _RommFixActionRow({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6.r),
+      child: Container(
+        height: 34.r,
+        padding: EdgeInsets.symmetric(horizontal: 8.r),
+        decoration: BoxDecoration(
+          color: selected
+              ? theme.colorScheme.primary.withValues(alpha: 0.15)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(6.r),
+          border: Border.all(
+            color: selected ? theme.colorScheme.primary : Colors.transparent,
+            width: 2.r,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 14.r, color: theme.colorScheme.primary),
+            SizedBox(width: 6.r),
+            Expanded(
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11.r,
+                  color: theme.colorScheme.onSurface,
+                  fontWeight: selected ? FontWeight.w600 : FontWeight.normal,
+                ),
+              ),
             ),
           ],
         ),

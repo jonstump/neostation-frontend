@@ -1565,4 +1565,27 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.rommMaintenanceQueued: 'Tarea puesta en cola en el servidor',
   AppLocale.rommMaintenanceBusy: 'Esa tarea ya se está ejecutando',
   AppLocale.rommMaintenanceFailed: 'No se pudo iniciar la tarea',
+  AppLocale.rommFixMatchAction: 'Corregir coincidencia en RomM',
+  AppLocale.rommChangeCoverAction: 'Cambiar carátula',
+  AppLocale.rommFixMatchTitle: 'Corregir coincidencia en RomM',
+  AppLocale.rommChangeCoverTitle: 'Cambiar carátula en RomM',
+  AppLocale.rommFixMatchSearchHint:
+      'Buscar en los proveedores de metadatos del servidor',
+  AppLocale.rommFixMatchLoading: 'Consultando a RomM…',
+  AppLocale.rommFixMatchNoResults: 'No se encontraron candidatos',
+  AppLocale.rommFixMatchNoSource:
+      'Este servidor RomM no tiene ninguna fuente de metadatos activada',
+  AppLocale.rommFixMatchFailed:
+      'La búsqueda en RomM falló: selecciona para reintentar',
+  AppLocale.rommFixMatchConfirmTitle: '¿Aplicar esta coincidencia?',
+  AppLocale.rommFixMatchConfirmBody:
+      'RomM guardará «{name}» como este juego para todos los clientes y los metadatos locales se reemplazarán desde RomM.',
+  AppLocale.rommChangeCoverConfirmTitle: '¿Aplicar esta carátula?',
+  AppLocale.rommChangeCoverConfirmBody:
+      'RomM guardará esta carátula para «{name}» para todos los clientes y la imagen local se reemplazará desde RomM.',
+  AppLocale.rommFixMatchApply: 'Aplicar en RomM',
+  AppLocale.rommFixMatchApplying: 'Aplicando en RomM…',
+  AppLocale.rommFixMatchApplied: 'Coincidencia aplicada en RomM',
+  AppLocale.rommChangeCoverApplied: 'Carátula aplicada en RomM',
+  AppLocale.rommFixMatchApplyFailed: 'No se pudo aplicar el cambio en RomM',
 };

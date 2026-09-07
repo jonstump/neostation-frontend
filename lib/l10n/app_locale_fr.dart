@@ -1579,4 +1579,28 @@ const Map<String, dynamic> appLocaleFr = {
       'Tâche mise en file d\'attente sur le serveur',
   AppLocale.rommMaintenanceBusy: 'Cette tâche est déjà en cours',
   AppLocale.rommMaintenanceFailed: 'La tâche n\'a pas pu être lancée',
+  AppLocale.rommFixMatchAction: 'Corriger la correspondance sur RomM',
+  AppLocale.rommChangeCoverAction: 'Changer la jaquette',
+  AppLocale.rommFixMatchTitle: 'Corriger la correspondance sur RomM',
+  AppLocale.rommChangeCoverTitle: 'Changer la jaquette sur RomM',
+  AppLocale.rommFixMatchSearchHint:
+      'Rechercher dans les sources de métadonnées du serveur',
+  AppLocale.rommFixMatchLoading: 'Interrogation de RomM…',
+  AppLocale.rommFixMatchNoResults: 'Aucun candidat trouvé',
+  AppLocale.rommFixMatchNoSource:
+      'Ce serveur RomM n’a aucune source de métadonnées activée',
+  AppLocale.rommFixMatchFailed:
+      'La recherche RomM a échoué — sélectionnez pour réessayer',
+  AppLocale.rommFixMatchConfirmTitle: 'Appliquer cette correspondance ?',
+  AppLocale.rommFixMatchConfirmBody:
+      'RomM enregistrera « {name} » comme ce jeu pour tous les clients, et les métadonnées locales seront remplacées depuis RomM.',
+  AppLocale.rommChangeCoverConfirmTitle: 'Appliquer cette jaquette ?',
+  AppLocale.rommChangeCoverConfirmBody:
+      'RomM enregistrera cette jaquette pour « {name} » pour tous les clients, et l’image locale sera remplacée depuis RomM.',
+  AppLocale.rommFixMatchApply: 'Appliquer sur RomM',
+  AppLocale.rommFixMatchApplying: 'Application sur RomM…',
+  AppLocale.rommFixMatchApplied: 'Correspondance appliquée sur RomM',
+  AppLocale.rommChangeCoverApplied: 'Jaquette appliquée sur RomM',
+  AppLocale.rommFixMatchApplyFailed:
+      'Impossible d’appliquer la modification sur RomM',
 };

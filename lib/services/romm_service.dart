@@ -17,6 +17,7 @@ import '../models/romm_rom_filters.dart';
 import '../models/romm_rom_page.dart';
 import '../models/romm_play_session.dart';
 import '../models/romm_rom.dart';
+import '../models/romm_search_result.dart';
 import '../models/romm_server_capabilities.dart';
 import '../models/romm_screenshot.dart';
 import 'logger_service.dart';
@@ -67,6 +68,14 @@ enum RommErrorKind {
   // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
   // SPEC-0018 REQ "Maintenance Tasks"
   taskBusy,
+
+  /// `GET /api/search/roms` (or `/api/search/cover`) answered 500 because the
+  /// server has no metadata provider configured. RomM raises rather than
+  /// returning an empty list, so the status is the only signal, and it is not
+  /// a fault the user can retry away — the fix is on the server.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Metadata Search And Apply"
+  noMetadataSource,
 }
 
 /// One *optional* bundle of RomM OAuth scopes, negotiated at login.
@@ -324,6 +333,29 @@ class RommService {
   // Governing: ADR-0010, SPEC-0010 REQ "Heartbeat Probe"
   RommFeatureSupport supports(RommFeature feature) =>
       _capabilities?.supports(feature) ?? RommFeatureSupport.unknown;
+
+  /// Whether the server has at least one metadata provider configured, which
+  /// is what `GET /api/search/roms` needs to answer at all (it raises a 500
+  /// otherwise). Read from the heartbeat's `METADATA_SOURCES` flags.
+  ///
+  /// Follows ADR-0010's rule that *unknown never gates*: a heartbeat that
+  /// never landed, or one whose `METADATA_SOURCES` section carries no
+  /// `*_API_ENABLED` flag at all, reads as true so the user is offered the
+  /// action and the server's own answer decides. Only a heartbeat that
+  /// positively says every provider is off hides it.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Fix Match In The Picker"
+  bool get hasMetadataSource {
+    final flags = _capabilities?.metadataSources ?? const <String, bool>{};
+    final anySource = flags['ANY_SOURCE_ENABLED'];
+    if (anySource != null) return anySource;
+    final apiFlags = [
+      for (final entry in flags.entries)
+        if (entry.key.endsWith('_API_ENABLED')) entry.value,
+    ];
+    if (apiFlags.isEmpty) return true;
+    return apiFlags.any((enabled) => enabled);
+  }
 
   String get baseUrl => _baseUrl;
 
@@ -1827,6 +1859,207 @@ class RommService {
           .join(' ');
       return '${m.group(0)} $attrs';
     });
+  }
+
+  // ── Metadata fix-up (search, match, cover) ────────────────────────────────
+
+  /// Asks the server's own metadata providers for candidates matching
+  /// [searchTerm] for [romId] (`GET /api/search/roms?rom_id=&search_term=`).
+  ///
+  /// This is a *server-side* search: RomM queries whichever of IGDB, MobyGames,
+  /// ScreenScraper, LaunchBox or Hasheous it holds credentials for and answers
+  /// with provider-shaped candidates. A server with none configured answers
+  /// 500 rather than an empty list, which surfaces as
+  /// [RommErrorKind.noMetadataSource] so the caller can say so instead of
+  /// showing a generic failure.
+  ///
+  /// Candidates that name no provider at all are dropped: applying one would
+  /// send an update with nothing for RomM to re-match on.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Metadata Search And Apply"
+  Future<List<RommSearchResult>> searchRomMetadata(
+    int romId,
+    String searchTerm,
+  ) async {
+    final uri = Uri.parse('$_baseUrl/api/search/roms').replace(
+      queryParameters: <String, String>{
+        'rom_id': '$romId',
+        'search_term': searchTerm.trim(),
+      },
+    );
+    final body = await _metadataSearchGet(uri, endpoint: '/api/search/roms');
+    final parsed = _itemsOf(
+      jsonDecode(body),
+    ).whereType<Map<String, dynamic>>().map(RommSearchResult.fromJson).toList();
+    final usable = parsed.where((r) => !r.isEmpty).toList();
+    if (usable.length != parsed.length) {
+      _log.w(
+        'RomM metadata search: endpoint=/api/search/roms rom=$romId '
+        'dropped=${parsed.length - usable.length} reason=no_provider_id',
+      );
+    }
+    return usable;
+  }
+
+  /// Lists cover art for [searchTerm] (`GET /api/search/cover`), flattened to
+  /// one entry per image. Maps a 500 the same way [searchRomMetadata] does:
+  /// SteamGridDB not being configured is the usual cause.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Metadata Search And Apply"
+  Future<List<RommCoverResult>> searchCovers(String searchTerm) async {
+    final uri = Uri.parse('$_baseUrl/api/search/cover').replace(
+      queryParameters: <String, String>{'search_term': searchTerm.trim()},
+    );
+    final body = await _metadataSearchGet(uri, endpoint: '/api/search/cover');
+    return RommCoverResult.listFromJson(jsonDecode(body));
+  }
+
+  /// Applies [result] to the RomM entry for [romId] — a library-wide write
+  /// that rewrites what the *server* thinks the ROM is, for every client.
+  ///
+  /// Returns null without sending anything when this connection is known not
+  /// to hold [RommScopeGroup.romsWrite]; otherwise the ROM as RomM returned it
+  /// after the update. Throws [RommException] with the endpoint and status on
+  /// any other failure.
+  ///
+  /// A candidate with no name sends no `name` at all rather than a blank one,
+  /// for the same reason [applyRomCover] refuses an empty URL: RomM reads a
+  /// present-but-empty form field as a value, so a blank `name` would erase
+  /// the entry's title for every client of the server. The candidate is still
+  /// worth applying — its provider ids are what RomM re-matches on, and the
+  /// name it already holds is left alone.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Metadata Search And Apply"
+  Future<RommRom?> applyRomMatch(int romId, RommSearchResult result) async {
+    if (_scopeGated(RommScopeGroup.romsWrite)) return null;
+    final cover = result.coverUrl;
+    final name = result.name.trim();
+    if (name.isEmpty) {
+      _log.w(
+        'RomM match update: rom=$romId omitting blank name '
+        'endpoint=/api/roms/$romId',
+      );
+    }
+    final fields = <String, String>{
+      for (final entry in result.providerIds.entries)
+        entry.key: '${entry.value}',
+      if (name.isNotEmpty) 'name': name,
+      if (cover != null && cover.isNotEmpty) 'url_cover': cover,
+    };
+    return _putRomForm(romId, fields, action: 'match');
+  }
+
+  /// Points the RomM entry for [romId] at [url] as its cover.
+  ///
+  /// Same gate and same return contract as [applyRomMatch]; an empty URL is
+  /// refused locally rather than sent, since RomM reads a blank `url_cover` as
+  /// "clear the cover".
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Metadata Search And Apply"
+  Future<RommRom?> applyRomCover(int romId, String url) async {
+    if (_scopeGated(RommScopeGroup.romsWrite)) return null;
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) {
+      _log.w(
+        'RomM cover update skipped: rom=$romId reason=empty_url '
+        'endpoint=/api/roms/$romId',
+      );
+      return null;
+    }
+    return _putRomForm(romId, {'url_cover': trimmed}, action: 'cover');
+  }
+
+  /// Shared body of the two searches: one authenticated GET whose 500 becomes
+  /// [RommErrorKind.noMetadataSource]. Every failure is logged once with the
+  /// endpoint and status before it is rethrown, never swallowed.
+  // Governing: ADR-0019, SPEC-0018 REQ "Error Handling Standards"
+  Future<String> _metadataSearchGet(Uri uri, {required String endpoint}) async {
+    final resp = await _sendWithAuthRetry<http.Response>(
+      () =>
+          _httpClient.get(uri, headers: _authHeaders).timeout(_requestTimeout),
+      statusOf: (r) => r.statusCode,
+    );
+    if (resp.statusCode == 200) return resp.body;
+
+    // RomM raises rather than returning nothing when it has no provider to
+    // ask, so 500 is the only signal that the *server* is unconfigured. It is
+    // not worth a retry: the fix is on the server.
+    final noSource = resp.statusCode == 500;
+    _log.w(
+      'RomM metadata search failed: endpoint=$endpoint '
+      'status=${resp.statusCode} '
+      'reason=${noSource ? 'no_metadata_source' : 'request_failed'}',
+    );
+    throw RommException(
+      'RomM metadata search failed ($endpoint, ${resp.statusCode})',
+      statusCode: resp.statusCode,
+      kind: noSource
+          ? RommErrorKind.noMetadataSource
+          : (resp.statusCode == 403
+                ? RommErrorKind.scopeDenied
+                : RommErrorKind.other),
+    );
+  }
+
+  /// The one multipart `PUT /api/roms/{id}` both writes go through.
+  ///
+  /// RomM's update endpoint reads form data, not JSON, and treats an absent
+  /// field as "leave it alone" — so only the keys the caller set travel.
+  // Governing: ADR-0019, SPEC-0018 REQ "Metadata Search And Apply"
+  Future<RommRom> _putRomForm(
+    int romId,
+    Map<String, String> fields, {
+    required String action,
+  }) async {
+    final uri = _uri('/api/roms/$romId');
+
+    // Capped like `_metadataSearchGet`: the body is a small form, and the
+    // dialog above this shows a modal the user cannot dismiss while a write is
+    // in flight, so a server that accepts the connection and never answers
+    // would otherwise strand a gamepad-only user with no way out.
+    // Governing: ADR-0019, SPEC-0018 REQ "Error Handling Standards"
+    Future<http.StreamedResponse> send() async {
+      final req = http.MultipartRequest('PUT', uri)
+        ..headers.addAll(_authHeaders)
+        ..fields.addAll(fields);
+      return _httpClient.send(req).timeout(_requestTimeout);
+    }
+
+    final resp = await _sendWithAuthRetry<http.StreamedResponse>(
+      send,
+      statusOf: (r) => r.statusCode,
+    );
+    final body = await resp.stream.bytesToString().timeout(_requestTimeout);
+
+    if (resp.statusCode < 200 || resp.statusCode >= 300) {
+      if (resp.statusCode == 403) {
+        _noteScopeDenial(RommScopeGroup.romsWrite, 403);
+      }
+      _log.w(
+        'RomM rom update failed: endpoint=/api/roms/$romId action=$action '
+        'status=${resp.statusCode} fields=${fields.keys.join(",")}',
+      );
+      throw RommException(
+        'RomM update failed (/api/roms/$romId, ${resp.statusCode})',
+        statusCode: resp.statusCode,
+        kind: resp.statusCode == 403
+            ? RommErrorKind.scopeDenied
+            : RommErrorKind.other,
+      );
+    }
+
+    final decoded = jsonDecode(body);
+    if (decoded is! Map<String, dynamic>) {
+      throw RommException(
+        'RomM update returned an unexpected body (/api/roms/$romId)',
+        statusCode: resp.statusCode,
+      );
+    }
+    _log.i(
+      'RomM rom updated: rom=$romId action=$action '
+      'fields=${fields.keys.join(",")}',
+    );
+    return RommRom.fromJson(decoded);
   }
 
   // ── Download ─────────────────────────────────────────────────────────────

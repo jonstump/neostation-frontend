@@ -1546,4 +1546,28 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.rommMaintenanceQueued: 'Tarefa colocada em fila no servidor',
   AppLocale.rommMaintenanceBusy: 'Essa tarefa já está a decorrer',
   AppLocale.rommMaintenanceFailed: 'Não foi possível iniciar a tarefa',
+  AppLocale.rommFixMatchAction: 'Corrigir correspondência no RomM',
+  AppLocale.rommChangeCoverAction: 'Trocar capa',
+  AppLocale.rommFixMatchTitle: 'Corrigir correspondência no RomM',
+  AppLocale.rommChangeCoverTitle: 'Trocar capa no RomM',
+  AppLocale.rommFixMatchSearchHint:
+      'Pesquisar nos provedores de metadados do servidor',
+  AppLocale.rommFixMatchLoading: 'Consultando o RomM…',
+  AppLocale.rommFixMatchNoResults: 'Nenhum candidato encontrado',
+  AppLocale.rommFixMatchNoSource:
+      'Este servidor RomM não tem nenhuma fonte de metadados ativada',
+  AppLocale.rommFixMatchFailed:
+      'A busca no RomM falhou — selecione para tentar de novo',
+  AppLocale.rommFixMatchConfirmTitle: 'Aplicar esta correspondência?',
+  AppLocale.rommFixMatchConfirmBody:
+      'O RomM vai guardar “{name}” como este jogo para todos os clientes, e os metadados locais serão substituídos a partir do RomM.',
+  AppLocale.rommChangeCoverConfirmTitle: 'Aplicar esta capa?',
+  AppLocale.rommChangeCoverConfirmBody:
+      'O RomM vai guardar esta capa para “{name}” para todos os clientes, e a imagem local será substituída a partir do RomM.',
+  AppLocale.rommFixMatchApply: 'Aplicar no RomM',
+  AppLocale.rommFixMatchApplying: 'Aplicando no RomM…',
+  AppLocale.rommFixMatchApplied: 'Correspondência aplicada no RomM',
+  AppLocale.rommChangeCoverApplied: 'Capa aplicada no RomM',
+  AppLocale.rommFixMatchApplyFailed:
+      'Não foi possível aplicar a alteração no RomM',
 };

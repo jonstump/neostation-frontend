@@ -1509,4 +1509,25 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rommMaintenanceQueued: 'Task queued on the server',
   AppLocale.rommMaintenanceBusy: 'That task is already running',
   AppLocale.rommMaintenanceFailed: 'The task could not be started',
+  AppLocale.rommFixMatchAction: 'Fix match on RomM',
+  AppLocale.rommChangeCoverAction: 'Change cover',
+  AppLocale.rommFixMatchTitle: 'Fix match on RomM',
+  AppLocale.rommChangeCoverTitle: 'Change cover on RomM',
+  AppLocale.rommFixMatchSearchHint: 'Search the server\'s metadata providers',
+  AppLocale.rommFixMatchLoading: 'Asking RomM…',
+  AppLocale.rommFixMatchNoResults: 'No candidates found',
+  AppLocale.rommFixMatchNoSource:
+      'This RomM server has no metadata source enabled',
+  AppLocale.rommFixMatchFailed: 'The RomM search failed — select to try again',
+  AppLocale.rommFixMatchConfirmTitle: 'Apply this match?',
+  AppLocale.rommFixMatchConfirmBody:
+      'RomM will store “{name}” as this game for every client, and the local metadata will be replaced from RomM.',
+  AppLocale.rommChangeCoverConfirmTitle: 'Apply this cover?',
+  AppLocale.rommChangeCoverConfirmBody:
+      'RomM will store this cover for “{name}” for every client, and the local artwork will be replaced from RomM.',
+  AppLocale.rommFixMatchApply: 'Apply on RomM',
+  AppLocale.rommFixMatchApplying: 'Applying on RomM…',
+  AppLocale.rommFixMatchApplied: 'Match applied on RomM',
+  AppLocale.rommChangeCoverApplied: 'Cover applied on RomM',
+  AppLocale.rommFixMatchApplyFailed: 'The change could not be applied on RomM',
 };
