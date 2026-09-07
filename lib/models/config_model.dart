@@ -344,35 +344,39 @@ class ConfigModel {
       emulators: emulators,
       gameViewMode: (json['gameViewMode'] ?? 'list').toString(),
       systemViewMode: (json['systemViewMode'] ?? 'grid').toString(),
-      showGameInfo:
-          (json['showGameInfo'] ?? false).toString().toLowerCase() == 'true',
-      isFullscreen:
-          (json['isFullscreen'] ?? true).toString().toLowerCase() == 'true',
-      bartopExitPoweroff:
-          (json['bartopExitPoweroff'] ?? false).toString().toLowerCase() ==
-          'true',
-      scanOnStartup:
-          (json['scanOnStartup'] ?? true).toString().toLowerCase() == 'true',
-      ignoreHiddenFiles:
-          ((json['ignoreHiddenFiles'] ?? json['ignore_hidden_files'] ?? 1)
-                  .toString() ==
-              '1') ||
-          (json['ignoreHiddenFiles'] ?? true).toString().toLowerCase() ==
-              'true',
-      setupCompleted:
-          (json['setupCompleted'] ?? false).toString().toLowerCase() ==
-              'true' ||
-          (json['setup_completed'] ?? false).toString().toLowerCase() == 'true',
-      hideBottomScreen:
-          (json['hideBottomScreen'] ?? false).toString().toLowerCase() ==
-          'true',
-      videoSound:
-          (json['videoSound'] ?? false).toString().toLowerCase() == 'true' ||
-          (json['video_sound'] ?? 0).toString() == '1' ||
-          (json['video_sound'] ?? 'off').toString() == 'on',
-      sfxEnabled:
-          (json['sfxEnabled'] ?? true).toString().toLowerCase() == 'true' ||
-          (json['sfx_enabled'] ?? 1).toString() == '1',
+      showGameInfo: readBool(json, 'showGameInfo', 'show_game_info', false),
+      isFullscreen: readBool(json, 'isFullscreen', 'is_fullscreen', true),
+      bartopExitPoweroff: readBool(
+        json,
+        'bartopExitPoweroff',
+        'bartop_exit_poweroff',
+        false,
+      ),
+      scanOnStartup: readBool(json, 'scanOnStartup', 'scan_on_startup', true),
+      ignoreHiddenFiles: readBool(
+        json,
+        'ignoreHiddenFiles',
+        'ignore_hidden_files',
+        true,
+      ),
+      setupCompleted: readBool(
+        json,
+        'setupCompleted',
+        'setup_completed',
+        false,
+      ),
+      hideBottomScreen: readBool(
+        json,
+        'hideBottomScreen',
+        'hide_bottom_screen',
+        false,
+      ),
+      videoSound: readBool(json, 'videoSound', 'video_sound', false),
+      // Read through [readBool] like every other flag. The old `??`-chain here
+      // fell back to `1` in its *second* clause, so `{'sfxEnabled': false}` —
+      // exactly what [toJson] writes — parsed back as `true` and SFX could not
+      // be turned off across a config-file round trip.
+      sfxEnabled: readBool(json, 'sfxEnabled', 'sfx_enabled', true),
       sfxVolume:
           (double.tryParse(
                     (json['sfxVolume'] ?? json['sfx_volume'] ?? 0.75)
@@ -381,11 +385,12 @@ class ConfigModel {
                   0.75)
               .clamp(0.0, 0.75)
               .toDouble(),
-      use12HourClock:
-          (json['use12HourClock'] ?? json['use_12_hour_clock'] ?? 0)
-                  .toString() ==
-              '1' ||
-          (json['use12HourClock'] ?? false).toString().toLowerCase() == 'true',
+      use12HourClock: readBool(
+        json,
+        'use12HourClock',
+        'use_12_hour_clock',
+        false,
+      ),
       systemSortBy:
           (json['systemSortBy'] ?? json['system_sort_by'] ?? 'alphabetical')
               .toString(),
@@ -402,11 +407,12 @@ class ConfigModel {
               .toString(),
       appLanguage: (json['appLanguage'] ?? json['app_language'] ?? 'en')
           .toString(),
-      hideRecentCard:
-          (json['hideRecentCard'] ?? json['hide_recent_card'] ?? 0)
-                  .toString() ==
-              '1' ||
-          (json['hideRecentCard'] ?? false).toString().toLowerCase() == 'true',
+      hideRecentCard: readBool(
+        json,
+        'hideRecentCard',
+        'hide_recent_card',
+        false,
+      ),
       recentCardSize:
           (json['recentCardSize'] ??
                   json['recent_card_size'] ??
@@ -417,44 +423,33 @@ class ConfigModel {
               .toString(),
       // Absent key => false => tab visible. Keeps a config written by an older
       // build (or restored from cloud sync) from hiding tabs it never knew about.
-      hideTabSync:
-          (json['hideTabSync'] ?? json['hide_tab_sync'] ?? 0).toString() ==
-              '1' ||
-          (json['hideTabSync'] ?? false).toString().toLowerCase() == 'true',
-      hideTabAchievements:
-          (json['hideTabAchievements'] ?? json['hide_tab_achievements'] ?? 0)
-                  .toString() ==
-              '1' ||
-          (json['hideTabAchievements'] ?? false).toString().toLowerCase() ==
-              'true',
-      hideTabScraper:
-          (json['hideTabScraper'] ?? json['hide_tab_scraper'] ?? 0)
-                  .toString() ==
-              '1' ||
-          (json['hideTabScraper'] ?? false).toString().toLowerCase() == 'true',
-      hideTabRomm:
-          (json['hideTabRomm'] ?? json['hide_tab_romm'] ?? 0).toString() ==
-              '1' ||
-          (json['hideTabRomm'] ?? false).toString().toLowerCase() == 'true',
-      hideTabSearch:
-          (json['hideTabSearch'] ?? json['hide_tab_search'] ?? 0).toString() ==
-              '1' ||
-          (json['hideTabSearch'] ?? false).toString().toLowerCase() == 'true',
+      hideTabSync: readBool(json, 'hideTabSync', 'hide_tab_sync', false),
+      hideTabAchievements: readBool(
+        json,
+        'hideTabAchievements',
+        'hide_tab_achievements',
+        false,
+      ),
+      hideTabScraper: readBool(
+        json,
+        'hideTabScraper',
+        'hide_tab_scraper',
+        false,
+      ),
+      hideTabRomm: readBool(json, 'hideTabRomm', 'hide_tab_romm', false),
+      hideTabSearch: readBool(json, 'hideTabSearch', 'hide_tab_search', false),
       activeSyncProvider:
           (json['activeSyncProvider'] ??
                   json['active_sync_provider'] ??
                   'neosync')
               .toString(),
-      autoUpdateApp:
-          (json['autoUpdateApp'] ?? json['auto_update_app'] ?? 1).toString() ==
-              '1' ||
-          (json['autoUpdateApp'] ?? true).toString().toLowerCase() == 'true',
-      autoUpdateSystems:
-          (json['autoUpdateSystems'] ?? json['auto_update_systems'] ?? 1)
-                  .toString() ==
-              '1' ||
-          (json['autoUpdateSystems'] ?? true).toString().toLowerCase() ==
-              'true',
+      autoUpdateApp: readBool(json, 'autoUpdateApp', 'auto_update_app', true),
+      autoUpdateSystems: readBool(
+        json,
+        'autoUpdateSystems',
+        'auto_update_systems',
+        true,
+      ),
       systemGridColumns:
           (json['systemGridColumns'] ?? json['system_grid_columns'] ?? 'M')
               .toString(),
@@ -485,9 +480,9 @@ class ConfigModel {
           ) ??
           25,
       dockApps: normalizeDock(json['dockApps'] ?? json['dock_apps']),
-      dockEnabled:
-          (json['dockEnabled'] ?? true).toString().toLowerCase() == 'true' ||
-          (json['dock_enabled'] ?? 1).toString() == '1',
+      // Same defect as [sfxEnabled] above: the old chain's second clause fell
+      // back to `1`, so `{'dockEnabled': false}` round-tripped to `true`.
+      dockEnabled: readBool(json, 'dockEnabled', 'dock_enabled', true),
       dockSlotCount:
           (int.tryParse(
                     (json['dockSlotCount'] ?? json['dock_slot_count'] ?? 3)
@@ -499,60 +494,52 @@ class ConfigModel {
           .toString(),
       // Absent key => 0 => off, which is also the column default: a config
       // written before the badge existed leaves the feature opt-in.
-      showAchievementsBadge:
-          (json['showAchievementsBadge'] ??
-                      json['show_achievements_badge'] ??
-                      0)
-                  .toString() ==
-              '1' ||
-          (json['showAchievementsBadge'] ?? false).toString().toLowerCase() ==
-              'true',
-      // Absent key => 1 => on, matching the column default: the mark predates
-      // this setting, so a config written before it must keep showing it.
-      showCloudSyncIcon:
-          (json['showCloudSyncIcon'] ?? json['show_cloud_sync_icon'] ?? 1)
-                  .toString() ==
-              '1' ||
-          (json['showCloudSyncIcon'] ?? false).toString().toLowerCase() ==
-              'true',
-      // Same reasoning: absent => 0 => off, matching the column default.
-      raMatchOnStartup:
-          (json['raMatchOnStartup'] ?? json['ra_match_on_startup'] ?? 0)
-                  .toString() ==
-              '1' ||
-          (json['raMatchOnStartup'] ?? false).toString().toLowerCase() ==
-              'true',
-      // Same reasoning: absent => 0 => off, matching the column default.
-      subfolderViewAll:
-          (json['subfolderViewAll'] ?? json['subfolder_view_all'] ?? 0)
-                  .toString() ==
-              '1' ||
-          (json['subfolderViewAll'] ?? false).toString().toLowerCase() ==
-              'true',
+      showAchievementsBadge: readBool(
+        json,
+        'showAchievementsBadge',
+        'show_achievements_badge',
+        false,
+      ),
+      // Absent key => on, matching the column default: the mark predates this
+      // setting, so a config written before it must keep showing it.
+      showCloudSyncIcon: readBool(
+        json,
+        'showCloudSyncIcon',
+        'show_cloud_sync_icon',
+        true,
+      ),
+      // Absent key => off, matching the column default.
+      raMatchOnStartup: readBool(
+        json,
+        'raMatchOnStartup',
+        'ra_match_on_startup',
+        false,
+      ),
+      // Absent key => off, matching the column default.
+      subfolderViewAll: readBool(
+        json,
+        'subfolderViewAll',
+        'subfolder_view_all',
+        false,
+      ),
       // Absent => on, matching the column's `DEFAULT 1`: a database that has
       // not reached v163 must behave like the feature's shipped default.
-      //
-      // Read through [_boolOr] rather than the pair of `??`-chained string
-      // comparisons the fields above use. Those read the camelCase key first
-      // and then fall back to `true`/`false` *without* consulting the
-      // snake_case key again, so a `{'romm_upload_screenshots': 0}` row —
-      // exactly the shape [SqliteService.getUserConfig] returns — would come
-      // back as the default instead of as off.
       // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload Toggle"
-      rommUploadScreenshots: _boolOr(
+      rommUploadScreenshots: readBool(
         json,
         'rommUploadScreenshots',
         'romm_upload_screenshots',
         true,
       ),
-      // Same reasoning: absent => 0 => off, matching the column default. The
-      // unified library is opt-in.
+      // Absent => off, matching the column default. The unified library is
+      // opt-in.
       // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Tables"
-      rommShowLibrary:
-          (json['rommShowLibrary'] ?? json['romm_show_library'] ?? 0)
-                  .toString() ==
-              '1' ||
-          (json['rommShowLibrary'] ?? false).toString().toLowerCase() == 'true',
+      rommShowLibrary: readBool(
+        json,
+        'rommShowLibrary',
+        'romm_show_library',
+        false,
+      ),
       rommLibraryDefaultScope:
           (json['rommLibraryDefaultScope'] ??
                   json['romm_library_default_scope'] ??
@@ -569,21 +556,31 @@ class ConfigModel {
 
   /// Reads a boolean stored under either spelling of its key.
   ///
-  /// Accepts every shape the two sources use: a JSON `bool` from [toJson], and
-  /// the `0`/`1` integers (or their stringified forms) SQLite stores. Anything
-  /// unrecognised, and an absent key, yield [fallback].
-  static bool _boolOr(
-    Map<String, dynamic> json,
+  /// This is the single boolean-coercion rule for the whole configuration:
+  /// [ConfigModel.fromJson] uses it for the `config.json` shape and
+  /// `SqliteConfigService.loadConfig` uses it for the `user_config` row, so a
+  /// column can no longer parse differently depending on which reader saw it.
+  ///
+  /// Accepts every shape either source produces: a JSON `bool` from [toJson],
+  /// the `0`/`1` integers (or their stringified forms) SQLite stores, the
+  /// literals `'true'`/`'false'`, and the legacy `'on'`/`'off'` text that
+  /// `video_sound` held before migration v24 turned it into an INTEGER.
+  /// Anything unrecognised, and an absent or null key, yield [fallback].
+  ///
+  /// [json] is nullable so callers holding an optional database row can pass it
+  /// straight through; a null map yields [fallback] for every key.
+  static bool readBool(
+    Map<String, dynamic>? json,
     String camelKey,
     String snakeKey,
     bool fallback,
   ) {
-    final raw = json[camelKey] ?? json[snakeKey];
+    final raw = json?[camelKey] ?? json?[snakeKey];
     if (raw == null) return fallback;
     if (raw is bool) return raw;
     final text = raw.toString().trim().toLowerCase();
-    if (text == '1' || text == 'true') return true;
-    if (text == '0' || text == 'false') return false;
+    if (text == '1' || text == 'true' || text == 'on') return true;
+    if (text == '0' || text == 'false' || text == 'off') return false;
     return fallback;
   }
 

@@ -111,59 +111,74 @@ class SqliteConfigService {
         emulators: detectedEmulators,
         gameViewMode: userConfig?['game_view_mode']?.toString() ?? 'list',
         systemViewMode: userConfig?['system_view_mode']?.toString() ?? 'grid',
-        showGameInfo:
-            (int.tryParse(userConfig?['show_game_info']?.toString() ?? '0') ??
-                0) ==
-            1,
-        isFullscreen:
-            (int.tryParse(userConfig?['is_fullscreen']?.toString() ?? '1') ??
-                1) ==
-            1,
-        bartopExitPoweroff:
-            (int.tryParse(
-                  userConfig?['bartop_exit_poweroff']?.toString() ?? '0',
-                ) ??
-                0) ==
-            1,
-        videoSound:
-            (int.tryParse(userConfig?['video_sound']?.toString() ?? '1') ??
-                1) ==
-            1,
-        scanOnStartup:
-            (int.tryParse(userConfig?['scan_on_startup']?.toString() ?? '1') ??
-                1) ==
-            1,
-        ignoreHiddenFiles:
-            (int.tryParse(
-                  userConfig?['ignore_hidden_files']?.toString() ?? '1',
-                ) ??
-                1) ==
-            1,
-        setupCompleted:
-            (int.tryParse(userConfig?['setup_completed']?.toString() ?? '0') ??
-                0) ==
-            1,
-        hideBottomScreen:
-            (int.tryParse(
-                  userConfig?['hide_bottom_screen']?.toString() ?? '0',
-                ) ??
-                0) ==
-            1,
-        sfxEnabled:
-            (int.tryParse(userConfig?['sfx_enabled']?.toString() ?? '1') ??
-                1) ==
-            1,
+        // Every flag below reads through [ConfigModel.readBool] so a column is
+        // coerced the same way here and in [ConfigModel.fromJson]. The
+        // fallback of each call is that column's own migration default.
+        showGameInfo: ConfigModel.readBool(
+          userConfig,
+          'showGameInfo',
+          'show_game_info',
+          false,
+        ),
+        isFullscreen: ConfigModel.readBool(
+          userConfig,
+          'isFullscreen',
+          'is_fullscreen',
+          true,
+        ),
+        bartopExitPoweroff: ConfigModel.readBool(
+          userConfig,
+          'bartopExitPoweroff',
+          'bartop_exit_poweroff',
+          false,
+        ),
+        videoSound: ConfigModel.readBool(
+          userConfig,
+          'videoSound',
+          'video_sound',
+          true,
+        ),
+        scanOnStartup: ConfigModel.readBool(
+          userConfig,
+          'scanOnStartup',
+          'scan_on_startup',
+          true,
+        ),
+        ignoreHiddenFiles: ConfigModel.readBool(
+          userConfig,
+          'ignoreHiddenFiles',
+          'ignore_hidden_files',
+          true,
+        ),
+        setupCompleted: ConfigModel.readBool(
+          userConfig,
+          'setupCompleted',
+          'setup_completed',
+          false,
+        ),
+        hideBottomScreen: ConfigModel.readBool(
+          userConfig,
+          'hideBottomScreen',
+          'hide_bottom_screen',
+          false,
+        ),
+        sfxEnabled: ConfigModel.readBool(
+          userConfig,
+          'sfxEnabled',
+          'sfx_enabled',
+          true,
+        ),
         sfxVolume:
             (double.tryParse(userConfig?['sfx_volume']?.toString() ?? '0.75') ??
                     0.75)
                 .clamp(0.0, 0.75)
                 .toDouble(),
-        use12HourClock:
-            (int.tryParse(
-                  userConfig?['use_12_hour_clock']?.toString() ?? '0',
-                ) ??
-                0) ==
-            1,
+        use12HourClock: ConfigModel.readBool(
+          userConfig,
+          'use12HourClock',
+          'use_12_hour_clock',
+          false,
+        ),
         systemSortBy:
             userConfig?['system_sort_by']?.toString() ?? 'alphabetical',
         systemSortOrder: userConfig?['system_sort_order']?.toString() ?? 'asc',
@@ -172,11 +187,12 @@ class SqliteConfigService {
         collectionSortOrder:
             userConfig?['collection_sort_order']?.toString() ?? 'asc',
         appLanguage: userConfig?['app_language']?.toString() ?? 'en',
-        hideRecentCard:
-            (int.tryParse(userConfig?['hide_recent_card']?.toString() ?? '0') ??
-                0) ==
-            1,
-        // Missing column/row => the 3x2 block the card has always used.
+        hideRecentCard: ConfigModel.readBool(
+          userConfig,
+          'hideRecentCard',
+          'hide_recent_card',
+          false,
+        ),
         recentCardSize:
             userConfig?['recent_card_size']?.toString().isNotEmpty == true
             ? userConfig!['recent_card_size'].toString()
@@ -187,50 +203,62 @@ class SqliteConfigService {
             ? userConfig!['game_details_tab'].toString()
             : 'wheel',
         // Missing column/row => '0' => tab visible (see migration v106).
-        hideTabSync:
-            (int.tryParse(userConfig?['hide_tab_sync']?.toString() ?? '0') ??
-                0) ==
-            1,
-        hideTabAchievements:
-            (int.tryParse(
-                  userConfig?['hide_tab_achievements']?.toString() ?? '0',
-                ) ??
-                0) ==
-            1,
-        hideTabScraper:
-            (int.tryParse(userConfig?['hide_tab_scraper']?.toString() ?? '0') ??
-                0) ==
-            1,
-        hideTabRomm:
-            (int.tryParse(userConfig?['hide_tab_romm']?.toString() ?? '0') ??
-                0) ==
-            1,
-        hideTabSearch:
-            (int.tryParse(userConfig?['hide_tab_search']?.toString() ?? '0') ??
-                0) ==
-            1,
+        hideTabSync: ConfigModel.readBool(
+          userConfig,
+          'hideTabSync',
+          'hide_tab_sync',
+          false,
+        ),
+        hideTabAchievements: ConfigModel.readBool(
+          userConfig,
+          'hideTabAchievements',
+          'hide_tab_achievements',
+          false,
+        ),
+        hideTabScraper: ConfigModel.readBool(
+          userConfig,
+          'hideTabScraper',
+          'hide_tab_scraper',
+          false,
+        ),
+        hideTabRomm: ConfigModel.readBool(
+          userConfig,
+          'hideTabRomm',
+          'hide_tab_romm',
+          false,
+        ),
+        hideTabSearch: ConfigModel.readBool(
+          userConfig,
+          'hideTabSearch',
+          'hide_tab_search',
+          false,
+        ),
         activeSyncProvider:
             userConfig?['active_sync_provider']?.toString() ?? 'neosync',
-        autoUpdateApp:
-            (int.tryParse(userConfig?['auto_update_app']?.toString() ?? '1') ??
-                1) ==
-            1,
-        autoUpdateSystems:
-            (int.tryParse(
-                  userConfig?['auto_update_systems']?.toString() ?? '1',
-                ) ??
-                1) ==
-            1,
+        autoUpdateApp: ConfigModel.readBool(
+          userConfig,
+          'autoUpdateApp',
+          'auto_update_app',
+          true,
+        ),
+        autoUpdateSystems: ConfigModel.readBool(
+          userConfig,
+          'autoUpdateSystems',
+          'auto_update_systems',
+          true,
+        ),
         systemGridColumns:
             userConfig?['system_grid_columns']?.toString() ?? 'M',
         gameGridColumns: userConfig?['game_grid_columns']?.toString() ?? 'M',
         gameCarouselCardStyle:
             userConfig?['game_carousel_card_style']?.toString() ?? 'fanart',
         dockApps: ConfigModel.normalizeDock(userConfig?['dock_apps']),
-        dockEnabled:
-            (int.tryParse(userConfig?['dock_enabled']?.toString() ?? '1') ??
-                1) ==
-            1,
+        dockEnabled: ConfigModel.readBool(
+          userConfig,
+          'dockEnabled',
+          'dock_enabled',
+          true,
+        ),
         dockSlotCount:
             (int.tryParse(userConfig?['dock_slot_count']?.toString() ?? '3') ??
                     3)
@@ -256,49 +284,49 @@ class SqliteConfigService {
                     25)
                 .clamp(0, 100),
         esdeFolderPath: userConfig?['esde_folder_path']?.toString() ?? '',
-        showAchievementsBadge:
-            (int.tryParse(
-                  userConfig?['show_achievements_badge']?.toString() ?? '0',
-                ) ??
-                0) ==
-            1,
-        showCloudSyncIcon:
-            (int.tryParse(
-                  userConfig?['show_cloud_sync_icon']?.toString() ?? '1',
-                ) ??
-                1) ==
-            1,
-        raMatchOnStartup:
-            (int.tryParse(
-                  userConfig?['ra_match_on_startup']?.toString() ?? '0',
-                ) ??
-                0) ==
-            1,
-        subfolderViewAll:
-            (int.tryParse(
-                  userConfig?['subfolder_view_all']?.toString() ?? '0',
-                ) ??
-                0) ==
-            1,
-        // Defaults to 1 (on), matching the column's own `DEFAULT 1` and
+        showAchievementsBadge: ConfigModel.readBool(
+          userConfig,
+          'showAchievementsBadge',
+          'show_achievements_badge',
+          false,
+        ),
+        showCloudSyncIcon: ConfigModel.readBool(
+          userConfig,
+          'showCloudSyncIcon',
+          'show_cloud_sync_icon',
+          true,
+        ),
+        raMatchOnStartup: ConfigModel.readBool(
+          userConfig,
+          'raMatchOnStartup',
+          'ra_match_on_startup',
+          false,
+        ),
+        subfolderViewAll: ConfigModel.readBool(
+          userConfig,
+          'subfolderViewAll',
+          'subfolder_view_all',
+          false,
+        ),
+        // Defaults to on, matching the column's own `DEFAULT 1` and
         // [ConfigRepository.getRommUploadScreenshots], which the session-end
         // upload pass reads straight from the database.
         // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload Toggle"
-        rommUploadScreenshots:
-            (int.tryParse(
-                  userConfig?['romm_upload_screenshots']?.toString() ?? '1',
-                ) ??
-                1) ==
-            1,
+        rommUploadScreenshots: ConfigModel.readBool(
+          userConfig,
+          'rommUploadScreenshots',
+          'romm_upload_screenshots',
+          true,
+        ),
         // The unified-library settings (SPEC-0019). Absent columns read as the
         // migration defaults: feature off, `all` scope, 200 MB of covers.
         // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Tables"
-        rommShowLibrary:
-            (int.tryParse(
-                  userConfig?['romm_show_library']?.toString() ?? '0',
-                ) ??
-                0) ==
-            1,
+        rommShowLibrary: ConfigModel.readBool(
+          userConfig,
+          'rommShowLibrary',
+          'romm_show_library',
+          false,
+        ),
         rommLibraryDefaultScope:
             userConfig?['romm_library_default_scope']?.toString() ?? 'all',
         rommCoverCacheMb:
