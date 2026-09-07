@@ -290,6 +290,15 @@ class RommService {
   /// once per connection rather than before every authenticated call.
   bool _probed = false;
 
+  /// Whether this connection has already verified its API key — and, with it,
+  /// learned the scopes that key holds — since the last [configure].
+  ///
+  /// Set even when the attempt fails, so a key the server keeps rejecting is
+  /// asked about once per connection rather than before every call.
+  // Governing: ADR-0013 (push play state to RomM),
+  // SPEC-0013 REQ "Optional Scope Groups", ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
+  bool _apiKeyVerified = false;
+
   /// Features already reported as gated on this connection, so the "not on
   /// this server" line is logged once per feature rather than once per call.
   final Set<RommFeature> _gatesLogged = <RommFeature>{};
@@ -423,6 +432,7 @@ class RommService {
       _scopeStates[group] = RommScopeState.unknown;
     }
     _scopeGatesLogged.clear();
+    _apiKeyVerified = false;
     _favouritesCollectionId = null;
     _playSessionsSupported = true;
     _applyCapabilityGates();
@@ -466,6 +476,7 @@ class RommService {
       _scopeStates[group] = RommScopeState.unknown;
     }
     _scopeGatesLogged.clear();
+    _apiKeyVerified = false;
   }
 
   static String _normalizeBaseUrl(String raw) {
@@ -723,7 +734,10 @@ class RommService {
     // API-key mode probes too: the key's scopes are fixed, but the server
     // version still gates which endpoints exist.
     if (!_probed) await fetchHeartbeat();
-    if (usesApiKey) return _verifyApiKey();
+    if (usesApiKey) {
+      _apiKeyVerified = true;
+      return _verifyApiKey();
+    }
     return _authenticateWithPassword();
   }
 
@@ -1171,7 +1185,34 @@ class RommService {
   }
 
   /// Ensures a usable access token, authenticating or refreshing as needed.
+  ///
+  /// API-key mode has nothing to refresh, but it does have something to
+  /// *learn*: the scopes the key carries, which only `GET /api/users/me`
+  /// reports. [RommProvider.initialize] restores a saved connection without
+  /// touching the network — by design — so a session resumed at launch never
+  /// calls [authenticate], and before this the scope groups stayed unknown for
+  /// the entire run. Every `granted`-gated feature was then invisible until the
+  /// user re-connected by hand, which is how the server maintenance menu came
+  /// to be missing on a paired handheld across restarts (issue #168).
+  ///
+  /// Verifying here rather than in `initialize` keeps the restore offline: the
+  /// cost is paid by the first call that actually needs the network, once per
+  /// connection, and a failure is logged and swallowed because this is a
+  /// best-effort enrichment of a request that is about to be sent anyway.
+  // Governing: ADR-0013 (push play state to RomM),
+  // SPEC-0013 REQ "Optional Scope Groups", ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
   Future<void> _ensureToken() async {
+    if (usesApiKey && !_apiKeyVerified) {
+      _apiKeyVerified = true;
+      try {
+        await authenticate();
+      } catch (e) {
+        // The key may still work for this call; a bad one fails the request
+        // itself, exactly as it did before this probe existed.
+        _log.w('RomM API-key verification failed: $e');
+      }
+      return;
+    }
     if (_tokenLikelyValid) return;
     if (_accessToken != null && _refreshToken != null) {
       await _refreshAccessToken();

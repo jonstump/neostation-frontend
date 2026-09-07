@@ -49,6 +49,16 @@ void main() {
     return s;
   }
 
+  /// The requests a test actually cares about. An API-key connection now
+  /// verifies itself once per connection — a heartbeat plus `GET
+  /// /api/users/me`, which is where it learns the scopes its key holds — before
+  /// its first authenticated call, so neither is the call under test.
+  // Governing: ADR-0013, SPEC-0013 REQ "Optional Scope Groups",
+  // ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
+  Iterable<http.BaseRequest> calls() => requests.where(
+    (r) => !const {'/api/heartbeat', '/api/users/me'}.contains(r.url.path),
+  );
+
   /// Answers every request with a buffered [respond] result.
   void serve(FutureOr<http.Response> Function(http.Request) respond) {
     RommService.debugUseHttpClient(
@@ -126,12 +136,12 @@ void main() {
 
       final list = await service().listFirmware(3);
 
-      expect(requests.single.method, 'GET');
+      expect(calls().single.method, 'GET');
       expect(
-        requests.single.url.toString(),
+        calls().single.url.toString(),
         'https://romm.local/api/firmware?platform_id=3',
       );
-      expect(requests.single.headers['Authorization'], 'Bearer rmm_deadbeef');
+      expect(calls().single.headers['Authorization'], 'Bearer rmm_deadbeef');
 
       expect(list, hasLength(3));
       expect(list.map((f) => f.fileName), [
@@ -207,7 +217,7 @@ void main() {
       );
 
       expect(
-        requests.single.url.toString(),
+        calls().single.url.toString(),
         'https://romm.local/api/firmware/42/content/scph5501.bin',
       );
       expect(File(dest).readAsStringSync(), 'BIOSDATA');
@@ -224,7 +234,7 @@ void main() {
       );
 
       expect(
-        requests.single.url.toString(),
+        calls().single.url.toString(),
         'https://romm.local/api/firmware/42/content/PS2%20bios.bin',
       );
     });
@@ -391,7 +401,7 @@ void main() {
       );
 
       expect(
-        requests.single.url.toString(),
+        calls().single.url.toString(),
         'https://romm.local/api/roms/7/content/game.sfc',
       );
       expect(File(dest).readAsStringSync(), 'ROM');

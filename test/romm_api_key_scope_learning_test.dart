@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
+import 'package:neostation/models/romm_server_capabilities.dart';
 import 'package:neostation/services/romm_service.dart';
 
 /// What an API-key login — and therefore a paired client token, which the
@@ -41,6 +42,8 @@ void main() {
               'username': 'jon',
               'oauth_scopes': ?scopes,
             });
+          case '/api/roms':
+            return json(200, {'items': <dynamic>[]});
           default:
             return http.Response('not found', 404);
         }
@@ -178,5 +181,75 @@ void main() {
     await service.authenticate();
 
     expect(service.username, 'jon');
+  });
+
+  group('a session restored without a connect still learns', () {
+    // RommProvider.initialize() rebuilds a saved connection from the database
+    // and deliberately does not touch the network, so authenticate() is never
+    // called. Before issue #168 that left the groups unknown for the whole run
+    // *and* left capabilities unprobed, so version-gated controls rendered on
+    // servers that cannot serve them.
+    test('the first authenticated call verifies the key and probes', () async {
+      serve(scopes: allScopes);
+      final service = configured();
+
+      // No authenticate() — straight to a normal browse call.
+      await service.getRoms(limit: 1);
+
+      expect(service.hasScope(RommScopeGroup.tasksRun), RommScopeState.granted);
+      // The heartbeat must run too. Without it capabilities stay null,
+      // `supports` answers `unknown` rather than `unsupported`, and a
+      // version-gated control like Surprise Me renders on a server that
+      // answers its endpoint with a 422.
+      expect(service.capabilities, isNotNull);
+      expect(
+        service.supports(RommFeature.randomRom),
+        RommFeatureSupport.unsupported,
+        reason: 'randomRom needs 5.2.0; this server is 5.1.0',
+      );
+    });
+
+    test('verification happens once, not before every call', () async {
+      serve(scopes: allScopes);
+      final service = configured();
+
+      await service.getRoms(limit: 1);
+      await service.getRoms(limit: 1);
+      await service.getRoms(limit: 1);
+
+      expect(
+        requests.where((r) => r.url.path == '/api/users/me'),
+        hasLength(1),
+        reason: 'once per connection, not once per request',
+      );
+    });
+
+    test('a failed verification does not fail the request', () async {
+      RommService.debugUseHttpClient(
+        MockClient((request) async {
+          requests.add(request);
+          switch (request.url.path) {
+            case '/api/heartbeat':
+              return json(200, {
+                'SYSTEM': {'VERSION': '5.1.0'},
+              });
+            case '/api/users/me':
+              return http.Response('boom', 500);
+            default:
+              return json(200, {'items': <dynamic>[]});
+          }
+        }),
+      );
+      final service = configured();
+
+      await expectLater(service.getRoms(limit: 1), completes);
+      for (final group in RommScopeGroup.values) {
+        expect(
+          service.hasScope(group),
+          RommScopeState.unknown,
+          reason: '$group',
+        );
+      }
+    });
   });
 }
