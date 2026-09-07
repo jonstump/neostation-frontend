@@ -1318,4 +1318,6 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.collectionUnlinkRomm: 'RomM 연결 해제',
   AppLocale.collectionUnlinkRommConfirm:
       '이 컬렉션은 더 이상 RomM 컬렉션을 따르지 않습니다. 게임은 그대로 유지됩니다.',
+  AppLocale.rommPairServerTooOld:
+      '이 RomM 서버는 페어링을 지원하기에 너무 오래된 버전입니다(4.8.0 이상 필요)',
 };

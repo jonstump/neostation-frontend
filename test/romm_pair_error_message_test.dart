@@ -43,16 +43,24 @@ void main() {
       );
     });
 
-    test('the three pairing keys are distinct', () {
+    test('a server too old for pairing has its own key', () {
+      expect(
+        rommPairErrorKey(RommErrorKind.unsupported),
+        AppLocale.rommPairServerTooOld,
+      );
+    });
+
+    test('the classified pairing keys are distinct', () {
       final keys = {
         for (final kind in [
           RommErrorKind.pairCodeInvalid,
           RommErrorKind.pairCodeExpired,
           RommErrorKind.pairRateLimited,
+          RommErrorKind.unsupported,
         ])
           rommPairErrorKey(kind),
       };
-      expect(keys.length, 3);
+      expect(keys.length, 4);
     });
 
     test('other and null defer to the returned message', () {
@@ -77,6 +85,8 @@ void main() {
       AppLocale.rommPairCodeInvalid,
       AppLocale.rommPairCodeExpired,
       AppLocale.rommPairRateLimited,
+      // Governing: ADR-0010, SPEC-0010 REQ "Gated Call Sites"
+      AppLocale.rommPairServerTooOld,
       AppLocale.rommPairedTokenExpires,
       AppLocale.rommPairedTokenName,
     };
@@ -116,6 +126,7 @@ void main() {
           AppLocale.rommPairCodeExpired,
           AppLocale.rommPairRateLimited,
           AppLocale.rommPairCodeInvalidLength,
+          AppLocale.rommPairServerTooOld,
         ]) {
           expect(
             entry.value[key],

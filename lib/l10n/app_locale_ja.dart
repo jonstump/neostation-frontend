@@ -1309,4 +1309,6 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.collectionUnlinkRomm: 'RomM とのリンクを解除',
   AppLocale.collectionUnlinkRommConfirm:
       'このコレクションは RomM のコレクションに追従しなくなります。ゲームはそのまま残ります。',
+  AppLocale.rommPairServerTooOld:
+      'この RomM サーバーはペアリングに対応していない古いバージョンです（4.8.0 以降が必要）',
 };

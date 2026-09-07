@@ -1480,4 +1480,6 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.collectionUnlinkRomm: 'Scollega da RomM',
   AppLocale.collectionUnlinkRommConfirm:
       'Questa raccolta smetterà di seguire la raccolta RomM. I suoi giochi restano.',
+  AppLocale.rommPairServerTooOld:
+      'Questo server RomM è troppo vecchio per l\'associazione (richiede 4.8.0 o successivo)',
 };

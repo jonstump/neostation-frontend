@@ -18,6 +18,11 @@ String? rommPairErrorKey(RommErrorKind? kind) {
     // call (firmware, say), and its own screen words it.
     // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "Firmware Model And Service"
     RommErrorKind.scopeDenied => null,
+    // A server that predates the pairing endpoint gets its own sentence, so
+    // the user is told to upgrade RomM instead of shown a raw 404.
+    // Governing: ADR-0010 (RomM heartbeat capability probe),
+    // SPEC-0010 REQ "Gated Call Sites"
+    RommErrorKind.unsupported => AppLocale.rommPairServerTooOld,
     RommErrorKind.other || null => null,
   };
 }

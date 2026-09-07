@@ -1259,4 +1259,5 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.collectionRommMirrored: '已從 RomM 同步',
   AppLocale.collectionUnlinkRomm: '取消與 RomM 的連結',
   AppLocale.collectionUnlinkRommConfirm: '此合集將不再跟隨 RomM 合集。其中的遊戲會保留。',
+  AppLocale.rommPairServerTooOld: '此 RomM 伺服器版本過舊，無法配對（需要 4.8.0 或更新版本）',
 };

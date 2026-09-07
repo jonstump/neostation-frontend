@@ -13,6 +13,7 @@ import '../models/romm_pairing.dart';
 import '../models/romm_platform.dart';
 import '../models/romm_rom.dart';
 import '../models/romm_scrape_step.dart';
+import '../models/romm_server_capabilities.dart';
 import '../models/system_model.dart';
 import '../repositories/collection_repository.dart';
 import '../repositories/game_repository.dart';
@@ -696,6 +697,37 @@ class RommProvider extends ChangeNotifier {
     _lastError = null;
     _lastErrorKind = null;
     notifyListeners();
+
+    // The exchange runs before any credential exists, so it never reaches
+    // authenticate()'s probe: ask the server what it is first. A RomM older
+    // than the client-token endpoint would answer the exchange with a raw 404,
+    // which reads as "bad code" — gate it into its own message instead, and
+    // send nothing.
+    //
+    // Only for a code that could plausibly be exchanged: a malformed one is
+    // refused locally, without a request, and the probe must not turn that
+    // into one.
+    // Governing: ADR-0010 (RomM heartbeat capability probe),
+    // SPEC-0010 REQ "Gated Call Sites"
+    if (RommPairCode.isValid(RommPairCode.normalize(code))) {
+      await _service.fetchHeartbeat(serverUrl: serverUrl);
+      if (_service.supports(RommFeature.clientTokenExchange) ==
+          RommFeatureSupport.unsupported) {
+        _status = RommConnectionStatus.error;
+        _lastErrorKind = RommErrorKind.unsupported;
+        _lastError =
+            'This RomM server is too old for pairing (needs '
+            '${RommFeature.clientTokenExchange.minVersion} or newer)';
+        _log.w(
+          'RomM pairing gated: '
+          'feature=${RommFeature.clientTokenExchange.name} '
+          'version=${_service.capabilities?.version} '
+          'min_version=${RommFeature.clientTokenExchange.minVersion}',
+        );
+        notifyListeners();
+        return _lastError;
+      }
+    }
 
     final RommPairedToken token;
     try {

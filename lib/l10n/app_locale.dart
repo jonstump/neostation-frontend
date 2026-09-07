@@ -1476,6 +1476,7 @@ mixin AppLocale {
   static const String collectionUnlinkRomm = 'collection_unlink_romm';
   static const String collectionUnlinkRommConfirm =
       'collection_unlink_romm_confirm';
+  static const String rommPairServerTooOld = 'romm_pair_server_too_old';
 
   // ==========================================================================
   // Localization Maps
