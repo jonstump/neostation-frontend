@@ -141,10 +141,16 @@ class GameSessionManager {
     }
   }
 
-  /// Recovers playtime from a previously interrupted game session.
+  /// Reconciles a previously interrupted game session.
   ///
   /// Handles cases where the application was terminated by the OS (Android)
-  /// while a game was running.
+  /// while a game was running: the elapsed time is credited, the session is
+  /// queued for RomM, and the same post-close hooks a clean exit fires are run
+  /// detached (see [_runRecoveredSessionHooks]). Recording the playtime and
+  /// dropping the saves and screenshots was the earlier behaviour, and it was
+  /// silent — a save the user made in the minutes before the kill never went
+  /// up, and the captures from that session fell outside every later session's
+  /// collection window, so nothing ever picked them up.
   static Future<void> checkPendingGameSession() async {
     try {
       final session = await GameSessionPersistence.getActiveGameSession();
@@ -179,6 +185,18 @@ class GameSessionManager {
             start: DateTime.fromMillisecondsSinceEpoch(startTimestamp),
             end: DateTime.fromMillisecondsSinceEpoch(currentTimestamp),
           );
+
+          // A killed session is still a finished session: give it the same
+          // post-close treatment [endGameSession] gives a clean exit. Behind
+          // the same gates as the playtime write above — the >= 5s floor that
+          // filters launch failures, and a ROM path the hooks can key on — and
+          // detached, because startup must not wait on it.
+          unawaited(
+            _runRecoveredSessionHooks(
+              GameModel.fromDatabaseModel(game),
+              DateTime.fromMillisecondsSinceEpoch(startTimestamp),
+            ),
+          );
         }
       }
 
@@ -186,6 +204,82 @@ class GameSessionManager {
     } catch (e) {
       _log.e('Error checking pending game session: $e');
     }
+  }
+
+  /// The post-close hooks for a session recovered by
+  /// [checkPendingGameSession], run once the sync providers can act on them.
+  ///
+  /// Same hooks, same order as the clean-exit path in [endGameSession]: the
+  /// screenshot pass first, then the save sync (which delays itself further).
+  /// The recovered session's *original* start is what is passed on, so the
+  /// collector's session window covers the captures the killed session left
+  /// behind — the window RetroArch stamped them in, not the window of the
+  /// launch that recovered them.
+  ///
+  /// The wait exists because of when this runs. `main()` calls
+  /// [checkPendingGameSession] during startup, before it builds and registers
+  /// the sync providers, so firing the hooks inline would offer the session to
+  /// an empty registry and drop it — silently, which is the whole defect.
+  /// Waiting here rather than moving the call keeps the recovery's database
+  /// work (playtime, and the flag that suppresses the startup scan) where the
+  /// rest of startup expects it.
+  ///
+  /// Never throws: it is detached, and an unhandled async error on this path
+  /// reaches no error handler.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload And Ledger" (upload at session end), SPEC-0016 REQ "Concurrency Safety" (detached, after the playtime hooks)
+  static Future<void> _runRecoveredSessionHooks(
+    GameModel game,
+    DateTime sessionStart,
+  ) async {
+    try {
+      final ready = await _awaitSyncProvider();
+      // No colon after "session": the log redactor treats that as a session
+      // token and would blank the rest of the line.
+      _log.i(
+        'Running post-close hooks for a recovered session '
+        'game="${game.romname}" providerReady=$ready',
+      );
+      _uploadScreenshotsAfterClose(game, sessionStart);
+      _syncSavesAfterClose(game);
+    } catch (e) {
+      _log.e('Recovered session post-close hooks failed: $e');
+    }
+  }
+
+  /// How long [_runRecoveredSessionHooks] waits for a sync provider to finish
+  /// restoring its saved connection, and how often it looks.
+  ///
+  /// Polled rather than listened for: [SyncManager] only re-broadcasts what a
+  /// provider notifies, and a provider restoring a saved connection does not
+  /// notify through it. The poll costs one getter read per tick, runs at most
+  /// once per launch, and only when a session was actually recovered.
+  static const Duration _recoveredSyncWait = Duration(seconds: 20);
+  static const Duration _recoveredSyncPoll = Duration(milliseconds: 250);
+
+  /// Whether any registered provider is in a position to act, waiting up to
+  /// [_recoveredSyncWait] for one.
+  ///
+  /// Returns false on expiry, and the hooks run anyway: a user with nothing
+  /// connected gets the same logged skip the clean-exit path gives them, which
+  /// is the honest outcome rather than a silent drop.
+  static Future<bool> _awaitSyncProvider() async {
+    final deadline = DateTime.now().add(_recoveredSyncWait);
+    while (!_hasReadySyncProvider()) {
+      if (!DateTime.now().isBefore(deadline)) return false;
+      await Future<void>.delayed(_recoveredSyncPoll);
+    }
+    return true;
+  }
+
+  static bool _hasReadySyncProvider() {
+    for (final provider in SyncManager.instance.providers) {
+      try {
+        if (provider.isAuthenticated) return true;
+      } catch (e) {
+        _log.w('Sync provider readiness check failed: $e');
+      }
+    }
+    return false;
   }
 
   /// Registers the initiation of a game session and initializes tracking state.
