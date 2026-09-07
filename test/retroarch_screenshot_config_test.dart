@@ -180,4 +180,88 @@ sort_screenshots_by_content_enable = "true"
       expect(copy.sortScreenshotsByContent, isTrue);
     });
   });
+
+  /// `screenshots_in_content_dir` — the setting that decides the whole
+  /// question of *where* on an install that has it on.
+  ///
+  /// RetroArch's `screenshot_dump` builds a directory from
+  /// `screenshot_directory` (plus the sort-by-content subfolder) and then
+  /// throws it away:
+  ///
+  /// ```c
+  /// if (     !*new_screenshot_dir
+  ///       || settings->bools.screenshots_in_content_dir)
+  ///    fill_pathname_basedir(new_screenshot_dir, name_base, ...);
+  /// ```
+  ///
+  /// The fallback added for the "no directory configured" case therefore had
+  /// no way to know it was naming a folder nothing writes to.
+  ///
+  /// Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ
+  /// "Screenshot Directory From RetroArch Config"
+  group('screenshots_in_content_dir', () {
+    test('is parsed as a quoted bool', () async {
+      final on = await parse('screenshots_in_content_dir = "true"\n');
+      expect(on.screenshotsInContentDir, isTrue);
+
+      final off = await parse('screenshots_in_content_dir = "false"\n');
+      expect(off.screenshotsInContentDir, isFalse);
+    });
+
+    test('defaults to false when the config never names it', () async {
+      final config = await parse('screenshot_directory = "/shots"\n');
+      expect(config.screenshotsInContentDir, isFalse);
+    });
+
+    test('does not collide with screenshot_directory', () async {
+      // Neither key is a prefix of the other, but they share one, and the
+      // parser dispatches on startsWith.
+      final config = await parse('''
+screenshot_directory = "/shots"
+screenshots_in_content_dir = "true"
+sort_screenshots_by_content_enable = "true"
+''');
+
+      expect(config.screenshotDirectory, '/shots');
+      expect(config.screenshotsInContentDir, isTrue);
+      expect(config.sortScreenshotsByContent, isTrue);
+    });
+
+    test('suppresses the screenshot directory guess', () {
+      // Guessing a folder here would put a path in the log that RetroArch
+      // never writes to; the collector resolves the content directory per
+      // game instead.
+      final config = RetroArchConfigService.withScreenshotFallback(
+        const RetroArchConfig(
+          configPath: '/cfg/retroarch.cfg',
+          screenshotsInContentDir: true,
+        ),
+      );
+
+      expect(config.screenshotDirectory, isNull);
+    });
+
+    test('survives the JSON round trip and copyWith', () {
+      const config = RetroArchConfig(
+        configPath: '/cfg',
+        screenshotsInContentDir: true,
+      );
+
+      expect(
+        RetroArchConfig.fromJson(config.toJson()).screenshotsInContentDir,
+        isTrue,
+      );
+      expect(
+        config.copyWith(savefileDirectory: '/saves').screenshotsInContentDir,
+        isTrue,
+      );
+      expect(
+        RetroArchConfig.fromJson(const {
+          'config_path': '/cfg',
+          'screenshots_in_content_dir': 1,
+        }).screenshotsInContentDir,
+        isTrue,
+      );
+    });
+  });
 }
