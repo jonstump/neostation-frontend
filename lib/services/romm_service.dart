@@ -167,6 +167,9 @@ class RommService {
 
   /// Cap on the capability probe. It is one small body on the connect path, so
   /// a slow or unreachable server must not hold up the login behind it.
+  ///
+  /// This is the budget for the *whole* probe, retries included — not per
+  /// attempt. See [fetchHeartbeat] for why that distinction matters.
   // Governing: ADR-0010, SPEC-0010 REQ "Heartbeat Probe"
   static const Duration _heartbeatTimeout = Duration(seconds: 5);
 
@@ -431,6 +434,10 @@ class RommService {
   /// [_heartbeatTimeout], and routed through the same client and TLS policy as
   /// every other call — including the HTTPS→HTTP fallback for homelab servers.
   ///
+  /// The cap covers the fallback too: both attempts share one budget, so a
+  /// server that fails TLS and then hangs on plain HTTP cannot stall the
+  /// connect path for longer than [_heartbeatTimeout] in total.
+  ///
   /// Never throws. Any failure — timeout, socket error, TLS, a non-2xx status,
   /// a body that is not a JSON object — leaves [capabilities] null, which reads
   /// as [RommFeatureSupport.unknown] and gates nothing. Exactly one line is
@@ -460,10 +467,15 @@ class RommService {
     final url = _baseUrl;
     http.Response resp;
     try {
+      // One budget for the whole probe, not one per attempt. The HTTPS->HTTP
+      // scheme fallback re-sends the request, so a per-attempt cap let a
+      // server that fails TLS slowly and then hangs on plain HTTP hold the
+      // connect path for close to twice [_heartbeatTimeout]. The cap therefore
+      // sits outside [_withSchemeFallback], covering both attempts together.
+      // Governing: ADR-0010, SPEC-0010 REQ "Heartbeat Probe" (at most 5 s)
       resp = await _withSchemeFallback(
-        () =>
-            _httpClient.get(_uri('/api/heartbeat')).timeout(_heartbeatTimeout),
-      );
+        () => _httpClient.get(_uri('/api/heartbeat')),
+      ).timeout(_heartbeatTimeout);
     } on TimeoutException catch (e) {
       _capabilities = null;
       onTransportFailure?.call(e);

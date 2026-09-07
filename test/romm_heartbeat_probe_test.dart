@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -111,6 +113,71 @@ void main() {
       await service.fetchHeartbeat();
       expect(service.capabilities, isNull);
     });
+
+    // The cap is the budget for the whole probe, retries included. When it was
+    // applied per attempt instead, a server that failed TLS slowly and then
+    // hung on plain HTTP held the connect path for both timeouts back to back
+    // — roughly twice the ceiling SPEC-0010 allows. The MockClient-based
+    // timeout test above never caught it because it throws instead of running
+    // the clock, so this one drives a fake clock through both attempts.
+    // Governing: ADR-0010, SPEC-0010 REQ "Heartbeat Probe"
+    test(
+      'the scheme fallback shares the 5 s budget, it does not restart it',
+      () {
+        fakeAsync((async) {
+          final schemes = <String>[];
+          RommService.debugUseHttpClient(
+            MockClient((request) async {
+              schemes.add(request.url.scheme);
+              if (request.url.scheme == 'https') {
+                // A TLS failure that costs real time before it lands.
+                await Future<void>.delayed(const Duration(seconds: 3));
+                throw const HandshakeException('bad cert');
+              }
+              // …and a plain-HTTP retry that never answers.
+              await Completer<void>().future;
+              throw StateError('unreachable');
+            }),
+          );
+          final service = RommService()
+            ..configure(
+              serverUrl: 'romm.local',
+              username: 'jon',
+              password: 's3cret',
+            );
+
+          var settled = false;
+          Object? thrown;
+          unawaited(() async {
+            try {
+              await service.fetchHeartbeat();
+            } catch (e) {
+              thrown = e;
+            }
+            settled = true;
+          }());
+
+          async.elapse(const Duration(seconds: 4));
+          async.flushMicrotasks();
+          expect(schemes, [
+            'https',
+            'http',
+          ], reason: 'the TLS failure downgraded the scheme and retried');
+          expect(settled, isFalse, reason: 'the budget has not run out yet');
+
+          async.elapse(const Duration(seconds: 1));
+          async.flushMicrotasks();
+
+          expect(
+            settled,
+            isTrue,
+            reason: 'the whole probe is capped at 5 s, not 5 s per attempt',
+          );
+          expect(thrown, isNull, reason: 'fetchHeartbeat never throws');
+          expect(service.capabilities, isNull);
+        });
+      },
+    );
 
     test('an unparseable body is swallowed', () async {
       serve(heartbeat: () => http.Response('<html>nope</html>', 200));
