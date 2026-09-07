@@ -13,6 +13,7 @@ import '../models/romm_collection.dart';
 import '../models/romm_firmware.dart';
 import '../models/romm_pairing.dart';
 import '../models/romm_platform.dart';
+import '../models/romm_rom_filters.dart';
 import '../models/romm_rom_page.dart';
 import '../models/romm_play_session.dart';
 import '../models/romm_rom.dart';
@@ -57,6 +58,15 @@ enum RommErrorKind {
   /// skipped rather than leaving it queued forever.
   // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload And Ledger"
   payloadTooLarge,
+
+  /// A maintenance task could not be queued because it is already running (or
+  /// the server refuses to run it manually): `POST /api/tasks/run/{name}`
+  /// answered 400, or answered "already running". Distinct because it is not a
+  /// failure the user needs to fix — the work they asked for is already
+  /// happening — so the screen says so rather than showing an error.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Maintenance Tasks"
+  taskBusy,
 }
 
 /// One *optional* bundle of RomM OAuth scopes, negotiated at login.
@@ -1272,6 +1282,7 @@ class RommService {
     int? collectionId,
     String? virtualCollectionId,
     String? search,
+    RommRomFilters filters = RommRomFilters.none,
     int limit = 50,
     int offset = 0,
   }) async {
@@ -1280,6 +1291,7 @@ class RommService {
       collectionId: collectionId,
       virtualCollectionId: virtualCollectionId,
       search: search,
+      filters: filters,
       limit: limit,
       offset: offset,
     );
@@ -1330,6 +1342,13 @@ class RommService {
   ///
   /// Note RomM has no release-year filter — year has to stay a client-side
   /// concern.
+  ///
+  /// [filters] are RomM's own boolean list filters; only the ones that are set
+  /// are sent, under the query-parameter names RomM publishes (`has_saves`,
+  /// `playable`, …). An unset filter contributes nothing, so a caller that
+  /// passes [RommRomFilters.none] builds byte-for-byte the query it always did.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Filter Parameters"
   Future<RommRomPage> getRomsPage({
     List<int> platformIds = const [],
     int? collectionId,
@@ -1337,6 +1356,7 @@ class RommService {
     String? search,
     List<String> genres = const [],
     List<String> companies = const [],
+    RommRomFilters filters = RommRomFilters.none,
     int limit = 50,
     int offset = 0,
   }) async {
@@ -1362,6 +1382,8 @@ class RommService {
     }
     if (genres.isNotEmpty) params['genres'] = genres;
     if (companies.isNotEmpty) params['companies'] = companies;
+    // Governing: ADR-0019, SPEC-0018 REQ "Filter Parameters"
+    params.addAll(filters.toQueryParameters());
 
     final resp = await _authedGetUri(
       Uri.parse('$_baseUrl/api/roms').replace(queryParameters: params),
@@ -1401,6 +1423,149 @@ class RommService {
       if (values.isNotEmpty) out[key] = values;
     }
     return out;
+  }
+
+  /// One ROM picked at random by the server, scoped to a platform, a
+  /// collection or a virtual collection — the browse screen's "Surprise me".
+  ///
+  /// Returns null when the scope holds nothing (RomM answers `null`), and null
+  /// **without sending a request** when the heartbeat says this server predates
+  /// [RommFeature.randomRom]. An [RommFeatureSupport.unknown] version still
+  /// tries, per ADR-0010: a heartbeat that never landed must not gate.
+  ///
+  /// Note the endpoint is far newer than ADR-0019 assumed — see
+  /// [RommFeature.randomRom] for the provenance — so on most servers in the
+  /// field this gate is what is actually load-bearing, not a formality.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Filter Parameters", REQ "Surprise Me"
+  Future<RommRom?> getRandomRom({
+    List<int> platformIds = const [],
+    int? collectionId,
+    String? virtualCollectionId,
+  }) async {
+    if (supports(RommFeature.randomRom) == RommFeatureSupport.unsupported) {
+      _logGateOnce(RommFeature.randomRom);
+      return null;
+    }
+
+    final params = <String, dynamic>{};
+    if (platformIds.isNotEmpty) {
+      params['platform_ids'] = platformIds.map((id) => '$id').toList();
+    }
+    if (collectionId != null) params['collection_id'] = '$collectionId';
+    if (virtualCollectionId != null) {
+      params['virtual_collection_id'] = virtualCollectionId;
+    }
+
+    final uri = Uri.parse(
+      '$_baseUrl/api/roms/random',
+    ).replace(queryParameters: params.isEmpty ? null : params);
+
+    final http.Response resp;
+    try {
+      resp = await _authedGetUri(uri);
+    } on RommException catch (e) {
+      // A server that reports no version (or a proxy that ate the heartbeat)
+      // reaches here rather than the gate above; a 404 is that server saying
+      // it has no such endpoint, which is an absent feature and not an error
+      // worth surfacing.
+      if (e.statusCode == 404) {
+        _log.i(
+          'RomM random rom unavailable: endpoint=/api/roms/random status=404 '
+          'reason=endpoint_absent',
+        );
+        return null;
+      }
+      _log.w(
+        'RomM random rom failed: endpoint=/api/roms/random '
+        'status=${e.statusCode} error=${e.message}',
+      );
+      rethrow;
+    }
+
+    // RomM answers a bare `null` for an empty scope, and 204 would carry no
+    // body at all; both mean "nothing to pick".
+    if (resp.body.trim().isEmpty) return null;
+    final decoded = jsonDecode(resp.body);
+    if (decoded is! Map<String, dynamic>) return null;
+    return RommRom.fromJson(decoded);
+  }
+
+  /// Queues one server-side maintenance task and returns the id RomM gave it.
+  ///
+  /// `POST /api/tasks/run/{name}` needs the `tasks.run` scope, so a connection
+  /// known not to hold [RommScopeGroup.tasksRun] returns null without sending
+  /// anything (logged once per connection by [_scopeGated]). A 400 — RomM's
+  /// answer for a task it will not run right now — and any body that says the
+  /// task is already running map to [RommErrorKind.taskBusy], which the caller
+  /// reports as "already running" rather than as a failure.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Maintenance Tasks"
+  Future<String?> runTask(String name) async {
+    if (_scopeGated(RommScopeGroup.tasksRun)) return null;
+
+    final resp = await _sendWithAuthRetry<http.Response>(
+      () => _httpClient
+          .post(_uri('/api/tasks/run/$name'), headers: _authHeaders)
+          .timeout(const Duration(seconds: 30)),
+      statusOf: (r) => r.statusCode,
+    );
+
+    if (resp.statusCode >= 200 && resp.statusCode < 300) {
+      final id = _taskIdOf(resp.body);
+      _log.i(
+        'RomM task queued: endpoint=/api/tasks/run/$name '
+        'status=${resp.statusCode} task_id=$id',
+      );
+      // The id is what the caller reports; an answer without one still means
+      // the task was accepted, so the task name stands in rather than a null
+      // that would read as "gated".
+      return id ?? name;
+    }
+
+    if (resp.statusCode == 403) {
+      _noteScopeDenial(RommScopeGroup.tasksRun, resp.statusCode);
+    }
+    final busy = resp.statusCode == 400 || _saysAlreadyRunning(resp.body);
+    final kind = busy
+        ? RommErrorKind.taskBusy
+        : (resp.statusCode == 403
+              ? RommErrorKind.scopeDenied
+              : RommErrorKind.other);
+    _log.w(
+      'RomM task run failed: endpoint=/api/tasks/run/$name '
+      'status=${resp.statusCode} kind=${kind.name}',
+    );
+    throw RommException(
+      'RomM task run failed: task=$name status=${resp.statusCode}',
+      statusCode: resp.statusCode,
+      kind: kind,
+    );
+  }
+
+  /// The `task_id` of a task-run response body, or null for any other shape.
+  // Governing: ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
+  static String? _taskIdOf(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map) return null;
+      final id = decoded['task_id'] ?? decoded['job_id'] ?? decoded['id'];
+      final text = id?.toString().trim() ?? '';
+      return text.isEmpty ? null : text;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Whether a task-run failure body says the task is already going. RomM
+  /// words this in the `detail` string rather than in a code, and the wording
+  /// has changed between releases, so this matches loosely on purpose.
+  // Governing: ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
+  static bool _saysAlreadyRunning(String body) {
+    final text = body.toLowerCase();
+    return text.contains('already running') ||
+        text.contains('already queued') ||
+        text.contains('already in progress');
   }
 
   /// Returns full detail for a single ROM.

@@ -23,6 +23,11 @@ String? rommPairErrorKey(RommErrorKind? kind) {
     // Governing: ADR-0010 (RomM heartbeat capability probe),
     // SPEC-0010 REQ "Gated Call Sites"
     RommErrorKind.unsupported => AppLocale.rommPairServerTooOld,
+    // A maintenance task that is already running is a maintenance outcome, not
+    // a pairing one; the browse screen's own toast words it.
+    // Governing: ADR-0019 (expose RomM library filters, search and
+    // maintenance), SPEC-0018 REQ "Maintenance Tasks"
+    RommErrorKind.taskBusy => null,
     // Every non-pairing kind falls back to the provider's own message, the
     // same as [RommErrorKind.other]: they cannot arise from an exchange.
     RommErrorKind.other || RommErrorKind.payloadTooLarge || null => null,

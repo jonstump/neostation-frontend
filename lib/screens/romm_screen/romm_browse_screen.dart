@@ -10,6 +10,7 @@ import '../../models/romm_collection.dart';
 import '../../models/romm_metadata_fetch.dart';
 import '../../models/romm_platform.dart';
 import '../../models/romm_rom.dart';
+import '../../models/romm_rom_filters.dart';
 import '../../providers/file_provider.dart';
 import '../../providers/romm_bulk_sync.dart';
 import '../../providers/romm_provider.dart';
@@ -23,9 +24,12 @@ import '../../sync/providers/romm_provider.dart';
 import '../../sync/sync_manager.dart';
 import '../../utils/debounced_search.dart';
 import '../../utils/gamepad_nav.dart';
+import '../../utils/romm_browse_header_slots.dart';
 import '../../utils/romm_collection_sync_message.dart';
 import '../../utils/romm_search_message.dart';
 import '../../widgets/confirm_action_dialog.dart';
+import '../../widgets/romm_filter_menu_dialog.dart';
+import '../../widgets/romm_maintenance_menu_dialog.dart';
 import '../../widgets/core_footer.dart' show kCoreFooterHeight;
 import '../../widgets/custom_notification.dart';
 import '../../utils/count_label.dart';
@@ -174,8 +178,67 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   /// into a list can't strand the cursor on a button that is no longer drawn.
   int? get _parkedSlot => _headerShowing ? _headerSlot : null;
 
-  /// Header buttons, in cursor order.
-  static const int _headerSlotCount = 2;
+  /// Account-header buttons, in cursor order.
+  ///
+  /// Dynamic since SPEC-0018: "Server maintenance" is *appended* when this
+  /// connection holds the `tasks.run` scope, which is settled by the login's
+  /// scope negotiation — i.e. after this screen's first build. Appending is
+  /// what makes that safe: with the action absent the row is the pre-SPEC-0018
+  /// `[saveSync, disconnect]` at 0 and 1, and with it present those two keep
+  /// those indices, so a resolve can never redefine a slot the cursor is on.
+  /// See [rommAccountHeaderSlots] for the arithmetic and its tests.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Maintenance Tasks"
+  List<RommAccountHeaderSlot> get _headerSlots =>
+      rommAccountHeaderSlots(maintenance: _rommProvider.canRunServerTasks);
+
+  int get _headerSlotCount => _headerSlots.length;
+
+  /// The control the cursor is parked on, or null when it is down in the grid.
+  ///
+  /// Reads through [_headerSlots] rather than trusting [_headerSlot] as a
+  /// number, so a row that grew or shrank since the index was recorded can
+  /// never resolve to a stale or out-of-range control.
+  // Governing: ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
+  RommAccountHeaderSlot? get _parkedAction {
+    final parked = _parkedSlot;
+    if (parked == null) return null;
+    final slots = _headerSlots;
+    if (parked < 0 || parked >= slots.length) return null;
+    return slots[parked];
+  }
+
+  /// Whether the cursor is parked on [slot] — what the header buttons paint
+  /// their focus ring from, so a shifting index cannot light the wrong button.
+  bool _isParked(RommAccountHeaderSlot slot) => _parkedAction == slot;
+
+  /// Keeps a parked cursor on the *control* it was on when the header's
+  /// contents change under it (the scope negotiation landing, a disconnect).
+  ///
+  /// Called from the build, which is the only place that sees both the old
+  /// index and the new row. A no-op when nothing is parked or nothing moved,
+  /// and the `setState` is deferred to a post-frame callback because this runs
+  /// *during* a build.
+  // Governing: ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
+  void _syncHeaderSlot() {
+    final parked = _headerSlot;
+    if (parked == null) return;
+    final slots = _headerSlots;
+    final previous = _headerSlotsLastBuilt ?? slots;
+    _headerSlotsLastBuilt = slots;
+    final next = rommReanchorSlot(previous, slots, parked);
+    if (next == parked) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      // Re-check: the cursor may have left the header in the meantime.
+      if (_headerSlot != parked) return;
+      setState(() => _headerSlot = next);
+    });
+  }
+
+  /// The header row as it was at the last build, for [_syncHeaderSlot] to
+  /// re-anchor against.
+  List<RommAccountHeaderSlot>? _headerSlotsLastBuilt;
 
   // ── In-platform search ──────────────────────────────────────────────────────
   // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "In-Platform Search Field"
@@ -199,9 +262,31 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   /// Whether the cursor is on the search row rather than down in the grid.
   bool _searchSelected = false;
 
-  /// Which control in the search row the cursor is on: 0 the field, 1 the
-  /// clear button (only while there is text to clear).
+  /// Which control in the ROM view's header row the cursor is on, as an index
+  /// into [_romHeaderSlots].
+  ///
+  /// An index rather than the enum itself because the row is walked with
+  /// Left/Right; [_syncRomHeaderSlot] keeps it pointing at the same *control*
+  /// when the row changes shape (the clear button appearing as the user types,
+  /// "Surprise me" appearing when the heartbeat lands).
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Filter Menu And Chips", REQ "Surprise Me"
   int _searchSlot = 0;
+
+  /// The ROM header row as it was at the last build, for [_syncRomHeaderSlot]
+  /// to re-anchor against.
+  List<RommRomHeaderSlot>? _romHeaderSlotsLastBuilt;
+
+  /// Bumped whenever the cursor is moved into the ROM view from outside it
+  /// (currently only by "Surprise me"), so the re-keyed view remounts on the
+  /// new [_romIndex] instead of keeping the cursor it already had.
+  // Governing: ADR-0019, SPEC-0018 REQ "Surprise Me"
+  int _romFocusEpoch = 0;
+
+  /// True while a "Surprise me" walk is in flight, so a second press cannot
+  /// start a competing one.
+  // Governing: ADR-0019, SPEC-0018 REQ "Surprise Me"
+  bool _surprisePending = false;
 
   @override
   void initState() {
@@ -242,6 +327,11 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
       // While typing, the D-pad belongs to the field (soft keyboard on
       // Android); B is still the way out.
       isTextFieldFocused: () => _searchFocus.hasFocus,
+      // Select+Y mirrors the local library's random gesture. Not while the
+      // field has focus: Select and Y are then the keyboard's, not ours.
+      // Governing: ADR-0019 (expose RomM library filters, search and
+      // maintenance), SPEC-0018 REQ "Surprise Me"
+      onSelectModifierY: _surpriseMe,
       allowRepeat: false,
     );
     _gamepadNav = GamepadNavigation(
@@ -257,6 +347,8 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
       onNextTab: AppNavigation.nextTab,
       onLeftBumper: AppNavigation.previousTab,
       onRightBumper: AppNavigation.nextTab,
+      // Governing: ADR-0019, SPEC-0018 REQ "Surprise Me"
+      onSelectModifierY: _surpriseMe,
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _gamepadNav.initialize();
@@ -868,12 +960,19 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   }
 
   void _confirmSelection() {
-    final parked = _parkedSlot;
+    final parked = _parkedAction;
     if (parked != null) {
-      if (parked == 0) {
-        _toggleSaveSync();
-      } else {
-        _disconnect(_rommProvider);
+      // Dispatched by the control the cursor is on, never by its index: with
+      // the maintenance action conditionally appended, "not 0" stopped being
+      // a synonym for "disconnect".
+      // Governing: ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
+      switch (parked) {
+        case RommAccountHeaderSlot.saveSync:
+          _toggleSaveSync();
+        case RommAccountHeaderSlot.disconnect:
+          _disconnect(_rommProvider);
+        case RommAccountHeaderSlot.maintenance:
+          _openMaintenanceMenu();
       }
       return;
     }
@@ -1022,6 +1121,10 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final provider = context.watch<RommProvider>();
+    // The header's contents can change between builds (the `tasks.run` scope
+    // resolving after login); keep a parked cursor on the control it was on.
+    // Governing: ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
+    _syncHeaderSlot();
     return PopScope(
       // Never pop, matching MySystemsGrid and the AppScreen shell: this is a
       // top-level tab, so back steps *within* the browser and stops at the
@@ -1189,7 +1292,7 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
             _syncToggle(theme),
             _headerButton(
               theme,
-              slot: 1,
+              slot: RommAccountHeaderSlot.disconnect,
               icon: Icon(
                 Symbols.logout_rounded,
                 color: theme.colorScheme.error,
@@ -1198,6 +1301,22 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
               tooltip: AppLocale.rommDisconnect.getString(context),
               onPressed: () => _disconnect(provider),
             ),
+            // Appended after the pre-existing two, so slots 0 and 1 keep
+            // meaning what they always meant whether or not this is drawn.
+            // Governing: ADR-0019 (expose RomM library filters, search and
+            // maintenance), SPEC-0018 REQ "Maintenance Tasks"
+            if (provider.canRunServerTasks)
+              _headerButton(
+                theme,
+                slot: RommAccountHeaderSlot.maintenance,
+                icon: Icon(
+                  Symbols.build_rounded,
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.8),
+                  size: 20.r,
+                ),
+                tooltip: AppLocale.rommMaintenanceTitle.getString(context),
+                onPressed: _openMaintenanceMenu,
+              ),
           ],
         ],
       ),
@@ -1235,10 +1354,10 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
               border: Border.all(
                 // The parked-slot ring stays the focus cue, exactly as the
                 // icon buttons beside it show it.
-                color: _parkedSlot == 0
+                color: _isParked(RommAccountHeaderSlot.saveSync)
                     ? theme.colorScheme.primary
                     : accent.withValues(alpha: on ? 0.5 : 0.3),
-                width: _parkedSlot == 0 ? 2.r : 1.r,
+                width: _isParked(RommAccountHeaderSlot.saveSync) ? 2.r : 1.r,
               ),
             ),
             child: Row(
@@ -1271,7 +1390,7 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   /// RetroAchievements dashboard puts on its logout button.
   Widget _headerButton(
     ThemeData theme, {
-    required int slot,
+    required RommAccountHeaderSlot slot,
     required Icon icon,
     required String tooltip,
     required VoidCallback onPressed,
@@ -1280,7 +1399,7 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8.r),
         border: Border.all(
-          color: _parkedSlot == slot
+          color: _isParked(slot)
               ? theme.colorScheme.primary
               : Colors.transparent,
           width: 2.r,
@@ -1321,6 +1440,173 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
       AppLocale.rommDisconnect.getString(context),
       type: NotificationType.info,
     );
+  }
+
+  // ── Server maintenance ──────────────────────────────────────────────────────
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Maintenance Tasks"
+
+  /// Opens the maintenance chooser, confirms the picked task, and queues it.
+  ///
+  /// Two dialogs on purpose: the chooser is a menu, and the confirmation is the
+  /// same [ConfirmActionDialog] every other consequential action in the app
+  /// uses — these rescan or prune a whole server library, so the wording and
+  /// the A/B affordances should be the ones the user already knows. Exactly one
+  /// request is sent, and only after the confirm.
+  // Governing: ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
+  Future<void> _openMaintenanceMenu() async {
+    // A confirm dialog opened from here must land above the grid, not under a
+    // focused search field's modal layer.
+    _leaveSearchField();
+    final task = await RommMaintenanceMenuDialog.show(context);
+    if (!mounted || task == null) return;
+
+    final scheme = Theme.of(context).colorScheme;
+    final confirmed = await ConfirmActionDialog.show(
+      context,
+      title: task.labelKey.getString(context),
+      body: task.confirmBodyKey.getString(context),
+      confirmLabel: AppLocale.rommMaintenanceRun.getString(context),
+      icon: task.icon,
+      // Only the cleanup actually removes rows; the two scans are additive, so
+      // they get the ordinary accent rather than the destructive red.
+      accentColor: task == RommMaintenanceTask.cleanupMissingRoms
+          ? scheme.error
+          : scheme.primary,
+    );
+    if (!mounted || !confirmed) return;
+    await _runMaintenanceTask(task);
+  }
+
+  /// Sends the one task-run request and reports queued / already running /
+  /// failed as a toast.
+  // Governing: ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
+  Future<void> _runMaintenanceTask(RommMaintenanceTask task) async {
+    // The outcome is decided as an `AppLocale` *key*, and only resolved to a
+    // sentence after the mounted guard below — reading the context across the
+    // await is what `use_build_context_synchronously` is there to stop.
+    String key;
+    NotificationType type;
+    try {
+      final id = await _rommProvider.runServerTask(task.taskName);
+      if (id == null) {
+        // Gated: the connection lost the scope between the button being drawn
+        // and the press. The service logged why; the user gets the plain
+        // "could not be started" rather than a silent no-op.
+        key = AppLocale.rommMaintenanceFailed;
+        type = NotificationType.error;
+      } else {
+        key = AppLocale.rommMaintenanceQueued;
+        type = NotificationType.success;
+      }
+    } on RommException catch (e) {
+      final busy = e.kind == RommErrorKind.taskBusy;
+      key = busy
+          ? AppLocale.rommMaintenanceBusy
+          : AppLocale.rommMaintenanceFailed;
+      type = busy ? NotificationType.info : NotificationType.error;
+    } catch (e) {
+      _log.w('RomM task run failed: task=${task.taskName} error=$e');
+      key = AppLocale.rommMaintenanceFailed;
+      type = NotificationType.error;
+    }
+    if (!mounted) return;
+    AppNotification.showNotification(
+      context,
+      key.getString(context),
+      type: type,
+    );
+  }
+
+  // ── Filters and Surprise me ─────────────────────────────────────────────────
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Filter Menu And Chips", REQ "Surprise Me"
+
+  /// Opens the filter checklist for the open platform or collection, and
+  /// applies whatever the user left set.
+  ///
+  /// [RommProvider.setFilters] resets paging, so the list reloads from offset
+  /// 0 rather than appending a filtered page onto an unfiltered one.
+  // Governing: ADR-0019, SPEC-0018 REQ "Filter Menu And Chips"
+  Future<void> _openFilterMenu() async {
+    if (!_inRomGrid) return;
+    _leaveSearchField();
+    final chosen = await RommFilterMenuDialog.show(
+      context,
+      filters: _rommProvider.filters,
+    );
+    if (!mounted || chosen == null) return;
+    _romIndex = 0;
+    await _rommProvider.setFilters(chosen);
+  }
+
+  /// Clears every active filter, from the chip row's own control.
+  // Governing: ADR-0019, SPEC-0018 REQ "Filter Menu And Chips"
+  Future<void> _clearFilters() async {
+    if (_rommProvider.filters.isEmpty) return;
+    _romIndex = 0;
+    await _rommProvider.setFilters(RommRomFilters.none);
+  }
+
+  /// Select+Y / the header action: asks the server for a random ROM in the
+  /// open platform or collection and puts the cursor on it.
+  ///
+  /// A pick the loaded pages can reach is focused; one past the page cap opens
+  /// its card instead, since scrolling to a row that is not loaded is not
+  /// something the user can be shown. An empty scope and a server too old for
+  /// the endpoint get their own sentences.
+  // Governing: ADR-0019, SPEC-0018 REQ "Surprise Me"
+  Future<void> _surpriseMe() async {
+    if (!_inRomGrid || _surprisePending) return;
+    _leaveSearchField();
+    // One at a time: the walk can add pages, and two overlapping walks would
+    // fight over the cursor.
+    _surprisePending = true;
+    try {
+      SfxService().playNavSound();
+      final pick = await _rommProvider.surpriseMe();
+      if (!mounted) return;
+      switch (pick.outcome) {
+        case RommSurpriseOutcome.unsupported:
+          AppNotification.showNotification(
+            context,
+            AppLocale.rommSurpriseMeUnsupported.getString(context),
+            type: NotificationType.info,
+          );
+        case RommSurpriseOutcome.empty:
+          AppNotification.showNotification(
+            context,
+            AppLocale.rommSurpriseMeEmpty.getString(context),
+            type: NotificationType.info,
+          );
+        case RommSurpriseOutcome.failed:
+          AppNotification.showNotification(
+            context,
+            AppLocale.rommSurpriseMeFailed.getString(context),
+            type: NotificationType.error,
+          );
+        case RommSurpriseOutcome.picked:
+          final rom = pick.rom!;
+          if (pick.isFocusable) {
+            // The ROM views read their opening index from [_romIndex] and are
+            // re-keyed per source, so bumping the key is what actually moves
+            // a mounted view's cursor.
+            setState(() {
+              _romIndex = pick.index;
+              _romFocusEpoch++;
+            });
+          }
+          AppNotification.showNotification(
+            context,
+            AppLocale.rommSurpriseMePicked
+                .getString(context)
+                .replaceFirst('{name}', rom.name),
+            type: NotificationType.success,
+          );
+      }
+    } finally {
+      _surprisePending = false;
+    }
   }
 
   /// Whether RomM (vs NeoSync) is the active save-sync provider.
@@ -1803,6 +2089,12 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
     // below it loads, empties or remounts, so a search that found nothing can
     // still be cleared.
     // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "In-Platform Search Field"
+    // The row's shape depends on the field's text and on the random-pick
+    // capability, both of which can change between builds; keep the cursor on
+    // the control it was on.
+    // Governing: ADR-0019 (expose RomM library filters, search and
+    // maintenance), SPEC-0018 REQ "Filter Menu And Chips", REQ "Surprise Me"
+    _syncRomHeaderSlot();
     return Column(
       children: [
         _buildSearchRow(theme, provider),
@@ -1821,6 +2113,16 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
       // matched; repeating "No ROMs found" would read as the platform being
       // empty.
       if (provider.searchTerm.trim().isNotEmpty) return const SizedBox();
+      // With filters on, "No ROMs found" would read as the platform being
+      // empty rather than as the filters being too narrow.
+      // Governing: ADR-0019, SPEC-0018 REQ "Filter Menu And Chips"
+      if (provider.filters.isNotEmpty) {
+        return _centeredMessage(
+          theme,
+          Symbols.filter_alt_off_rounded,
+          AppLocale.rommFilterNoMatches.getString(context),
+        );
+      }
       return _centeredMessage(
         theme,
         Symbols.search_off_rounded,
@@ -1836,7 +2138,12 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
     // the view with a fresh selection and layout, rather than carrying the
     // previous library's state (and index) into it.
     final sourceKey = ValueKey(
-      'romm_roms_${provider.currentPlatform?.id}_${provider.currentCollection?.id}',
+      'romm_roms_${provider.currentPlatform?.id}_${provider.currentCollection?.id}'
+      // A "Surprise me" pick moves the cursor from outside the view, which a
+      // mounted view would otherwise ignore — it owns its own selection. The
+      // epoch remounts it on the new [_romIndex].
+      // Governing: ADR-0019, SPEC-0018 REQ "Surprise Me"
+      '_$_romFocusEpoch',
     );
     Widget footerBuilder(RommRom? focused) =>
         _buildRomFooter(provider, focused);
@@ -1865,6 +2172,8 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
           onExitTop: _selectSearchField,
           onToggleView: _toggleRomLayout,
           onSyncAll: _syncFocusedSource,
+          // Governing: ADR-0019, SPEC-0018 REQ "Surprise Me"
+          onSurpriseMe: provider.canSurpriseMe ? _surpriseMe : null,
           footerBuilder: footerBuilder,
         );
       case RommRomLayout.list:
@@ -1881,6 +2190,8 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
           onExitTop: _selectSearchField,
           onToggleView: _toggleRomLayout,
           onSyncAll: _syncFocusedSource,
+          // Governing: ADR-0019, SPEC-0018 REQ "Surprise Me"
+          onSurpriseMe: provider.canSurpriseMe ? _surpriseMe : null,
           footerBuilder: footerBuilder,
         );
     }
@@ -1934,25 +2245,83 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   /// Up (and Left/Right past the row's ends) has nowhere to go.
   bool _searchStay() => false;
 
-  /// Left/Right walk between the field and its clear button, which exists
-  /// only while there is text to clear.
+  /// The ROM view's header row, in cursor order.
+  ///
+  /// Both conditional members are handled by [rommRomHeaderSlots]: the clear
+  /// button only exists while there is text, and "Surprise me" only on a
+  /// server that answers `/api/roms/random` — which is settled by the
+  /// heartbeat, i.e. possibly after the first build.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Filter Menu And Chips", REQ "Surprise Me"
+  List<RommRomHeaderSlot> get _romHeaderSlots => rommRomHeaderSlots(
+    canClear: _searchController.text.isNotEmpty,
+    surpriseMe: _rommProvider.canSurpriseMe,
+  );
+
+  /// The control the cursor is on in the ROM header row, or null while it is
+  /// down in the grid.
+  RommRomHeaderSlot? get _selectedRomHeaderSlot {
+    if (!_searchSelected) return null;
+    final slots = _romHeaderSlots;
+    if (_searchSlot < 0 || _searchSlot >= slots.length) return null;
+    return slots[_searchSlot];
+  }
+
+  bool _isRomHeaderSlot(RommRomHeaderSlot slot) =>
+      _selectedRomHeaderSlot == slot;
+
+  /// Keeps the cursor on the control it was on when the header row changes
+  /// shape underneath it.
+  ///
+  /// Typing the first character *inserts* the clear button in the middle of
+  /// the row, which is the one case appending cannot cover — so the cursor
+  /// follows the control by identity ([rommReanchorSlot]) and only falls back
+  /// to a clamp when the control it was on is gone. Runs during build, so the
+  /// `setState` is deferred.
+  // Governing: ADR-0019, SPEC-0018 REQ "Filter Menu And Chips", REQ "Surprise Me"
+  void _syncRomHeaderSlot() {
+    final slots = _romHeaderSlots;
+    final previous = _romHeaderSlotsLastBuilt ?? slots;
+    _romHeaderSlotsLastBuilt = slots;
+    if (!_searchSelected) return;
+    final parked = _searchSlot;
+    final next = rommReanchorSlot(previous, slots, parked);
+    if (next == parked) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_searchSelected) return;
+      // Re-check, as [_syncHeaderSlot] does: the cursor may have moved to
+      // another control between the build and this callback, and writing the
+      // index computed from the older one would drag it back.
+      if (_searchSlot != parked) return;
+      setState(() => _searchSlot = next);
+    });
+  }
+
+  /// Left/Right walk the header row's controls.
   bool _moveSearchSlot(int delta) {
     if (_searchFocus.hasFocus) return false;
     final next = _searchSlot + delta;
-    if (next < 0 || next > (_searchController.text.isEmpty ? 0 : 1)) {
-      return false;
-    }
+    if (next < 0 || next >= _romHeaderSlots.length) return false;
+    SfxService().playNavSound();
     setState(() => _searchSlot = next);
     return true;
   }
 
-  /// A on the field opens it for typing; A on the clear button empties it.
+  /// A on the focused header control: the field opens for typing, the clear
+  /// button empties it, and the two actions open their menus.
+  // Governing: ADR-0019, SPEC-0018 REQ "Filter Menu And Chips", REQ "Surprise Me"
   void _confirmSearchSlot() {
-    if (_searchSlot == 1) {
-      _clearSearch();
-      return;
+    switch (_selectedRomHeaderSlot) {
+      case RommRomHeaderSlot.clearSearch:
+        _clearSearch();
+      case RommRomHeaderSlot.filters:
+        _openFilterMenu();
+      case RommRomHeaderSlot.surpriseMe:
+        _surpriseMe();
+      case RommRomHeaderSlot.searchField:
+      case null:
+        _searchFocus.requestFocus();
     }
-    _searchFocus.requestFocus();
   }
 
   /// Keeps the cursor and the styling in step with the platform's focus: a
@@ -1970,10 +2339,12 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   void _onSearchChanged(String text) {
     _romIndex = 0;
     // The clear button appears with the first character and goes with the
-    // last; the cursor can't stay on a control that is no longer drawn.
-    setState(() {
-      if (text.isEmpty) _searchSlot = 0;
-    });
+    // last, which reshapes the header row mid-typing. [_syncRomHeaderSlot],
+    // run from the build, moves the cursor with whatever control it was on
+    // rather than dumping it back on the field — so the filter and
+    // "Surprise me" actions do not slide out from under it.
+    // Governing: ADR-0019, SPEC-0018 REQ "Filter Menu And Chips"
+    setState(() {});
     _search.submit(text);
   }
 
@@ -1986,8 +2357,8 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   Widget _buildSearchRow(ThemeData theme, RommProvider provider) {
     final scheme = theme.colorScheme;
     final focused = _searchFocus.hasFocus;
-    final fieldSelected = _searchSelected && _searchSlot == 0;
-    final clearSelected = _searchSelected && _searchSlot == 1;
+    final fieldSelected = _isRomHeaderSlot(RommRomHeaderSlot.searchField);
+    final clearSelected = _isRomHeaderSlot(RommRomHeaderSlot.clearSearch);
     final message = rommSearchMessageFor(
       term: provider.searchTerm,
       count: provider.roms.length,
@@ -2006,59 +2377,44 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12.r),
-              border: Border.all(
-                color: fieldSelected || focused
-                    ? scheme.primary
-                    : Colors.transparent,
-                width: 2.r,
-              ),
-            ),
-            child: TextField(
-              controller: _searchController,
-              focusNode: _searchFocus,
-              textInputAction: TextInputAction.search,
-              style: TextStyle(fontSize: 12.r),
-              onTap: _selectSearchField,
-              onChanged: _onSearchChanged,
-              // Enter / the keyboard's search key: search now rather than
-              // after the pause, and give the D-pad back.
-              onSubmitted: (_) {
-                _search.flush();
-                _searchFocus.unfocus();
-              },
-              decoration: InputDecoration(
-                hintText: hint,
-                hintStyle: TextStyle(
-                  fontSize: 12.r,
-                  color: scheme.onSurface.withValues(alpha: 0.5),
-                ),
-                prefixIcon: Icon(Symbols.search_rounded, size: 18.r),
-                prefixIconConstraints: BoxConstraints(
-                  minWidth: 36.r,
-                  minHeight: 18.r,
-                ),
-                suffixIcon: _searchController.text.isEmpty
-                    ? null
-                    : _buildClearSearchButton(scheme, clearSelected),
-                isDense: true,
-                contentPadding: EdgeInsets.symmetric(
-                  horizontal: 10.r,
-                  vertical: 8.r,
-                ),
-                filled: true,
-                fillColor: scheme.surfaceContainerHighest.withValues(
-                  alpha: focused ? 0.7 : 0.5,
-                ),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12.r),
-                  borderSide: BorderSide.none,
+          Row(
+            children: [
+              Expanded(
+                child: _buildSearchField(
+                  theme,
+                  hint,
+                  fieldSelected,
+                  focused,
+                  clearSelected,
                 ),
               ),
-            ),
+              // Appended after the field: the two header actions of SPEC-0018,
+              // in the order [rommRomHeaderSlots] walks them.
+              // Governing: ADR-0019 (expose RomM library filters, search and
+              // maintenance), SPEC-0018 REQ "Filter Menu And Chips", REQ "Surprise Me"
+              SizedBox(width: 6.r),
+              _buildRomHeaderAction(
+                theme,
+                slot: RommRomHeaderSlot.filters,
+                icon: Symbols.filter_alt_rounded,
+                tooltip: AppLocale.rommFilterMenuAction.getString(context),
+                active: provider.filters.isNotEmpty,
+                onPressed: _openFilterMenu,
+              ),
+              if (provider.canSurpriseMe) ...[
+                SizedBox(width: 6.r),
+                _buildRomHeaderAction(
+                  theme,
+                  slot: RommRomHeaderSlot.surpriseMe,
+                  icon: Symbols.casino_rounded,
+                  tooltip: AppLocale.rommSurpriseMe.getString(context),
+                  active: false,
+                  onPressed: _surpriseMe,
+                ),
+              ],
+            ],
           ),
+          _buildFilterChips(theme, provider),
           if (error != null || message != null)
             Padding(
               padding: EdgeInsets.only(top: 4.r, left: 4.r),
@@ -2074,6 +2430,212 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
                 ),
               ),
             ),
+        ],
+      ),
+    );
+  }
+
+  /// The search field itself, unchanged but for being lifted out of the row so
+  /// the header actions can sit beside it.
+  Widget _buildSearchField(
+    ThemeData theme,
+    String hint,
+    bool fieldSelected,
+    bool focused,
+    bool clearSelected,
+  ) {
+    final scheme = theme.colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(
+          color: fieldSelected || focused ? scheme.primary : Colors.transparent,
+          width: 2.r,
+        ),
+      ),
+      child: TextField(
+        controller: _searchController,
+        focusNode: _searchFocus,
+        textInputAction: TextInputAction.search,
+        style: TextStyle(fontSize: 12.r),
+        onTap: _selectSearchField,
+        onChanged: _onSearchChanged,
+        // Enter / the keyboard's search key: search now rather than
+        // after the pause, and give the D-pad back.
+        onSubmitted: (_) {
+          _search.flush();
+          _searchFocus.unfocus();
+        },
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: TextStyle(
+            fontSize: 12.r,
+            color: scheme.onSurface.withValues(alpha: 0.5),
+          ),
+          prefixIcon: Icon(Symbols.search_rounded, size: 18.r),
+          prefixIconConstraints: BoxConstraints(
+            minWidth: 36.r,
+            minHeight: 18.r,
+          ),
+          suffixIcon: _searchController.text.isEmpty
+              ? null
+              : _buildClearSearchButton(scheme, clearSelected),
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(horizontal: 10.r, vertical: 8.r),
+          filled: true,
+          fillColor: scheme.surfaceContainerHighest.withValues(
+            alpha: focused ? 0.7 : 0.5,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12.r),
+            borderSide: BorderSide.none,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// One of the ROM header row's trailing actions (filters, "Surprise me").
+  ///
+  /// Wears the same parked-selection ring the account header's buttons do, so
+  /// "where is the cursor" reads the same on both rows, and is a tap target in
+  /// its own right — every control here is reachable by D-pad *and* by touch.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Filter Menu And Chips", REQ "Surprise Me"
+  Widget _buildRomHeaderAction(
+    ThemeData theme, {
+    required RommRomHeaderSlot slot,
+    required IconData icon,
+    required String tooltip,
+    required bool active,
+    required VoidCallback onPressed,
+  }) {
+    final scheme = theme.colorScheme;
+    final selected = _isRomHeaderSlot(slot);
+    return Tooltip(
+      message: tooltip,
+      child: Semantics(
+        button: true,
+        label: tooltip,
+        child: InkWell(
+          onTap: () {
+            // A tap moves the cursor here, as the D-pad would, so the two
+            // input paths cannot disagree about where the selection is.
+            _selectSearchField();
+            final index = _romHeaderSlots.indexOf(slot);
+            if (index >= 0) setState(() => _searchSlot = index);
+            onPressed();
+          },
+          borderRadius: BorderRadius.circular(10.r),
+          child: Container(
+            padding: EdgeInsets.all(7.r),
+            decoration: BoxDecoration(
+              color: active
+                  ? scheme.primary.withValues(alpha: 0.18)
+                  : Colors.transparent,
+              borderRadius: BorderRadius.circular(10.r),
+              border: Border.all(
+                color: selected ? scheme.primary : Colors.transparent,
+                width: 2.r,
+              ),
+            ),
+            child: Icon(
+              icon,
+              size: 18.r,
+              fill: active ? 1 : 0,
+              color: active
+                  ? scheme.primary
+                  : scheme.onSurface.withValues(alpha: 0.7),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// The active filters, as chips under the search row.
+  ///
+  /// Nothing at all when no filter is set, so an unfiltered platform keeps the
+  /// row it always had. The trailing "Clear filters" chip is a tap shortcut for
+  /// the menu's own "Clear all" row, which is the D-pad's way to the same
+  /// outcome — so the control has a controller-reachable twin rather than
+  /// being tap-only.
+  // Governing: ADR-0019, SPEC-0018 REQ "Filter Menu And Chips"
+  Widget _buildFilterChips(ThemeData theme, RommProvider provider) {
+    final active = provider.filters.active;
+    if (active.isEmpty) return const SizedBox.shrink();
+    final scheme = theme.colorScheme;
+    return Padding(
+      padding: EdgeInsets.only(top: 6.r),
+      child: Wrap(
+        spacing: 6.r,
+        runSpacing: 4.r,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          Text(
+            AppLocale.rommFilterChipsLabel.getString(context),
+            style: TextStyle(
+              fontSize: 10.r,
+              fontWeight: FontWeight.w600,
+              color: scheme.onSurface.withValues(alpha: 0.6),
+            ),
+          ),
+          for (final filter in active)
+            Container(
+              padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 3.r),
+              decoration: BoxDecoration(
+                color: scheme.primary.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10.r),
+                border: Border.all(
+                  color: scheme.primary.withValues(alpha: 0.5),
+                  width: 1.r,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    RommFilterMenuDialog.iconFor(filter),
+                    size: 12.r,
+                    color: scheme.primary,
+                  ),
+                  SizedBox(width: 4.r),
+                  Text(
+                    RommFilterMenuDialog.labelKeyFor(filter).getString(context),
+                    style: TextStyle(
+                      fontSize: 10.r,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          InkWell(
+            onTap: _clearFilters,
+            borderRadius: BorderRadius.circular(10.r),
+            child: Padding(
+              padding: EdgeInsets.symmetric(horizontal: 6.r, vertical: 3.r),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Symbols.close_rounded,
+                    size: 12.r,
+                    color: scheme.onSurface.withValues(alpha: 0.6),
+                  ),
+                  SizedBox(width: 3.r),
+                  Text(
+                    AppLocale.rommFilterClearAll.getString(context),
+                    style: TextStyle(
+                      fontSize: 10.r,
+                      color: scheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );

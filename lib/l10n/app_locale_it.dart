@@ -1528,4 +1528,38 @@ const Map<String, dynamic> appLocaleIt = {
       'Invia a RomM le nuove catture di RetroArch al termine di ogni sessione',
   AppLocale.rommFirmwareDestinationRetroArch:
       'Destinazione (da RetroArch): {path}',
+  AppLocale.rommFilterMenuTitle: 'Filtri',
+  AppLocale.rommFilterMenuAction: 'Filtri',
+  AppLocale.rommFilterFavorites: 'Preferiti',
+  AppLocale.rommFilterHasSaves: 'Con salvataggi',
+  AppLocale.rommFilterHasStates: 'Con stati di salvataggio',
+  AppLocale.rommFilterHasAchievements: 'Con obiettivi',
+  AppLocale.rommFilterPlayable: 'Giocabili',
+  AppLocale.rommFilterDuplicates: 'Duplicati',
+  AppLocale.rommFilterMissing: 'File mancanti',
+  AppLocale.rommFilterChipsLabel: 'Filtri:',
+  AppLocale.rommFilterClearAll: 'Azzera i filtri',
+  AppLocale.rommFilterNoMatches: 'Nessuna ROM corrisponde a questi filtri',
+  AppLocale.rommSurpriseMe: 'Sorprendimi',
+  AppLocale.rommSurpriseMeEmpty: 'Non c\'è nulla da scegliere qui',
+  AppLocale.rommSurpriseMeUnsupported:
+      'Questo server RomM è troppo vecchio per una scelta casuale',
+  AppLocale.rommSurpriseMeFailed:
+      'Non è stato possibile caricare la scelta casuale',
+  AppLocale.rommSurpriseMePicked: 'Scelto: {name}',
+  AppLocale.rommMaintenanceTitle: 'Manutenzione del server',
+  AppLocale.rommMaintenanceRescan: 'Riesamina la libreria',
+  AppLocale.rommMaintenanceRescanConfirm:
+      'RomM riesaminerà l\'intera libreria. Su un server grande può richiedere parecchio tempo.',
+  AppLocale.rommMaintenanceSyncFolders:
+      'Sincronizza la scansione delle cartelle',
+  AppLocale.rommMaintenanceSyncFoldersConfirm:
+      'RomM rileggerà le sue cartelle di ROM e rileverà i file aggiunti o rimossi fuori dall\'app.',
+  AppLocale.rommMaintenanceCleanup: 'Rimuovi le ROM mancanti',
+  AppLocale.rommMaintenanceCleanupConfirm:
+      'RomM rimuoverà le voci della libreria i cui file non sono più sul server. L\'operazione non è reversibile.',
+  AppLocale.rommMaintenanceRun: 'Esegui',
+  AppLocale.rommMaintenanceQueued: 'Attività messa in coda sul server',
+  AppLocale.rommMaintenanceBusy: 'Quell\'attività è già in corso',
+  AppLocale.rommMaintenanceFailed: 'Non è stato possibile avviare l\'attività',
 };

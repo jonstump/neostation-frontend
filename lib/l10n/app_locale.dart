@@ -1544,6 +1544,44 @@ mixin AppLocale {
   static const String rommFirmwareDestinationRetroArch =
       'romm_firmware_destination_retroarch';
 
+  // ── RomM browse filters, Surprise me and server maintenance (SPEC-0018) ──
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Localized User-Facing Text"
+  static const String rommFilterMenuTitle = 'romm_filter_menu_title';
+  static const String rommFilterMenuAction = 'romm_filter_menu_action';
+  static const String rommFilterFavorites = 'romm_filter_favorites';
+  static const String rommFilterHasSaves = 'romm_filter_has_saves';
+  static const String rommFilterHasStates = 'romm_filter_has_states';
+  static const String rommFilterHasAchievements =
+      'romm_filter_has_achievements';
+  static const String rommFilterPlayable = 'romm_filter_playable';
+  static const String rommFilterDuplicates = 'romm_filter_duplicates';
+  static const String rommFilterMissing = 'romm_filter_missing';
+  static const String rommFilterChipsLabel = 'romm_filter_chips_label';
+  static const String rommFilterClearAll = 'romm_filter_clear_all';
+  static const String rommFilterNoMatches = 'romm_filter_no_matches';
+  static const String rommSurpriseMe = 'romm_surprise_me';
+  static const String rommSurpriseMeEmpty = 'romm_surprise_me_empty';
+  static const String rommSurpriseMeUnsupported =
+      'romm_surprise_me_unsupported';
+  static const String rommSurpriseMeFailed = 'romm_surprise_me_failed';
+  static const String rommSurpriseMePicked = 'romm_surprise_me_picked';
+  static const String rommMaintenanceTitle = 'romm_maintenance_title';
+  static const String rommMaintenanceRescan = 'romm_maintenance_rescan';
+  static const String rommMaintenanceRescanConfirm =
+      'romm_maintenance_rescan_confirm';
+  static const String rommMaintenanceSyncFolders =
+      'romm_maintenance_sync_folders';
+  static const String rommMaintenanceSyncFoldersConfirm =
+      'romm_maintenance_sync_folders_confirm';
+  static const String rommMaintenanceCleanup = 'romm_maintenance_cleanup';
+  static const String rommMaintenanceCleanupConfirm =
+      'romm_maintenance_cleanup_confirm';
+  static const String rommMaintenanceRun = 'romm_maintenance_run';
+  static const String rommMaintenanceQueued = 'romm_maintenance_queued';
+  static const String rommMaintenanceBusy = 'romm_maintenance_busy';
+  static const String rommMaintenanceFailed = 'romm_maintenance_failed';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================
