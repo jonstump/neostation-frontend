@@ -78,8 +78,15 @@ class _FakeCatalog {
   final Map<int, int> platformCounts = {};
   DateTime? newest;
 
+  /// Platforms whose writes fail: the batch is dropped and the short count
+  /// the real repository returns for a failed chunk is reported.
+  Set<int> failingWrites = const {};
+
   Future<int> upsert(List<RommCatalogRow> batch) async {
     upsertBatchSizes.add(batch.length);
+    if (batch.isNotEmpty && failingWrites.contains(batch.first.platformId)) {
+      return 0;
+    }
     for (final row in batch) {
       rows[row.rommRomId] = row;
     }
@@ -389,6 +396,57 @@ void main() {
         (l) => l.startsWith('w|') && l.contains('"snes"'),
       );
       expect(failure, hasLength(1), reason: 'named once, not swallowed');
+    });
+
+    // A platform can page to the end and still have lost a write chunk. Its
+    // surviving rows keep an older `seen_at`, so pruning it would delete ROMs
+    // that are still on the server.
+    // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Error Handling Standards"
+    test('a platform whose write failed is not pruned', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes'), _platform(2, 'nes')],
+        romsByPlatform: {
+          1: [_rom(10, platformId: 1, fsName: 'A.sfc')],
+          2: [_rom(20, platformId: 2, fsName: 'B.nes')],
+        },
+        systemBySlug: {'snes': snes, 'nes': _system('nes')},
+      );
+      final catalog = _FakeCatalog();
+      catalog.failingWrites = {1};
+      catalog.rows[99] = RommCatalogRow(
+        serverUrl: _server,
+        rommRomId: 99,
+        platformId: 1,
+        systemFolder: 'snes',
+        name: 'Still On The Server',
+        fsName: 'Still On The Server.sfc',
+        seenAt: DateTime.utc(2020),
+      );
+
+      final summary = await build(
+        server,
+        catalog,
+      ).run(reason: RommRefreshReason.manual);
+
+      expect(catalog.prunedPlatforms, [
+        2,
+      ], reason: 'the platform that wrote cleanly is still pruned');
+      expect(
+        catalog.rows.containsKey(99),
+        isTrue,
+        reason: 'a half-written platform must never delete rows',
+      );
+      expect(
+        catalog.platformStamps.containsKey(1),
+        isFalse,
+        reason: 'no fresh stamp, so the hourly guard lets the next run retry',
+      );
+      expect(summary.platformsFailed, 1);
+      expect(summary.platformsProcessed, 1);
+      final warned = LoggerService.instance.takeCapture().where(
+        (l) => l.startsWith('w|') && l.contains('catalog write incomplete'),
+      );
+      expect(warned, hasLength(1), reason: 'said once per platform');
     });
   });
 

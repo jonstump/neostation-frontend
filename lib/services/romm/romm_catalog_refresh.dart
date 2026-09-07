@@ -43,6 +43,9 @@ enum RommRefreshSkip {
 }
 
 /// Writes a batch of catalog rows; returns how many were written.
+///
+/// A count short of `rows.length` means part of the batch did not land, which
+/// the refresh reads as "this platform is not safe to prune".
 typedef RommCatalogUpsert = Future<int> Function(List<RommCatalogRow> rows);
 
 /// Deletes a completed platform's rows that this run did not stamp.
@@ -76,7 +79,8 @@ class RommCatalogRefreshSummary {
   /// Platforms paged to completion.
   final int platformsProcessed;
 
-  /// Platforms whose paging failed. Their rows are left exactly as they were.
+  /// Platforms whose paging failed, plus those paged to the end whose catalog
+  /// writes did not all land. Their rows are left exactly as they were.
   final int platformsFailed;
 
   /// Platforms with no local system — they stay in the RomM tab.
@@ -137,9 +141,11 @@ class RommCatalogRefreshException implements Exception {
 /// ADR-0020 inherited for the catalog.
 ///
 /// Deletion is per completed platform: once a platform has been paged to the
-/// end, its rows that this run did not stamp are gone from the server and are
-/// removed. A platform whose paging failed is counted and left completely
-/// alone — a partial view must never delete ROMs that are still there.
+/// end *and* every one of its rows has been written, its rows that this run did
+/// not stamp are gone from the server and are removed. A platform whose paging
+/// failed, or whose catalog write only half landed, is counted as failed and
+/// left completely alone — a partial view must never delete ROMs that are
+/// still there.
 // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Refresh Shares The Walk"
 class RommCatalogRefresh {
   static final _defaultLog = LoggerService.instance;
@@ -270,6 +276,14 @@ class RommCatalogRefresh {
     var rowsUpserted = 0;
     var rowsDeleted = 0;
     final romsByPlatform = <int, int>{};
+    // Platforms a catalog write failed on, and — of those — the ones the walk
+    // still paged to the end. A completed platform is only prunable when every
+    // one of its rows actually landed: rows a failed chunk left carrying an
+    // older `seen_at` look unseen to [_deleteUnseen], and deleting them would
+    // lose ROMs that are still on the server.
+    // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Refresh Shares The Walk"
+    final writeFailures = <int>{};
+    final unprunable = <int>{};
 
     final walk = RommPlatformWalk(
       listPlatforms: _listPlatforms,
@@ -298,7 +312,20 @@ class RommCatalogRefresh {
                 seenAt: started,
               ),
           ];
-          rowsUpserted += await _upsert(rows);
+          final written = await _upsert(rows);
+          rowsUpserted += written;
+          if (written < rows.length) {
+            // The repository writes in chunks and reports what it committed;
+            // a short count is a chunk that did not land.
+            // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Error Handling Standards"
+            if (writeFailures.add(platform.id)) {
+              _log.w(
+                '$logLabel: catalog write incomplete: '
+                'platform=${platform.id} written=$written of ${rows.length} '
+                '— this platform will not be pruned this run',
+              );
+            }
+          }
           romsByPlatform[platform.id] =
               (romsByPlatform[platform.id] ?? 0) + roms.length;
         },
@@ -309,6 +336,14 @@ class RommCatalogRefresh {
             // A platform that failed or was cut short has not been fully
             // seen: its rows and its previous stamp stay untouched.
             // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Error Handling Standards"
+            return;
+          }
+          if (writeFailures.contains(platform.id)) {
+            // Paged to the end, but not every row landed. Neither prune nor
+            // stamp it: leaving `refreshed_at` alone also means the hourly
+            // guard lets the next automatic refresh retry this platform.
+            // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Error Handling Standards"
+            unprunable.add(platform.id);
             return;
           }
           rowsDeleted += await _deleteUnseen(
@@ -337,8 +372,10 @@ class RommCatalogRefresh {
 
     final linkSummary = stage?.finish(result);
     final summary = RommCatalogRefreshSummary(
-      platformsProcessed: result.platformsProcessed,
-      platformsFailed: result.platformFailures,
+      // A platform whose rows only half landed is reported as failed, not
+      // processed: nothing downstream may treat its catalog as complete.
+      platformsProcessed: result.platformsProcessed - unprunable.length,
+      platformsFailed: result.platformFailures + unprunable.length,
       platformsUnresolved: result.platformsUnresolved,
       rowsUpserted: rowsUpserted,
       rowsDeleted: rowsDeleted,

@@ -113,9 +113,12 @@ class _FakeLinker extends RommLibraryLinker {
   }
 }
 
-/// Records each catalog refresh and the reason it was given.
+/// Records each catalog refresh and the reason it was given, and answers with
+/// whatever [result] a test wants — including a skip, which is what the hourly
+/// guard produces.
 class _FakeRefresh extends RommCatalogRefresh {
   final List<RommRefreshReason> reasons = [];
+  RommCatalogRefreshSummary result = const RommCatalogRefreshSummary();
 
   _FakeRefresh()
     : super(
@@ -131,7 +134,7 @@ class _FakeRefresh extends RommCatalogRefresh {
     RommRefreshReason reason = RommRefreshReason.scheduled,
   }) async {
     reasons.add(reason);
-    return const RommCatalogRefreshSummary();
+    return result;
   }
 }
 
@@ -286,15 +289,65 @@ void main() {
       );
     });
 
-    test('with it off the pass walks on its own, as before', () async {
+    // ADR-0020 decision 2 bounds the refresh by the hourly guard alone — there
+    // is no toggle condition on it — so connect must behave exactly as the
+    // reconnect hook does, which never read the toggle either.
+    // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Refresh Shares The Walk"
+    test('with it off the refresh still owns the walk', () async {
       final refresh = _FakeRefresh();
       await build(autoSweep: false, withRefresh: refresh);
+      browse.connected = true;
+      await SqliteService.saveUserConfig(rommShowLibrary: 0);
+
+      await provider.linkLibrary();
+
+      expect(refresh.reasons, [RommRefreshReason.connect]);
+      expect(
+        linker.runs,
+        0,
+        reason: 'the toggle is a display setting, not a walk condition',
+      );
+    });
+
+    // The catalog's hourly guard must never become a guard on the link pass:
+    // a user who copies ROMs across and reconnects ten minutes later still
+    // gets their mapping rows.
+    // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Connect-Time Link Pass"
+    test('a refresh skipped as too soon still runs the link pass', () async {
+      final refresh = _FakeRefresh();
+      refresh.result = const RommCatalogRefreshSummary(
+        skipped: RommRefreshSkip.tooSoon,
+      );
+      await build(autoSweep: false, withRefresh: refresh);
+      browse.connected = true;
+      await SqliteService.saveUserConfig(rommShowLibrary: 1);
+      linker.result = const RommLinkPassSummary(
+        rowsAdded: 2,
+        linkedRomnames: ['A', 'B'],
+      );
+
+      final summary = await provider.linkLibrary();
+
+      expect(refresh.reasons, [RommRefreshReason.connect]);
+      expect(linker.runs, 1, reason: 'the pass walks on its own instead');
+      expect(summary?.rowsAdded, 2);
+      expect(browse.cacheInvalidations, 1);
+    });
+
+    // The provider-level guards (no server, another walk in flight) answer
+    // null rather than a summary; that is a skip too.
+    // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Connect-Time Link Pass"
+    test('a refresh the provider refused still runs the link pass', () async {
+      await build(autoSweep: false);
       browse.connected = true;
 
       await provider.linkLibrary();
 
-      expect(refresh.reasons, isEmpty);
-      expect(linker.runs, 1);
+      expect(
+        linker.runs,
+        1,
+        reason: 'the real refresh has no server url, so it does nothing',
+      );
     });
 
     test('a disposed provider refreshes nothing', () async {

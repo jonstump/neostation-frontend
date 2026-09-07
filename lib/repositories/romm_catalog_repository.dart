@@ -37,7 +37,10 @@ class RommCatalogRepository {
   /// the cover cache) and gains the new name and `seen_at`. Returns how many
   /// rows were written; a chunk that fails is logged with its context and the
   /// rest still go in — a refresh that half succeeds leaves a half-fresh
-  /// catalog, never an empty one.
+  /// catalog, never an empty one. A return short of `rows.length` is the
+  /// caller's signal that this platform must not be pruned: the rows the failed
+  /// chunk would have stamped still carry an older `seen_at` and would read as
+  /// gone from the server.
   // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Database Operation Standards"
   static Future<int> upsertRows(List<RommCatalogRow> rows) async {
     if (rows.isEmpty) return 0;
@@ -73,8 +76,9 @@ class RommCatalogRepository {
   ///
   /// Called once a platform has been paged to completion: anything still
   /// carrying a `seen_at` from before [before] was not on the server this
-  /// time, so it is gone. Never called for a platform whose walk failed —
-  /// a partial view of a platform would delete ROMs that are still there.
+  /// time, so it is gone. Never called for a platform whose walk failed, or
+  /// whose [upsertRows] returned short — a partial view of a platform would
+  /// delete ROMs that are still there.
   // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Refresh Shares The Walk"
   static Future<int> deleteUnseen({
     required String serverUrl,

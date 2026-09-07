@@ -1703,6 +1703,10 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
   /// linked have their cached sync state dropped in one go, so the badge and
   /// the browse grid see the links without a restart.
   ///
+  /// The pass rides the catalog refresh's walk when that refresh actually
+  /// runs, and walks on its own whenever the refresh was skipped or failed —
+  /// the hourly catalog guard bounds the catalog, never the link pass.
+  ///
   /// Never throws: the linker's own failures (library, platform list, or
   /// platform-to-system resolution unreadable) are logged here and read as
   /// "nothing linked". Returns the pass summary, or null when the pass was
@@ -1723,17 +1727,21 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
     }
     _linking = true;
     try {
-      // With the unified library on, the catalog refresh owns the walk and the
-      // link pass rides along on it: one enumeration serves both. With it off
-      // there is no catalog to keep, so the pass walks on its own exactly as
-      // it did before — including its early exit when nothing is unlinked.
+      // The catalog refresh owns the walk and the link pass rides along on
+      // it: one enumeration serves both. This is deliberately not conditional
+      // on `romm_show_library` — ADR-0020 decision 2 bounds the refresh by the
+      // hourly guard alone, and SPEC-0019 REQ "Settings And Actions" keeps the
+      // catalog's lifetime independent of whether the user displays it — so
+      // connect and the reconnect hook behave identically.
       // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Refresh Shares The Walk"
-      if (await _unifiedLibraryEnabled()) {
-        final refreshed = await refreshCatalog(
-          reason: RommRefreshReason.connect,
-        );
-        return refreshed?.linkSummary;
-      }
+      final refreshed = await refreshCatalog(reason: RommRefreshReason.connect);
+      if (refreshed != null && refreshed.ran) return refreshed.linkSummary;
+      // The refresh did nothing: the hourly guard, no server, another walk
+      // already in flight, or a failure. The catalog's guard must never become
+      // a guard on the link pass, which predates it and is a MUST on every
+      // connect — so the pass walks on its own, with its own early exit when
+      // nothing is unlinked.
+      // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Connect-Time Link Pass"
       final summary = await _linker.run();
       if (summary.linkedRomnames.isNotEmpty) {
         invalidateGameSyncStates(summary.linkedRomnames);
@@ -1785,20 +1793,6 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
       return null;
     } finally {
       _refreshing = false;
-    }
-  }
-
-  /// Whether the user asked for the RomM library inside their systems.
-  ///
-  /// A read failure reads as "off": the catalog is an addition, and the pass
-  /// that predates it still runs.
-  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Error Handling Standards"
-  Future<bool> _unifiedLibraryEnabled() async {
-    try {
-      return await ConfigRepository.getRommShowLibrary();
-    } catch (e) {
-      _log.w('RomM catalog refresh: the library toggle was unreadable: $e');
-      return false;
     }
   }
 
