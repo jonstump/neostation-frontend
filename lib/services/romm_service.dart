@@ -812,8 +812,17 @@ class RommService {
   /// be read as a server that grants none — that would newly disable features
   /// like playtime, which run on `!= denied` and work today precisely because
   /// unknown is permissive. Only a non-empty list settles anything.
-  // Governing: ADR-0013 (push play state to RomM),
-  // SPEC-0013 REQ "Optional Scope Groups", ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
+  /// Note on the governing artifacts: ADR-0013 decision 1, SPEC-0013 REQ
+  /// "Optional Scope Groups" and SPEC-0018 REQ "Maintenance Tasks" each
+  /// specified the *inverse* of this method — groups stay `unknown` in API-key
+  /// mode until a 403, and the resulting blind spot for pair-code and restored
+  /// sessions is deliberate. Issue #168 is the report that the blind spot made
+  /// the maintenance menu unreachable on the primary handheld login. All three
+  /// are amended to match this code in the docs PR #171, which must land
+  /// alongside this change.
+  // Governing: ADR-0013 (push play state to RomM) decision 1 (amended, #171),
+  // SPEC-0013 REQ "Optional Scope Groups" (amended, #171),
+  // ADR-0019, SPEC-0018 REQ "Maintenance Tasks" (amended, #171)
   void _learnScopesFromUser(Map<String, dynamic> user) {
     final raw = user['oauth_scopes'];
     if (raw is! List || raw.isEmpty) return;
@@ -1199,17 +1208,29 @@ class RommService {
   /// cost is paid by the first call that actually needs the network, once per
   /// connection, and a failure is logged and swallowed because this is a
   /// best-effort enrichment of a request that is about to be sent anyway.
-  // Governing: ADR-0013 (push play state to RomM),
-  // SPEC-0013 REQ "Optional Scope Groups", ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
+  // Governing: ADR-0010 (RomM heartbeat capability probe),
+  // SPEC-0010 REQ "Probe Before The Token Grant" (amended, #171 — the clause
+  // tying the probe to authenticate() did not cover a restored session),
+  // ADR-0013, SPEC-0013 REQ "Optional Scope Groups" (amended, #171)
   Future<void> _ensureToken() async {
     if (usesApiKey && !_apiKeyVerified) {
       _apiKeyVerified = true;
       try {
         await authenticate();
+      } on RommAuthException catch (e) {
+        // The server answered, and its answer was "no". Asking again with the
+        // same key would only repeat it, so the attempt stays spent.
+        _log.w('RomM API-key rejected during verification: ${e.message}');
       } catch (e) {
-        // The key may still work for this call; a bad one fails the request
-        // itself, exactly as it did before this probe existed.
-        _log.w('RomM API-key verification failed: $e');
+        // The server did not answer at all — a timeout, a dropped socket, a
+        // TLS failure. Re-arm: a handheld commonly resumes and issues its
+        // first request before Wi-Fi is up, and latching on a transport error
+        // would leave the groups unknown and the capabilities null for the
+        // rest of the process. That is issue #168's exact symptom with a
+        // narrower trigger, and `_reprobe()` does not cover it because it
+        // restores capabilities without re-running verification.
+        _apiKeyVerified = false;
+        _log.w('RomM API-key verification could not reach the server: $e');
       }
       return;
     }

@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
@@ -250,6 +251,80 @@ void main() {
           reason: '$group',
         );
       }
+    });
+  });
+
+  group('a verification that never reached the server re-arms', () {
+    // A handheld commonly resumes and fires its first request before Wi-Fi is
+    // up. Latching the one-shot on a transport error would leave the groups
+    // unknown and capabilities null for the rest of the process — issue #168's
+    // symptom with a narrower trigger.
+    test('a transport failure lets a later call verify', () async {
+      var offline = true;
+      RommService.debugUseHttpClient(
+        MockClient((request) async {
+          requests.add(request);
+          if (offline) throw const SocketException('network is down');
+          switch (request.url.path) {
+            case '/api/heartbeat':
+              return json(200, {
+                'SYSTEM': {'VERSION': '5.1.0'},
+              });
+            case '/api/users/me':
+              return json(200, {
+                'id': 1,
+                'username': 'jon',
+                'oauth_scopes': allScopes,
+              });
+            default:
+              return json(200, {'items': <dynamic>[]});
+          }
+        }),
+      );
+      final service = configured();
+
+      // First call: the server is unreachable, so nothing is learned.
+      await expectLater(service.getRoms(limit: 1), throwsA(isA<Exception>()));
+      expect(service.hasScope(RommScopeGroup.tasksRun), RommScopeState.unknown);
+
+      // Wi-Fi comes up; the next call must retry the verification.
+      offline = false;
+      await service.getRoms(limit: 1);
+
+      expect(
+        service.hasScope(RommScopeGroup.tasksRun),
+        RommScopeState.granted,
+        reason: 'a transport error must not spend the one-shot',
+      );
+    });
+
+    test('a rejected key does not retry', () async {
+      RommService.debugUseHttpClient(
+        MockClient((request) async {
+          requests.add(request);
+          switch (request.url.path) {
+            case '/api/heartbeat':
+              return json(200, {
+                'SYSTEM': {'VERSION': '5.1.0'},
+              });
+            case '/api/users/me':
+              return http.Response('forbidden', 403);
+            default:
+              return json(200, {'items': <dynamic>[]});
+          }
+        }),
+      );
+      final service = configured();
+
+      await service.getRoms(limit: 1);
+      await service.getRoms(limit: 1);
+      await service.getRoms(limit: 1);
+
+      expect(
+        requests.where((r) => r.url.path == '/api/users/me'),
+        hasLength(1),
+        reason: 'the server answered "no" — asking again only repeats it',
+      );
     });
   });
 }
