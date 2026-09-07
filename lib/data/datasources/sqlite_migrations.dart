@@ -650,6 +650,9 @@ class SqliteMigrations {
       case 161:
         await _migrateToVersion161(db);
         break;
+      case 162:
+        await _migrateToVersion162(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -7173,6 +7176,39 @@ class SqliteMigrations {
       _log.i('Migration v161 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v161: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v162: Adds `user_config.bios_directory`, the folder the user
+  /// picked for BIOS/firmware downloads.
+  ///
+  /// Only consulted when RetroArch's own `system_directory` is unknown, so
+  /// existing rows stay null and every device keeps the RetroArch-first
+  /// behaviour until the user chooses a folder. Guarded with
+  /// `PRAGMA table_info`, so a re-run — or a database a branch already carried
+  /// past this version — is a no-op. Fresh installs get the column from the
+  /// CREATE in `SqliteService`.
+  // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "Database Operation Standards"
+  static Future<void> _migrateToVersion162(Database db) async {
+    _log.i('Migration v162: Adding bios_directory to user_config');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      if (tableInfo.isEmpty) {
+        _log.i('Table user_config absent — nothing to migrate');
+        return;
+      }
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (columns.contains('bios_directory')) {
+        _log.i('Column bios_directory already exists');
+      } else {
+        db.execute('ALTER TABLE user_config ADD COLUMN bios_directory TEXT');
+        _log.i('Column bios_directory added via v162');
+      }
+      _log.i('Migration v162 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v162: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

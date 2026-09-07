@@ -10,6 +10,7 @@ import 'package:path/path.dart' as path;
 
 import '../models/romm_asset.dart';
 import '../models/romm_collection.dart';
+import '../models/romm_firmware.dart';
 import '../models/romm_pairing.dart';
 import '../models/romm_platform.dart';
 import '../models/romm_rom_page.dart';
@@ -33,6 +34,13 @@ enum RommErrorKind {
 
   /// Too many exchange attempts in the last minute.
   pairRateLimited,
+
+  /// The server answered 403 on a call whose scope the credential does not
+  /// hold — an API key created without `firmware.read`, typically. Distinct
+  /// from a bad credential: the login itself is fine, this one endpoint is not
+  /// allowed.
+  // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "Firmware Model And Service"
+  scopeDenied,
 }
 
 /// Raised when a RomM API call fails; [message] is safe to surface to the user.
@@ -1145,11 +1153,37 @@ class RommService {
     required String destFilePath,
     void Function(int received, int? total)? onProgress,
     bool Function()? shouldCancel,
-  }) async {
+  }) {
     final fileName = rom.fsName.isNotEmpty ? rom.fsName : '${rom.id}';
-    final endpoint =
-        '/api/roms/${rom.id}/content/${Uri.encodeComponent(fileName)}';
+    return _streamToFile(
+      '/api/roms/${rom.id}/content/${Uri.encodeComponent(fileName)}',
+      destFilePath: destFilePath,
+      onProgress: onProgress,
+      shouldCancel: shouldCancel,
+    );
+  }
 
+  /// Streams the body of an authenticated GET on [endpoint] into
+  /// [destFilePath].
+  ///
+  /// The single download path for every large binary this client fetches (ROMs
+  /// and firmware): writes to a sibling `.part` temp file and renames it into
+  /// place only on success, so a partial, failed or cancelled transfer never
+  /// leaves a usable-looking file behind. Streaming (not buffering) keeps
+  /// memory flat for multi-GB payloads.
+  ///
+  /// [onProgress] receives `(receivedBytes, totalBytes?)`. [shouldCancel] is
+  /// polled between chunks; returning true aborts with a
+  /// [RommCancelledException] and removes the temp file. A non-200 response
+  /// throws a [RommException] carrying the status, which the caller may remap
+  /// to a more specific [RommErrorKind].
+  // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "Firmware Model And Service"
+  Future<void> _streamToFile(
+    String endpoint, {
+    required String destFilePath,
+    void Function(int received, int? total)? onProgress,
+    bool Function()? shouldCancel,
+  }) async {
     final tmpPath = '$destFilePath.part';
     final tmpFile = File(tmpPath);
     if (await tmpFile.exists()) {
@@ -1207,6 +1241,87 @@ class RommService {
     }
     await tmpFile.rename(destFilePath);
     _log.i('RomM download complete: $destFilePath ($received bytes)');
+  }
+
+  // ── Firmware (BIOS) ──────────────────────────────────────────────────────
+
+  /// Lists the firmware RomM holds for [platformId]
+  /// (`GET /api/firmware?platform_id=`), through the shared auth-retry policy.
+  ///
+  /// Rows the server marks `missing_from_fs` are returned too — the panel shows
+  /// them as "missing on the server" rather than hiding a record the user can
+  /// see in RomM's own UI. A 403 means the credential lacks the `firmware.read`
+  /// scope (an API key created without it, typically) and surfaces as
+  /// [RommErrorKind.scopeDenied] so the caller can say so instead of showing a
+  /// bare status code.
+  // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "Firmware Model And Service"
+  Future<List<RommFirmware>> listFirmware(int platformId) async {
+    final http.Response resp;
+    try {
+      resp = await _authedGet('/api/firmware?platform_id=$platformId');
+    } on RommException catch (e) {
+      throw _asScopeDenied(e) ?? e;
+    }
+    return _itemsOf(
+      jsonDecode(resp.body),
+    ).whereType<Map<String, dynamic>>().map(RommFirmware.fromJson).toList();
+  }
+
+  /// Streams [firmware]'s bytes into [destFilePath]
+  /// (`GET /api/firmware/{id}/content/{file_name}`).
+  ///
+  /// Shares the `.part`-and-rename path with [downloadRom], so a failed or
+  /// cancelled BIOS download leaves nothing behind for an emulator to load. A
+  /// 403 surfaces as [RommErrorKind.scopeDenied]; every other failure is logged
+  /// exactly once here, naming the file and the cause, and rethrown for the
+  /// caller to report.
+  // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "Firmware Model And Service"
+  Future<void> downloadFirmware(
+    RommFirmware firmware, {
+    required String destFilePath,
+    void Function(int received, int? total)? onProgress,
+    bool Function()? shouldCancel,
+  }) async {
+    final fileName = firmware.fileName.isNotEmpty
+        ? firmware.fileName
+        : '${firmware.id}';
+    try {
+      await _streamToFile(
+        '/api/firmware/${firmware.id}/content/'
+        '${Uri.encodeComponent(fileName)}',
+        destFilePath: destFilePath,
+        onProgress: onProgress,
+        shouldCancel: shouldCancel,
+      );
+    } on RommCancelledException {
+      // A user-requested stop is not a failure: the temp file is already gone.
+      _log.i('RomM firmware download cancelled: file=$fileName');
+      rethrow;
+    } on RommException catch (e) {
+      final mapped = _asScopeDenied(e) ?? e;
+      _log.w(
+        'RomM firmware download failed: file=$fileName id=${firmware.id} '
+        'status=${mapped.statusCode ?? '-'} kind=${mapped.kind.name} '
+        'cause=${mapped.message}',
+      );
+      throw mapped;
+    }
+  }
+
+  /// Rewrites a 403 from a firmware call as a [RommErrorKind.scopeDenied]
+  /// exception, or returns null when [e] is not a scope problem.
+  ///
+  /// A 403 here has already survived the shared retry (a password-grant
+  /// connection re-authenticates once before giving up), so the credential
+  /// genuinely lacks `firmware.read` rather than holding a stale token.
+  // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "Firmware Model And Service"
+  static RommException? _asScopeDenied(RommException e) {
+    if (e.statusCode != 403) return null;
+    return RommException(
+      'This RomM account or API key has no firmware access',
+      statusCode: 403,
+      kind: RommErrorKind.scopeDenied,
+    );
   }
 
   // ── Saves & states (asset sync) ──────────────────────────────────────────
