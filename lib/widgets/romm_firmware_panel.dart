@@ -86,6 +86,16 @@ class _RommFirmwarePanelState extends State<RommFirmwarePanel> {
 
   List<RommFirmwareRow> _rows = const [];
   String? _destDir;
+
+  /// Which candidate supplied [_destDir], or null when there is none.
+  ///
+  /// Drives whether the folder picker is offered at all: ADR-0012 §2 has the
+  /// user asked to pick a folder only when RetroArch supplies none, and
+  /// [BiosDestinationService] resolves RetroArch first on every open — so
+  /// offering the picker while RetroArch wins would take a choice and then
+  /// forget it the next time the panel is opened.
+  // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "BIOS Destination"
+  BiosDestinationSource? _destSource;
   bool _loading = true;
 
   /// The localized line explaining why there are no rows, already rendered
@@ -141,7 +151,10 @@ class _RommFirmwarePanelState extends State<RommFirmwarePanel> {
   /// each file against the destination.
   // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "Local Presence And Verification"
   Future<void> _load() async {
-    final dest = await BiosDestinationService.instance.resolve(widget.system);
+    final resolved = await BiosDestinationService.instance.resolveDestination(
+      widget.system,
+    );
+    final dest = resolved?.directory;
     List<RommFirmwareRow> rows = const [];
     // The key to explain an empty list with, and the failure detail its
     // `{error}` placeholder takes; both null on a normal, non-empty listing.
@@ -178,6 +191,7 @@ class _RommFirmwarePanelState extends State<RommFirmwarePanel> {
         .replaceFirst('{error}', errorDetail ?? '');
     setState(() {
       _destDir = dest;
+      _destSource = resolved?.source;
       _rows = rows;
       _emptyMessage = empty;
       _loading = false;
@@ -201,6 +215,16 @@ class _RommFirmwarePanelState extends State<RommFirmwarePanel> {
 
   bool get _hasDestination => (_destDir ?? '').isNotEmpty;
 
+  /// Whether picking a folder would actually change where firmware lands.
+  ///
+  /// False while RetroArch supplies the destination: the resolver puts
+  /// `system_directory` first on every open (ADR-0012 §2), so a pick made here
+  /// would apply to this session and be dropped on the next one. Better to not
+  /// offer it than to offer it and forget it — the destination line says where
+  /// the files are going and that it is RetroArch deciding.
+  // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "BIOS Destination"
+  bool get _canChooseFolder => _destSource != BiosDestinationSource.retroArch;
+
   /// Footer actions, in order, after the firmware rows.
   List<_FooterAction> get _footerActions => [
     if (RommFirmwareRow.canDownloadAll(
@@ -210,7 +234,7 @@ class _RommFirmwarePanelState extends State<RommFirmwarePanel> {
         ) ||
         _busy)
       _FooterAction.downloadAll,
-    _FooterAction.chooseFolder,
+    if (_canChooseFolder) _FooterAction.chooseFolder,
   ];
 
   int get _itemCount => _rows.length + _footerActions.length;
@@ -253,6 +277,10 @@ class _RommFirmwarePanelState extends State<RommFirmwarePanel> {
   }
 
   void _activate() {
+    // Nothing is rendered during the initial load, so a press here would arm an
+    // action the user cannot see — and the folder it picked would be
+    // overwritten by [_load]'s own setState moments later.
+    if (_loading) return;
     if (_selected < _rows.length) {
       final row = _rows[_selected];
       final actions = _actionsFor(row);
@@ -266,7 +294,10 @@ class _RommFirmwarePanelState extends State<RommFirmwarePanel> {
       }
       return;
     }
-    final footer = _footerActions[_selected - _rows.length];
+    final footers = _footerActions;
+    final footerIndex = _selected - _rows.length;
+    if (footerIndex < 0 || footerIndex >= footers.length) return;
+    final footer = footers[footerIndex];
     switch (footer) {
       case _FooterAction.downloadAll:
         if (_busy) {
@@ -434,7 +465,23 @@ class _RommFirmwarePanelState extends State<RommFirmwarePanel> {
       // Refresh from disk rather than assuming: a rename that landed and a
       // transfer that did not both answer here.
       await _refreshStates();
-      if (!mounted) return;
+      if (!mounted) {
+        // The route popped mid-run. The notification is global and outlives
+        // this widget, so it has to be closed out here or it stays pinned as
+        // an in-progress transfer that will never finish.
+        // Governing: SPEC-0012 REQ "Error Handling Standards"
+        notifications.update(
+          id: notificationId,
+          message: summaryTemplate
+              .replaceFirst('{downloaded}', '$downloaded')
+              .replaceFirst('{failed}', '$failed'),
+          type: failed > 0
+              ? GlobalNotificationType.error
+              : GlobalNotificationType.success,
+          progress: null,
+        );
+        return;
+      }
       if (cancelled || result == RommFirmwareDownloadResult.scopeDenied) break;
     }
 
@@ -496,7 +543,22 @@ class _RommFirmwarePanelState extends State<RommFirmwarePanel> {
       );
       return;
     }
-    setState(() => _destDir = resolved);
+    // Keep the cursor on the action the user just used. Setting a destination
+    // can make "Download all missing" appear, which lengthens the footer list
+    // ahead of this entry — without this the focus ring would jump to the
+    // newly inserted action under the user's thumb.
+    final wasOnChooseFolder =
+        _selected >= _rows.length &&
+        _selected - _rows.length < _footerActions.length &&
+        _footerActions[_selected - _rows.length] == _FooterAction.chooseFolder;
+    setState(() {
+      _destDir = resolved;
+      _destSource = BiosDestinationSource.configured;
+    });
+    if (wasOnChooseFolder) {
+      final index = _footerActions.indexOf(_FooterAction.chooseFolder);
+      if (index >= 0) setState(() => _selected = _rows.length + index);
+    }
     await _refreshStates();
   }
 
@@ -615,9 +677,15 @@ class _RommFirmwarePanelState extends State<RommFirmwarePanel> {
   Widget _buildDestinationLine() {
     final theme = Theme.of(context);
     final dest = _destDir;
+    // Naming RetroArch as the source is what makes the missing folder picker
+    // legible: the destination is not a choice this panel is withholding, it is
+    // one RetroArch has already made.
+    // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "BIOS Destination"
     final text = dest == null
         ? AppLocale.rommFirmwareDestinationMissing.getString(context)
-        : AppLocale.rommFirmwareDestination
+        : (_destSource == BiosDestinationSource.retroArch
+                  ? AppLocale.rommFirmwareDestinationRetroArch
+                  : AppLocale.rommFirmwareDestination)
               .getString(context)
               .replaceFirst('{path}', dest);
     return Text(

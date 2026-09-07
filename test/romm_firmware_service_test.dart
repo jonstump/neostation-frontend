@@ -32,6 +32,23 @@ void main() {
     return s;
   }
 
+  /// A password-grant connection holding a token the server will reject, so the
+  /// shared retry's re-authenticate step actually runs. The API-key service
+  /// above cannot exercise it: API-key mode skips the retry entirely.
+  RommService passwordService() {
+    final s = RommService();
+    s.configure(
+      serverUrl: 'https://romm.local',
+      username: 'ada',
+      password: 'hunter2',
+      accessToken: 'stale-but-presented',
+      tokenExpiresMs:
+          DateTime.now().millisecondsSinceEpoch +
+          const Duration(hours: 1).inMilliseconds,
+    );
+    return s;
+  }
+
   /// Answers every request with a buffered [respond] result.
   void serve(FutureOr<http.Response> Function(http.Request) respond) {
     RommService.debugUseHttpClient(
@@ -281,6 +298,71 @@ void main() {
 
       expect(File(dest).readAsStringSync(), 'NEW');
       expect(File('$dest.part').existsSync(), isFalse);
+    });
+
+    test('refuses a missing_from_fs row without sending anything', () async {
+      // ADR-0012 Decision Outcome 1: a row the server flagged missing_from_fs
+      // is listed but not downloadable. The panel and RommFirmwareService gate
+      // it too, but this is the layer no caller can go around.
+      serveStream((_) => ok([_bytes('SHOULD NOT BE FETCHED')]));
+      final dest = '${tmp.path}/scph5502.bin';
+
+      final e = await failure(
+        service().downloadFirmware(
+          firmware(fileName: 'scph5502.bin', missing: true),
+          destFilePath: dest,
+        ),
+      );
+
+      expect(e.kind, RommErrorKind.other);
+      expect(requests, isEmpty);
+      expect(File(dest).existsSync(), isFalse);
+      expect(File('$dest.part').existsSync(), isFalse);
+    });
+  });
+
+  group('a 403 raised while re-authenticating', () {
+    /// A password-grant 403 sends the shared retry to `authenticate()`, which
+    /// throws its own 403 when the credential no longer works. Mapping *that*
+    /// to scopeDenied told a user who had changed their RomM password that
+    /// their account has no firmware access.
+    ///
+    /// Governing: SPEC-0012 REQ "Error Handling Standards"
+    http.Response tokenResponse(int status) => status == 200
+        ? json(200, {'access_token': 'fresh', 'expires': 3600})
+        : json(status, {'detail': 'forbidden'});
+
+    /// Answers the heartbeat, the token grant and everything else separately,
+    /// so a test can fail one stage at a time.
+    void serveAuth({required int token, required int endpoint}) {
+      serve((request) {
+        final path = request.url.path;
+        if (path.contains('/api/heartbeat')) return json(404, {});
+        if (path.contains('/api/token')) return tokenResponse(token);
+        return json(endpoint, {'detail': 'forbidden'});
+      });
+    }
+
+    test('surfaces the credential failure, not scopeDenied', () async {
+      serveAuth(token: 403, endpoint: 403);
+
+      final e = await failure(passwordService().listFirmware(3));
+
+      expect(e, isA<RommAuthException>());
+      expect(e.kind, isNot(RommErrorKind.scopeDenied));
+      expect(e.message, 'Invalid username or password');
+    });
+
+    test('still maps the endpoint\'s own 403 to scopeDenied', () async {
+      // The credential is fine — the re-auth succeeds — and the firmware route
+      // answers 403 again, which is a genuine missing `firmware.read`.
+      serveAuth(token: 200, endpoint: 403);
+
+      final e = await failure(passwordService().listFirmware(3));
+
+      expect(e, isNot(isA<RommAuthException>()));
+      expect(e.kind, RommErrorKind.scopeDenied);
+      expect(e.statusCode, 403);
     });
   });
 

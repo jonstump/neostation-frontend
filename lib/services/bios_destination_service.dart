@@ -3,19 +3,50 @@ import 'dart:io';
 import 'package:path/path.dart' as path;
 
 import '../models/system_model.dart';
+import '../providers/romm_provider.dart' show RommProvider;
 import '../repositories/config_repository.dart';
 import 'logger_service.dart';
 import 'retroarch_config_service.dart';
 import 'user_data_location_service.dart';
+
+/// Which candidate supplied a resolved BIOS destination.
+// Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "BIOS Destination"
+enum BiosDestinationSource {
+  /// RetroArch's `system_directory`, discovered from `retroarch.cfg`.
+  retroArch,
+
+  /// `user_config.bios_directory` — the folder the user picked once.
+  configured,
+}
+
+/// A resolved BIOS destination: the directory, and which candidate won.
+///
+/// The source matters to the UI, not just to the log: ADR-0012 §2 has the
+/// picker offered only when RetroArch supplies nothing, so a panel that knows
+/// RetroArch won can leave the picker out rather than offering a choice
+/// [BiosDestinationService.resolve] would discard on the next open.
+// Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "BIOS Destination"
+class BiosDestination {
+  /// The normalized, existing, writable directory firmware lands in.
+  final String directory;
+
+  /// Which of the two candidates this directory came from.
+  final BiosDestinationSource source;
+
+  const BiosDestination({required this.directory, required this.source});
+
+  @override
+  String toString() => 'BiosDestination($directory, ${source.name})';
+}
 
 /// Decides where a system's BIOS/firmware files belong on this device.
 ///
 /// Precedence, per ADR-0012:
 ///
 /// 1. RetroArch's `system_directory`, when `retroarch.cfg` names one and that
-///    directory exists. RetroArch is the one emulator whose BIOS location the
-///    app can discover, and if it is configured the user almost certainly
-///    wants the files there.
+///    directory exists and is writable. RetroArch is the one emulator whose
+///    BIOS location the app can discover, and if it is configured the user
+///    almost certainly wants the files there.
 /// 2. `user_config.bios_directory` — the folder the user picked once, through
 ///    the native picker on desktop or a SAF tree on Android.
 /// 3. Nothing. The caller then offers the picker and persists the choice with
@@ -34,13 +65,16 @@ class BiosDestinationService {
     Future<String?> Function()? storedBiosDirectory,
     Future<void> Function(String directory)? persistBiosDirectory,
     Future<bool> Function(String directory)? directoryExists,
+    Future<bool> Function(String directory)? directoryIsWritable,
   }) : _retroArchSystemDirectory =
            retroArchSystemDirectory ?? _defaultRetroArchSystemDirectory,
        _storedBiosDirectory =
            storedBiosDirectory ?? ConfigRepository.getBiosDirectory,
        _persistBiosDirectory =
            persistBiosDirectory ?? ConfigRepository.setBiosDirectory,
-       _directoryExists = directoryExists ?? _defaultDirectoryExists;
+       _directoryExists = directoryExists ?? _defaultDirectoryExists,
+       _directoryIsWritable =
+           directoryIsWritable ?? _defaultDirectoryIsWritable;
 
   static final _log = LoggerService.instance;
 
@@ -51,23 +85,41 @@ class BiosDestinationService {
   final Future<String?> Function() _storedBiosDirectory;
   final Future<void> Function(String directory) _persistBiosDirectory;
   final Future<bool> Function(String directory) _directoryExists;
+  final Future<bool> Function(String directory) _directoryIsWritable;
 
   /// Returns the directory firmware for [system] should be written to, or null
   /// when the device has neither a RetroArch system directory nor a chosen
   /// BIOS folder.
   ///
-  /// Both candidates are translated out of the Android SAF form and confirmed
-  /// to exist, so a non-null answer is a real, writable-looking directory the
-  /// download can join a path onto.
+  /// Convenience wrapper over [resolveDestination] for callers that only need
+  /// the path.
   // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "BIOS Destination"
-  Future<String?> resolve(SystemModel system) async {
+  Future<String?> resolve(SystemModel system) async =>
+      (await resolveDestination(system))?.directory;
+
+  /// The destination firmware for [system] should be written to and which
+  /// candidate supplied it, or null when neither is usable.
+  ///
+  /// Both candidates are translated out of the Android SAF form, confirmed to
+  /// exist, and then probed for writability with the same probe-file
+  /// round-trip the ROM download path uses ([RommProvider.dirIfWritable]) — so
+  /// a non-null answer is a directory the download can actually write into,
+  /// not merely one that is there. That distinction is the whole point on
+  /// Android without All Files Access, where an existing directory is readable
+  /// and unwritable and the failure would otherwise surface only at the first
+  /// byte written.
+  // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "BIOS Destination"
+  Future<BiosDestination?> resolveDestination(SystemModel system) async {
     final retroArch = await _usableDirectory(await _retroArchSystemDirectory());
     if (retroArch != null) {
       _log.i(
         'BIOS destination: source=retroarch system=${system.folderName} '
         'dir=$retroArch',
       );
-      return retroArch;
+      return BiosDestination(
+        directory: retroArch,
+        source: BiosDestinationSource.retroArch,
+      );
     }
 
     final configured = await _usableDirectory(await _storedBiosDirectory());
@@ -76,7 +128,10 @@ class BiosDestinationService {
         'BIOS destination: source=config system=${system.folderName} '
         'dir=$configured',
       );
-      return configured;
+      return BiosDestination(
+        directory: configured,
+        source: BiosDestinationSource.configured,
+      );
     }
 
     _log.i(
@@ -124,13 +179,25 @@ class BiosDestinationService {
     return UserDataLocationService.safUriToRealPath(trimmed);
   }
 
-  /// Normalizes a candidate to an existing directory, or null.
+  /// Normalizes a candidate to an existing, writable directory, or null.
+  ///
+  /// Existence is checked before writability on purpose: the shared probe
+  /// creates the directory it is handed, and a BIOS folder that has since been
+  /// deleted (or lives on an unmounted card) must fall through to the next
+  /// candidate rather than be silently recreated somewhere useless.
   Future<String?> _usableDirectory(String? candidate) async {
     if (candidate == null) return null;
     final real = realPathFor(candidate);
     if (real == null) return null;
     final normalized = path.normalize(real);
     if (!await _directoryExists(normalized)) return null;
+    if (!await _directoryIsWritable(normalized)) {
+      _log.w(
+        'BIOS destination: directory exists but is not writable: '
+        '$normalized',
+      );
+      return null;
+    }
     return normalized;
   }
 
@@ -149,4 +216,10 @@ class BiosDestinationService {
 
   static Future<bool> _defaultDirectoryExists(String directory) =>
       Directory(directory).exists();
+
+  /// Reuses the ROM download path's probe rather than repeating it: one
+  /// definition of "writable" for every RomM download, and its concurrency fix
+  /// (a per-call probe filename) comes along for free.
+  static Future<bool> _defaultDirectoryIsWritable(String directory) async =>
+      await RommProvider.dirIfWritable(directory) != null;
 }

@@ -1296,4 +1296,5 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.rommGalleryError: '无法加载 RomM 图库',
   AppLocale.rommUploadScreenshots: '将截图上传到 RomM',
   AppLocale.rommUploadScreenshotsHint: '每次游玩结束后，将新的 RetroArch 截图发送到 RomM',
+  AppLocale.rommFirmwareDestinationRetroArch: '目标位置（来自 RetroArch）：{path}',
 };

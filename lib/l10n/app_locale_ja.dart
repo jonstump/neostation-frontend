@@ -1350,4 +1350,5 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommUploadScreenshots: 'スクリーンショットを RomM にアップロード',
   AppLocale.rommUploadScreenshotsHint:
       'プレイ終了後に新しい RetroArch のスクリーンショットを RomM に送信します',
+  AppLocale.rommFirmwareDestinationRetroArch: '保存先（RetroArch の設定）: {path}',
 };

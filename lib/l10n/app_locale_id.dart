@@ -1492,4 +1492,5 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommUploadScreenshots: 'Unggah tangkapan layar ke RomM',
   AppLocale.rommUploadScreenshotsHint:
       'Kirim tangkapan layar RetroArch yang baru ke RomM setelah setiap sesi',
+  AppLocale.rommFirmwareDestinationRetroArch: 'Tujuan (dari RetroArch): {path}',
 };

@@ -1723,7 +1723,14 @@ class RommProvider extends ChangeNotifier {
   /// returning it on success or null when the folder can't be written to.
   ///
   /// Safe to call concurrently for the same directory — see [_writeProbeSerial].
-  @visibleForTesting
+  ///
+  /// Public because it is the app's one definition of "a folder a RomM download
+  /// may write into": `BiosDestinationService` resolves the BIOS destination
+  /// through it too, so an existing-but-unwritable folder (Android without All
+  /// Files Access) is rejected before a transfer starts rather than at the
+  /// first byte. Note it *creates* [path] — callers that must not conjure a
+  /// folder check existence first.
+  // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "BIOS Destination"
   static Future<String?> dirIfWritable(String path) async {
     final dir = Directory(path);
     final probe = File(
