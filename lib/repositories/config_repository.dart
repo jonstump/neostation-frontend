@@ -10,6 +10,23 @@ class ConfigRepository {
   static Future<Map<String, dynamic>?> getUserConfig() =>
       SqliteService.getUserConfig();
 
+  /// Whether a finished session's RetroArch captures are pushed to RomM
+  /// (`user_config.romm_upload_screenshots`, migration v163).
+  ///
+  /// Defaults to true when the row or the column is missing: the column is
+  /// created with `DEFAULT 1`, and a database that has not reached v163 yet
+  /// should behave like the feature's shipped default rather than silently
+  /// off. Any read failure also reads as the default — the caller still
+  /// checks the connection and the link before it uploads anything.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload Toggle"
+  static Future<bool> getRommUploadScreenshots() async {
+    final row = await SqliteService.getUserConfig();
+    final raw = row?['romm_upload_screenshots'];
+    if (raw == null) return true;
+    if (raw is bool) return raw;
+    return (int.tryParse(raw.toString()) ?? 1) != 0;
+  }
+
   // ── Theme settings ──────────────────────────────────────────────────────
 
   static Future<String> getThemeName() => SqliteService.getThemeName();

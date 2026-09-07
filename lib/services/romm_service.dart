@@ -17,6 +17,7 @@ import '../models/romm_rom_page.dart';
 import '../models/romm_play_session.dart';
 import '../models/romm_rom.dart';
 import '../models/romm_server_capabilities.dart';
+import '../models/romm_screenshot.dart';
 import 'logger_service.dart';
 
 /// Failure modes a caller needs to tell apart programmatically (the connect
@@ -49,6 +50,13 @@ enum RommErrorKind {
   // Governing: ADR-0010 (RomM heartbeat capability probe),
   // SPEC-0010 REQ "Gated Call Sites"
   unsupported,
+
+  /// The server refused the upload as larger than its asset limit (HTTP 413,
+  /// `MAX_ASSET_UPLOAD_SIZE_BYTES`). Distinct because it is not worth
+  /// retrying: the file's size will not change, so the caller records it as
+  /// skipped rather than leaving it queued forever.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload And Ledger"
+  payloadTooLarge,
 }
 
 /// Raised when a RomM API call fails; [message] is safe to surface to the user.
@@ -1668,6 +1676,72 @@ class RommService {
     overwrite: overwrite,
     isState: true,
   );
+
+  /// Uploads [file] as a user screenshot for [romId]
+  /// (`POST /api/screenshots?rom_id=`, multipart field `screenshotFile`).
+  ///
+  /// Deliberately not routed through [_uploadAsset]: the screenshots endpoint
+  /// takes neither `overwrite`, `emulator`, `slot` nor `device_id` — it
+  /// overwrites on `(user, rom, file name)` unconditionally — and it answers
+  /// with a screenshot, not a save/state asset. It does share the auth-retry
+  /// policy, so a cached token that predates the `assets.write` scope is
+  /// refreshed rather than surfacing as a failed upload.
+  ///
+  /// Throws [RommException]; a 413 carries [RommErrorKind.payloadTooLarge] so
+  /// the caller can record the file as skipped instead of retrying it after
+  /// every future session. Returns null when the upload succeeded but the
+  /// response body was not a shape [RommScreenshot] recognises — the file is
+  /// on the server either way, and only the gallery needs the id.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload And Ledger"
+  Future<RommScreenshot?> uploadScreenshot(int romId, File file) async {
+    final fileName = path.basename(file.path);
+    final uri = Uri.parse(
+      '$_baseUrl/api/screenshots',
+    ).replace(queryParameters: {'rom_id': '$romId'});
+
+    Future<http.StreamedResponse> send() async {
+      final req = http.MultipartRequest('POST', uri)
+        ..headers.addAll(_authHeaders)
+        ..files.add(
+          await http.MultipartFile.fromPath(
+            'screenshotFile',
+            file.path,
+            filename: fileName,
+          ),
+        );
+      return _httpClient.send(req);
+    }
+
+    final resp = await _sendWithAuthRetry<http.StreamedResponse>(
+      send,
+      statusOf: (r) => r.statusCode,
+    );
+
+    final body = await resp.stream.bytesToString();
+    if (resp.statusCode == 413) {
+      throw RommException(
+        'Screenshot rejected as too large (413) file="$fileName" rom=$romId',
+        statusCode: 413,
+        kind: RommErrorKind.payloadTooLarge,
+      );
+    }
+    if (resp.statusCode != 200 && resp.statusCode != 201) {
+      throw RommException(
+        'Screenshot upload failed (${resp.statusCode}) '
+        'file="$fileName" rom=$romId',
+        statusCode: resp.statusCode,
+      );
+    }
+    try {
+      return RommScreenshot.fromUploadResponse(jsonDecode(body));
+    } catch (e) {
+      _log.w(
+        'RomM screenshot upload succeeded but the body was unreadable '
+        'file="$fileName" rom=$romId error=$e',
+      );
+      return null;
+    }
+  }
 
   /// Replaces the contents of the existing save asset [assetId]
   /// (`PUT /api/saves/{id}`, field `saveFile`).

@@ -83,6 +83,55 @@ class SqliteMigrations {
     );
   ''';
 
+  /// CREATE for the screenshot upload ledger (v163).
+  ///
+  /// Records what this device already sent to RomM for a given ROM, so a
+  /// capture is uploaded exactly once. Keyed on `(rom_path, file_name)`
+  /// because RomM itself overwrites assets by file name — a name it already
+  /// holds is not new content, whatever else changed. `file_size` qualifies
+  /// that: a file re-saved at a different size is genuinely different and is
+  /// offered again, while a NULL size marks a capture the server refused as
+  /// too large (413) and is never offered again.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload And Ledger"
+  static const String createAppRommScreenshotMapTableSql = '''
+    CREATE TABLE IF NOT EXISTS app_romm_screenshot_map (
+      rom_path TEXT NOT NULL,
+      file_name TEXT NOT NULL,
+      file_size INTEGER,
+      romm_screenshot_id INTEGER,
+      uploaded_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (rom_path, file_name)
+    );
+  ''';
+
+  /// CREATE for the singleton RetroArch directory row (v35; the screenshot
+  /// columns added in v163).
+  ///
+  /// Repeated here so a fresh install and an upgraded device end up with the
+  /// same table: v35 created it inline and nothing added it to the
+  /// fresh-install list, so a database created after this constant exists is
+  /// the first that has it from the start.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Screenshot Directory From RetroArch Config"
+  static const String createUserRetroArchConfigTableSql = '''
+    CREATE TABLE IF NOT EXISTS user_retroarch_config (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      config_path TEXT NOT NULL,
+      system_directory TEXT,
+      savefile_directory TEXT,
+      savestate_directory TEXT,
+      screenshot_directory TEXT,
+      sort_screenshots_by_content_enable INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+    );
+  ''';
+
+  /// The RetroArch screenshot columns v163 adds, with their SQLite types.
+  static const Map<String, String> retroArchScreenshotColumns = {
+    'screenshot_directory': 'TEXT',
+    'sort_screenshots_by_content_enable': 'INTEGER DEFAULT 0',
+  };
+
   /// Lookup index for [createAppRommPlaySessionsTableSql] (v111).
   static const String createAppRommPlaySessionsIndexSql = '''
     CREATE INDEX IF NOT EXISTS idx_romm_play_sessions_rom_id
@@ -652,6 +701,9 @@ class SqliteMigrations {
         break;
       case 162:
         await _migrateToVersion162(db);
+        break;
+      case 163:
+        await _migrateToVersion163(db);
         break;
       default:
         _log.w('No migration defined for version $version');
@@ -7209,6 +7261,77 @@ class SqliteMigrations {
       _log.i('Migration v162 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v162: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v163: RomM screenshot sync schema.
+  ///
+  /// Everything the screenshot feature persists lands together, so a device
+  /// reaches all of it or none of it:
+  ///
+  /// * `app_romm_screenshot_map` — the upload ledger
+  ///   ([createAppRommScreenshotMapTableSql]).
+  /// * `user_config.romm_upload_screenshots` — the "Upload screenshots to
+  ///   RomM" toggle, defaulting to `1` so the feature is on for everyone who
+  ///   already uses RomM.
+  /// * `user_retroarch_config.screenshot_directory` and
+  ///   `.sort_screenshots_by_content_enable` — where RetroArch writes captures
+  ///   and whether it sorts them into a per-content subfolder.
+  ///
+  /// **Numbered 163, not 162.** 162 is claimed by the in-flight RomM firmware
+  /// branch. Two lineages cannot both own a number: a device that ran the
+  /// other branch's 162 is already past it, so a `case 162` here would never
+  /// fire for that device and the ledger table would never be created.
+  ///
+  /// Every statement is `IF NOT EXISTS` or guarded by `PRAGMA table_info`, so
+  /// re-running is a no-op and a database that already has some of the columns
+  /// gains only what is missing.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Database Operation Standards"
+  static Future<void> _migrateToVersion163(Database db) async {
+    _log.i('Migration v163: Creating the RomM screenshot schema');
+    try {
+      db.execute(createAppRommScreenshotMapTableSql);
+
+      // The table exists on every device past v35 and on every fresh install
+      // from this version on; the CREATE is here for the one gap in between.
+      db.execute(createUserRetroArchConfigTableSql);
+      final retroArchColumns = db
+          .select('PRAGMA table_info(user_retroarch_config)')
+          .map((c) => c['name'].toString())
+          .toList();
+      for (final entry in retroArchScreenshotColumns.entries) {
+        if (retroArchColumns.contains(entry.key)) {
+          _log.i('Column ${entry.key} already exists');
+          continue;
+        }
+        db.execute(
+          'ALTER TABLE user_retroarch_config ADD COLUMN '
+          '${entry.key} ${entry.value}',
+        );
+        _log.i('Column ${entry.key} added via v163');
+      }
+
+      final configColumns = db
+          .select('PRAGMA table_info(user_config)')
+          .map((c) => c['name'].toString())
+          .toList();
+      if (configColumns.isEmpty) {
+        _log.i('Table user_config absent - nothing to migrate');
+      } else if (configColumns.contains('romm_upload_screenshots')) {
+        _log.i('Column romm_upload_screenshots already exists');
+      } else {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN '
+          'romm_upload_screenshots INTEGER DEFAULT 1',
+        );
+        _log.i('Column romm_upload_screenshots added via v163');
+      }
+
+      _log.i('Migration v163 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v163: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

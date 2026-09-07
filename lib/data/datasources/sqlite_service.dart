@@ -459,7 +459,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 162;
+  static const int _databaseVersion = 163;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -1962,7 +1962,12 @@ class SqliteService {
         -- own `system_directory` is unknown. Null until chosen. See migration
         -- v162.
         -- Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "BIOS Destination"
-        bios_directory TEXT
+        bios_directory TEXT,
+        -- Whether a finished session's RetroArch captures are pushed to RomM
+        -- (migration v163). On by default; only takes effect while RomM is
+        -- connected and the game is linked.
+        -- Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload Toggle"
+        romm_upload_screenshots INTEGER DEFAULT 1
       );
       ''',
       '''
@@ -2137,6 +2142,8 @@ class SqliteService {
       SqliteMigrations.createAppRommRomMapTableSql,
       SqliteMigrations.createAppRommPlaySessionsTableSql,
       SqliteMigrations.createAppRommPlaytimeStateTableSql,
+      SqliteMigrations.createAppRommScreenshotMapTableSql,
+      SqliteMigrations.createUserRetroArchConfigTableSql,
       SqliteMigrations.createUserCollectionsTableSql,
       SqliteMigrations.createUserCollectionItemsTableSql,
     ];

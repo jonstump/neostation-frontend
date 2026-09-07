@@ -98,7 +98,9 @@ class RetroArchConfigService {
 
   /// Parses the `retroarch.cfg` file and extracts directory configurations.
   ///
-  /// Targets `system_directory`, `savefile_directory`, and `savestate_directory`.
+  /// Targets `system_directory`, `savefile_directory`, `savestate_directory`
+  /// and `screenshot_directory`, plus the three "sort into subfolders" flags.
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Screenshot Directory From RetroArch Config"
   Future<RetroArchConfig> parseConfig(String configPath) async {
     final file = File(configPath);
     if (!await file.exists()) {
@@ -108,8 +110,10 @@ class RetroArchConfigService {
     String? systemDir;
     String? saveDir;
     String? stateDir;
+    String? screenshotDir;
     var sortSaves = false;
     var sortStates = false;
+    var sortScreenshots = false;
 
     try {
       final lines = await file.readAsLines();
@@ -124,10 +128,16 @@ class RetroArchConfigService {
           saveDir = _extractValue(timmedLine);
         } else if (timmedLine.startsWith('savestate_directory')) {
           stateDir = _extractValue(timmedLine);
+        } else if (timmedLine.startsWith('screenshot_directory')) {
+          screenshotDir = _extractValue(timmedLine);
         } else if (timmedLine.startsWith('sort_savefiles_enable')) {
           sortSaves = _extractBool(timmedLine);
         } else if (timmedLine.startsWith('sort_savestates_enable')) {
           sortStates = _extractBool(timmedLine);
+        } else if (timmedLine.startsWith(
+          'sort_screenshots_by_content_enable',
+        )) {
+          sortScreenshots = _extractBool(timmedLine);
         }
       }
     } catch (e) {
@@ -142,6 +152,8 @@ class RetroArchConfigService {
       savestateDirectory: _normalizePath(stateDir, configPath),
       sortSavefilesByCore: sortSaves,
       sortSavestatesByCore: sortStates,
+      screenshotDirectory: _normalizePath(screenshotDir, configPath),
+      sortScreenshotsByContent: sortScreenshots,
     );
 
     return resolvedConfig;
@@ -428,14 +440,17 @@ class RetroArchConfigService {
   void _logResolution(RetroArchConfig cfg) {
     final signature =
         '${cfg.configPath}|${cfg.savefileDirectory}|${cfg.savestateDirectory}|'
-        '${cfg.sortSavefilesByCore}|${cfg.sortSavestatesByCore}';
+        '${cfg.sortSavefilesByCore}|${cfg.sortSavestatesByCore}|'
+        '${cfg.screenshotDirectory}|${cfg.sortScreenshotsByContent}';
     if (signature == _lastLoggedResolution) return;
     _lastLoggedResolution = signature;
     _log.i(
       'RetroArch config resolved: cfg="${cfg.configPath}" '
       'saves="${cfg.savefileDirectory}" states="${cfg.savestateDirectory}" '
+      'shots="${cfg.screenshotDirectory}" '
       'sortSaves=${cfg.sortSavefilesByCore} '
-      'sortStates=${cfg.sortSavestatesByCore}',
+      'sortStates=${cfg.sortSavestatesByCore} '
+      'sortShots=${cfg.sortScreenshotsByContent}',
     );
   }
 
