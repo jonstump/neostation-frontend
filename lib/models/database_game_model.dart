@@ -56,8 +56,27 @@ class DatabaseGameModel {
   /// Only 'manual' is protected from automatic re-matching.
   final String? raMatchSource;
 
-  /// Computed ScreenScraper MD5/SHA1 hash used for metadata scraping.
+  /// The ROM image's md5 (`user_roms.ss_hash`, lowercase hex), written by the
+  /// ScreenScraper fingerprint path; null when only the cheap crc32 path ran
+  /// or nothing has fingerprinted the game yet.
   final String? ssHash;
+
+  /// The ROM image's crc32 (`user_roms.rom_crc32`, uppercase hex as
+  /// `RomFingerprint` writes it), or null when not yet fingerprinted. Read by
+  /// the RomM link pass, which matches it against the server's hashes.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Local Fingerprints In The Link Index"
+  final String? romCrc32;
+
+  /// Size of the fingerprinted image in bytes (`user_roms.rom_size`), or
+  /// null when not yet fingerprinted.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Local Fingerprints In The Link Index"
+  final int? romSize;
+
+  /// Why an earlier fingerprint attempt parked this game
+  /// (`user_roms.rom_fingerprint_skipped`), or null when it is not parked.
+  /// A parked game is not re-attempted by the link pass.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Local Fingerprints In The Link Index"
+  final String? fingerprintSkipped;
 
   /// System folder name on the filesystem.
   final String? systemFolderName;
@@ -127,6 +146,9 @@ class DatabaseGameModel {
     this.raHash,
     this.raMatchSource,
     this.ssHash,
+    this.romCrc32,
+    this.romSize,
+    this.fingerprintSkipped,
     this.systemFolderName,
     this.systemRealName,
     this.systemShortName,
@@ -145,6 +167,18 @@ class DatabaseGameModel {
     this.screenscraperRealName,
     this.box2dAspectRatio,
   });
+
+  /// The ROM image's md5 under the name the link pass reads it by; the
+  /// column is `ss_hash` for historical reasons (migration 135 repurposed it).
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Local Fingerprints In The Link Index"
+  String? get romMd5 => ssHash;
+
+  /// [value] as a string, or null when it is absent or empty — an empty
+  /// hash or skip marker means "none", not a value to compare against.
+  static String? _nonEmptyString(Object? value) {
+    final text = value?.toString() ?? '';
+    return text.isEmpty ? null : text;
+  }
 
   /// Internal helper to parse multi-language descriptions from raw JSON data.
   static Map<String, String?>? _parseDescriptions(Map<String, dynamic> json) {
@@ -228,6 +262,13 @@ class DatabaseGameModel {
       raMatchSource: (json['ra_match_source'] ?? json['raMatchSource'])
           ?.toString(),
       ssHash: (json['ss_hash'] ?? json['ssId'])?.toString(),
+      romCrc32: _nonEmptyString(json['rom_crc32'] ?? json['romCrc32']),
+      romSize: int.tryParse(
+        (json['rom_size'] ?? json['romSize'] ?? '').toString(),
+      ),
+      fingerprintSkipped: _nonEmptyString(
+        json['rom_fingerprint_skipped'] ?? json['fingerprintSkipped'],
+      ),
       systemFolderName: (json['system_folder_name'] ?? json['systemFolderName'])
           ?.toString(),
       systemRealName: (json['system_real_name'] ?? json['systemRealName'])
@@ -288,6 +329,9 @@ class DatabaseGameModel {
       'raHash': raHash,
       'raMatchSource': raMatchSource,
       'ssHash': ssHash,
+      'romCrc32': romCrc32,
+      'romSize': romSize,
+      'fingerprintSkipped': fingerprintSkipped,
       'systemFolderName': systemFolderName,
       'systemRealName': systemRealName,
       'systemShortName': systemShortName,
@@ -327,6 +371,9 @@ class DatabaseGameModel {
     String? raHash,
     String? raMatchSource,
     String? ssHash,
+    String? romCrc32,
+    int? romSize,
+    String? fingerprintSkipped,
     String? systemFolderName,
     String? systemRealName,
     String? systemShortName,
@@ -362,6 +409,9 @@ class DatabaseGameModel {
       raHash: raHash ?? this.raHash,
       raMatchSource: raMatchSource ?? this.raMatchSource,
       ssHash: ssHash ?? this.ssHash,
+      romCrc32: romCrc32 ?? this.romCrc32,
+      romSize: romSize ?? this.romSize,
+      fingerprintSkipped: fingerprintSkipped ?? this.fingerprintSkipped,
       systemFolderName: systemFolderName ?? this.systemFolderName,
       systemRealName: systemRealName ?? this.systemRealName,
       systemShortName: systemShortName ?? this.systemShortName,

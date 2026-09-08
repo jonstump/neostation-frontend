@@ -402,18 +402,21 @@ void main() {
           systemFolder: 'snes',
           rommRomId: 1,
           fsName: null,
+          source: RommLinkSource.auto,
         ),
         (
           romname: 'Existing.sfc',
           systemFolder: 'snes',
           rommRomId: 999,
           fsName: 'Existing.sfc',
+          source: RommLinkSource.auto,
         ),
         (
           romname: 'New B.sfc',
           systemFolder: 'snes',
           rommRomId: 2,
           fsName: null,
+          source: RommLinkSource.hash,
         ),
       ]);
 
@@ -435,8 +438,20 @@ void main() {
 
     test('a duplicate key inside one batch is written once', () async {
       final inserted = await RommSaveMapRepository.putMappingsIfAbsent([
-        (romname: 'Dup.sfc', systemFolder: 'snes', rommRomId: 5, fsName: null),
-        (romname: 'Dup.sfc', systemFolder: 'snes', rommRomId: 6, fsName: null),
+        (
+          romname: 'Dup.sfc',
+          systemFolder: 'snes',
+          rommRomId: 5,
+          fsName: null,
+          source: RommLinkSource.auto,
+        ),
+        (
+          romname: 'Dup.sfc',
+          systemFolder: 'snes',
+          rommRomId: 6,
+          fsName: null,
+          source: RommLinkSource.auto,
+        ),
       ]);
 
       expect(inserted, 1);
@@ -680,6 +695,7 @@ void main() {
           systemFolder: 'snes',
           rommRomId: 13,
           fsName: null,
+          source: RommLinkSource.auto,
         ),
       ]);
 

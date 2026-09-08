@@ -1422,4 +1422,5 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommPasswordLoginDisabledHint: 'このサーバーではパスワードによるログインが無効になっています',
   AppLocale.rommPushPlayState: 'プレイ状態をRomMに送信',
   AppLocale.rommPushPlayStateHint: 'リンク済みゲームの非表示・お気に入り・最終プレイの変更をRomMに送信します',
+  AppLocale.rommLinkSourceHash: '{name} にハッシュでリンク済み',
 };

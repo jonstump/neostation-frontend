@@ -4587,6 +4587,9 @@ class SqliteService {
         COALESCE(usm.players, CASE WHEN s.folder_name IN ('android') THEN ur.players END        ) as players,
         ur.box2d_aspect_ratio,
         ur.id_ra, ur.ra_hash, s.ra_id as system_ra_id,
+        -- The dump identity the RomM link pass matches by (migration 135).
+        -- Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Local Fingerprints In The Link Index"
+        ur.ss_hash, ur.rom_crc32, ur.rom_size, ur.rom_fingerprint_skipped,
         -- app_ra_game_list holds one row per registered hash, so a game id can
         -- appear several times with the same counts; take the first.
         (SELECT ral.num_achievements FROM app_ra_game_list ral

@@ -159,6 +159,32 @@ void main() {
       expect(result.skipReason, RomFingerprintService.deferredCostly);
     });
 
+    // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Concurrency Safety"
+    test('computeInBackground honours the cheap effort', () async {
+      final inner = payload(64 * 1024, seed: 3);
+      final archive = Archive()..add(ArchiveFile.bytes('Game.nes', inner));
+      final zipPath = '${tempDir.path}/Background.zip';
+      await File(zipPath).writeAsBytes(ZipEncoder().encode(archive));
+      final barePath = '${tempDir.path}/Bare.nes';
+      await File(barePath).writeAsBytes(payload(64 * 1024));
+
+      final zipped = await RomFingerprintService.computeInBackground(
+        zipPath,
+        'nes',
+        effort: FingerprintEffort.cheapOnly,
+      );
+      expect(zipped.fingerprint!.crc32, hex32(getCrc32(inner)));
+      expect(zipped.fingerprint!.md5, isNull, reason: 'nothing was read');
+
+      final bare = await RomFingerprintService.computeInBackground(
+        barePath,
+        'nes',
+        effort: FingerprintEffort.cheapOnly,
+      );
+      expect(bare.fingerprint, isNull);
+      expect(bare.skipReason, RomFingerprintService.deferredCostly);
+    });
+
     test('deferring is distinct from every real failure reason', () {
       // The caller keys off this to decide whether to park the ROM; if it ever
       // collided with a skip reason, a deferred ROM would be parked and the

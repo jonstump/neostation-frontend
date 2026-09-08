@@ -14,18 +14,27 @@ enum RommLinkState {
 
   /// A row the user picked by hand in the link picker.
   manual,
+
+  /// A row the connect-time pass wrote because the file's content hash
+  /// matched a server ROM (SPEC-0011). Automatic like [auto], but named so
+  /// the user can see the link did not come from the filename.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Hash Rows Follow The Link Rules"
+  hash,
 }
 
 /// Derives the link state the Manage tab shows from the mapping row (or its
 /// absence). Pure so the null-source rule is unit-testable on its own:
 /// [RommLinkSource.fromDb] already maps a null column to [RommLinkSource.auto],
-/// and only [RommLinkSource.manual] is reported as manual.
+/// only [RommLinkSource.manual] is reported as manual, and only
+/// [RommLinkSource.hash] as linked by hash.
 // Governing: ADR-0004 (manual link provenance), SPEC-0004 REQ "Link State Display"
 RommLinkState rommLinkStateOf(RommSaveMapping? mapping) {
   if (mapping == null) return RommLinkState.notLinked;
-  return mapping.source == RommLinkSource.manual
-      ? RommLinkState.manual
-      : RommLinkState.auto;
+  return switch (mapping.source) {
+    RommLinkSource.manual => RommLinkState.manual,
+    RommLinkSource.hash => RommLinkState.hash,
+    RommLinkSource.auto || RommLinkSource.download => RommLinkState.auto,
+  };
 }
 
 /// The on-disk filename a manual link must be keyed by.

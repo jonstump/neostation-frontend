@@ -1367,4 +1367,5 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.rommPasswordLoginDisabledHint: '此伺服器已停用密碼登入',
   AppLocale.rommPushPlayState: '將遊戲狀態推送到 RomM',
   AppLocale.rommPushPlayStateHint: '將已連結遊戲的隱藏、收藏和最近遊玩變更傳送到 RomM',
+  AppLocale.rommLinkSourceHash: '已透過雜湊連結至 {name}',
 };

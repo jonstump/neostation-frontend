@@ -1,12 +1,15 @@
 import 'package:flutter/foundation.dart';
 
 import '../../models/database_game_model.dart';
+import '../../models/rom_fingerprint.dart';
 import '../../models/romm_platform.dart';
 import '../../models/romm_rom.dart';
 import '../../models/system_model.dart';
+import '../../repositories/game_repository.dart';
 import '../../repositories/romm_save_map_repository.dart';
 import '../../utils/romm_local_matcher.dart';
 import '../logger_service.dart';
+import '../rom_fingerprint_service.dart';
 import 'romm_paging.dart';
 import 'romm_platform_walk.dart';
 
@@ -29,6 +32,25 @@ typedef RommRomIdIndexLoader = Future<RommRomIdIndex> Function();
 /// Insert-if-absent for a batch of links; returns the rows actually written.
 typedef RommMappingWriter =
     Future<int> Function(List<RommSaveMapEntry> entries);
+
+/// The cheap fingerprint of one local file — a zip's stored crc32 and
+/// uncompressed size, read from its central directory off the UI isolate —
+/// or the reason there is none (`RomFingerprintService.deferredCostly` for a
+/// file that would have to be read in full, a skip reason for one that can
+/// never be fingerprinted). The packed-archive policy of the system is the
+/// caller's to resolve; the pass only hands over the path and the folder.
+// Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Local Fingerprints In The Link Index"
+typedef RommCheapFingerprinter =
+    Future<({RomFingerprint? fingerprint, String? skipReason})> Function(
+      String romPath,
+      String? systemFolder,
+    );
+
+/// Persists a batch of fingerprint outcomes (results and skip reasons) in
+/// one transaction, so a later pass pays nothing for those games.
+// Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Database Operation Standards"
+typedef RommFingerprintSaver =
+    Future<int> Function(List<RomFingerprintWrite> writes);
 
 /// A local file the pass refused to link because more than one RomM ROM
 /// claimed it.
@@ -151,6 +173,34 @@ class RommLinkPassSummary {
   /// provider caches state under) of the games this run linked.
   final List<String> linkedRomnames;
 
+  /// Mapping rows the hash stage wrote — counted apart from [rowsAdded],
+  /// which is the filename stage's count, so the line says which stage did
+  /// the work.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Pass Summary And Observability"
+  final int hashRowsAdded;
+
+  /// Cheap fingerprints this run computed and persisted.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Pass Summary And Observability"
+  final int fingerprintsComputed;
+
+  /// Fingerprint attempts that produced nothing: files parked with a skip
+  /// reason (persisted, never re-attempted) plus files whose fingerprint
+  /// would have cost a full read (not parked — nothing is wrong with them —
+  /// and answered without I/O).
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Pass Summary And Observability"
+  final int fingerprintsSkipped;
+
+  /// Unlinked games still without a fingerprint when the per-pass cap (or the
+  /// stop signal) ended the fingerprint step; the next pass picks them up.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Local Fingerprints In The Link Index"
+  final int fingerprintsRemaining;
+
+  /// Local games whose crc32 matched a server ROM that its md5 or size then
+  /// ruled out — a crc32 collision, or two dumps that differ past the
+  /// checksum — so nothing was linked for them.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Pass Summary And Observability"
+  final int hashMismatches;
+
   const RommLinkPassSummary({
     this.platformsProcessed = 0,
     this.platformsUnresolved = 0,
@@ -165,6 +215,11 @@ class RommLinkPassSummary {
     this.stoppedEarly = false,
     this.elapsed = Duration.zero,
     this.linkedRomnames = const [],
+    this.hashRowsAdded = 0,
+    this.fingerprintsComputed = 0,
+    this.fingerprintsSkipped = 0,
+    this.fingerprintsRemaining = 0,
+    this.hashMismatches = 0,
   });
 
   int get ambiguousSkipped => ambiguities.length;
@@ -193,9 +248,24 @@ class RommLinkPassSummary {
 /// them both claim is ambiguous. Rows are therefore written once per system
 /// group, after every platform in it has been paged, so the ambiguity check
 /// sees the whole picture before anything is committed.
+///
+/// Games the filename stage leaves unlinked get a second chance by content
+/// hash (ADR-0011): the same pages carry RomM's crc32/md5 per ROM and per
+/// file, the local index carries the fingerprints ScreenScraper persisted,
+/// and the pass tops those up with the cheap zip crc32 — capped per pass and
+/// persisted — before matching in memory. No extra request is ever made for
+/// it; see [RommLinkStage.onGroupComplete].
 // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Connect-Time Link Pass"
+// Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Hash Matching Stage"
 class RommLibraryLinker {
   static final _defaultLog = LoggerService.instance;
+
+  /// Most cheap fingerprints one pass computes. A first connect on a large
+  /// unscraped zipped library reads that many zip tails and no more; the
+  /// results are persisted, so the next pass carries on from where this one
+  /// stopped and a fully fingerprinted library costs nothing.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Local Fingerprints In The Link Index"
+  static const int fingerprintCapPerPass = 500;
 
   /// Rows per page — bulk sync's enumeration size, from the one definition
   /// every walk reads ([RommPaging]) so they cost the same.
@@ -221,12 +291,17 @@ class RommLibraryLinker {
   final RommLocalLibraryLister _listGames;
   final RommRomIdIndexLoader _loadRomIdIndex;
   final RommMappingWriter _putMappingsIfAbsent;
+  final RommCheapFingerprinter? _fingerprintCheap;
+  final RommFingerprintSaver? _saveFingerprints;
   final RommStopCheck _shouldStop;
   final DateTime Function() _clock;
   final LoggerService _log;
 
   bool _running = false;
 
+  /// [fingerprintCheap] and [saveFingerprints] are the fingerprint step's two
+  /// halves; without both the step is skipped and the hash stage matches on
+  /// the fingerprints the library already holds.
   RommLibraryLinker({
     required RommPlatformLister listPlatforms,
     required RommPlatformResolver resolveSystem,
@@ -234,6 +309,8 @@ class RommLibraryLinker {
     required RommLocalLibraryLister listGames,
     required RommRomIdIndexLoader loadRomIdIndex,
     required RommMappingWriter putMappingsIfAbsent,
+    RommCheapFingerprinter? fingerprintCheap,
+    RommFingerprintSaver? saveFingerprints,
     RommStopCheck? shouldStop,
     DateTime Function()? clock,
     LoggerService? logger,
@@ -243,6 +320,8 @@ class RommLibraryLinker {
        _listGames = listGames,
        _loadRomIdIndex = loadRomIdIndex,
        _putMappingsIfAbsent = putMappingsIfAbsent,
+       _fingerprintCheap = fingerprintCheap,
+       _saveFingerprints = saveFingerprints,
        _shouldStop = shouldStop ?? _neverStop,
        _clock = clock ?? DateTime.now,
        _log = logger ?? _defaultLog;
@@ -382,9 +461,14 @@ class RommLibraryLinker {
       '${s.groupsSkipped} systems skipped after a failure, '
       '${s.romsEnumerated} ROMs enumerated, '
       '${s.rowsAdded} rows added, '
+      '${s.hashRowsAdded} hash rows added, '
       '${s.rowsAlreadyPresent} already present, '
       '${s.ambiguousSkipped} ambiguous skipped, '
       '${s.conflictCount} conflicting, '
+      '${s.fingerprintsComputed} fingerprints computed, '
+      '${s.fingerprintsSkipped} fingerprints skipped, '
+      '${s.fingerprintsRemaining} fingerprints left for the next pass, '
+      '${s.hashMismatches} hash mismatches, '
       '${s.elapsed.inMilliseconds} ms',
     );
     if (s.unresolvedSlugs.isNotEmpty) {
@@ -449,6 +533,17 @@ class RommLinkStage {
   /// Claims accumulated for the system group being walked, keyed by folder.
   final Map<String, Map<_LocalGame, Map<int, String>>> _claims = {};
 
+  /// The hashes of the platform currently being paged, keyed by platform id:
+  /// crc32 → ROM id → what that ROM (or one of its files) says beside the
+  /// crc. Kept and dropped exactly as [_platformClaims] is: a platform only
+  /// partly seen cannot be checked for ambiguity.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Hash Matching Stage"
+  final Map<int, Map<String, Map<int, List<_RomHashes>>>> _platformHashes = {};
+
+  /// The hash index of the system group being walked, keyed by folder — the
+  /// completed platforms' [_platformHashes] merged.
+  final Map<String, Map<String, Map<int, List<_RomHashes>>>> _hashes = {};
+
   /// Normalized folder aliases per system folder, computed once per group.
   final Map<String, Set<String>> _aliases = {};
 
@@ -457,13 +552,25 @@ class RommLinkStage {
   final List<String> _linked = [];
 
   var _added = 0;
+  var _hashAdded = 0;
   var _alreadyPresent = 0;
   var _groupsSkipped = 0;
+  var _fingerprintsComputed = 0;
+  var _fingerprintsSkipped = 0;
+  var _fingerprintsRemaining = 0;
+  var _hashMismatches = 0;
+  var _fingerprintBudget = RommLibraryLinker.fingerprintCapPerPass;
+
+  /// True once the stop check fired inside the fingerprint step. The walk
+  /// polls the same check between pages and groups; this is the one place
+  /// the stage polls it itself, so it has to carry the answer to the summary.
+  var _stopped = false;
   var _closed = false;
 
   RommLinkStage._(this._linker, this._index, this._started);
 
-  /// Records what [rom] claims among the local files of [group]'s system.
+  /// Records what [rom] claims among the local files of [group]'s system,
+  /// and every hash it carries for the group's hash index.
   void onRom(RommWalkGroup group, RommPlatform platform, RommRom rom) {
     final aliases = _aliases.putIfAbsent(
       group.system.folderName,
@@ -477,6 +584,25 @@ class RommLinkStage {
         if (game == null) continue;
         claims.putIfAbsent(game, () => {})[rom.id] = rom.fsName;
       }
+    }
+    // ROM-level and file-level hashes are indexed side by side (the union
+    // `allCrc32`), each with the md5 and size *of its own level*: whether
+    // RomM hashed the stored archive or the image inside it depends on the
+    // server version and file type, and comparing a file's md5 against the
+    // archive's size would veto a correct match.
+    // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Hash Matching Stage"
+    final hashes = _platformHashes.putIfAbsent(platform.id, () => {});
+    void record(String? crc, String? md5, int size) {
+      if (crc == null) return;
+      hashes
+          .putIfAbsent(crc, () => {})
+          .putIfAbsent(rom.id, () => [])
+          .add(_RomHashes(fsName: rom.fsName, md5: md5, size: size));
+    }
+
+    record(rom.crcHash, rom.md5Hash, rom.fsSizeBytes);
+    for (final file in rom.files) {
+      record(file.crcHash, file.md5Hash, file.fileSizeBytes);
     }
   }
 
@@ -492,20 +618,38 @@ class RommLinkStage {
     RommWalkPlatformOutcome outcome,
   ) async {
     final claims = _platformClaims.remove(platform.id);
-    if (outcome != RommWalkPlatformOutcome.completed || claims == null) return;
-    final groupClaims = _claims.putIfAbsent(group.system.folderName, () => {});
-    for (final entry in claims.entries) {
-      groupClaims.putIfAbsent(entry.key, () => {}).addAll(entry.value);
+    final hashes = _platformHashes.remove(platform.id);
+    if (outcome != RommWalkPlatformOutcome.completed) return;
+    final folder = group.system.folderName;
+    if (claims != null) {
+      final groupClaims = _claims.putIfAbsent(folder, () => {});
+      for (final entry in claims.entries) {
+        groupClaims.putIfAbsent(entry.key, () => {}).addAll(entry.value);
+      }
+    }
+    if (hashes != null) {
+      final groupHashes = _hashes.putIfAbsent(folder, () => {});
+      for (final byCrc in hashes.entries) {
+        final byRom = groupHashes.putIfAbsent(byCrc.key, () => {});
+        for (final entry in byCrc.value.entries) {
+          byRom.putIfAbsent(entry.key, () => []).addAll(entry.value);
+        }
+      }
     }
   }
 
   /// Writes the rows for one system group, now that every platform in it has
-  /// been walked.
+  /// been walked: the filename stage's, then — for the games it left
+  /// unlinked, topped up with cheap fingerprints — the hash stage's, in one
+  /// insert-if-absent batch.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Hash Matching Stage"
   Future<void> onGroupComplete(
     RommWalkGroup group, {
     required bool groupFailed,
   }) async {
-    final claims = _claims.remove(group.system.folderName) ?? const {};
+    final folder = group.system.folderName;
+    final claims = _claims.remove(folder) ?? const {};
+    final hashes = _hashes.remove(folder) ?? const {};
     // A failed platform in a multi-platform group: a file the surviving
     // platforms claim once may also be claimed by a ROM on the platform that
     // threw, and a guess written now is permanent (rows are never
@@ -572,15 +716,38 @@ class RommLinkStage {
         systemFolder: game.systemFolder,
         rommRomId: romId,
         fsName: roms[romId],
+        source: RommLinkSource.auto,
       ));
       entryGames.add(game);
     }
+
+    // Stage two. A game the filename stage had any claim on — linked, in
+    // conflict, or ambiguous — is settled; the filename decision wins. The
+    // rest of the group's games are matched by hash, fingerprinting the ones
+    // that have none first.
+    // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Hash Matching Stage"
+    final aliases = _aliases.putIfAbsent(
+      folder,
+      () => RommLibraryLinker._folderAliases(group.system),
+    );
+    final candidates = [
+      for (final game in _index.gamesUnder(aliases))
+        if (!claims.containsKey(game)) game,
+    ];
+    await _fingerprintUnlinked(candidates);
+    final hashCount = _matchByHash(candidates, hashes, entries, entryGames);
     if (entries.isEmpty) return;
 
     final inserted = await _linker._putMappingsIfAbsent(entries);
-    _added += inserted;
-    // An ignored insert means a row appeared between the index read and the
-    // write (a download finishing): already present, not a failure.
+    // One batch, one count: the writer says how many rows went in, not
+    // which. The split is exact unless a row appeared between the index read
+    // and the write (a download finishing); that shortfall is charged to the
+    // filename stage, which already reads an ignored insert as "already
+    // present" rather than a failure.
+    // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Pass Summary And Observability"
+    final hashInserted = hashCount < inserted ? hashCount : inserted;
+    _hashAdded += hashInserted;
+    _added += inserted - hashInserted;
     _alreadyPresent += entries.length - inserted;
     if (inserted > 0) {
       // Which specific rows were ignored isn't reported; every candidate is
@@ -588,6 +755,169 @@ class RommLinkStage {
       // download meanwhile needs its badge refreshed just the same.
       _linked.addAll(entryGames.map((g) => g.romname));
     }
+  }
+
+  /// Computes the cheap fingerprint of every unlinked game in [candidates]
+  /// that has none and is not parked, up to the per-pass cap, and persists
+  /// the outcomes in one batch.
+  ///
+  /// Skipped altogether when the pass was built without the two halves of the
+  /// step. Polls the stop check before each file: a disconnect mid-step ends
+  /// the reads after the current file, persists what was computed, and the
+  /// group still matches on what it has — no server round trip is involved
+  /// past this point. A file whose fingerprint would cost a full read
+  /// (`deferredCostly`) is neither parked nor charged to the cap: nothing was
+  /// read for it and nothing is wrong with it.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Local Fingerprints In The Link Index"
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Concurrency Safety"
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Error Handling Standards"
+  Future<void> _fingerprintUnlinked(List<_LocalGame> candidates) async {
+    final fingerprintCheap = _linker._fingerprintCheap;
+    final save = _linker._saveFingerprints;
+    if (fingerprintCheap == null || save == null) return;
+
+    final writes = <RomFingerprintWrite>[];
+    for (final game in candidates) {
+      if (game.linked || game.crc32 != null || game.skipped) continue;
+      if (_fingerprintBudget <= 0) {
+        _fingerprintsRemaining++;
+        continue;
+      }
+      if (_stopped || _linker._shouldStop()) {
+        _stopped = true;
+        _fingerprintsRemaining++;
+        continue;
+      }
+
+      ({RomFingerprint? fingerprint, String? skipReason}) attempt;
+      try {
+        attempt = await fingerprintCheap(game.romPath, game.systemFolder);
+      } catch (e) {
+        // Named and parked, never swallowed: the file is recorded as
+        // unreadable so the next pass does not pay for it again, and the
+        // pass carries on with the rest.
+        _linker._log.w(
+          'RomM link pass could not fingerprint '
+          '${game.systemFolder}/${game.filename}: $e',
+        );
+        attempt = (
+          fingerprint: null,
+          skipReason: RomFingerprintService.skipError,
+        );
+      }
+
+      final fingerprint = attempt.fingerprint;
+      if (fingerprint != null) {
+        _fingerprintBudget--;
+        _fingerprintsComputed++;
+        game.setFingerprint(fingerprint);
+        writes.add((
+          romPath: game.romPath,
+          crc32: fingerprint.crc32,
+          md5: fingerprint.md5,
+          size: fingerprint.sizeBytes,
+          skipReason: null,
+        ));
+        continue;
+      }
+      _fingerprintsSkipped++;
+      final reason = attempt.skipReason ?? RomFingerprintService.skipError;
+      if (reason == RomFingerprintService.deferredCostly) continue;
+      _fingerprintBudget--;
+      game.skipped = true;
+      writes.add((
+        romPath: game.romPath,
+        crc32: null,
+        md5: null,
+        size: null,
+        skipReason: reason,
+      ));
+    }
+    if (writes.isNotEmpty) await save(writes);
+  }
+
+  /// Matches [candidates] by crc32 against the group's hash index and
+  /// appends the rows to write to [entries]; returns how many it appended.
+  ///
+  /// A crc32 match stands unless the md5 or the size says otherwise: when
+  /// both sides carry one they must agree ([_LocalGame.agreesWith]). A game
+  /// whose crc32 survives for more than one ROM id is ambiguous and skipped;
+  /// one whose only matches were vetoed is a mismatch and counted. A game
+  /// that already has a row is never written — the row is the user's saves'
+  /// anchor — but a match pointing elsewhere is reported, exactly as the
+  /// filename stage reports its own.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Hash Matching Stage"
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Hash Rows Follow The Link Rules"
+  int _matchByHash(
+    List<_LocalGame> candidates,
+    Map<String, Map<int, List<_RomHashes>>> hashes,
+    List<RommSaveMapEntry> entries,
+    List<_LocalGame> entryGames,
+  ) {
+    if (hashes.isEmpty) return 0;
+    var appended = 0;
+    for (final game in candidates) {
+      final crc = game.crc32;
+      if (crc == null) continue;
+      final byRom = hashes[crc];
+      if (byRom == null || byRom.isEmpty) continue;
+
+      final matched = <int, String>{};
+      for (final entry in byRom.entries) {
+        for (final romHashes in entry.value) {
+          if (game.agreesWith(romHashes)) {
+            matched[entry.key] = romHashes.fsName;
+            break;
+          }
+        }
+      }
+      if (matched.isEmpty) {
+        _hashMismatches++;
+        continue;
+      }
+
+      // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Existing Mappings Are Never Overwritten"
+      // Governing: ADR-0004 (manual link provenance), SPEC-0004 REQ "Manual Rows Are Never Replaced by Automatic Writers"
+      final existingRomId = game.existingRomId;
+      if (existingRomId != null) {
+        _alreadyPresent++;
+        if (!matched.containsKey(existingRomId)) {
+          for (final matchedRomId in matched.keys.toList()..sort()) {
+            _conflicts.add(
+              RommLinkConflict(
+                filename: game.filename,
+                systemFolder: game.systemFolder,
+                existingRomId: existingRomId,
+                existingSource: game.existingSource ?? RommLinkSource.auto,
+                matchedRomId: matchedRomId,
+              ),
+            );
+          }
+        }
+        continue;
+      }
+      if (matched.length > 1) {
+        _ambiguities.add(
+          RommLinkAmbiguity(
+            filename: game.filename,
+            systemFolder: game.systemFolder,
+            romIds: matched.keys.toList()..sort(),
+          ),
+        );
+        continue;
+      }
+      final romId = matched.keys.single;
+      entries.add((
+        romname: game.filename,
+        systemFolder: game.systemFolder,
+        rommRomId: romId,
+        fsName: matched[romId],
+        source: RommLinkSource.hash,
+      ));
+      entryGames.add(game);
+      appended++;
+    }
+    return appended;
   }
 
   /// Closes the stage against the walk that drove it and logs the one summary
@@ -605,9 +935,14 @@ class RommLinkStage {
       ambiguities: _ambiguities,
       conflicts: _conflicts,
       unresolvedSlugs: result.unresolvedSlugs,
-      stoppedEarly: result.stoppedEarly,
+      stoppedEarly: result.stoppedEarly || _stopped,
       elapsed: _linker._clock().difference(_started),
       linkedRomnames: _linked,
+      hashRowsAdded: _hashAdded,
+      fingerprintsComputed: _fingerprintsComputed,
+      fingerprintsSkipped: _fingerprintsSkipped,
+      fingerprintsRemaining: _fingerprintsRemaining,
+      hashMismatches: _hashMismatches,
     );
     _close();
     _linker._logSummary(summary);
@@ -639,10 +974,35 @@ class RommLinkPassException implements Exception {
   String toString() => 'RomM link pass failed: $context: $cause';
 }
 
+/// What one RomM ROM — or one of its files — says beside a crc32 in the
+/// group's hash index: the md5 and size *at that level*, and the name the
+/// row is written with.
+// Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Hash Matching Stage"
+@immutable
+class _RomHashes {
+  final String fsName;
+
+  /// Lowercase hex, or null when RomM sent none at this level.
+  final String? md5;
+
+  /// Stored size in bytes at this level; 0 reads as unknown.
+  final int size;
+
+  const _RomHashes({
+    required this.fsName,
+    required this.md5,
+    required this.size,
+  });
+}
+
 /// One indexed local file. Identity is the `(systemFolder, filename)` pair,
 /// which is also the mapping table's primary key, so two library rows for the
 /// same file (a duplicate scan) collapse to one candidate.
-@immutable
+///
+/// The fingerprint fields are the one mutable part: they start from what the
+/// library persisted and are filled in when the pass computes a cheap
+/// fingerprint — on the main isolate, after the isolate has answered — so the
+/// hash stage reads one place. Identity never depends on them.
 class _LocalGame {
   /// On-disk filename with extension, the library's canonical spelling.
   final String filename;
@@ -653,6 +1013,24 @@ class _LocalGame {
   /// The system folder the row carries, exactly as stored.
   final String systemFolder;
 
+  /// The stored path (a SAF `content://` URI on Android), which is what the
+  /// fingerprinter opens and the fingerprint columns are keyed by.
+  final String romPath;
+
+  /// The image's crc32, lowercase hex, or null when the library holds none.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Local Fingerprints In The Link Index"
+  String? crc32;
+
+  /// The image's md5, lowercase hex, or null when only the cheap path ran.
+  String? md5;
+
+  /// The image's size in bytes, or null when not fingerprinted.
+  int? size;
+
+  /// True when an earlier attempt parked the file with a skip reason; the
+  /// pass does not try again.
+  bool skipped;
+
   /// The RomM ROM id of the mapping row the file already had when the pass
   /// started, or null when it had none. Kept as the id rather than a flag so
   /// a match that disagrees with the row can be reported.
@@ -662,16 +1040,58 @@ class _LocalGame {
   /// [existingRomId] so a conflict with a manual row reads as such.
   final RommLinkSource? existingSource;
 
-  const _LocalGame({
+  _LocalGame({
     required this.filename,
     required this.romname,
     required this.systemFolder,
+    required this.romPath,
     required this.existingRomId,
     required this.existingSource,
+    this.crc32,
+    this.md5,
+    this.size,
+    this.skipped = false,
   });
 
   /// Already had a mapping row when the pass started.
   bool get linked => existingRomId != null;
+
+  /// A zip or 7z the library indexes by its inner image: the fingerprint
+  /// describes the image, so the stored size RomM reports for the archive
+  /// is not comparable with it.
+  bool get isArchive {
+    final lower = filename.toLowerCase();
+    return lower.endsWith('.zip') || lower.endsWith('.7z');
+  }
+
+  /// Adopts a fingerprint computed this pass.
+  void setFingerprint(RomFingerprint fingerprint) {
+    crc32 = normalizeRommHash(fingerprint.crc32);
+    md5 = normalizeRommHash(fingerprint.md5) ?? md5;
+    size = fingerprint.sizeBytes;
+    skipped = false;
+  }
+
+  /// Whether a crc32 match with [rom] stands: when both sides carry an md5
+  /// they must agree, and when both carry a size they must agree — except
+  /// for an archive, whose local size is the inner image's while RomM's is
+  /// the stored file's, so the two say nothing about each other.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Hash Matching Stage"
+  bool agreesWith(_RomHashes rom) {
+    final localMd5 = md5;
+    if (localMd5 != null && rom.md5 != null && localMd5 != rom.md5) {
+      return false;
+    }
+    final localSize = size;
+    if (!isArchive &&
+        localSize != null &&
+        localSize > 0 &&
+        rom.size > 0 &&
+        localSize != rom.size) {
+      return false;
+    }
+    return true;
+  }
 
   @override
   bool operator ==(Object other) =>
@@ -688,9 +1108,14 @@ class _LocalGame {
 /// lookup by a ROM's candidate name is exactly the equivalence rule.
 class _LocalIndex {
   final Map<String, _LocalGame> _byKey;
+
+  /// The same games grouped by normalized folder, for the hash stage, which
+  /// walks a system group's games rather than looking them up by name.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Hash Matching Stage"
+  final Map<String, List<_LocalGame>> _byFolder;
   final int unlinkedCount;
 
-  const _LocalIndex._(this._byKey, this.unlinkedCount);
+  const _LocalIndex._(this._byKey, this._byFolder, this.unlinkedCount);
 
   static String _keyFor(String folder, String normalizedName) =>
       '$folder\t$normalizedName';
@@ -700,13 +1125,15 @@ class _LocalIndex {
     RommRomIdIndex romIds,
   ) {
     final byKey = <String, _LocalGame>{};
+    final byFolder = <String, List<_LocalGame>>{};
     var unlinked = 0;
     for (final game in games) {
       final folder = game.systemFolderName ?? '';
       final filename = game.filename;
       if (folder.isEmpty || filename.isEmpty) continue;
+      final normalizedFolder = RommLibraryLinker._normalizeFolder(folder);
       final key = _keyFor(
-        RommLibraryLinker._normalizeFolder(folder),
+        normalizedFolder,
         RommLocalMatcher.normalizeName(filename),
       );
       if (byKey.containsKey(key)) continue;
@@ -721,20 +1148,35 @@ class _LocalIndex {
         existingRomId = romIds.lookup(spelling, folder);
       }
       if (existingRomId == null) unlinked++;
-      byKey[key] = _LocalGame(
+      final local = _LocalGame(
         filename: filename,
         romname: game.romname,
         systemFolder: folder,
+        romPath: game.romPath,
         existingRomId: existingRomId,
         existingSource: existingRomId == null
             ? null
             : romIds.sourceFor(spelling, folder),
+        crc32: normalizeRommHash(game.romCrc32),
+        md5: normalizeRommHash(game.romMd5),
+        size: game.romSize,
+        skipped: game.fingerprintSkipped != null,
       );
+      byKey[key] = local;
+      byFolder.putIfAbsent(normalizedFolder, () => []).add(local);
     }
-    return _LocalIndex._(byKey, unlinked);
+    return _LocalIndex._(byKey, byFolder, unlinked);
   }
 
   /// The indexed file named [normalizedName] under [normalizedFolder].
   _LocalGame? lookup(String normalizedFolder, String normalizedName) =>
       _byKey[_keyFor(normalizedFolder, normalizedName)];
+
+  /// Every indexed file under any of the normalized folder [aliases], in
+  /// library order.
+  Iterable<_LocalGame> gamesUnder(Set<String> aliases) sync* {
+    for (final alias in aliases) {
+      yield* _byFolder[alias] ?? const [];
+    }
+  }
 }
