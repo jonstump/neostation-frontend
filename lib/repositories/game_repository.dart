@@ -7,11 +7,100 @@ import '../providers/file_provider.dart';
 import '../services/saf_directory_service.dart';
 import 'romm_screenshot_map_repository.dart';
 
+/// One fingerprint outcome to persist, for [GameRepository.saveFingerprints].
+///
+/// Either a result — [crc32] (with [md5] when the full path ran and [size])
+/// and a null [skipReason], which also clears any earlier skip marker — or a
+/// skip: a null [crc32] and the [skipReason] to park the game with. Keyed by
+/// [romPath], the column `user_roms` is unique on.
+// Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Database Operation Standards"
+typedef RomFingerprintWrite = ({
+  String romPath,
+  String? crc32,
+  String? md5,
+  int? size,
+  String? skipReason,
+});
+
 /// Repository for game data access operations.
 class GameRepository {
+  static final _log = LoggerService.instance;
+
+  /// Rows per batch statement group in [saveFingerprints]: enough that a
+  /// capped link pass (500 fingerprints) is one group, small enough that a
+  /// larger caller does not build one enormous batch.
+  static const int fingerprintBatchSize = 500;
+
   /// Returns all games grouped by system folder name.
   static Future<Map<String, List<DatabaseGameModel>>> loadDatabase() =>
       SqliteDatabaseService.loadDatabase();
+
+  /// Persists a pass's worth of fingerprint outcomes in one transaction.
+  ///
+  /// Each write is one parameterized `UPDATE` on the migration-135 columns;
+  /// they are committed in batches of [fingerprintBatchSize] statements
+  /// inside a single transaction, so a failure part-way leaves every row as
+  /// it was rather than half the pass persisted. A result never blanks a
+  /// value it did not produce: the cheap zip path returns crc32 only, and
+  /// re-running it must not lose an md5 the full path wrote earlier. A skip
+  /// keeps whatever fingerprint columns the row already had (there are none
+  /// when a pass skips it) and records the reason. Returns how many rows the
+  /// updates touched; 0 on error, which is logged with the first path.
+  ///
+  /// The single-row writers this mirrors are
+  /// `ScraperRepository.updateRomFingerprint` /
+  /// `markRomFingerprintSkipped`; the link pass has hundreds per run and
+  /// wants them in one round trip.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Database Operation Standards"
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Local Fingerprints In The Link Index"
+  static Future<int> saveFingerprints(List<RomFingerprintWrite> writes) async {
+    if (writes.isEmpty) return 0;
+    try {
+      final db = await SqliteService.getDatabase();
+      return await db.transaction((txn) async {
+        var touched = 0;
+        for (
+          var start = 0;
+          start < writes.length;
+          start += fingerprintBatchSize
+        ) {
+          final end = (start + fingerprintBatchSize).clamp(0, writes.length);
+          final batch = txn.batch();
+          for (final w in writes.sublist(start, end)) {
+            batch.rawUpdate(_saveFingerprintSql, [
+              w.crc32,
+              w.size,
+              w.md5,
+              w.skipReason,
+              w.romPath,
+            ]);
+          }
+          for (final changed in await batch.commit()) {
+            if (changed is int) touched += changed;
+          }
+        }
+        return touched;
+      });
+    } catch (e) {
+      _log.e(
+        'Error saving ${writes.length} ROM fingerprint(s) '
+        '(first: ${writes.first.romPath}): $e',
+      );
+      return 0;
+    }
+  }
+
+  /// Parameterized write for [saveFingerprints]. `COALESCE` on the value
+  /// columns keeps what the row has when the write carries nothing for them;
+  /// the skip column is set outright, so a result clears the marker and a
+  /// skip sets it.
+  static const String _saveFingerprintSql =
+      'UPDATE user_roms SET '
+      'rom_crc32 = COALESCE(?, rom_crc32), '
+      'rom_size = COALESCE(?, rom_size), '
+      'ss_hash = COALESCE(?, ss_hash), '
+      'rom_fingerprint_skipped = ? '
+      'WHERE rom_path = ?';
 
   /// Returns all games registered for [systemFolderName].
   static Future<List<DatabaseGameModel>> loadGamesForSystem(

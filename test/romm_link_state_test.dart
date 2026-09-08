@@ -35,6 +35,11 @@ void main() {
       );
     });
 
+    // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Hash Rows Follow The Link Rules"
+    test('a hash row reads as linked by hash', () {
+      expect(rommLinkStateOf(_row(RommLinkSource.hash)), RommLinkState.hash);
+    });
+
     test(
       'a legacy null link_source decodes to auto and reads as automatic',
       () {

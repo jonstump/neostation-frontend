@@ -1366,4 +1366,5 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.rommPasswordLoginDisabledHint: '此服务器已禁用密码登录',
   AppLocale.rommPushPlayState: '将游戏状态推送到 RomM',
   AppLocale.rommPushPlayStateHint: '将已关联游戏的隐藏、收藏和最近游玩变更发送到 RomM',
+  AppLocale.rommLinkSourceHash: '已通过哈希链接到 {name}',
 };

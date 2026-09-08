@@ -428,7 +428,8 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
     });
   }
 
-  /// The localized state line: not linked / linked automatically / manually.
+  /// The localized state line: not linked / linked automatically / manually
+  /// / by hash.
   // Governing: ADR-0004 (manual link provenance), SPEC-0004 REQ "Link State Display"
   String _rommLinkStateLabel(BuildContext context) {
     final name = _rommLinkedName ?? '';
@@ -441,6 +442,11 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
             .replaceFirst('{name}', name);
       case RommLinkState.manual:
         return AppLocale.rommLinkStateManual
+            .getString(context)
+            .replaceFirst('{name}', name);
+      // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Hash Rows Follow The Link Rules"
+      case RommLinkState.hash:
+        return AppLocale.rommLinkSourceHash
             .getString(context)
             .replaceFirst('{name}', name);
     }

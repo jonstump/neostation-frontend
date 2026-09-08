@@ -23,6 +23,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/neo_sync_models.dart';
+import 'package:neostation/models/rom_fingerprint.dart';
 import 'package:neostation/models/romm_asset.dart';
 import 'package:neostation/models/romm_platform.dart';
 import 'package:neostation/models/romm_rom.dart';
@@ -30,7 +31,9 @@ import 'package:neostation/providers/neo_sync_provider.dart';
 import 'package:neostation/repositories/config_repository.dart';
 import 'package:neostation/repositories/emulator_repository.dart';
 import 'package:neostation/repositories/game_repository.dart';
+import 'package:neostation/services/retroachievements_hash_service.dart';
 import 'package:neostation/services/retroarch_config_service.dart';
+import 'package:neostation/services/rom_fingerprint_service.dart';
 import 'package:neostation/providers/romm_provider.dart';
 import 'package:neostation/repositories/romm_props_outbox_repository.dart';
 import 'package:neostation/repositories/romm_save_map_repository.dart';
@@ -1862,8 +1865,30 @@ class RomMSyncProvider extends ChangeNotifier
     listGames: GameRepository.getAllGames,
     loadRomIdIndex: RommSaveMapRepository.getRomIdIndex,
     putMappingsIfAbsent: RommSaveMapRepository.putMappingsIfAbsent,
+    fingerprintCheap: _cheapFingerprint,
+    saveFingerprints: GameRepository.saveFingerprints,
     shouldStop: () => _disposed || !_browse.isConnected,
   );
+
+  /// The link pass's cheap fingerprint: a zip's stored crc32, read off the UI
+  /// isolate with the root isolate token so SAF reads work. The system's
+  /// packed-archive policy (arcade sets are identified by the archive itself)
+  /// is resolved here, cached per system, so the linker stays free of policy
+  /// lookups — the same split `ScreenScraperService` makes.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Local Fingerprints In The Link Index"
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Concurrency Safety"
+  static Future<({RomFingerprint? fingerprint, String? skipReason})>
+  _cheapFingerprint(String romPath, String? systemFolder) async {
+    final policy = await RetroAchievementsHashService.policyForSystem(
+      systemFolder,
+    );
+    return RomFingerprintService.computeInBackground(
+      romPath,
+      systemFolder,
+      keepsArchivesPacked: policy.keepsArchivesPacked,
+      effort: FingerprintEffort.cheapOnly,
+    );
+  }
 
   /// The production catalog refresh: the same server access the linker uses,
   /// the catalog through its repository, the link stage from [_linker], and a

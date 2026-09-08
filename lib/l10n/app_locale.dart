@@ -1656,6 +1656,9 @@ mixin AppLocale {
   static const String rommPushPlayState = 'romm_push_play_state';
   static const String rommPushPlayStateHint = 'romm_push_play_state_hint';
 
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Localized User-Facing Text"
+  static const String rommLinkSourceHash = 'romm_link_source_hash';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================

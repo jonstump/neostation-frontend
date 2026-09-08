@@ -1570,4 +1570,5 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommPushPlayState: 'Kirim status bermain ke RomM',
   AppLocale.rommPushPlayStateHint:
       'Kirim perubahan sembunyikan, favorit, dan terakhir dimainkan untuk game tertaut ke RomM',
+  AppLocale.rommLinkSourceHash: 'Tertaut berdasarkan hash ke {name}',
 };

@@ -1628,4 +1628,5 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.rommPushPlayState: 'Spielstatus an RomM senden',
   AppLocale.rommPushPlayStateHint:
       'Änderungen an Ausblenden, Favorit und zuletzt gespielt für verknüpfte Spiele an RomM senden',
+  AppLocale.rommLinkSourceHash: 'Per Hash verknüpft mit {name}',
 };

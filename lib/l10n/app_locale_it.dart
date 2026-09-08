@@ -1614,4 +1614,5 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.rommPushPlayState: 'Invia lo stato di gioco a RomM',
   AppLocale.rommPushPlayStateHint:
       'Invia a RomM le modifiche di nascosto, preferito e ultima partita dei giochi collegati',
+  AppLocale.rommLinkSourceHash: 'Collegato tramite hash a {name}',
 };

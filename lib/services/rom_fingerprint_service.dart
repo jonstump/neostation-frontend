@@ -61,23 +61,65 @@ class RomFingerprintService {
   /// Fingerprints [romPath] on a background isolate.
   ///
   /// Prefer this from UI-driven code: a scrape walks the whole library and the
-  /// slow path reads every byte of every ROM.
+  /// slow path reads every byte of every ROM. [effort] is passed through to
+  /// [fingerprint]: the RomM link pass asks for [FingerprintEffort.cheapOnly]
+  /// so a zip's stored crc32 is read off the main isolate (over SAF that is
+  /// still two method-channel reads) and nothing else is read at all.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Concurrency Safety"
   static Future<({RomFingerprint? fingerprint, String? skipReason})>
   computeInBackground(
     String romPath,
     String? systemFolderName, {
     bool keepsArchivesPacked = false,
+    FingerprintEffort effort = FingerprintEffort.full,
   }) async {
+    // Under cheapOnly only a zip that is going to be opened costs any I/O
+    // (two short reads of its tail); every other path is answered from its
+    // extension and the packed flag alone — a disc image is parked, the rest
+    // deferred — and an isolate hop would cost more than the answer. Those
+    // go straight to [fingerprint].
+    if (answersInline(
+      romPath,
+      keepsArchivesPacked: keepsArchivesPacked,
+      effort: effort,
+    )) {
+      return fingerprint(
+        romPath,
+        systemFolderName,
+        keepsArchivesPacked: keepsArchivesPacked,
+        effort: effort,
+      );
+    }
     return await compute(_computeIsolate, {
       'romPath': romPath,
       'systemFolderName': systemFolderName,
       'keepsArchivesPacked': keepsArchivesPacked,
+      'effort': effort.name,
       // SAF reads go through a method channel, which a bare isolate cannot
       // reach; the token is what makes content:// URIs work off the main
       // isolate.
       'token': RootIsolateToken.instance,
     });
   }
+
+  /// Whether [computeInBackground] answers [romPath] on the calling isolate.
+  ///
+  /// True exactly when [fingerprint] would do no I/O for it: under
+  /// [FingerprintEffort.cheapOnly], anything but a zip that is going to be
+  /// opened — a bare ROM, a disc image, a `.7z`, or a `.zip` on a
+  /// [keepsArchivesPacked] system, whose archive *is* the ROM and would take
+  /// a full read to hash. Spawning an isolate for a fixed answer costs more
+  /// than the answer; on an arcade library it would be one spawn per set on
+  /// every connect, since a deferred answer is never persisted.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Concurrency Safety"
+  @visibleForTesting
+  static bool answersInline(
+    String romPath, {
+    required bool keepsArchivesPacked,
+    required FingerprintEffort effort,
+  }) =>
+      effort == FingerprintEffort.cheapOnly &&
+      (keepsArchivesPacked || !romPath.toLowerCase().endsWith('.zip'));
 
   static Future<({RomFingerprint? fingerprint, String? skipReason})>
   _computeIsolate(Map<String, dynamic> params) async {
@@ -89,7 +131,10 @@ class RomFingerprintService {
       params['romPath'].toString(),
       params['systemFolderName']?.toString(),
       keepsArchivesPacked: params['keepsArchivesPacked'] as bool? ?? false,
-      effort: FingerprintEffort.full,
+      effort: FingerprintEffort.values.firstWhere(
+        (e) => e.name == params['effort'],
+        orElse: () => FingerprintEffort.full,
+      ),
     );
   }
 

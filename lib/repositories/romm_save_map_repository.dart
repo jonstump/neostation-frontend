@@ -18,7 +18,15 @@ enum RommLinkSource {
   auto('auto'),
 
   /// Written by the per-game picker; protected from every other writer.
-  manual('manual');
+  manual('manual'),
+
+  /// Written by the connect-time pass's hash stage: the file's crc32 (and
+  /// md5/size when both sides had them) matched a server ROM. Automatic for
+  /// every rule — never overwrites, never replaces a manual row — and named
+  /// separately so the picker and the conflict log can say how the row came
+  /// to be.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Hash Rows Follow The Link Rules"
+  hash('hash');
 
   /// The value stored in `link_source`.
   final String dbValue;
@@ -94,13 +102,18 @@ class RommRomIdIndex {
 /// One row to link, for [RommSaveMapRepository.putMappingsIfAbsent].
 ///
 /// [romname] is the library's canonical on-disk filename (the spelling the
-/// sync layer looks games up by), [systemFolder] the local system folder, and
-/// [fsName] the server-side name the link was made from.
+/// sync layer looks games up by), [systemFolder] the local system folder,
+/// [fsName] the server-side name the link was made from, and [source] who is
+/// writing it — [RommLinkSource.auto] for a filename match,
+/// [RommLinkSource.hash] for a content-hash match. Both are automatic
+/// writers; the batch is insert-if-absent whatever the source says.
+// Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Hash Rows Follow The Link Rules"
 typedef RommSaveMapEntry = ({
   String romname,
   String systemFolder,
   int rommRomId,
   String? fsName,
+  RommLinkSource source,
 });
 
 /// Repository for the RomM save-sync mapping table (`app_romm_rom_map`).
@@ -139,9 +152,9 @@ class RommSaveMapRepository {
   /// the row was written, false when a manual row was kept (or on error,
   /// which is logged).
   ///
-  /// Only [RommLinkSource.download] replaces; [RommLinkSource.auto] is
-  /// routed to [putMappingIfAbsent] and [RommLinkSource.manual] to
-  /// [putManualMapping], which has no guard.
+  /// Only [RommLinkSource.download] replaces; [RommLinkSource.auto] and
+  /// [RommLinkSource.hash] are routed to [putMappingIfAbsent] and
+  /// [RommLinkSource.manual] to [putManualMapping], which has no guard.
   // Governing: ADR-0004 (manual link provenance), SPEC-0004 REQ "Manual Rows Are Never Replaced by Automatic Writers"
   static Future<bool> putMapping({
     required String romname,
@@ -162,8 +175,9 @@ class RommSaveMapRepository {
     // Mappings Are Never Overwritten"); only the download path re-targets a
     // non-manual row. Route `auto` to the insert-if-absent write so a future
     // caller cannot overwrite a download row by picking the wrong source.
-    if (source == RommLinkSource.auto) {
+    if (source == RommLinkSource.auto || source == RommLinkSource.hash) {
       return putMappingIfAbsent(
+        source: source,
         romname: romname,
         systemFolder: systemFolder,
         rommRomId: rommRomId,
@@ -242,6 +256,7 @@ class RommSaveMapRepository {
     required String systemFolder,
     required int rommRomId,
     String? fsName,
+    RommLinkSource source = RommLinkSource.auto,
   }) async {
     final inserted = await putMappingsIfAbsent([
       (
@@ -249,6 +264,7 @@ class RommSaveMapRepository {
         systemFolder: systemFolder,
         rommRomId: rommRomId,
         fsName: fsName,
+        source: source,
       ),
     ]);
     return inserted == 1;
@@ -260,8 +276,11 @@ class RommSaveMapRepository {
   /// one platform and wants them written in one round trip. All inserts run in
   /// a single transaction so a failure part-way leaves the table as it was,
   /// and each is a parameterized `INSERT OR IGNORE` — existing rows are
-  /// skipped, never replaced. Every row written here is tagged
-  /// [RommLinkSource.auto].
+  /// skipped, never replaced. Each row is tagged with its entry's
+  /// [RommSaveMapEntry.source] — [RommLinkSource.auto] for a filename match,
+  /// [RommLinkSource.hash] for a hash match — so one batch per system group
+  /// carries both stages of the pass in one transaction.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Hash Rows Follow The Link Rules"
   ///
   /// The count comes from SQLite's per-statement change counter rather than
   /// the inserted rowid: an ignored insert leaves `last_insert_rowid()` at
@@ -285,7 +304,7 @@ class RommSaveMapRepository {
             e.systemFolder,
             e.rommRomId,
             e.fsName,
-            RommLinkSource.auto.dbValue,
+            e.source.dbValue,
             now,
           ]);
         }

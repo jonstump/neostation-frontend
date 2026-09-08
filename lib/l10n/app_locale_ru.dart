@@ -1575,4 +1575,5 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommPushPlayState: 'Отправлять состояние игры в RomM',
   AppLocale.rommPushPlayStateHint:
       'Отправлять в RomM изменения скрытия, избранного и последней игры для связанных игр',
+  AppLocale.rommLinkSourceHash: 'Связано по хешу с {name}',
 };

@@ -159,6 +159,83 @@ void main() {
       expect(result.skipReason, RomFingerprintService.deferredCostly);
     });
 
+    // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Concurrency Safety"
+    test('computeInBackground honours the cheap effort', () async {
+      final inner = payload(64 * 1024, seed: 3);
+      final archive = Archive()..add(ArchiveFile.bytes('Game.nes', inner));
+      final zipPath = '${tempDir.path}/Background.zip';
+      await File(zipPath).writeAsBytes(ZipEncoder().encode(archive));
+      final barePath = '${tempDir.path}/Bare.nes';
+      await File(barePath).writeAsBytes(payload(64 * 1024));
+
+      final zipped = await RomFingerprintService.computeInBackground(
+        zipPath,
+        'nes',
+        effort: FingerprintEffort.cheapOnly,
+      );
+      expect(zipped.fingerprint!.crc32, hex32(getCrc32(inner)));
+      expect(zipped.fingerprint!.md5, isNull, reason: 'nothing was read');
+
+      final bare = await RomFingerprintService.computeInBackground(
+        barePath,
+        'nes',
+        effort: FingerprintEffort.cheapOnly,
+      );
+      expect(bare.fingerprint, isNull);
+      expect(bare.skipReason, RomFingerprintService.deferredCostly);
+    });
+
+    // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Concurrency Safety"
+    test('an arcade zip is answered inline under cheap effort, like every '
+        'other path that costs no I/O', () async {
+      // On a system that keeps archives packed the archive is the ROM and
+      // hashing it is a full read, so the cheap answer follows from the
+      // extension and the flag alone. A MAME library is thousands of sets;
+      // an isolate per set per connect for a fixed answer would be waste.
+      bool inline(
+        String path, {
+        bool packed = false,
+        FingerprintEffort effort = FingerprintEffort.cheapOnly,
+      }) => RomFingerprintService.answersInline(
+        path,
+        keepsArchivesPacked: packed,
+        effort: effort,
+      );
+
+      expect(inline('/roms/mame/sf2.zip', packed: true), isTrue);
+      expect(inline('/roms/mame/SF2.ZIP', packed: true), isTrue);
+      expect(inline('/roms/nes/Bare.nes'), isTrue);
+      expect(inline('/roms/psx/Disc.chd'), isTrue);
+      expect(inline('/roms/snes/Game.7z'), isTrue);
+      expect(
+        inline('/roms/snes/Game.zip'),
+        isFalse,
+        reason: 'the one cheap path that reads',
+      );
+      expect(
+        inline(
+          '/roms/mame/sf2.zip',
+          packed: true,
+          effort: FingerprintEffort.full,
+        ),
+        isFalse,
+      );
+      expect(
+        inline('/roms/nes/Bare.nes', effort: FingerprintEffort.full),
+        isFalse,
+      );
+
+      // The set need not even exist: nothing is read for it.
+      final result = await RomFingerprintService.computeInBackground(
+        '${tempDir.path}/missing/sf2.zip',
+        'mame',
+        keepsArchivesPacked: true,
+        effort: FingerprintEffort.cheapOnly,
+      );
+      expect(result.fingerprint, isNull);
+      expect(result.skipReason, RomFingerprintService.deferredCostly);
+    });
+
     test('deferring is distinct from every real failure reason', () {
       // The caller keys off this to decide whether to park the ROM; if it ever
       // collided with a skip reason, a deferred ROM would be parked and the

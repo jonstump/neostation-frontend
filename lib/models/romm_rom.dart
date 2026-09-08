@@ -5,10 +5,25 @@ class RommRomFile {
   final String fileName;
   final int fileSizeBytes;
 
+  /// RomM's hashes of this stored file, lowercase hex, or null when the
+  /// server did not send one. Per file rather than per ROM because RomM
+  /// hashes each member of a multi-file ROM on its own.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Hash Fields On The ROM Model"
+  final String? crcHash;
+  final String? md5Hash;
+  final String? sha1Hash;
+  final String? raHash;
+  final String? chdSha1Hash;
+
   const RommRomFile({
     required this.id,
     required this.fileName,
     this.fileSizeBytes = 0,
+    this.crcHash,
+    this.md5Hash,
+    this.sha1Hash,
+    this.raHash,
+    this.chdSha1Hash,
   });
 
   factory RommRomFile.fromJson(Map<String, dynamic> json) {
@@ -16,8 +31,23 @@ class RommRomFile {
       id: (json['id'] as num).toInt(),
       fileName: json['file_name']?.toString() ?? '',
       fileSizeBytes: (json['file_size_bytes'] as num?)?.toInt() ?? 0,
+      crcHash: normalizeRommHash(json['crc_hash']),
+      md5Hash: normalizeRommHash(json['md5_hash']),
+      sha1Hash: normalizeRommHash(json['sha1_hash']),
+      raHash: normalizeRommHash(json['ra_hash']),
+      chdSha1Hash: normalizeRommHash(json['chd_sha1_hash']),
     );
   }
+}
+
+/// A hash as RomM sends it, normalized for comparison: surrounding whitespace
+/// removed and lowercased, so a server that stores `1A2B3C4D` and a local
+/// fingerprint that reads `1a2b3c4d` compare equal. Absent, null and empty
+/// all become null — "no hash", never an empty key in an index.
+// Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Hash Fields On The ROM Model"
+String? normalizeRommHash(Object? value) {
+  final text = value?.toString().trim().toLowerCase() ?? '';
+  return text.isEmpty ? null : text;
 }
 
 /// A ROM entry as exposed by a remote RomM server.
@@ -111,6 +141,17 @@ class RommRom {
   // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Tables"
   final String? serverUpdatedAt;
 
+  /// RomM's hashes of the ROM as stored, lowercase hex, or null when the
+  /// server did not send one. Whether these describe the archive or the image
+  /// inside it depends on the server version and file type, which is why the
+  /// link pass compares against [allCrc32] / [allMd5] — the union with the
+  /// per-file hashes — rather than against these alone.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Hash Fields On The ROM Model"
+  final String? crcHash;
+  final String? md5Hash;
+  final String? sha1Hash;
+  final String? raHash;
+
   const RommRom({
     required this.id,
     required this.name,
@@ -131,7 +172,21 @@ class RommRom {
     this.companies = const [],
     this.releaseYear,
     this.serverUpdatedAt,
+    this.crcHash,
+    this.md5Hash,
+    this.sha1Hash,
+    this.raHash,
   });
+
+  /// Every crc32 RomM holds for this ROM: its own plus each file's,
+  /// deduplicated. Empty when the server sent none.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Hash Fields On The ROM Model"
+  Set<String> get allCrc32 => {?crcHash, for (final f in files) ?f.crcHash};
+
+  /// Every md5 RomM holds for this ROM: its own plus each file's,
+  /// deduplicated. Empty when the server sent none.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Hash Fields On The ROM Model"
+  Set<String> get allMd5 => {?md5Hash, for (final f in files) ?f.md5Hash};
 
   /// Primary genre, or null when unknown — the list UI shows a single compact
   /// label rather than the whole set.
@@ -177,6 +232,10 @@ class RommRom {
       companies: _parseStringList(json, 'companies'),
       releaseYear: _parseReleaseYear(json),
       serverUpdatedAt: _nonEmpty(json['updated_at']),
+      crcHash: normalizeRommHash(json['crc_hash']),
+      md5Hash: normalizeRommHash(json['md5_hash']),
+      sha1Hash: normalizeRommHash(json['sha1_hash']),
+      raHash: normalizeRommHash(json['ra_hash']),
     );
   }
 

@@ -1430,4 +1430,5 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommPushPlayState: '플레이 상태를 RomM에 전송',
   AppLocale.rommPushPlayStateHint:
       '연결된 게임의 숨김, 즐겨찾기, 마지막 플레이 변경 사항을 RomM에 전송합니다',
+  AppLocale.rommLinkSourceHash: '{name}에 해시로 연결됨',
 };
