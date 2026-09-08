@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:crypto/crypto.dart';
 import 'package:neostation/services/credential_store.dart';
 import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/utils/log_redaction.dart';
 import '../../repositories/sync_repository.dart';
 
 /// Service responsible for communicating with the NeoSync cloud synchronization API.
@@ -566,8 +567,14 @@ class NeoSyncService extends ChangeNotifier {
                 data['error'] ??
                 'HTTP ${response.statusCode}: ${response.reasonPhrase}';
           } catch (jsonError) {
+            // Redact before the cut, never after: truncating first slices a
+            // secret into a shape [redactSecrets] no longer matches, and the
+            // log's redacting printer — which only sees this finished string —
+            // then writes it out intact (issue #189). This message is also
+            // handed back to the caller, so it must be clean either way.
+            final body = redactSecrets(response.body);
             error =
-                'HTTP ${response.statusCode}: ${response.body.length > 100 ? '${response.body.substring(0, 100)}...' : response.body}';
+                'HTTP ${response.statusCode}: ${body.length > 100 ? '${body.substring(0, 100)}...' : body}';
           }
           _log.e('Download failed (${response.statusCode}): $error');
         }

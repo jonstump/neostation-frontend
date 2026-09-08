@@ -6,6 +6,7 @@ import 'package:http/testing.dart';
 import 'package:neostation/models/romm_rom_filters.dart';
 import 'package:neostation/models/romm_server_capabilities.dart';
 import 'package:neostation/services/romm_service.dart';
+import 'package:neostation/utils/log_redaction.dart';
 
 /// The three service calls behind ADR-0019's browse stories: the boolean list
 /// filters on `getRomsPage`, the random pick, and the maintenance task run.
@@ -355,9 +356,112 @@ void main() {
       );
     });
 
+    // A 403 is settled before the body is consulted. Nothing pinned that
+    // ordering, and it is the subtlest half of the rule: the body decides
+    // every *other* status, so a reverse proxy's 403 page that happens to
+    // carry the words must not read as "already running" and tell the user a
+    // scan is underway when the credential simply lacks `tasks.run`.
+    test(
+      'a 403 saying "already running" in its body is still scopeDenied',
+      () async {
+        final service = await connected(
+          taskStatus: 403,
+          taskBody: '<html><body>Task is already running</body></html>',
+        );
+        await expectLater(
+          service.runTask('scan_library'),
+          throwsA(
+            isA<RommException>()
+                .having((e) => e.kind, 'kind', RommErrorKind.scopeDenied)
+                .having((e) => e.statusCode, 'statusCode', 403),
+          ),
+        );
+      },
+    );
+
+    // 422 is the only failure RomM 5.1.0's OpenAPI documents on this route —
+    // the argument the whole mapping rests on — so the documented status is
+    // pinned alongside the undocumented ones it was reasoned against.
+    test('a 422, the one documented failure, is not busy either', () async {
+      final service = await connected(
+        taskStatus: 422,
+        taskBody: const {
+          'detail': [
+            {
+              'loc': ['path', 'task_name'],
+              'msg': 'value is not a valid enumeration member',
+            },
+          ],
+        },
+      );
+      await expectLater(
+        service.runTask('scan_library'),
+        throwsA(
+          isA<RommException>()
+              .having((e) => e.kind, 'kind', RommErrorKind.other)
+              .having((e) => e.statusCode, 'statusCode', 422),
+        ),
+      );
+    });
+
     test('an answer without a task id still counts as queued', () async {
       final service = await connected(taskBody: const {'status': 'queued'});
       expect(await service.runTask('scan_library'), 'scan_library');
+    });
+  });
+
+  // ── What the failure body leaves in the log ───────────────────────────────
+
+  /// SPEC-0018 REQ "Maintenance Tasks" requires the failure body to be logged,
+  /// and `LoggerService`'s `RedactingPrinter` runs [redactSecrets] over the
+  /// finished line. The brief-body helper therefore has to redact *before* it
+  /// cuts: truncating first slices a secret into a shape no pattern matches
+  /// any more, and the printer then passes it through untouched (issue #189).
+  ///
+  /// These drive [redactSecrets] over the helper's real output rather than
+  /// reasoning about the patterns.
+  group('the logged failure body', () {
+    /// What the log file ends up holding: the helper's output put through the
+    /// same redaction the printer applies to every rendered line.
+    String logged(String body) =>
+        redactSecrets(RommService.debugBriefBody(body));
+
+    test('a "token" value straddling the cut is still redacted', () {
+      const secret = 'SUPERSECRETVALUE0123456789abcdef';
+      // The value opens at 172 and its closing quote falls at 204, so the
+      // 200-character cut lands inside it and takes the quote that
+      // `_jsonFieldPattern`'s quoted alternative needs in order to match.
+      final head = '{"detail":"${'x' * 150}","token":"';
+      final body = '$head$secret"}';
+      expect(head.length, lessThan(200));
+      expect(body.length, greaterThan(200));
+
+      // The redactor is not at fault: the untruncated body redacts cleanly.
+      expect(redactSecrets(body), isNot(contains(secret)));
+
+      expect(logged(body), isNot(contains('SUPERSECRET')));
+      expect(logged(body), contains(redactedPlaceholder));
+      // And it is still a short line: redaction only ever shortens.
+      expect(logged(body).length, lessThanOrEqualTo(203));
+    });
+
+    test('a JWT cut before its third segment is still redacted', () {
+      const jwt =
+          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.'
+          'eyJzdWIiOiJqb24iLCJleHAiOjE3MDAwMDAwMDB9.s3cr3tSignatureValue';
+      // The token starts at 171, so the cut falls inside its first segment and
+      // leaves neither dot behind for the JWT pattern to anchor on.
+      final body = '{"detail":"${'x' * 160}$jwt"}';
+      expect(body.length, greaterThan(200));
+
+      expect(redactSecrets(body), isNot(contains('eyJ')));
+
+      expect(logged(body), isNot(contains('eyJ')));
+      expect(logged(body), contains(redactedPlaceholder));
+    });
+
+    test('an empty body still reads as empty, not as a redaction', () {
+      expect(RommService.debugBriefBody('  \n  '), '<empty>');
     });
   });
 }
