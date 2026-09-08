@@ -54,8 +54,23 @@ RomM: `RomSchema` (inherited by the list schema) and `RomFileSchema` carry `crc_
 
 ### Picker shortcut uses the full fingerprint and the by-hash endpoint
 
-**Choice**: `RommMatchPickerController` gains an injected `lookupByHash(RomFingerprint) → Future<RommRom?>` and `fingerprintFile() → Future<({fingerprint, skipReason})>`; the dialog gets a "Match by hash" button in its action row, a busy state, and a result line. The gate is `RommService.supports(romLookupByHash) != unsupported`, passed in as a bool.
+**Choice**: `RommMatchPickerController` gains an injected `lookupByHash(RomFingerprint) → Future<RommRom?>` and `fingerprintFile() → Future<({fingerprint, skipReason})>`; the dialog gets a "Match by hash" row above the fix-up actions (routed through `RommMatchPickerSlots` so the D-pad highlight lands on the right row), a busy state, and a result line. The gate is `RommService.supports(romLookupByHash) != unsupported`, passed in as a bool and read once at controller construction.
 **Rationale**: the user is looking at one file; one full read and one request are proportionate, and `by-hash` returns a detailed ROM that the picker can preselect and confirm through its existing manual-row path.
+
+### Hashes are lowercased before the by-hash request
+
+**Choice**: `getRomByHash` passes each hash it was given through `normalizeRommHash` (trim + lowercase, `lib/models/romm_rom.dart`) before building the query, and sends only the keys it was given.
+**Rationale**: RomM stores digests as lowercase hex, while `RomFingerprint.crc32` is uppercase by convention; the connect-time linker already normalizes both sides with the same function, so the picker shortcut and the pass agree on casing end to end and a hit cannot be lost to case.
+
+### The hash hit is the pinned row; a later non-hit run drops it
+
+**Choice**: `pinnedRom` is `_hashHit ?? preselected`: a hit is prepended to the results and outranks a caller-supplied `preselected`, and `_withPreselected` reads `pinnedRom` so the hit stays first through later searches. `matchByHash()` clears `_hashHit` with the skip reason and error at run start, so a second press that ends in miss, skip, or failure leaves no stale pin under a result line that says otherwise.
+**Rationale**: the server just said this is the file; that outranks whatever the caller guessed. Clearing at run start keeps `pinnedRom` and `hashStatus` describing the same run (the stale-hit case the #212 review found).
+
+### B cancels a busy run before it closes the dialog
+
+**Choice**: each run captures a serial; `cancelMatchByHash()` bumps it and returns to idle, and every await in `matchByHash` re-checks the serial (and disposal) before mutating or notifying, so a late result is discarded silently. The dialog's B order is: unfocus the search field → cancel a busy run → pop.
+**Rationale**: a full fingerprint of a large ROM over SAF can take seconds; the app-wide B-is-cancel rule means the first press must stop the read, not abandon the picker.
 
 ## Architecture
 
@@ -89,9 +104,11 @@ flowchart LR
     subgraph picker["RommMatchPickerDialog"]
         B["Match by hash (gated by SPEC-0010)"] --> FP["computeInBackground(full)"]
         FP --> Q["RommService.getRomByHash"]
-        Q -- 200 --> P["preselect → writeMapping(manual)"]
+        Q -- 200 --> P["pin first (outranks preselected) → writeMapping(manual)"]
         Q -- 404 --> N["no match line"]
-        FP -- skip --> K["skip reason line"]
+        FP -- skip --> K["translated skip reason line"]
+        Q -- error --> E["failure line"]
+        X["B while busy"] -. cancels, late result dropped .-> FP
     end
 ```
 

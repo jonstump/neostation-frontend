@@ -82,12 +82,12 @@ Rows written by the hash stage MUST use `putMappingsIfAbsent` with a new `RommLi
 
 ### Requirement: ROM Lookup By Hash
 
-`RommService.getRomByHash({crc32, md5, sha1})` SHALL GET `/api/roms/by-hash` with only the query parameters it was given, through the shared auth-retry policy, and SHALL return the parsed `RommRom` on 200, null on 404, and throw `RommException` otherwise. It MUST return null without sending a request when `supports(RommFeature.romLookupByHash)` is `unsupported`, logging the gate once per connection.
+`RommService.getRomByHash({crc32, md5, sha1})` SHALL GET `/api/roms/by-hash` with only the query parameters it was given (`crc_hash`, `md5_hash`, `sha1_hash`), each value passed through `normalizeRommHash` (trimmed, lowercased) before the request because RomM stores lowercase hex while the local `RomFingerprint.crc32` is uppercase by convention, through the shared auth-retry policy, and SHALL return the parsed `RommRom` on 200, null on 404, and throw `RommException` otherwise. It MUST return null without sending a request when `supports(RommFeature.romLookupByHash)` is `unsupported`, logging the gate once per connection.
 
 #### Scenario: Hit
 
-- **WHEN** called with a crc32 and md5 and the server answers 200
-- **THEN** the request carries `crc_hash` and `md5_hash` only, and the ROM is returned
+- **WHEN** called with crc32 `DEADBEEF` and an md5 and the server answers 200
+- **THEN** the request carries `crc_hash=deadbeef` and `md5_hash` only, and the ROM is returned
 
 #### Scenario: Old server
 
@@ -96,7 +96,7 @@ Rows written by the hash stage MUST use `putMappingsIfAbsent` with a new `RommLi
 
 ### Requirement: Match By Hash In The Picker
 
-The manual link picker SHALL offer a "Match by hash" action when `supports(romLookupByHash)` is `supported` or `unknown`. Activating it MUST compute the full fingerprint for the game's file in the background (`RomFingerprintService.computeInBackground`, respecting the system's packed-archive policy), call `getRomByHash`, and on a hit place the result first in the list and preselect it; on a miss it MUST show a localized "no match by hash" line; on a fingerprint skip (disc image, unreadable) it MUST show the localized skip reason. The action MUST be reachable by controller, MUST show a busy state while running, and MUST be cancellable with B.
+The manual link picker SHALL offer a "Match by hash" action when `supports(romLookupByHash)` is `supported` or `unknown` (the gate is read once, when the picker's controller is built). Activating it MUST compute the full fingerprint for the game's file in the background (`RomFingerprintService.computeInBackground`, respecting the system's packed-archive policy), call `getRomByHash`, and on a hit pin the result first in the list and move the highlight onto it; the hash hit is the picker's pinned row and MUST outrank a caller-supplied `preselected` ROM, and it MUST stay first through later searches. A later run that ends in a miss, a fingerprint skip, or a failure MUST drop the previous hit's pin, so the pinned row and the result line always describe the same run. On a miss it MUST show a localized "no match by hash" line; on a fingerprint skip (disc image, oversize, missing, extraction failure, read error) it MUST show the localized skip reason, translated rather than the fingerprint service's raw token; on a lookup failure it MUST show a localized error line. The action MUST be reachable by controller, MUST show a busy state while running, and MUST be cancellable with B: while a run is busy, B cancels the run and keeps the dialog open (the search results and any earlier pin intact, the late result discarded silently); only when nothing is running does B close the dialog.
 
 #### Scenario: Hit
 
@@ -108,9 +108,19 @@ The manual link picker SHALL offer a "Match by hash" action when `supports(romLo
 - **WHEN** the server answers 404
 - **THEN** the picker shows the "no match by hash" line and keeps its search results
 
+#### Scenario: Later miss drops the pin
+
+- **WHEN** a run pinned ROM 41 and a second press over the same file ends in a miss
+- **THEN** the pinned row is cleared, the "no match by hash" line shows, and ROM 41 is no longer first
+
+#### Scenario: B while busy
+
+- **WHEN** the user presses B while the fingerprint of a large ROM is being read
+- **THEN** the run is cancelled, the dialog stays open with the spinner gone and the search results intact, and a second B closes it
+
 ### Requirement: Localized User-Facing Text
 
-Every new string (the picker action, busy, no-match, skip-reason lines, and the hash provenance label) MUST be an `AppLocale` key with all twelve translations; no hardcoded UI text.
+Every new string MUST be an `AppLocale` key with all twelve translations; no hardcoded UI text. The picker's keys are `rommMatchByHash` (the action), `rommMatchByHashBusy`, `rommMatchByHashNoMatch`, `rommMatchByHashSkipped` (with a `{reason}` placeholder), `rommMatchByHashFailed`, and the five skip reasons the full fingerprint can produce — `rommMatchByHashReasonDisc`, `rommMatchByHashReasonOversize`, `rommMatchByHashReasonMissing`, `rommMatchByHashReasonExtractFailed`, `rommMatchByHashReasonError` — so the reason shown to the user is a translated string, never the service's raw token; plus the hash provenance label on the Manage tab.
 
 #### Scenario: Missing translation
 
