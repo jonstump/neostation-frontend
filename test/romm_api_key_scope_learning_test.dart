@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:neostation/models/romm_server_capabilities.dart';
+import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/romm_service.dart';
 
 /// What an API-key login — and therefore a paired client token, which the
@@ -324,6 +325,199 @@ void main() {
         requests.where((r) => r.url.path == '/api/users/me'),
         hasLength(1),
         reason: 'the server answered "no" — asking again only repeats it',
+      );
+    });
+  });
+
+  group('a server that answered badly is retried, but not forever', () {
+    /// A RomM whose `/api/users/me` answers [status] until [healAfter]
+    /// failures have been served, and 200 with [allScopes] from then on.
+    void serveFailing({int status = 500, int healAfter = 1 << 30}) {
+      var failures = 0;
+      RommService.debugUseHttpClient(
+        MockClient((request) async {
+          requests.add(request);
+          switch (request.url.path) {
+            case '/api/heartbeat':
+              return json(200, {
+                'SYSTEM': {'VERSION': '5.1.0'},
+              });
+            case '/api/users/me':
+              if (failures >= healAfter) {
+                return json(200, {
+                  'id': 1,
+                  'username': 'jon',
+                  'oauth_scopes': allScopes,
+                });
+              }
+              failures++;
+              return http.Response('server error', status);
+            default:
+              return json(200, {'items': <dynamic>[]});
+          }
+        }),
+      );
+    }
+
+    List<String> me() => requests
+        .where((r) => r.url.path == '/api/users/me')
+        .map((r) => r.url.path)
+        .toList();
+
+    test('a 5xx that clears lets a later call verify', () async {
+      // The transient case the bound must not break: a RomM container
+      // restarting answers 502 for a moment, then serves normally.
+      serveFailing(status: 502, healAfter: 1);
+      final service = configured();
+
+      await service.getRoms(limit: 1);
+      expect(service.hasScope(RommScopeGroup.tasksRun), RommScopeState.unknown);
+
+      await service.getRoms(limit: 1);
+
+      expect(
+        service.hasScope(RommScopeGroup.tasksRun),
+        RommScopeState.granted,
+        reason: 'a restarting server must be able to heal the connection',
+      );
+    });
+
+    test('a server stuck on 5xx stops costing a request per call', () async {
+      // Issue #173's measurement: re-arming unconditionally meant one extra
+      // GET /api/users/me on *every* authenticated call, forever.
+      serveFailing();
+      final service = configured();
+
+      for (var i = 0; i < 6; i++) {
+        await service.getRoms(limit: 1);
+      }
+
+      expect(
+        me(),
+        hasLength(3),
+        reason: 'three attempts, then the one-shot stays spent',
+      );
+    });
+
+    test('429 is bounded the same way', () async {
+      serveFailing(status: 429);
+      final service = configured();
+
+      for (var i = 0; i < 5; i++) {
+        await service.getRoms(limit: 1);
+      }
+
+      expect(me(), hasLength(3));
+    });
+
+    test('a transport failure keeps its unbounded re-arm', () async {
+      // The bound is on answers, not on silence: RommProvider's reachability
+      // backoff already damps the genuinely-offline case, and counting it here
+      // would strand a handheld that stayed off Wi-Fi for four calls.
+      RommService.debugUseHttpClient(
+        MockClient((request) async {
+          requests.add(request);
+          throw const SocketException('network is down');
+        }),
+      );
+      final service = configured();
+
+      for (var i = 0; i < 5; i++) {
+        await expectLater(service.getRoms(limit: 1), throwsA(isA<Exception>()));
+      }
+
+      expect(
+        me(),
+        hasLength(5),
+        reason: 'every call still retries while the server never answers',
+      );
+    });
+
+    test('reconfiguring clears the spent budget', () async {
+      // A stale count across a credential or server change would spend a fresh
+      // connection's attempts before it made any.
+      serveFailing();
+      final service = configured();
+
+      for (var i = 0; i < 4; i++) {
+        await service.getRoms(limit: 1);
+      }
+      expect(me(), hasLength(3));
+
+      service.configure(
+        serverUrl: 'https://romm.local',
+        apiKey: 'a-different-token',
+      );
+      await service.getRoms(limit: 1);
+
+      expect(
+        me(),
+        hasLength(4),
+        reason: 'a new credential gets its own attempts',
+      );
+    });
+  });
+
+  group('the failure log says which of the three things happened', () {
+    // Issue #172: the re-arm branch logged "could not reach the server" for
+    // anything that was not a 401/403, so a 502 read as a network fault.
+    // Issue #168 was diagnosed almost entirely from these lines.
+    /// Everything [run] logs in this isolate, whether or not it threw.
+    Future<List<String>> capture(Future<void> Function() run) async {
+      LoggerService.instance.startCapture();
+      try {
+        await run();
+      } catch (_) {
+        // The log line is the subject here; the request failing is expected.
+      }
+      return LoggerService.instance.takeCapture();
+    }
+
+    test('a 500 is logged with its status, not as unreachable', () async {
+      RommService.debugUseHttpClient(
+        MockClient((request) async {
+          requests.add(request);
+          if (request.url.path == '/api/heartbeat') {
+            return json(200, {
+              'SYSTEM': {'VERSION': '5.1.0'},
+            });
+          }
+          if (request.url.path == '/api/users/me') {
+            return http.Response('server error', 500);
+          }
+          return json(200, {'items': <dynamic>[]});
+        }),
+      );
+      final service = configured();
+
+      final lines = await capture(() => service.getRoms(limit: 1));
+      final verification = lines.where(
+        (l) => l.contains('API-key verification'),
+      );
+
+      expect(verification, isNotEmpty);
+      expect(verification.single, contains('the server answered 500'));
+      expect(
+        verification.single,
+        isNot(contains('could not reach the server')),
+        reason: 'the server plainly answered',
+      );
+    });
+
+    test('a transport failure still reads as unreachable', () async {
+      RommService.debugUseHttpClient(
+        MockClient((request) async {
+          requests.add(request);
+          throw const SocketException('network is down');
+        }),
+      );
+      final service = configured();
+
+      final lines = await capture(() => service.getRoms(limit: 1));
+
+      expect(
+        lines.where((l) => l.contains('could not reach the server')),
+        isNotEmpty,
       );
     });
   });
