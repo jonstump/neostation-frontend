@@ -40,8 +40,8 @@ Local library: `user_roms` (`UNIQUE(rom_path)`, NOT NULL) and `user_detected_sys
 
 ### Merge in `GameListService`, not in the views
 
-**Choice**: the service reads catalog rows for the system, builds the hidden set from `RommRomIdIndex` and `RommLocalMatcher`, and appends remote `GameModel`s; the aggregate path does the same per system. Scope filtering is a view-level predicate over the merged list.
-**Rationale**: one funnel feeds all three views and the aggregate; the views only learn `isRemote`.
+**Choice**: the service reads the toggle and the server URL once per load (a light `RommRepository.getServerUrl`, no credential-store read), reads catalog rows for the system's folder and each alias, builds the hidden set from `RommRomIdIndex` and `RommLocalMatcher` (`normalizeName` over the system's local filenames, hidden games included, against `candidateNamesFor` — the shared candidate list, callable from a catalog row), and appends remote `GameModel`s through `GameModel.fromCatalogRow(row, system, displayName:, showRomFileNameSubtitle:)`; the aggregate path does the same per system, visiting each row once by id. Scope filtering is a view-level predicate over the merged list (`LibraryScope.filter`).
+**Rationale**: one funnel feeds all three views and the aggregate; the views only learn `isRemote`. The factory takes the resolved display name rather than a name-settings object (the issue's `nameSettings` shape) because the name formatter lives in `GameListService` and a model cannot import a service; the merge applies the same per-system settings the local path does.
 
 ### Download reuses the browse path
 
@@ -56,8 +56,23 @@ The cache serves remote entries only: a local game without scraped media draws t
 
 ### Remote-only systems through the same builder
 
-**Choice**: `buildSystemsList` unions `systemsWithRows` with detected systems, marks the extras.
-**Rationale**: the carousel is the only place systems are listed; the destination resolver already creates missing folders.
+**Choice**: `buildSystemsList` unions `RommProvider.catalogSystemCounts` (per-folder counts and the newest `refreshed_at`, from one `RommCatalogRepository.countsBySystem` query, refreshed on initialize, connect, after a refresh or clear, and on disconnect) with the detected systems, resolves each extra folder through `systemForFolder` (detected systems first, then `SqliteConfigProvider.availableSystems`), orders the union with `compareSystemsForCarousel` (`lib/utils/system_sort.dart`, the provider's comparator extracted verbatim so both share one rule), and marks the extras with `badgeIcon: cloud`, a localized semantics label, and the catalog count. The provider exposes a `catalogRevision` so the carousel and the grid select on it rather than on every download tick.
+**Rationale**: the carousel is the only place systems are listed; the destination resolver already creates missing folders; the old `firstWhere` on an unknown folder threw, and the resolver replaces it in both the carousel and the grid.
+
+### Scope is per game view; the carousel follows the opening scope
+
+**Choice**: the games screen holds `_libraryScope`, initialised before the first load from `rommLibraryDefaultScope` and forced to `downloaded` while `RommProvider.reachability == offline` (`LibraryScope.initial(configured:, offline:)`). The carousel has no toggle, so `remoteOnlySystems` applies the same `LibraryScope.initial` rule and a scope toggled inside a list does not reach back to it. The toggle is Select + X, the footer pill (`lib/widgets/library_scope_pill.dart`, in both the details-card footer and the grid/carousel footer), and a context-menu item.
+**Rationale**: Select + X is the free chord on this screen (X alone is the view-mode picker, Select + A scrape, Select + Y random). Giving the carousel a scope of its own would need a second toggle and a second footer; the opening scope is the only coherent reading of "`downloaded` hides remote-only systems".
+
+### Offline "cached library" as a notice plus a pill mark, not a banner
+
+**Choice**: switching to `all` while offline toasts the localized "offline, showing the cached RomM library" line once, and the footer pill wears a cloud-off mark whose tooltip carries the same line for as long as the view is `all` and offline.
+**Rationale**: the footer is one line high and already carries the chord and the scope name; a persistent banner would cost list height for a state the pill already shows. The pill has a label slot should a persistent line be wanted later.
+
+### Remote entries are inert until the download flow lands
+
+**Choice**: with #108 (cards, badges, download-from-the-list, secondary display) still open, a launch, favourite, per-game settings, or scrape press on a remote entry answers with a localized "Not downloaded" notice (`_notifyRemoteNotDownloaded`) instead of writing rows keyed to a file that is not there; the context menu drops favourite, collections, settings, and scrape for `isRemote` and keeps the view-level items. The scrape guard must cover the Select + A chord as well as the menu (the #213 review found the chord bypassing it).
+**Rationale**: `user_roms`-keyed writes for a path-less entry would be exactly the identity leak ADR-0020 rejected; the search screen and the secondary display are untouched, since a remote entry reaching the secondary display resolves its media paths to files that do not exist and draws the placeholder.
 
 ## Architecture
 
@@ -91,7 +106,7 @@ flowchart LR
     GL --> C["RommCatalogRepository.rowsForSystem"]
     GL --> H["hidden set: RommRomIdIndex + RommLocalMatcher"]
     L & C & H --> M["merged List<GameModel>"]
-    M --> SC["scope predicate (all | downloaded)"]
+    M --> SC["scope predicate (all | downloaded): Select + X, footer pill, context menu"]
     SC --> V["list / grid / carousel"]
     V --> F["footer: Play | Download | Cancel | Retry"]
     V --> B["badges: cloud-download, progress, retry"]
@@ -101,6 +116,7 @@ flowchart LR
     DL --> ST["settle rescan → libraryRevision → reload"]
     RC["reachability"] --> SC
     RC --> DL
+    RC --> OS["opening scope (LibraryScope.initial) → remote-only systems in the carousel"]
 ```
 
 Layering: UI → providers → `GameListService`/`RommCatalogRefresh`/`RommCoverCache` (services) → repositories (`RommCatalogRepository`, `GameRepository`, `RommSaveMapRepository`) → datasource.
