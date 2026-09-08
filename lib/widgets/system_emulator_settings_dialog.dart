@@ -23,6 +23,7 @@ import '../repositories/system_repository.dart';
 import '../repositories/emulator_repository.dart';
 import '../repositories/game_repository.dart';
 import '../services/config_service.dart';
+import '../services/game/game_visibility_service.dart';
 import '../services/romm/romm_metadata_fetch.dart';
 import 'package:neostation/services/logger_service.dart';
 import '../utils/gamepad_nav.dart';
@@ -486,7 +487,13 @@ class _SystemEmulatorSettingsDialogState
     final folderName = game.systemFolderName ?? _system.folderName;
     final displayName = game.realName ?? game.filename;
     try {
-      await GameRepository.setGameHidden(folderName, game.filename, false);
+      // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Props Outbox"
+      await GameVisibilityService.setHidden(
+        systemFolder: folderName,
+        romname: game.filename,
+        hidden: false,
+        romPath: game.romPath,
+      );
     } catch (e) {
       _log.e('Error unhiding ${game.filename}: $e');
       return;
@@ -512,12 +519,8 @@ class _SystemEmulatorSettingsDialogState
         .map((g) => g.systemFolderName ?? _system.folderName)
         .toSet();
     try {
-      final scopeId = _hiddenScopeSystemId;
-      if (scopeId == null) {
-        await GameRepository.unhideAllGames();
-      } else {
-        await GameRepository.unhideAllGamesForSystem(scopeId);
-      }
+      // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Props Outbox"
+      await GameVisibilityService.unhideAll(systemId: _hiddenScopeSystemId);
     } catch (e) {
       _log.e('Error unhiding all games: $e');
       return;

@@ -131,10 +131,11 @@ class _RommConnectContentState extends State<RommConnectContent>
   @override
   List<FocusNode?> get selectionSlots {
     if (context.read<RommProvider>().isConnected) {
-      // Browse, save sync, screenshot upload, disconnect — four action rows,
-      // none of them a text field.
+      // Browse, save sync, screenshot upload, play-state push, disconnect —
+      // five action rows, none of them a text field.
       // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload Toggle"
-      return const [null, null, null, null];
+      // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Push Toggle"
+      return const [null, null, null, null, null];
     }
     return _focusOrder.map(_focusNodeFor).toList(growable: false);
   }
@@ -251,6 +252,9 @@ class _RommConnectContentState extends State<RommConnectContent>
         // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload Toggle"
         _toggleUploadScreenshots();
       } else if (isSelected(3)) {
+        // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Push Toggle"
+        _togglePushPlayState();
+      } else if (isSelected(4)) {
         _disconnect();
       }
       return;
@@ -533,6 +537,20 @@ class _RommConnectContentState extends State<RommConnectContent>
     await config.updateRommUploadScreenshots(
       !config.config.rommUploadScreenshots,
     );
+  }
+
+  /// Whether hide, favourite and last-played changes are pushed to RomM.
+  /// Same source as [_uploadsScreenshots], for the same reason.
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Push Toggle"
+  bool get _pushesPlayState =>
+      context.watch<SqliteConfigProvider>().config.rommPushPlayState;
+
+  /// Flips "Push play state to RomM" and persists it; turning it off also
+  /// empties the pending outbox (the provider does that).
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Push Toggle"
+  Future<void> _togglePushPlayState() async {
+    final config = context.read<SqliteConfigProvider>();
+    await config.updateRommPushPlayState(!config.config.rommPushPlayState);
   }
 
   // ── Build ─────────────────────────────────────────────────────────────────
@@ -1108,9 +1126,21 @@ class _RommConnectContentState extends State<RommConnectContent>
         AppLocale.rommUploadScreenshotsHint.getString(context),
       ),
       SizedBox(height: 10.r),
+      // Connected-only for the same reason as the screenshot toggle above.
+      // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Push Toggle"
       _buildActionRow(
         theme,
         index: 3,
+        icon: Symbols.cloud_upload_rounded,
+        label: AppLocale.rommPushPlayState.getString(context),
+        toggleValue: _pushesPlayState,
+        onTap: _togglePushPlayState,
+      ),
+      _buildCaption(theme, AppLocale.rommPushPlayStateHint.getString(context)),
+      SizedBox(height: 10.r),
+      _buildActionRow(
+        theme,
+        index: 4,
         icon: Symbols.logout_rounded,
         label: AppLocale.rommDisconnect.getString(context),
         onTap: _disconnect,

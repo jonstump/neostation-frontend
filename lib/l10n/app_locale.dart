@@ -1651,6 +1651,11 @@ mixin AppLocale {
   static const String rommPasswordLoginDisabledHint =
       'romm_password_login_disabled_hint';
 
+  // RomM play-state write-back (SPEC-0013 REQ "Push Toggle").
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Localized User-Facing Text"
+  static const String rommPushPlayState = 'romm_push_play_state';
+  static const String rommPushPlayStateHint = 'romm_push_play_state_hint';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================

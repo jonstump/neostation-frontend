@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as p;
 
 import '../l10n/app_locale.dart';
+import '../l10n/app_locale_resolver.dart';
 import '../models/game_model.dart';
 import '../models/romm_collection.dart';
 import '../models/romm_metadata_fetch.dart';
@@ -30,6 +31,7 @@ import '../services/logger_service.dart';
 import '../services/romm/romm_collection_mirror.dart';
 import '../services/romm/romm_cover_cache.dart';
 import '../services/romm/romm_metadata_fetch.dart';
+import '../services/romm/romm_props_outbox_service.dart';
 import '../services/romm_playtime_service.dart';
 import '../services/romm_service.dart';
 import '../services/storage_space_service.dart';
@@ -1150,13 +1152,49 @@ class RommProvider extends ChangeNotifier {
   /// Fire-and-forget: nothing in the UI waits on a statistic.
   void _flushQueuedPlaytime() {
     playtimeFlushes++;
-    if (!_service.playtimeSyncAvailable) return;
-    unawaited(
-      RommPlaytimeService.flushQueuedSessions(_service).catchError((Object e) {
+    unawaited(_flushOutboxes());
+  }
+
+  /// The two outboxes, in order: play sessions first, then the play-state
+  /// rows that ride along with them (SPEC-0013 REQ "Flush"). Sequential so
+  /// the `update_last_played` touch lands after the session it belongs to.
+  Future<void> _flushOutboxes() async {
+    if (_service.playtimeSyncAvailable) {
+      try {
+        await RommPlaytimeService.flushQueuedSessions(_service);
+      } catch (e) {
         _log.w('RomM playtime flush on connect failed: $e');
-        return 0;
-      }),
-    );
+      }
+    }
+    await flushPlayStateOutbox();
+  }
+
+  /// Drains the play-state outbox (hidden, favourite, last played) to the
+  /// connected server.
+  ///
+  /// Runs with every play-session flush here and from the sync provider's
+  /// connect-time sweep, and stops the moment the connection goes away. The
+  /// favourites collection name is resolved at this boundary because the
+  /// service below has no `BuildContext`. Never throws; a flush is a
+  /// statistic, not something the UI waits on.
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Flush"
+  Future<RommPropsFlushSummary> flushPlayStateOutbox() async {
+    const nothing = (pushed: 0, dropped: 0, kept: 0);
+    if (!isConnected) return nothing;
+    try {
+      // Via the [service] getter, not [_service], so a test can substitute
+      // the server the same way the sync-provider tests do.
+      return await RommPropsOutboxService.flush(
+        service,
+        isConnected: () => isConnected,
+        favouritesCollectionName: resolveAppLocale(
+          AppLocale.rommFavoritesCollectionName,
+        ),
+      );
+    } catch (e) {
+      _log.w('RomM play-state flush failed: $e');
+      return nothing;
+    }
   }
 
   /// Clears stored credentials and resets all browse state.

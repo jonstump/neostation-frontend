@@ -1629,4 +1629,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.rommServerVersionLine: 'Version du serveur {version}',
   AppLocale.rommPasswordLoginDisabledHint:
       'La connexion par mot de passe est désactivée sur ce serveur',
+  AppLocale.rommPushPlayState: 'Envoyer l’état de jeu à RomM',
+  AppLocale.rommPushPlayStateHint:
+      'Envoie à RomM les changements de masquage, de favori et de dernière partie des jeux liés',
 };

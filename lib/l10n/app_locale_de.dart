@@ -1625,4 +1625,7 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.rommServerVersionLine: 'Serverversion {version}',
   AppLocale.rommPasswordLoginDisabledHint:
       'Die Passwort-Anmeldung ist auf diesem Server deaktiviert',
+  AppLocale.rommPushPlayState: 'Spielstatus an RomM senden',
+  AppLocale.rommPushPlayStateHint:
+      'Änderungen an Ausblenden, Favorit und zuletzt gespielt für verknüpfte Spiele an RomM senden',
 };

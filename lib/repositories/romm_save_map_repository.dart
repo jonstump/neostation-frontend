@@ -538,6 +538,42 @@ class RommSaveMapRepository {
     return out;
   }
 
+  /// The RomM ROM id for the local game stored at [romPath], or null when the
+  /// path is unknown to the library or the game is not linked.
+  ///
+  /// The reverse of [getRomPathsForRomIds], for the play-state outbox: its
+  /// rows are keyed by `rom_path` (the one identity a game keeps across a
+  /// rename of its link row), so the flush resolves the id at flush time.
+  /// The path is looked up in `user_roms` for its system folder and filename,
+  /// then resolved through [_findRow] exactly as the single-game reads are.
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Flush"
+  static Future<int?> getRommRomIdForRomPath(String romPath) async {
+    if (romPath.isEmpty) return null;
+    try {
+      final db = await SqliteService.getDatabase();
+      final games = await db.rawQuery(
+        '''
+        SELECT ur.filename, s.folder_name
+        FROM user_roms ur
+        JOIN app_systems s ON ur.app_system_id = s.id
+        WHERE ur.rom_path = ?
+        LIMIT 1
+        ''',
+        [romPath],
+      );
+      if (games.isEmpty) return null;
+      final filename = games.first['filename']?.toString() ?? '';
+      final folder = games.first['folder_name']?.toString() ?? '';
+      if (filename.isEmpty || folder.isEmpty) return null;
+      final row = await _findRow(db, filename, folder);
+      if (row == null) return null;
+      return int.tryParse(row['romm_rom_id'].toString());
+    } catch (e) {
+      _log.e('Error resolving RomM rom id for $romPath: $e');
+      return null;
+    }
+  }
+
   /// The row for a local game: an exact match on the stored name first, then
   /// [_romIdByStem]. Shared by every single-game read so they cannot disagree
   /// about which row a game resolves to.

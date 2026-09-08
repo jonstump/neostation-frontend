@@ -459,7 +459,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 165;
+  static const int _databaseVersion = 166;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -1973,7 +1973,12 @@ class SqliteService {
         -- Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Tables"
         romm_show_library INTEGER DEFAULT 0,
         romm_library_default_scope TEXT DEFAULT 'all',
-        romm_cover_cache_mb INTEGER DEFAULT 200
+        romm_cover_cache_mb INTEGER DEFAULT 200,
+        -- Whether hide, favourite and last-played changes are pushed to RomM
+        -- for linked games (migration v166). On by default; only read while
+        -- RomM is connected and the game has a link row.
+        -- Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Push Toggle"
+        romm_push_play_state INTEGER DEFAULT 1
       );
       ''',
       '''
@@ -2818,6 +2823,8 @@ class SqliteService {
     int? rommShowLibrary,
     String? rommLibraryDefaultScope,
     int? rommCoverCacheMb,
+    // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Push Toggle"
+    int? rommPushPlayState,
   }) async {
     final db = await instance.database;
 
@@ -2976,6 +2983,10 @@ class SqliteService {
     }
     if (rommCoverCacheMb != null) {
       updates['romm_cover_cache_mb'] = rommCoverCacheMb;
+    }
+    // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Push Toggle"
+    if (rommPushPlayState != null) {
+      updates['romm_push_play_state'] = rommPushPlayState;
     }
 
     if (showAchievementsBadge != null) {
@@ -5241,7 +5252,11 @@ class SqliteService {
   /// Automatically synchronizes the 'favorites' virtual system in
   /// [user_detected_systems] so the UI stays consistent without requiring
   /// a full ROM scan.
-  static Future<void> toggleRomFavorite(String romPath) async {
+  ///
+  /// Returns the value the row now holds, or null when no row matched: the
+  /// RomM push hook needs to know which way the toggle went, and reading it
+  /// back separately would race a second press.
+  static Future<bool?> toggleRomFavorite(String romPath) async {
     final db = await instance.database;
     final current = await db.query(
       'user_roms',
@@ -5249,7 +5264,7 @@ class SqliteService {
       where: 'rom_path = ?',
       whereArgs: [romPath],
     );
-    if (current.isEmpty) return;
+    if (current.isEmpty) return null;
 
     final oldVal =
         int.tryParse(current.first['is_favorite']?.toString() ?? '0') ?? 0;
@@ -5281,6 +5296,7 @@ class SqliteService {
         );
       }
     }
+    return newVal == 1;
   }
 
   /// Determines if cloud synchronization is enabled for a specific game.

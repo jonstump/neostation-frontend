@@ -1364,4 +1364,6 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.neoSyncPlansFailed: '获取计划失败',
   AppLocale.rommServerVersionLine: '服务器版本 {version}',
   AppLocale.rommPasswordLoginDisabledHint: '此服务器已禁用密码登录',
+  AppLocale.rommPushPlayState: '将游戏状态推送到 RomM',
+  AppLocale.rommPushPlayStateHint: '将已关联游戏的隐藏、收藏和最近游玩变更发送到 RomM',
 };

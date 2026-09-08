@@ -233,6 +233,17 @@ class ConfigModel {
   // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload Toggle"
   final bool rommUploadScreenshots;
 
+  /// Whether hide, favourite and last-played changes for RomM-linked games
+  /// are pushed to the connected server.
+  ///
+  /// On by default, matching the `DEFAULT 1` of `user_config
+  /// .romm_push_play_state` (migration v166): the push only ever fires for a
+  /// game that is already linked to a connected server, so the user who set
+  /// that up gets the changes in RomM without a second switch. Turning it off
+  /// also empties the pending outbox — see `RommPropsOutboxService`.
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Push Toggle"
+  final bool rommPushPlayState;
+
   /// Whether the RomM server's library is shown inside the local systems.
   ///
   /// Off by default: turning it on adds every RomM ROM that resolves to a
@@ -301,6 +312,7 @@ class ConfigModel {
     this.raMatchOnStartup = false,
     this.subfolderViewAll = false,
     this.rommUploadScreenshots = true,
+    this.rommPushPlayState = true,
     this.rommShowLibrary = false,
     this.rommLibraryDefaultScope = 'all',
     this.rommCoverCacheMb = 200,
@@ -537,6 +549,14 @@ class ConfigModel {
         'romm_upload_screenshots',
         true,
       ),
+      // Absent => on, matching the column's `DEFAULT 1` (migration v166).
+      // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Push Toggle"
+      rommPushPlayState: readBool(
+        json,
+        'rommPushPlayState',
+        'romm_push_play_state',
+        true,
+      ),
       // Absent => off, matching the column default. The unified library is
       // opt-in.
       // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Tables"
@@ -646,6 +666,7 @@ class ConfigModel {
       'raMatchOnStartup': raMatchOnStartup,
       'subfolderViewAll': subfolderViewAll,
       'rommUploadScreenshots': rommUploadScreenshots,
+      'rommPushPlayState': rommPushPlayState,
       'rommShowLibrary': rommShowLibrary,
       'rommLibraryDefaultScope': rommLibraryDefaultScope,
       'rommCoverCacheMb': rommCoverCacheMb,
@@ -702,6 +723,7 @@ class ConfigModel {
     bool? raMatchOnStartup,
     bool? subfolderViewAll,
     bool? rommUploadScreenshots,
+    bool? rommPushPlayState,
     bool? rommShowLibrary,
     String? rommLibraryDefaultScope,
     int? rommCoverCacheMb,
@@ -758,6 +780,7 @@ class ConfigModel {
       subfolderViewAll: subfolderViewAll ?? this.subfolderViewAll,
       rommUploadScreenshots:
           rommUploadScreenshots ?? this.rommUploadScreenshots,
+      rommPushPlayState: rommPushPlayState ?? this.rommPushPlayState,
       rommShowLibrary: rommShowLibrary ?? this.rommShowLibrary,
       rommLibraryDefaultScope:
           rommLibraryDefaultScope ?? this.rommLibraryDefaultScope,

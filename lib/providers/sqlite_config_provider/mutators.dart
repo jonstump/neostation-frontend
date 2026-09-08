@@ -223,6 +223,22 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     _notify();
   }
 
+  /// Persists whether hide, favourite and last-played changes for RomM-linked
+  /// games are pushed to the connected server.
+  ///
+  /// Awaited for the same reason as [updateRommUploadScreenshots]: the hooks
+  /// read the column straight from the database, so the write has to land
+  /// before the next hide or session end. Turning the toggle off also empties
+  /// the outbox, so nothing queued under the old consent is pushed later
+  /// behind the user's back.
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Push Toggle"
+  Future<void> updateRommPushPlayState(bool value) async {
+    _config = _config.copyWith(rommPushPlayState: value);
+    await ConfigRepository.setRommPushPlayState(value);
+    if (!value) await RommPropsOutboxService.discardAll();
+    _notify();
+  }
+
   /// Updates whether hidden files/folders are ignored during ROM scans.
   Future<void> updateIgnoreHiddenFiles(bool ignoreHiddenFiles) async {
     _config = _config.copyWith(ignoreHiddenFiles: ignoreHiddenFiles);

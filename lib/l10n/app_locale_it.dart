@@ -1611,4 +1611,7 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.rommServerVersionLine: 'Versione del server {version}',
   AppLocale.rommPasswordLoginDisabledHint:
       'L\'accesso con password è disabilitato su questo server',
+  AppLocale.rommPushPlayState: 'Invia lo stato di gioco a RomM',
+  AppLocale.rommPushPlayStateHint:
+      'Invia a RomM le modifiche di nascosto, preferito e ultima partita dei giochi collegati',
 };

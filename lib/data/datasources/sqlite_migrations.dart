@@ -234,6 +234,21 @@ class SqliteMigrations {
     'romm_cover_cache_mb': 'INTEGER DEFAULT 200',
   };
 
+  /// The `user_config` column v166 adds: the "Push play state to RomM"
+  /// toggle, with its SQLite type.
+  ///
+  /// Defaults to on: the write-back only ever fires for games that are
+  /// already linked to a connected RomM server, so a user who set that up
+  /// gets hide, favourite and last-played in RomM without another switch to
+  /// find. The toggle exists for the user who does not want the server told.
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Push Toggle"
+  static const String rommPushPlayStateColumn = 'romm_push_play_state';
+
+  /// SQLite type of [rommPushPlayStateColumn], shared by the migration and the
+  /// tests that assert the fresh-install DDL matches it.
+  // Governing: ADR-0013, SPEC-0013 REQ "Database Operation Standards"
+  static const String rommPushPlayStateColumnType = 'INTEGER DEFAULT 1';
+
   /// Lookup index for [createAppRommPlaySessionsTableSql] (v111).
   static const String createAppRommPlaySessionsIndexSql = '''
     CREATE INDEX IF NOT EXISTS idx_romm_play_sessions_rom_id
@@ -812,6 +827,9 @@ class SqliteMigrations {
         break;
       case 165:
         await _migrateToVersion165(db);
+        break;
+      case 166:
+        await _migrateToVersion166(db);
         break;
       default:
         _log.w('No migration defined for version $version');
@@ -7525,6 +7543,49 @@ class SqliteMigrations {
       _log.i('Migration v165 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v165: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v166: the "Push play state to RomM" toggle
+  /// (`user_config.romm_push_play_state`, [rommPushPlayStateColumn]).
+  ///
+  /// The outbox table itself arrived in v164; this is the consent column the
+  /// hooks consult before they write to it. `DEFAULT 1` so every device that
+  /// already links games to RomM starts pushing on upgrade, matching ADR-0013
+  /// ("on by default when the groups are granted").
+  ///
+  /// **Numbered 166**, the first free slot above v165 on `main`; no in-flight
+  /// branch claims it at the time of writing.
+  ///
+  /// Guarded by `PRAGMA table_info`, so re-running is a no-op, a database
+  /// that already carries the column is left alone, and a database without
+  /// `user_config` at all (nothing to migrate) is not failed. Fresh installs
+  /// get the same column from the CREATE statement in `SqliteService`.
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Push Toggle", REQ "Database Operation Standards"
+  static Future<void> _migrateToVersion166(Database db) async {
+    _log.i('Migration v166: Adding the RomM push play-state toggle');
+    try {
+      final configColumns = db
+          .select('PRAGMA table_info(user_config)')
+          .map((c) => c['name'].toString())
+          .toList();
+      if (configColumns.isEmpty) {
+        _log.i('Table user_config absent - nothing to migrate');
+      } else if (configColumns.contains(rommPushPlayStateColumn)) {
+        _log.i('Column $rommPushPlayStateColumn already exists');
+      } else {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN '
+          '$rommPushPlayStateColumn $rommPushPlayStateColumnType',
+        );
+        _log.i('Column $rommPushPlayStateColumn added via v166');
+      }
+
+      _log.i('Migration v166 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v166: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

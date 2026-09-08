@@ -21,6 +21,7 @@ import 'package:neostation/screens/game_screen/my_games_carousel.dart';
 import 'package:neostation/screens/game_screen/my_games_grid.dart';
 import 'package:neostation/utils/enabled_index_nav.dart';
 import 'package:neostation/screens/settings_screen/new_settings_options/widgets/setting_row.dart';
+import 'package:neostation/services/game/game_visibility_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/sync/i_sync_provider.dart';
@@ -302,10 +303,13 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
     final configProvider = context.read<SqliteConfigProvider>();
 
     try {
-      await GameRepository.setGameHidden(
-        _targetSystemFolder,
-        hiddenRomname,
-        true,
+      // Through the visibility service, which owns the RomM write-back hook.
+      // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Props Outbox"
+      await GameVisibilityService.setHidden(
+        systemFolder: _targetSystemFolder,
+        romname: hiddenRomname,
+        hidden: true,
+        romPath: widget.game.romPath,
       );
       // The systems screen keeps its own cached copies — the recent-games row
       // and the ROM count on the system card — so both are re-read here rather

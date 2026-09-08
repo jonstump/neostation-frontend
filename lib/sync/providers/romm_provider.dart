@@ -589,6 +589,10 @@ class RomMSyncProvider extends ChangeNotifier
   /// the launch/close flow. [RommPlaytimeService] throttles the pull itself, so
   /// this is cheap to call from the per-selection save detection.
   Future<void> _syncPlaytime(GameModel game, int romId) async {
+    // The play-state outbox rides along with the session flush, and is not
+    // behind the playtime gate: favourites need a different scope group.
+    // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Flush"
+    await _browse.flushPlayStateOutbox();
     if (!_svc.playtimeSyncAvailable) return;
     try {
       await RommPlaytimeService.flushQueuedSessions(_svc);
@@ -1694,6 +1698,12 @@ class RomMSyncProvider extends ChangeNotifier
         } catch (e) {
           _log.w('RomM playtime pull failed: $e');
         }
+        if (_disposed || !_browse.isConnected) return;
+
+        // Queued hide / favourite / last-played changes go out on the same
+        // sweep, likewise outside the active-provider gate. Never throws.
+        // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Flush"
+        await _browse.flushPlayStateOutbox();
         if (_disposed || !_browse.isConnected) return;
 
         // Link pre-existing ROMs before the sweep, so games linked here are
