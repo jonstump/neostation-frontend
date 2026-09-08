@@ -4,11 +4,21 @@
 
 <h4>Modern, multi-platform emulation frontend built with Flutter</h4>
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) [![Discord](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdiscord.com%2Fapi%2Fv10%2Finvites%2FxE2kgKsRVq%3Fwith_counts%3Dtrue&query=%24.approximate_member_count&label=Discord&suffix=%20members&logo=discord&color=5865f2)](https://discord.gg/xE2kgKsRVq) ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/miguelsotobaez/neostation-frontend/total) ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/miguelsotobaez/neostation-frontend/build-and-deploy.yml) [![Stars](https://img.shields.io/github/stars/misobadev/neostation-frontend?logo=github)](https://github.com/misobadev/neostation-frontend) [![Issues](https://img.shields.io/github/issues/misobadev/neostation-frontend)](https://github.com/misobadev/neostation-frontend/issues)  [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20(x64%2Farm64)%20%7C%20macOS%20%7C%20Android-blue)](https://github.com/misobadev/neostation-frontend)
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0) ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/jonstump/neostation-frontend/total) ![GitHub Actions Workflow Status](https://img.shields.io/github/actions/workflow/status/jonstump/neostation-frontend/build-and-deploy.yml) [![Stars](https://img.shields.io/github/stars/jonstump/neostation-frontend?logo=github)](https://github.com/jonstump/neostation-frontend) [![Issues](https://img.shields.io/github/issues/jonstump/neostation-frontend)](https://github.com/jonstump/neostation-frontend/issues) [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20(x64%2Farm64)%20%7C%20macOS%20%7C%20Android-blue)](https://github.com/jonstump/neostation-frontend)
 
 ![NeoStation Hero](https://repository-images.githubusercontent.com/1223168847/4e7a727d-9855-4597-a999-c07167d8552f)
 
 </div>
+
+> [!NOTE]
+> **This is a personal fork.** I develop and test it for my own devices. It is
+> not a maintained project: I am not accepting issues or pull requests, and the
+> issue tracker here is a set of working notes for myself rather than a
+> contribution queue.
+>
+> **No affiliation.** This project is not associated with, endorsed by, or
+> supported by the NeoStation or RomM projects. Both names are used only to
+> describe what this is forked from and what it integrates with.
 
 <div align="left">
 
@@ -96,7 +106,7 @@ screen, the app isn't at fault — it's being run outside Steam.
 
 ```bash
 # Clone the repository
-git clone https://github.com/misobadev/neostation-frontend.git
+git clone https://github.com/jonstump/neostation-frontend.git
 cd neostation-frontend
 
 # Install dependencies
@@ -235,7 +245,10 @@ Please read [`CONTRIBUTING.md`](CONTRIBUTING.md) for guidelines on bug reports, 
 
 If you discover a security vulnerability, please follow the instructions in [`SECURITY.md`](SECURITY.md) to report it responsibly.
 
-## Project Team
+## Upstream Project Team
+
+NeoStation is built and maintained by the people below. This fork carries their
+work; they are not involved in it and are not a contact point for anything here.
 
 ### Lead
 
@@ -252,7 +265,7 @@ If you discover a security vulnerability, please follow the instructions in [`SE
 - **@ItsRetroPup**
   - Ko-fi: https://ko-fi.com/retropup84752
 
-These co-maintainers and collaborators work very hard to make NeoStation what it is today.
+These co-maintainers and collaborators work very hard to make NeoStation what it is today. Support them, not this fork.
 
 ## License
 
