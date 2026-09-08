@@ -103,9 +103,10 @@ final RegExp _queryParamPattern = RegExp(
 /// diagnostic text. No credential encoding this file redacts (base64,
 /// base64url, hex, a JWT) contains a `;`. Issue #197.
 final RegExp _jsonFieldPattern = RegExp(
-  '(?<![A-Za-z0-9])'
+  '(^|[,{\\[;]\\s*)'
   '(["\']?(?:${_sensitiveFieldNames.join('|')})["\']?\\s*[:=]\\s*)'
   '(["\'][^"\']*["\']|[^,;\\s}\\]&<>"\']+)',
+  multiLine: true,
   caseSensitive: false,
 );
 
@@ -187,7 +188,7 @@ String redactSecrets(String text) {
   );
   result = result.replaceAllMapped(
     _jsonFieldPattern,
-    (m) => '${m[1]}$redactedPlaceholder',
+    (m) => '${m[1]}${m[2]}$redactedPlaceholder',
   );
   result = result.replaceAllMapped(
     _setCookiePattern,
