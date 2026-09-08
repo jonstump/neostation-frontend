@@ -1576,4 +1576,16 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommPushPlayStateHint:
       'Отправлять в RomM изменения скрытия, избранного и последней игры для связанных игр',
   AppLocale.rommLinkSourceHash: 'Связано по хешу с {name}',
+  AppLocale.rommMatchByHash: 'Найти по хешу',
+  AppLocale.rommMatchByHashBusy: 'Поиск по хешу…',
+  AppLocale.rommMatchByHashNoMatch:
+      'Ни одна запись RomM не имеет хеш этого файла',
+  AppLocale.rommMatchByHashSkipped: 'Не удалось вычислить хеш файла: {reason}',
+  AppLocale.rommMatchByHashFailed: 'Поиск по хешу не удался',
+  AppLocale.rommMatchByHashReasonDisc: 'образы дисков не хешируются',
+  AppLocale.rommMatchByHashReasonOversize:
+      'файл слишком большой для хеширования',
+  AppLocale.rommMatchByHashReasonMissing: 'файл не найден',
+  AppLocale.rommMatchByHashReasonExtractFailed: 'не удалось открыть архив',
+  AppLocale.rommMatchByHashReasonError: 'не удалось прочитать файл',
 };

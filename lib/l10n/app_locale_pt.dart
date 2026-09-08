@@ -1597,4 +1597,18 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.rommPushPlayStateHint:
       'Envia ao RomM as alterações de oculto, favorito e última jogada dos jogos vinculados',
   AppLocale.rommLinkSourceHash: 'Vinculado por hash a {name}',
+  AppLocale.rommMatchByHash: 'Corresponder por hash',
+  AppLocale.rommMatchByHashBusy: 'A corresponder por hash…',
+  AppLocale.rommMatchByHashNoMatch:
+      'Nenhuma entrada do RomM tem o hash deste ficheiro',
+  AppLocale.rommMatchByHashSkipped:
+      'Não foi possível calcular o hash do ficheiro: {reason}',
+  AppLocale.rommMatchByHashFailed: 'A correspondência por hash falhou',
+  AppLocale.rommMatchByHashReasonDisc: 'imagens de disco não são hasheadas',
+  AppLocale.rommMatchByHashReasonOversize:
+      'o ficheiro é demasiado grande para calcular o hash',
+  AppLocale.rommMatchByHashReasonMissing: 'o ficheiro não foi encontrado',
+  AppLocale.rommMatchByHashReasonExtractFailed:
+      'não foi possível abrir o arquivo',
+  AppLocale.rommMatchByHashReasonError: 'não foi possível ler o ficheiro',
 };

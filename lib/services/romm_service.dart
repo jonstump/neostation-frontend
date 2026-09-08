@@ -2027,6 +2027,75 @@ class RommService {
     return RommRom.fromJson(decoded);
   }
 
+  /// Asks the server which ROM has the given content hashes — the picker's
+  /// "Match by hash", for a file the filename pass could not place.
+  ///
+  /// Sends only the hashes it was given, lowercased and trimmed, since RomM
+  /// stores hex digests lowercase and compares them as strings. Returns the
+  /// ROM on 200, null on 404 (no ROM carries these hashes), and throws
+  /// [RommException] on anything else — the picker shows that as a failure
+  /// rather than a miss. Returns null **without sending a request** when the
+  /// heartbeat says this server predates [RommFeature.romLookupByHash]; an
+  /// [RommFeatureSupport.unknown] version still asks, per ADR-0010.
+  ///
+  /// At least one hash is required: a request with none would be a query the
+  /// server answers with an error for a mistake made here.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "ROM Lookup By Hash"
+  Future<RommRom?> getRomByHash({
+    String? crc32,
+    String? md5,
+    String? sha1,
+  }) async {
+    if (supports(RommFeature.romLookupByHash) ==
+        RommFeatureSupport.unsupported) {
+      _logGateOnce(RommFeature.romLookupByHash);
+      return null;
+    }
+
+    final params = <String, String>{};
+    void put(String key, String? value) {
+      final normalized = normalizeRommHash(value);
+      if (normalized != null) params[key] = normalized;
+    }
+
+    put('crc_hash', crc32);
+    put('md5_hash', md5);
+    put('sha1_hash', sha1);
+    if (params.isEmpty) {
+      throw ArgumentError('getRomByHash needs at least one hash');
+    }
+
+    final uri = Uri.parse(
+      '$_baseUrl/api/roms/by-hash',
+    ).replace(queryParameters: params);
+
+    final http.Response resp;
+    try {
+      resp = await _authedGetUri(uri);
+    } on RommException catch (e) {
+      if (e.statusCode == 404) {
+        _log.i(
+          'RomM rom by hash: endpoint=/api/roms/by-hash status=404 '
+          'result=miss keys=${params.keys.join(',')}',
+        );
+        return null;
+      }
+      _log.w(
+        'RomM rom by hash failed: endpoint=/api/roms/by-hash '
+        'status=${e.statusCode} error=${e.message}',
+      );
+      rethrow;
+    }
+
+    if (resp.body.trim().isEmpty) return null;
+    final decoded = jsonDecode(resp.body);
+    if (decoded is Map<String, dynamic>) return RommRom.fromJson(decoded);
+    // Tolerate a list-shaped answer the way the other ROM reads do; the first
+    // entry is the match.
+    final first = _itemsOf(decoded).whereType<Map<String, dynamic>>();
+    return first.isEmpty ? null : RommRom.fromJson(first.first);
+  }
+
   /// Queues one server-side maintenance task and returns the id RomM gave it.
   ///
   /// `POST /api/tasks/run/{name}` needs the `tasks.run` scope, so a connection

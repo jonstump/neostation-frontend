@@ -1571,4 +1571,16 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommPushPlayStateHint:
       'Kirim perubahan sembunyikan, favorit, dan terakhir dimainkan untuk game tertaut ke RomM',
   AppLocale.rommLinkSourceHash: 'Tertaut berdasarkan hash ke {name}',
+  AppLocale.rommMatchByHash: 'Cocokkan berdasarkan hash',
+  AppLocale.rommMatchByHashBusy: 'Mencocokkan berdasarkan hash…',
+  AppLocale.rommMatchByHashNoMatch:
+      'Tidak ada entri RomM dengan hash berkas ini',
+  AppLocale.rommMatchByHashSkipped:
+      'Tidak dapat menghitung hash berkas ini: {reason}',
+  AppLocale.rommMatchByHashFailed: 'Pencocokan berdasarkan hash gagal',
+  AppLocale.rommMatchByHashReasonDisc: 'citra cakram tidak di-hash',
+  AppLocale.rommMatchByHashReasonOversize: 'berkas terlalu besar untuk di-hash',
+  AppLocale.rommMatchByHashReasonMissing: 'berkas tidak ditemukan',
+  AppLocale.rommMatchByHashReasonExtractFailed: 'arsip tidak dapat dibuka',
+  AppLocale.rommMatchByHashReasonError: 'berkas tidak dapat dibaca',
 };

@@ -6,8 +6,10 @@ import 'package:provider/provider.dart';
 
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/models/game_model.dart';
+import 'package:neostation/models/rom_fingerprint.dart';
 import 'package:neostation/models/romm_metadata_fetch.dart';
 import 'package:neostation/models/romm_rom.dart';
+import 'package:neostation/models/romm_server_capabilities.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/providers/romm_provider.dart';
@@ -16,6 +18,8 @@ import 'package:neostation/screens/game_screen/game_settings_dialog/romm_fix_mat
 import 'package:neostation/screens/game_screen/game_settings_dialog/romm_fix_match_dialog.dart';
 import 'package:neostation/screens/game_screen/game_settings_dialog/romm_match_picker_controller.dart';
 import 'package:neostation/services/gamepad/gamepad_navigation_manager.dart';
+import 'package:neostation/services/retroachievements_hash_service.dart';
+import 'package:neostation/services/rom_fingerprint_service.dart';
 import 'package:neostation/services/romm_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/sync/providers/romm_provider.dart';
@@ -28,13 +32,14 @@ import 'package:neostation/widgets/custom_notification.dart';
 /// D-pad row index the dialog keeps in `_selectedIndex` — and what that slot
 /// means.
 ///
-/// Slot 0 is the search field, slots `1..actionCount` are the RomM fix-up
-/// actions, and every slot after them is a search result (or the single retry
-/// row). Every index computation in the dialog goes through this rather than
-/// carrying its own offset: rows have already been inserted above the results
-/// once (the fix-up actions) and issue #81 plans a third, and a literal
-/// `+ 1` left behind by such an insertion silently highlights the wrong row —
-/// which A then confirms as the manual link.
+/// Slot 0 is the search field, slots `1..actionCount` are the action rows
+/// ("Match by hash" when the server may have the endpoint, then the RomM
+/// fix-up actions), and every slot after them is a search result (or the
+/// single retry row). Every index computation in the dialog goes through this
+/// rather than carrying its own offset: rows have been inserted above the
+/// results twice already (the fix-up actions, then match by hash), and a
+/// literal `+ 1` left behind by such an insertion silently highlights the
+/// wrong row — which A then confirms as the manual link.
 // Governing: ADR-0019 (expose RomM library filters, search and maintenance), SPEC-0018 REQ "Fix Match In The Picker"
 @immutable
 class RommMatchPickerSlots {
@@ -61,6 +66,18 @@ class RommMatchPickerSlots {
 
   /// How many slots the dialog has with [rowCount] rows under the actions.
   int itemCount(int rowCount) => resultBase + rowCount;
+}
+
+/// The action rows between the search field and the results, in row order.
+enum _PickerAction {
+  /// Fingerprint the local file and ask the server which ROM it is.
+  matchByHash,
+
+  /// "Fix match on RomM" for the linked entry.
+  fixMatch,
+
+  /// "Change cover" for the linked entry.
+  changeCover,
 }
 
 /// Lets the user link one local game to a RomM ROM by hand.
@@ -155,10 +172,21 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
     return const [RommFixMode.match, RommFixMode.cover];
   }
 
+  /// Every action row in slot order: "Match by hash" first, when this server
+  /// is not known to lack the endpoint, then the fix-up rows.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Match By Hash In The Picker"
+  List<_PickerAction> get _actions => [
+    if (_controller.hashLookupAvailable) _PickerAction.matchByHash,
+    for (final mode in _fixActions)
+      mode == RommFixMode.cover
+          ? _PickerAction.changeCover
+          : _PickerAction.fixMatch,
+  ];
+
   /// The row layout as it stands right now — the one place that maps between
   /// a slot and what the slot means. See [RommMatchPickerSlots].
   RommMatchPickerSlots get _slots =>
-      RommMatchPickerSlots(actionCount: _fixActions.length);
+      RommMatchPickerSlots(actionCount: _actions.length);
 
   int get _itemCount =>
       _slots.itemCount(_showRetryRow ? 1 : _controller.results.length);
@@ -214,6 +242,18 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
         return outcome;
       },
       preselected: widget.preselectedRom,
+      // "Match by hash" is offered unless the heartbeat proved the server
+      // predates the endpoint; an unknown version still tries (ADR-0010).
+      // The fingerprint is the full one — the whole ROM read off the UI
+      // isolate — honouring the system's packed-archive policy so an arcade
+      // set hashes as the archive RomM stores.
+      // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Match By Hash In The Picker"
+      hashLookupAvailable:
+          service.supports(RommFeature.romLookupByHash) !=
+          RommFeatureSupport.unsupported,
+      fingerprintFile: _fingerprintGameFile,
+      lookupByHash: (fingerprint) =>
+          service.getRomByHash(crc32: fingerprint.crc32, md5: fingerprint.md5),
     )..addListener(_onControllerChanged);
 
     _queryFocus.addListener(() {
@@ -287,6 +327,26 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
     });
   }
 
+  /// The full fingerprint of the game's file, for the controller's
+  /// [RommMatchPickerController.matchByHash]. A game with no path (a
+  /// RomM-only row) is answered as missing without touching the disk.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Match By Hash In The Picker"
+  Future<({RomFingerprint? fingerprint, String? skipReason})>
+  _fingerprintGameFile() async {
+    final romPath = widget.game.romPath;
+    if (romPath == null || romPath.isEmpty) {
+      return (fingerprint: null, skipReason: RomFingerprintService.skipMissing);
+    }
+    final folder = widget.system.folderName;
+    final policy = await RetroAchievementsHashService.policyForSystem(folder);
+    return RomFingerprintService.computeInBackground(
+      romPath,
+      folder,
+      keepsArchivesPacked: policy.keepsArchivesPacked,
+      effort: FingerprintEffort.full,
+    );
+  }
+
   /// The game's extension-stripped filename, or the preselected ROM's name
   /// when the caller already knows which entry it means. The controller
   /// strips the release tags before searching.
@@ -330,7 +390,7 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
     final slots = _slots;
     final action = slots.actionForSlot(_selectedIndex);
     if (action != null) {
-      _openFixDialog(_fixActions[action]);
+      _activateAction(_actions[action]);
       return;
     }
 
@@ -347,17 +407,21 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
   }
 
   /// B leaves the text field first, and only closes the dialog once the field
-  /// is no longer focused — the app-wide way out of text entry. While a
-  /// confirm is in flight B is ignored: the link row is already written and
-  /// the fill-gaps fetch is running, so popping `false` here would tell the
-  /// Manage tab nothing changed when it did.
+  /// is no longer focused — the app-wide way out of text entry. A busy
+  /// "Match by hash" run is cancelled by the same press, before anything
+  /// closes, so a slow read of a big ROM can be abandoned without losing the
+  /// search results. While a confirm is in flight B is ignored: the link row
+  /// is already written and the fill-gaps fetch is running, so popping
+  /// `false` here would tell the Manage tab nothing changed when it did.
   // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Fill Gaps On Link Confirm"
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Match By Hash In The Picker"
   void _handleBack() {
     if (_isConfirming) return;
     if (_queryFocus.hasFocus) {
       _queryFocus.unfocus();
       return;
     }
+    if (_controller.cancelMatchByHash()) return;
     if (mounted) Navigator.of(context).pop(false);
   }
 
@@ -375,6 +439,33 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
   }
 
   // ── Actions ───────────────────────────────────────────────────────────────
+
+  void _activateAction(_PickerAction action) {
+    switch (action) {
+      case _PickerAction.matchByHash:
+        _matchByHash();
+      case _PickerAction.fixMatch:
+        _openFixDialog(RommFixMode.match);
+      case _PickerAction.changeCover:
+        _openFixDialog(RommFixMode.cover);
+    }
+  }
+
+  /// Runs the controller's match-by-hash and, on a hit, moves the highlight
+  /// onto the ROM it pinned so A confirms it. A press while a run is busy is
+  /// ignored by the controller; the dialog just plays no sound for it.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Match By Hash In The Picker"
+  Future<void> _matchByHash() async {
+    if (_controller.isMatchingByHash || _isConfirming) return;
+    SfxService().playNavSound();
+    await _controller.matchByHash();
+    if (!mounted) return;
+    if (_controller.hashStatus != RommMatchByHashStatus.hit) return;
+    final pinned = _controller.preselectedIndex;
+    if (pinned < 0) return;
+    setState(() => _selectedIndex = _slots.slotForResult(pinned));
+    _scrollToSelection();
+  }
 
   void _retry() {
     SfxService().playNavSound();
@@ -529,7 +620,11 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
               SizedBox(height: 4.r),
               _buildCleanedQueryNote(theme),
             ],
-            ..._buildFixActions(theme),
+            ..._buildActionRows(theme),
+            if (_hashResultLine() != null) ...[
+              SizedBox(height: 4.r),
+              _buildHashResultLine(theme),
+            ],
             SizedBox(height: 8.r),
             Flexible(child: _buildResults(theme, platformNames)),
           ],
@@ -668,33 +763,114 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
     );
   }
 
-  /// The RomM-side fix-up rows, between the search field and the results, so
-  /// the D-pad reaches them on the way down without a separate menu.
+  /// The action rows between the search field and the results — "Match by
+  /// hash" and the RomM-side fix-ups — so the D-pad reaches them on the way
+  /// down without a separate menu. The hash row shows a spinner and its busy
+  /// label while a run is in flight.
   // Governing: ADR-0019 (expose RomM library filters, search and maintenance), SPEC-0018 REQ "Fix Match In The Picker"
-  List<Widget> _buildFixActions(ThemeData theme) {
-    final actions = _fixActions;
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Match By Hash In The Picker"
+  List<Widget> _buildActionRows(ThemeData theme) {
+    final actions = _actions;
     if (actions.isEmpty) return const [];
     final slots = _slots;
+    final busy = _controller.isMatchingByHash;
     return [
       for (var i = 0; i < actions.length; i++) ...[
         SizedBox(height: 6.r),
         _RommFixActionRow(
-          label:
-              (actions[i] == RommFixMode.cover
-                      ? AppLocale.rommChangeCoverAction
-                      : AppLocale.rommFixMatchAction)
-                  .getString(context),
-          icon: actions[i] == RommFixMode.cover
-              ? Symbols.image_rounded
-              : Symbols.manage_search_rounded,
+          label: _actionLabel(actions[i], busy: busy),
+          icon: _actionIcon(actions[i]),
+          busy: busy && actions[i] == _PickerAction.matchByHash,
           selected: _selectedIndex == slots.slotForAction(i),
           onTap: () {
             setState(() => _selectedIndex = slots.slotForAction(i));
-            _openFixDialog(actions[i]);
+            _activateAction(actions[i]);
           },
         ),
       ],
     ];
+  }
+
+  String _actionLabel(_PickerAction action, {required bool busy}) {
+    final key = switch (action) {
+      _PickerAction.matchByHash =>
+        busy ? AppLocale.rommMatchByHashBusy : AppLocale.rommMatchByHash,
+      _PickerAction.fixMatch => AppLocale.rommFixMatchAction,
+      _PickerAction.changeCover => AppLocale.rommChangeCoverAction,
+    };
+    return key.getString(context);
+  }
+
+  IconData _actionIcon(_PickerAction action) => switch (action) {
+    _PickerAction.matchByHash => Symbols.fingerprint_rounded,
+    _PickerAction.fixMatch => Symbols.manage_search_rounded,
+    _PickerAction.changeCover => Symbols.image_rounded,
+  };
+
+  /// What the last "Match by hash" run has to say, or null when there is
+  /// nothing to show (idle, busy, or a hit — the highlighted row is the
+  /// answer). A skip names its reason in the user's language; a token the
+  /// fingerprint service adds later is shown as-is rather than hidden.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Match By Hash In The Picker"
+  String? _hashResultLine() {
+    switch (_controller.hashStatus) {
+      case RommMatchByHashStatus.idle:
+      case RommMatchByHashStatus.busy:
+      case RommMatchByHashStatus.hit:
+        return null;
+      case RommMatchByHashStatus.miss:
+        return AppLocale.rommMatchByHashNoMatch.getString(context);
+      case RommMatchByHashStatus.skipped:
+        final token = _controller.hashSkipReason ?? '';
+        final key = switch (token) {
+          RomFingerprintService.skipDisc => AppLocale.rommMatchByHashReasonDisc,
+          RomFingerprintService.skipOversize =>
+            AppLocale.rommMatchByHashReasonOversize,
+          RomFingerprintService.skipMissing =>
+            AppLocale.rommMatchByHashReasonMissing,
+          RomFingerprintService.skipExtractFailed =>
+            AppLocale.rommMatchByHashReasonExtractFailed,
+          RomFingerprintService.skipError =>
+            AppLocale.rommMatchByHashReasonError,
+          _ => null,
+        };
+        final reason = key == null ? token : key.getString(context);
+        return AppLocale.rommMatchByHashSkipped
+            .getString(context)
+            .replaceFirst('{reason}', reason);
+      case RommMatchByHashStatus.error:
+        return AppLocale.rommMatchByHashFailed.getString(context);
+    }
+  }
+
+  Widget _buildHashResultLine(ThemeData theme) {
+    final failed = _controller.hashStatus == RommMatchByHashStatus.error;
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: 8.r),
+      child: Row(
+        children: [
+          Icon(
+            failed ? Symbols.error_rounded : Symbols.info_rounded,
+            size: 12.r,
+            color: failed
+                ? theme.colorScheme.error
+                : theme.colorScheme.onSurface.withValues(alpha: 0.5),
+          ),
+          SizedBox(width: 6.r),
+          Expanded(
+            child: Text(
+              _hashResultLine() ?? '',
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 9.r,
+                color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildResults(ThemeData theme, Map<int, String> platformNames) {
@@ -892,11 +1068,13 @@ class _RommRetryRow extends StatelessWidget {
   }
 }
 
-/// One RomM-side fix-up action under the search field.
+/// One action row under the search field. [busy] swaps the icon for a
+/// spinner while the row's work is in flight.
 class _RommFixActionRow extends StatelessWidget {
   final String label;
   final IconData icon;
   final bool selected;
+  final bool busy;
   final VoidCallback onTap;
 
   const _RommFixActionRow({
@@ -904,6 +1082,7 @@ class _RommFixActionRow extends StatelessWidget {
     required this.icon,
     required this.selected,
     required this.onTap,
+    this.busy = false,
   });
 
   @override
@@ -927,7 +1106,14 @@ class _RommFixActionRow extends StatelessWidget {
         ),
         child: Row(
           children: [
-            Icon(icon, size: 14.r, color: theme.colorScheme.primary),
+            if (busy)
+              SizedBox(
+                width: 14.r,
+                height: 14.r,
+                child: CircularProgressIndicator(strokeWidth: 1.5.r),
+              )
+            else
+              Icon(icon, size: 14.r, color: theme.colorScheme.primary),
             SizedBox(width: 6.r),
             Expanded(
               child: Text(
