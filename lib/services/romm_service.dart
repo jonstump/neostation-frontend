@@ -2181,10 +2181,16 @@ class RommService {
   /// out would leave an undecodable `.png` behind — art that looks downloaded
   /// but renders as nothing — and would hide the miss from any caller trying a
   /// second source. Video fetches pass `requireImage: false`.
+  ///
+  /// With [quiet] a miss is logged at debug rather than warning: the cover
+  /// cache walks a candidate list where a 404 on the first entry is the
+  /// expected way to reach the second, and retries on the next render.
   Future<Uint8List?> fetchImageBytes(
     String pathOrUrl, {
     bool requireImage = true,
+    bool quiet = false,
   }) async {
+    void miss(String message) => quiet ? _log.d(message) : _log.w(message);
     try {
       final url = pathOrUrl.startsWith('http')
           ? pathOrUrl
@@ -2193,17 +2199,21 @@ class RommService {
           .get(Uri.parse(url), headers: imageHeadersFor(url))
           .timeout(const Duration(seconds: 30));
       if (resp.statusCode != 200) {
-        _log.w('RomM image fetch: HTTP ${resp.statusCode} for $url');
+        miss('RomM image fetch: HTTP ${resp.statusCode} for $url');
         return null;
       }
       final bytes = resp.bodyBytes;
       if (requireImage && !looksLikeImage(bytes)) {
-        _log.w('RomM image fetch: non-image body for $url');
+        miss('RomM image fetch: non-image body for $url');
         return null;
       }
       return bytes;
     } catch (e) {
-      _log.e('RomM image fetch failed: $e');
+      if (quiet) {
+        _log.d('RomM image fetch failed: $e');
+      } else {
+        _log.e('RomM image fetch failed: $e');
+      }
       return null;
     }
   }
@@ -2292,11 +2302,22 @@ class RommService {
   /// thumbnail is both the cheapest fetch (LAN, small) and the cheapest decode.
   /// Surfaces that show a single large cover keep [coverUrlCandidates].
   // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Tile Cover Source Order"
-  List<String> tileCoverUrlCandidates(RommRom rom) => _absoluteCoverUrls([
-    rom.pathCoverSmall,
-    rom.pathCoverLarge,
-    rom.urlCover,
-  ]);
+  List<String> tileCoverUrlCandidates(RommRom rom) => tileCoverUrlCandidatesFor(
+    pathCoverSmall: rom.pathCoverSmall,
+    pathCoverLarge: rom.pathCoverLarge,
+    urlCover: rom.urlCover,
+  );
+
+  /// [tileCoverUrlCandidates] for a cover that is not on a [RommRom] — a
+  /// catalog row carries the same three fields, and the on-disk cover cache
+  /// fills from them in the same small-first order with the same base-URL
+  /// rule.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+  List<String> tileCoverUrlCandidatesFor({
+    String? pathCoverSmall,
+    String? pathCoverLarge,
+    String? urlCover,
+  }) => _absoluteCoverUrls([pathCoverSmall, pathCoverLarge, urlCover]);
 
   /// Absolute, authenticated-fetchable URLs for [covers] in the given order,
   /// skipping null/empty entries and joining server-relative paths onto the

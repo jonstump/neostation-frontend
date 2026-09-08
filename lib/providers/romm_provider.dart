@@ -28,6 +28,7 @@ import '../repositories/system_repository.dart';
 import '../services/collections/collections_service.dart';
 import '../services/logger_service.dart';
 import '../services/romm/romm_collection_mirror.dart';
+import '../services/romm/romm_cover_cache.dart';
 import '../services/romm/romm_metadata_fetch.dart';
 import '../services/romm_playtime_service.dart';
 import '../services/romm_service.dart';
@@ -175,6 +176,21 @@ class RommProvider extends ChangeNotifier {
   static final _log = LoggerService.instance;
 
   final RommService _service = RommService();
+
+  /// The on-disk cache of small RomM covers the unified library draws remote
+  /// entries from. Owned here because it fetches through [_service]'s auth
+  /// and follows this connection's lifetime: [disconnect] and a server change
+  /// clear the old server's files. Built-time readers call
+  /// [RommCoverCache.pathFor]; the catalog refresh calls
+  /// [RommCoverCache.prefetch].
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+  late final RommCoverCache coverCache;
+
+  RommProvider({@visibleForTesting RommCoverCache? coverCache}) {
+    this.coverCache =
+        coverCache ??
+        RommCoverCache.forService(_service, shouldStop: () => !isConnected);
+  }
 
   RommConnectionStatus _status = RommConnectionStatus.disconnected;
   String? _lastErrorMessage;
@@ -889,6 +905,11 @@ class RommProvider extends ChangeNotifier {
       installTransportHooks();
       notifyListeners();
       _flushQueuedPlaytime();
+      // Warm the cover index now: pathFor answers from it synchronously, and
+      // a card on an offline cold start would otherwise see a miss for a
+      // cover that is already on disk. Idempotent and never throws.
+      // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+      unawaited(coverCache.initialize());
     } catch (e) {
       _log.e('RomM initialize failed: $e');
       _status = RommConnectionStatus.disconnected;
@@ -924,6 +945,7 @@ class RommProvider extends ChangeNotifier {
     String password = '',
     String apiKey = '',
   }) async {
+    final previousServerUrl = _serverUrl;
     _status = RommConnectionStatus.connecting;
     _lastError = null;
     _lastErrorKind = null;
@@ -986,9 +1008,17 @@ class RommProvider extends ChangeNotifier {
     _serverUrl = _service.baseUrl;
     _username = _service.username;
     _status = RommConnectionStatus.connected;
-    installTransportHooks();
-    notifyListeners();
     _flushQueuedPlaytime();
+    // Warm the cover index now: pathFor answers from it synchronously, and a
+    // card on an offline cold start would otherwise see a miss for a cover
+    // that is already on disk. Idempotent and never throws.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+    unawaited(coverCache.initialize());
+    if (previousServerUrl.isNotEmpty && previousServerUrl != _serverUrl) {
+      // A different server: the old one's covers can never be drawn again.
+      // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
+      unawaited(coverCache.clear(previousServerUrl));
+    }
     return null;
   }
 
@@ -1135,6 +1165,11 @@ class RommProvider extends ChangeNotifier {
     // otherwise keep running (and failing) against a server we just forgot.
     bulkSync.cancel();
     await RommRepository.clearConfig();
+    if (_serverUrl.isNotEmpty) {
+      // The covers belong to the connection that is going away.
+      // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
+      unawaited(coverCache.clear(_serverUrl));
+    }
     _status = RommConnectionStatus.disconnected;
     _lastError = null;
     _lastErrorKind = null;

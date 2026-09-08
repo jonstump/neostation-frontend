@@ -56,6 +56,7 @@ class _FakeRommService extends RommService {
   Future<Uint8List?> fetchImageBytes(
     String pathOrUrl, {
     bool requireImage = true,
+    bool quiet = false,
   }) async {
     fetched.add(pathOrUrl);
     return pathOrUrl.endsWith('cover.png')

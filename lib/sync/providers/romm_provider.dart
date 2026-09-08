@@ -1859,6 +1859,9 @@ class RomMSyncProvider extends ChangeNotifier
     serverUrl: () => _browse.serverUrl,
     linker: _linker,
     shouldStop: () => _disposed || !_browse.isConnected,
+    // Covers for the rows the walk wrote, after the summary, detached.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+    prefetchCovers: _browse.coverCache.prefetch,
   );
 
   /// The browse provider's platform list, loaded if it hasn't been yet.
