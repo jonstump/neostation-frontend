@@ -1603,4 +1603,6 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.rommChangeCoverApplied: 'Jaquette appliquée sur RomM',
   AppLocale.rommFixMatchApplyFailed:
       'Impossible d’appliquer la modification sur RomM',
+  AppLocale.rommConnectionFailedDetail: 'Échec de la connexion : {error}',
+  AppLocale.rommPairingFailedDetail: 'Échec de l’association : {error}',
 };

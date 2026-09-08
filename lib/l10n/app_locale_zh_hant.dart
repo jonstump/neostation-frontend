@@ -1347,4 +1347,6 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.rommFixMatchApplied: '已在 RomM 上套用配對',
   AppLocale.rommChangeCoverApplied: '已在 RomM 上套用封面',
   AppLocale.rommFixMatchApplyFailed: '無法在 RomM 上套用此變更',
+  AppLocale.rommConnectionFailedDetail: '連線失敗：{error}',
+  AppLocale.rommPairingFailedDetail: '配對失敗：{error}',
 };

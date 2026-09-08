@@ -1547,4 +1547,6 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommFixMatchApplied: 'Kecocokan diterapkan di RomM',
   AppLocale.rommChangeCoverApplied: 'Sampul diterapkan di RomM',
   AppLocale.rommFixMatchApplyFailed: 'Perubahan tidak dapat diterapkan di RomM',
+  AppLocale.rommConnectionFailedDetail: 'Koneksi gagal: {error}',
+  AppLocale.rommPairingFailedDetail: 'Penyandingan gagal: {error}',
 };

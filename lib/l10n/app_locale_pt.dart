@@ -1570,4 +1570,6 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.rommChangeCoverApplied: 'Capa aplicada no RomM',
   AppLocale.rommFixMatchApplyFailed:
       'Não foi possível aplicar a alteração no RomM',
+  AppLocale.rommConnectionFailedDetail: 'Falha na conexão: {error}',
+  AppLocale.rommPairingFailedDetail: 'Falha no emparelhamento: {error}',
 };

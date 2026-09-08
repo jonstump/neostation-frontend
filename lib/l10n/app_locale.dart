@@ -1606,6 +1606,14 @@ mixin AppLocale {
   static const String rommChangeCoverApplied = 'romm_change_cover_applied';
   static const String rommFixMatchApplyFailed = 'romm_fix_match_apply_failed';
 
+  // The provider's own connect/pairing failures, worded here rather than in
+  // Dart so they reach the user translated; `{error}` carries the raw
+  // exception text for diagnosis.
+  // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Localized User-Facing Text"
+  static const String rommConnectionFailedDetail =
+      'romm_connection_failed_detail';
+  static const String rommPairingFailedDetail = 'romm_pairing_failed_detail';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================

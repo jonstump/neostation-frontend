@@ -355,13 +355,23 @@ class _RommConnectContentState extends State<RommConnectContent>
     if (error != null) {
       // A pairing failure the provider could classify gets its own sentence;
       // anything else (network, TLS, verification) reads as it does for the
-      // other modes.
+      // other modes — and where the provider worded that message itself it
+      // hands over an AppLocale key, so the English fallback in
+      // [RommProvider.lastError] never reaches the screen. `error` is only
+      // shown when it came from RommException.message, which is already
+      // user-facing.
+      // Governing: ADR-0007 (RomM pairing login),
+      // SPEC-0007 REQ "Localized User-Facing Text"
       final pairKey = mode == RommAuthMode.pairCode
           ? rommPairErrorKey(provider.lastErrorKind)
           : null;
+      final localized = provider.lastErrorLocalized;
       AppNotification.showNotification(
         context,
-        pairKey?.getString(context) ?? error,
+        pairKey?.getString(context) ??
+            (localized == null
+                ? error
+                : rommLocalizedErrorText(context, localized)),
         type: NotificationType.error,
       );
     } else {

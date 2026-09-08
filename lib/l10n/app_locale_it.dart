@@ -1585,4 +1585,6 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.rommChangeCoverApplied: 'Copertina applicata su RomM',
   AppLocale.rommFixMatchApplyFailed:
       'Impossibile applicare la modifica su RomM',
+  AppLocale.rommConnectionFailedDetail: 'Connessione non riuscita: {error}',
+  AppLocale.rommPairingFailedDetail: 'Associazione non riuscita: {error}',
 };

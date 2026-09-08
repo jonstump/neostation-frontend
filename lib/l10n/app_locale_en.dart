@@ -1530,4 +1530,6 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rommFixMatchApplied: 'Match applied on RomM',
   AppLocale.rommChangeCoverApplied: 'Cover applied on RomM',
   AppLocale.rommFixMatchApplyFailed: 'The change could not be applied on RomM',
+  AppLocale.rommConnectionFailedDetail: 'Connection failed: {error}',
+  AppLocale.rommPairingFailedDetail: 'Pairing failed: {error}',
 };

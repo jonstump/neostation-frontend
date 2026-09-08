@@ -1549,4 +1549,6 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommFixMatchApplied: 'Совпадение применено в RomM',
   AppLocale.rommChangeCoverApplied: 'Обложка применена в RomM',
   AppLocale.rommFixMatchApplyFailed: 'Не удалось применить изменение в RomM',
+  AppLocale.rommConnectionFailedDetail: 'Не удалось подключиться: {error}',
+  AppLocale.rommPairingFailedDetail: 'Не удалось выполнить сопряжение: {error}',
 };
