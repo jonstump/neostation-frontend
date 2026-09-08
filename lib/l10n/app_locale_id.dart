@@ -1583,4 +1583,34 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommMatchByHashReasonMissing: 'berkas tidak ditemukan',
   AppLocale.rommMatchByHashReasonExtractFailed: 'arsip tidak dapat dibuka',
   AppLocale.rommMatchByHashReasonError: 'berkas tidak dapat dibaca',
+  AppLocale.rommShowLibrary: 'Tampilkan pustaka RomM di sistem saya',
+  AppLocale.rommShowLibrarySubtitle:
+      'Mencantumkan setiap game di server RomM di bawah sistemnya, ditandai jika tidak ada di perangkat ini',
+  AppLocale.rommLibraryDefaultScope: 'Cakupan pustaka bawaan',
+  AppLocale.rommLibraryDefaultScopeSubtitle:
+      'Apa yang ditampilkan daftar game saat dibuka: semua yang ada di server, atau hanya game yang sudah diunduh',
+  AppLocale.rommCoverCacheSize: 'Ukuran cache sampul RomM',
+  AppLocale.rommCoverCacheSizeSubtitle:
+      'Ruang disk yang disediakan untuk sampul RomM agar game jarak jauh punya gambar saat offline',
+  AppLocale.rommCoverCacheSizeValue: '{size} MB',
+  AppLocale.libraryScopeAll: 'Semua game',
+  AppLocale.libraryScopeDownloaded: 'Sudah diunduh',
+  AppLocale.libraryScopeFooter: 'Pustaka: {scope}',
+  AppLocale.libraryScopeToggle: 'Ganti cakupan pustaka',
+  AppLocale.libraryScopeSwitched: 'Menampilkan: {scope}',
+  AppLocale.libraryOfflineCached:
+      'Offline — menampilkan pustaka RomM dari cache',
+  AppLocale.rommRemoteOnlySystemLabel: 'Hanya di server RomM',
+  AppLocale.rommRefreshLibraryNow: 'Segarkan pustaka RomM sekarang',
+  AppLocale.rommRefreshLibraryRunning: 'Menyegarkan pustaka RomM…',
+  AppLocale.rommRefreshLibraryDone:
+      'Pustaka RomM disegarkan: {count} game di {platforms} platform',
+  AppLocale.rommRefreshLibraryFailed: 'Pustaka RomM tidak dapat disegarkan',
+  AppLocale.rommRefreshLibraryUnavailable:
+      'Pustaka RomM tidak dapat disegarkan saat ini',
+  AppLocale.rommClearCachedLibrary: 'Hapus cache pustaka RomM',
+  AppLocale.rommClearCachedLibraryDone: 'Cache pustaka RomM dihapus',
+  AppLocale.rommCatalogAsOf: 'Pustaka per {time}',
+  AppLocale.rommCatalogNeverRefreshed: 'Pustaka belum disegarkan',
+  AppLocale.rommRemoteNotDownloaded: 'Belum diunduh',
 };

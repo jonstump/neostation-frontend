@@ -1235,74 +1235,16 @@ extension SqliteConfigScanning on SqliteConfigProvider {
 
   /// Re-orders the detected systems list based on current sorting preferences.
   ///
-  /// Implements special "float-to-top" logic for priority systems like 'All Games'
-  /// and 'Android Apps'.
+  /// The rule itself is [compareSystemsForCarousel], shared with the systems
+  /// list builder so RomM-only systems slot in under the same order.
   void _sortDetectedSystems() {
     if (_detectedSystems.isEmpty) return;
 
     final sortBy = _config.systemSortBy;
     final isAsc = _config.systemSortOrder == 'asc';
-
-    // Map priority folders that should NEVER be sorted
-    final priorityMap = <String, int>{
-      'all': 1,
-      'favorites': 2,
-      SystemFolderNames.collections: 3,
-      'music': 4,
-      'android': 5,
-    };
-
-    _detectedSystems.sort((a, b) {
-      final pA = priorityMap[a.folderName] ?? 999;
-      final pB = priorityMap[b.folderName] ?? 999;
-
-      if (pA != pB) {
-        return pA.compareTo(pB); // Priority objects always float to the top
-      }
-
-      // If both are normal systems (999), sort them
-      if (pA != 999) {
-        return 0; // Both are special and have same priority somehow
-      }
-
-      int comparison = 0;
-
-      if (sortBy == 'year') {
-        // Sort by year (launchDate). If no date is available, it goes to the end.
-        final dateA = a.launchDate ?? '9999';
-        final dateB = b.launchDate ?? '9999';
-        comparison = dateA.compareTo(dateB);
-      } else if (sortBy == 'manufacturer') {
-        final mA = (a.manufacturer ?? '').toLowerCase();
-        final mB = (b.manufacturer ?? '').toLowerCase();
-        comparison = mA.compareTo(mB);
-        if (comparison == 0) {
-          final dateA = a.launchDate ?? '9999';
-          final dateB = b.launchDate ?? '9999';
-          comparison = dateA.compareTo(dateB);
-        }
-      } else if (sortBy == 'manufacturer_type') {
-        final mA = (a.manufacturer ?? '').toLowerCase();
-        final mB = (b.manufacturer ?? '').toLowerCase();
-        comparison = mA.compareTo(mB);
-        if (comparison == 0) {
-          final tA = (a.type ?? '').toLowerCase();
-          final tB = (b.type ?? '').toLowerCase();
-          comparison = tA.compareTo(tB);
-        }
-        if (comparison == 0) {
-          final dateA = a.launchDate ?? '9999';
-          final dateB = b.launchDate ?? '9999';
-          comparison = dateA.compareTo(dateB);
-        }
-      } else {
-        // Default: Alphabetical by real name
-        comparison = a.realName.toLowerCase().compareTo(
-          b.realName.toLowerCase(),
-        );
-      }
-
-      return isAsc ? comparison : -comparison;
-    });
+    _detectedSystems.sort(
+      (a, b) =>
+          compareSystemsForCarousel(a, b, sortBy: sortBy, ascending: isAsc),
+    );
   }
 }

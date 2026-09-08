@@ -7,6 +7,7 @@ import 'dart:async';
 import '../../../models/system_model.dart';
 import '../../../utils/effective_system.dart';
 import '../../../models/game_model.dart';
+import '../../../models/library_scope.dart';
 import '../../../providers/file_provider.dart';
 import '../../../providers/romm_provider.dart';
 import '../../../providers/retro_achievements_provider.dart';
@@ -139,6 +140,13 @@ class GameDetailsCardList extends StatefulWidget {
   final bool isNavigatingFast;
   final VoidCallback? onBack;
 
+  /// The unified library's scope for the footer pill; null hides it. Passed
+  /// through untouched — the host owns the scope.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
+  final LibraryScope? libraryScope;
+  final VoidCallback? onToggleLibraryScope;
+  final bool libraryOffline;
+
   const GameDetailsCardList({
     super.key,
     required this.game,
@@ -180,6 +188,9 @@ class GameDetailsCardList extends StatefulWidget {
     this.onRegisterScrapeAction,
     this.isSecondaryScreenActive = false,
     this.isNavigatingFast = false,
+    this.libraryScope,
+    this.onToggleLibraryScope,
+    this.libraryOffline = false,
     this.onBack,
   });
 
@@ -896,6 +907,9 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
             onShowRandomGame: widget.onShowRandomGame,
             onToggleFavorite: widget.onToggleFavorite,
             onOpenGameSettings: widget.onOpenGameSettings,
+            libraryScope: widget.libraryScope,
+            onToggleLibraryScope: widget.onToggleLibraryScope,
+            libraryOffline: widget.libraryOffline,
           ),
 
           // Panel layer: the tabs share one strip so a D-pad step or a

@@ -36,6 +36,8 @@ import '../../providers/neo_sync_provider.dart';
 import '../../repositories/neosync_save_folder_repository.dart';
 import '../../models/system_model.dart';
 import '../../models/game_model.dart';
+import '../../models/library_scope.dart';
+import '../../widgets/library_scope_pill.dart';
 import '../../utils/rom_tree.dart';
 import 'game_details_card/game_details_card_list.dart';
 import 'game_details_card/random_game_dialog.dart';
@@ -164,14 +166,15 @@ class _SystemGamesListState extends State<SystemGamesList> {
   /// come first, then the level's games — matching [buildRomLevel]'s ordering.
   /// When subfolder view is off this is just the flat [_allGames].
   List<GameModel> _buildDisplayList() {
+    final scoped = _scopedGames;
     if (!_subfolderViewEnabled) {
       _currentFolderEntries = const [];
       _folderPlaceholders.clear();
-      return _allGames;
+      return scoped;
     }
 
     final entries = buildRomLevel(
-      games: _allGames,
+      games: scoped,
       rootFolders: _subfolderRoots,
       currentRelPath: _currentRelPath,
     );
@@ -285,6 +288,16 @@ class _SystemGamesListState extends State<SystemGamesList> {
   ); // Debounce for video playback.
   bool _lastShowInfo = false; // Memoizes 'showGameInfo' config state.
   String? _lastGameViewMode; // Memoizes 'gameViewMode' config state.
+
+  /// The unified library's scope for this view: `all` shows the RomM catalog's
+  /// remote entries in among the local games, `downloaded` hides them. Set
+  /// once on entry from the configured default (forced to `downloaded` while
+  /// the server is unreachable) and toggled by Select + X, the footer pill or
+  /// the context menu. Applied as a predicate in [_buildDisplayList] over the
+  /// merged [_allGames], so a toggle never re-reads the database.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
+  LibraryScope _libraryScope = LibraryScope.all;
+  bool _lastShowLibrary = false; // Memoizes 'rommShowLibrary' config state.
   bool _isGameLaunching =
       false; // Critical flag to suppress media tasks during transitions.
   bool _standaloneSyncTriggered = false;
@@ -360,6 +373,15 @@ class _SystemGamesListState extends State<SystemGamesList> {
     super.initState();
     _fileProvider = widget.fileProvider;
     _backButtonFocusNode = FocusNode(skipTraversal: true);
+    // The scope is decided before the first load so the list opens in it.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
+    final startupConfig = context.read<SqliteConfigProvider>().config;
+    _lastShowLibrary = startupConfig.rommShowLibrary;
+    _libraryScope = LibraryScope.initial(
+      configured: startupConfig.rommLibraryDefaultScope,
+      offline:
+          context.read<RommProvider>().reachability == RommReachability.offline,
+    );
     _loadGames();
     _initializeGamepad();
 
@@ -548,6 +570,96 @@ class _SystemGamesListState extends State<SystemGamesList> {
 
     // Refresh audio ducking logic (e.g., when toggling video sound).
     _updateMusicDucking();
+
+    // The unified-library toggle: off must hide the remote entries at once,
+    // on must show them, and both are one reload — the catalog stays on
+    // disk either way, only the merge reads the flag.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
+    final showLibrary = configProvider.config.rommShowLibrary;
+    if (showLibrary != _lastShowLibrary) {
+      _lastShowLibrary = showLibrary;
+      _loadGames();
+    }
+  }
+
+  // ── Unified library scope ────────────────────────────────────────────────
+
+  /// [_allGames] under [_libraryScope]: everything, or the local games only.
+  /// A predicate, not a query — the merged list was read once by
+  /// [_loadGames] and the scope only decides which of it to show.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Concurrency Safety"
+  List<GameModel> get _scopedGames => _libraryScope.filter(_allGames);
+
+  /// Whether this view offers the scope at all: the feature is on, and the
+  /// view is one the merge feeds. Music and Android apps never carry remote
+  /// entries; favourites and collections never do either (SPEC-0019 keeps
+  /// them local), so their footers do not show a switch that would do
+  /// nothing.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
+  bool get _libraryScopeAvailable {
+    if (!_lastShowLibrary) return false;
+    final folder = widget.system.folderName;
+    if (folder == 'music' || folder == 'android') return false;
+    if (folder == SystemFolderNames.favorites) return false;
+    if (SystemFolderNames.collectionIdOf(folder) != null) return false;
+    return true;
+  }
+
+  /// Whether the RomM server is currently unreachable, for the footer pill's
+  /// offline mark and the cached-library notice.
+  bool get _libraryOffline =>
+      context.read<RommProvider>().reachability == RommReachability.offline;
+
+  /// Flips the scope and rebuilds the visible list from the merged one in
+  /// memory. The selection follows the same game when it survives the
+  /// change, else it lands on the first entry. Reports the new scope, and —
+  /// when `all` is chosen while the server is unreachable — that what is
+  /// listed is the cached catalog.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
+  void _toggleLibraryScope() {
+    if (!_libraryScopeAvailable || _isLoading) return;
+    SfxService().playNavSound();
+    final previous = _selectedGame;
+    setState(() {
+      _libraryScope = _libraryScope.toggled;
+      _games = _buildDisplayList();
+      _gameIndexMap = {for (int i = 0; i < _games.length; i++) _games[i]: i};
+      final kept = previous == null ? -1 : (_gameIndexMap[previous] ?? -1);
+      _selectedGameIndex = kept >= 0 ? kept : 0;
+      _selectedGame = _games.isNotEmpty ? _games[_selectedGameIndex] : null;
+    });
+    final offline = _libraryOffline;
+    final label = LibraryScopePill.labelFor(context, _libraryScope);
+    AppNotification.showNotification(
+      context,
+      offline && _libraryScope == LibraryScope.all
+          ? AppLocale.libraryOfflineCached.getString(context)
+          : AppLocale.libraryScopeSwitched
+                .getString(context)
+                .replaceFirst('{scope}', label),
+      type: NotificationType.info,
+    );
+    if (_selectedGame != null && !identical(_selectedGame, previous)) {
+      _resetVideoState();
+      _performBackgroundOperationsForSelectedGame();
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _scrollToSelectedItem();
+    });
+  }
+
+  /// The notice for an action a remote entry cannot take yet (launch,
+  /// favourite, settings): the file is not on this device. Downloading from
+  /// the list is the next story's; until then the press is answered rather
+  /// than swallowed.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entries In The Game Model"
+  void _notifyRemoteNotDownloaded() {
+    AppNotification.showNotification(
+      context,
+      AppLocale.rommRemoteNotDownloaded.getString(context),
+      type: NotificationType.info,
+    );
   }
 
   /// Triggers UI refresh upon music player state transitions.
@@ -591,6 +703,12 @@ class _SystemGamesListState extends State<SystemGamesList> {
     // Folder rows are placeholders, not ROMs — a settings dialog for one would
     // write per-game rows keyed to a path that has no game behind it.
     if (_isFolderEntry(game)) return;
+    // Nor does a remote entry have a row: nothing local exists to configure.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entries In The Game Model"
+    if (game.isRemote) {
+      _notifyRemoteNotDownloaded();
+      return;
+    }
     SfxService().playNavSound();
     showDialog(
       context: context,
@@ -1356,6 +1474,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
       // preview is over there and so is its own mute control.
       isSecondaryScreenActive:
           _secondaryDisplayState?.value?.isSecondaryActive ?? false,
+      libraryScope: _libraryScopeAvailable ? _libraryScope : null,
+      onToggleLibraryScope: _toggleLibraryScope,
+      libraryOffline: _libraryOffline,
     );
   }
 
@@ -1394,6 +1515,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
       // preview is over there and so is its own mute control.
       isSecondaryScreenActive:
           _secondaryDisplayState?.value?.isSecondaryActive ?? false,
+      libraryScope: _libraryScopeAvailable ? _libraryScope : null,
+      onToggleLibraryScope: _toggleLibraryScope,
+      libraryOffline: _libraryOffline,
     );
   }
 
@@ -1877,6 +2001,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
         onPlayGame: _selectCurrentGame,
         onToggleFavorite: _toggleFavorite,
         onOpenGameSettings: _openGameSettingsDialog,
+        libraryScope: _libraryScopeAvailable ? _libraryScope : null,
+        onToggleLibraryScope: _toggleLibraryScope,
+        libraryOffline: _libraryOffline,
         onBack: _goBack,
         onGameUpdated: _handleGameUpdated, // Sync UI after metadata edits.
         onFavoriteToggled: _handleFavoriteToggledFromCard,

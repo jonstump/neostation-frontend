@@ -7,6 +7,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/sync/sync_manager.dart';
 import 'package:neostation/models/game_model.dart';
+import 'package:neostation/models/library_scope.dart';
 import 'package:neostation/utils/rom_tree.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/utils/effective_system.dart';
@@ -95,6 +96,12 @@ class GamesGrid extends StatefulWidget {
   /// the pill that goes.
   final bool isSecondaryScreenActive;
 
+  /// The unified library's scope for the footer pill; null hides it.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
+  final LibraryScope? libraryScope;
+  final VoidCallback? onToggleLibraryScope;
+  final bool libraryOffline;
+
   const GamesGrid({
     super.key,
     required this.system,
@@ -118,6 +125,9 @@ class GamesGrid extends StatefulWidget {
     this.onYButton,
     this.selectedItemKey,
     this.isSecondaryScreenActive = false,
+    this.libraryScope,
+    this.onToggleLibraryScope,
+    this.libraryOffline = false,
   });
 
   @override
@@ -1338,7 +1348,10 @@ class _GamesGridState extends State<GamesGrid> {
     final sig =
         '$_settledIndex|${settledGame.romname}|${settledGame.isFavorite}'
         '|$hasRa|$loadingRa|${identityHashCode(_currentGameInfo)}'
-        '|${widget.isSecondaryScreenActive}';
+        '|${widget.isSecondaryScreenActive}'
+        // The scope pill is part of this chrome, so its inputs are part of
+        // the signature — a toggle must not be memoized away.
+        '|${widget.libraryScope}|${widget.libraryOffline}';
     if (sig == _chromeSig && _chromeFooter != null) {
       return;
     }
@@ -1357,6 +1370,9 @@ class _GamesGridState extends State<GamesGrid> {
       // the placeholder an aggregate view is browsing under.
       system: isFolder ? null : _effectiveSystemFor(settledGame),
       syncProvider: context.read<SyncManager>().active,
+      libraryScope: widget.libraryScope,
+      onToggleLibraryScope: widget.onToggleLibraryScope,
+      libraryOffline: widget.libraryOffline,
     );
   }
 

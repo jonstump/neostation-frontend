@@ -63,44 +63,54 @@ extension _ContextMenu on _SystemGamesListState {
     // is left off rather than offered and ignored.
     final canScrape = (game.systemId ?? widget.system.id) != null;
 
+    // A remote entry has no local row: no favourite, no collections, no
+    // per-game settings, no scrape. The view-level actions still apply, and
+    // the scope switch is the one it most needs.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entries In The Game Model"
+    final isRemote = game.isRemote;
+
     final targets = <GameContextMenuTarget>[
-      GameContextMenuTarget(
-        id: _favoritesTargetId,
-        label: AppLocale.favorite.getString(context),
-        icon: Symbols.favorite_rounded,
-        isMember: game.isFavorite == true,
-        setMember: (bool member) async {
-          final applied = await _setFavoriteFromMenu(member);
-          // In the Favourites view every game is a favourite, so only a removal
-          // can strand a row here.
-          if (applied &&
-              !member &&
-              widget.system.folderName == SystemFolderNames.favorites) {
-            reloadWhenClosed = true;
-          }
-          return applied;
-        },
-      ),
-      for (final collection in collectionsProvider.collections)
+      if (isRemote)
+        ...[]
+      else ...[
         GameContextMenuTarget(
-          id: '${SystemFolderNames.collectionPrefix}${collection.id}',
-          label: collection.name,
-          icon: Symbols.bookmark_rounded,
-          isMember: memberIds.contains(collection.id),
+          id: _favoritesTargetId,
+          label: AppLocale.favorite.getString(context),
+          icon: Symbols.favorite_rounded,
+          isMember: game.isFavorite == true,
           setMember: (bool member) async {
-            final applied = await _setCollectionMembershipFromMenu(
-              collection.id,
-              adding: member,
-            );
+            final applied = await _setFavoriteFromMenu(member);
+            // In the Favourites view every game is a favourite, so only a removal
+            // can strand a row here.
             if (applied &&
                 !member &&
-                widget.system.folderName ==
-                    '${SystemFolderNames.collectionPrefix}${collection.id}') {
+                widget.system.folderName == SystemFolderNames.favorites) {
               reloadWhenClosed = true;
             }
             return applied;
           },
         ),
+        for (final collection in collectionsProvider.collections)
+          GameContextMenuTarget(
+            id: '${SystemFolderNames.collectionPrefix}${collection.id}',
+            label: collection.name,
+            icon: Symbols.bookmark_rounded,
+            isMember: memberIds.contains(collection.id),
+            setMember: (bool member) async {
+              final applied = await _setCollectionMembershipFromMenu(
+                collection.id,
+                adding: member,
+              );
+              if (applied &&
+                  !member &&
+                  widget.system.folderName ==
+                      '${SystemFolderNames.collectionPrefix}${collection.id}') {
+                reloadWhenClosed = true;
+              }
+              return applied;
+            },
+          ),
+      ],
     ];
 
     // Membership changes land live, but a game leaving the favourites block
@@ -111,17 +121,20 @@ extension _ContextMenu on _SystemGamesListState {
       context: context,
       targets: targets,
       anchorKey: _selectedItemKey,
-      onSettings: _openGameSettingsDialog,
-      onCreateTarget: () => _createCollectionFromMenu(game),
+      onSettings: isRemote ? null : _openGameSettingsDialog,
+      onCreateTarget: isRemote ? null : () => _createCollectionFromMenu(game),
       createTargetLabel: AppLocale.newCollection.getString(context),
       // The view-independent path, in every view. It feeds `_scrapeProgress`
       // and `_selectedScrapeStatus`, which the details card renders as its own
       // progress panel, so the list view loses nothing by not going through the
       // card's registered action — and grid and carousel, which have no card to
       // register one, work off the same call.
-      onScrape: canScrape ? _scrapeSelectedGame : null,
+      onScrape: canScrape && !isRemote ? _scrapeSelectedGame : null,
       onViewMode: () =>
           GameViewModeDropdown.globalKey.currentState?.showDropdown(),
+      // The same switch Select + X is, for a user without a pad.
+      // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
+      onToggleLibraryScope: _libraryScopeAvailable ? _toggleLibraryScope : null,
       onRandom: _showRandomGameDialog,
     );
 

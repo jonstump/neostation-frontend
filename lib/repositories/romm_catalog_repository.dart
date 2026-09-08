@@ -154,6 +154,34 @@ class RommCatalogRepository {
     }
   }
 
+  /// How many ROMs are catalogued per system folder, in one query.
+  ///
+  /// What the systems carousel needs for every remote-only card at once:
+  /// [systemsWithRows] plus a [countForSystem] per folder would be one query
+  /// per platform on every carousel rebuild.
+  // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Remote-Only Systems"
+  static Future<Map<String, int>> countsBySystem(String serverUrl) async {
+    if (serverUrl.isEmpty) return const {};
+    try {
+      final db = await SqliteService.getDatabase();
+      final rows = await db.rawQuery(
+        'SELECT system_folder, COUNT(*) AS n FROM $_table '
+        'WHERE server_url = ? GROUP BY system_folder',
+        [serverUrl],
+      );
+      final counts = <String, int>{};
+      for (final row in rows) {
+        final folder = row['system_folder']?.toString() ?? '';
+        if (folder.isEmpty) continue;
+        counts[folder] = int.tryParse(row['n']?.toString() ?? '0') ?? 0;
+      }
+      return counts;
+    } catch (e) {
+      _log.e('RomM catalog counts read failed: server=$serverUrl cause=$e');
+      return const {};
+    }
+  }
+
   /// How many ROMs are catalogued for one system.
   static Future<int> countForSystem({
     required String serverUrl,

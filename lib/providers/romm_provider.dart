@@ -22,6 +22,7 @@ import '../models/system_model.dart';
 import '../repositories/collection_repository.dart';
 import '../repositories/game_repository.dart';
 import '../repositories/romm_repository.dart';
+import '../repositories/romm_catalog_repository.dart';
 import '../repositories/romm_save_map_repository.dart';
 import '../repositories/retro_achievements_repository.dart';
 import '../repositories/scraper_repository.dart';
@@ -192,6 +193,71 @@ class RommProvider extends ChangeNotifier {
     this.coverCache =
         coverCache ??
         RommCoverCache.forService(_service, shouldStop: () => !isConnected);
+  }
+
+  // ── Unified library: catalog summary ────────────────────────────────────
+
+  /// Catalogued ROMs per local system folder for the connected server, read
+  /// once per change rather than on every carousel build. The systems list
+  /// builder is synchronous and runs from event handlers, so what it needs
+  /// has to already be in memory.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote-Only Systems"
+  Map<String, int> _catalogSystemCounts = const {};
+
+  /// When the newest platform walk on the connected server completed, or
+  /// null when none has — the "as of {time}" line in the RomM settings.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
+  DateTime? _catalogAsOf;
+
+  /// Bumped whenever [catalogSystemCounts] or [catalogAsOf] change, so a
+  /// widget can `select` on one int instead of rebuilding on every download
+  /// progress tick this provider also notifies for.
+  int _catalogRevision = 0;
+
+  Map<String, int> get catalogSystemCounts => _catalogSystemCounts;
+  DateTime? get catalogAsOf => _catalogAsOf;
+  int get catalogRevision => _catalogRevision;
+
+  /// Re-reads the catalog summary for the connected server. Called after a
+  /// connection is (re)established, after a refresh writes rows, and after a
+  /// clear; disconnected there is nothing to summarise and the summary
+  /// empties. Never throws — the repository already logs its own failures.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote-Only Systems"
+  Future<void> reloadCatalogSystems() async {
+    if (!isConnected || _serverUrl.isEmpty) {
+      _setCatalogSummary(const {}, null);
+      return;
+    }
+    final url = _serverUrl;
+    final counts = await RommCatalogRepository.countsBySystem(url);
+    final asOf = await RommCatalogRepository.newestRefreshedAt(url);
+    // The server moved (or went away) while the reads were in flight: the
+    // caller for the new one will read again, and these rows are not its.
+    if (url != _serverUrl || !isConnected) return;
+    _setCatalogSummary(counts, asOf);
+  }
+
+  void _setCatalogSummary(Map<String, int> counts, DateTime? asOf) {
+    if (mapEquals(counts, _catalogSystemCounts) && asOf == _catalogAsOf) {
+      return;
+    }
+    _catalogSystemCounts = Map.unmodifiable(counts);
+    _catalogAsOf = asOf;
+    _catalogRevision++;
+    notifyListeners();
+  }
+
+  /// "Clear cached RomM library": drops the connected server's catalog rows
+  /// and its cover files, and empties the summary so the carousel loses its
+  /// remote-only cards at once. The next refresh rebuilds all of it; the
+  /// link map and the local library are untouched.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
+  Future<void> clearCatalog() async {
+    final url = _serverUrl;
+    if (url.isEmpty) return;
+    await RommCatalogRepository.clear(url);
+    await coverCache.clear(url);
+    _setCatalogSummary(const {}, null);
   }
 
   RommConnectionStatus _status = RommConnectionStatus.disconnected;
@@ -912,6 +978,10 @@ class RommProvider extends ChangeNotifier {
       // cover that is already on disk. Idempotent and never throws.
       // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
       unawaited(coverCache.initialize());
+      // The catalog outlives the process; the carousel wants its summary
+      // before any refresh runs, offline included.
+      // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote-Only Systems"
+      unawaited(reloadCatalogSystems());
     } catch (e) {
       _log.e('RomM initialize failed: $e');
       _status = RommConnectionStatus.disconnected;
@@ -1017,10 +1087,13 @@ class RommProvider extends ChangeNotifier {
     // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
     unawaited(coverCache.initialize());
     if (previousServerUrl.isNotEmpty && previousServerUrl != _serverUrl) {
-      // A different server: the old one's covers can never be drawn again.
+      // A different server: the old one's covers can never be drawn again,
+      // and its catalog would list games this server cannot download.
       // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
       unawaited(coverCache.clear(previousServerUrl));
+      unawaited(RommCatalogRepository.clear(previousServerUrl));
     }
+    unawaited(reloadCatalogSystems());
     return null;
   }
 
@@ -1223,10 +1296,15 @@ class RommProvider extends ChangeNotifier {
     bulkSync.cancel();
     await RommRepository.clearConfig();
     if (_serverUrl.isNotEmpty) {
-      // The covers belong to the connection that is going away.
+      // The covers and the catalog belong to the connection that is going
+      // away: a library nothing can download from must not stay on screen.
       // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
       unawaited(coverCache.clear(_serverUrl));
+      unawaited(RommCatalogRepository.clear(_serverUrl));
     }
+    _catalogSystemCounts = const {};
+    _catalogAsOf = null;
+    _catalogRevision++;
     _status = RommConnectionStatus.disconnected;
     _lastError = null;
     _lastErrorKind = null;

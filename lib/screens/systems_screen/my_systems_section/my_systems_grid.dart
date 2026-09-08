@@ -19,6 +19,7 @@ import 'system_card.dart';
 import '../../../providers/sqlite_config_provider.dart';
 import '../../../providers/sqlite_database_provider.dart';
 import '../../../providers/file_provider.dart';
+import '../../../providers/romm_provider.dart';
 import '../../../widgets/system_scan_progress_widget.dart';
 import '../../game_screen/my_games_list.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -94,6 +95,13 @@ class MySystems extends StatelessWidget {
           false, // Maintain application flow by preventing raw hardware back navigation.
       child: Consumer2<SqliteConfigProvider, SqliteDatabaseProvider>(
         builder: (context, configProvider, dbProvider, child) {
+          // The RomM-only cards come and go with the catalog summary and
+          // reachability; select on those two so download progress ticks
+          // (which the same provider notifies for) do not rebuild the grid.
+          // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote-Only Systems"
+          context.select<RommProvider, int>(
+            (romm) => Object.hash(romm.catalogRevision, romm.reachability),
+          );
           // PHASE 1: Blocking Initialization.
           // If a high-priority system scan is active (e.g., first run), show a blocking status.
           if (configProvider.isGlobalScanning) {
@@ -366,9 +374,8 @@ class MySystems extends StatelessWidget {
 
       final selectedSystem = folderName == 'all'
           ? _createAllGamesSystem(context, configProvider.detectedSystems)
-          : configProvider.detectedSystems.firstWhere(
-              (s) => s.folderName == folderName,
-            );
+          : systemForFolder(configProvider, folderName) ??
+                (throw StateError('System not found: $folderName'));
 
       await Future.delayed(const Duration(milliseconds: 50));
 
@@ -545,11 +552,12 @@ class MySystems extends StatelessWidget {
           );
         }
       } else {
-        final systemMeta = configProvider.detectedSystems.firstWhere(
-          (system) => system.folderName == systemInfo.folderName,
-          orElse: () =>
-              throw Exception('System not found: ${systemInfo.folderName}'),
-        );
+        // A RomM-only system has no detected row; the shared resolver falls
+        // through to the full systems list for it.
+        // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote-Only Systems"
+        final systemMeta =
+            systemForFolder(configProvider, systemInfo.folderName) ??
+            (throw Exception('System not found: ${systemInfo.folderName}'));
         final targetScreen = SystemGamesList(
           system: systemMeta,
           fileProvider: fileProvider,

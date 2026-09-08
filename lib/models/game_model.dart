@@ -3,6 +3,8 @@ import 'package:path/path.dart' as path;
 import '../providers/file_provider.dart';
 import '../utils/ra_coverage.dart';
 import 'database_game_model.dart';
+import 'romm_catalog_row.dart';
+import 'system_model.dart';
 
 /// Represents a unified game entity combining metadata, filesystem info, and database state.
 ///
@@ -106,6 +108,27 @@ class GameModel {
   /// UI hint: Whether to display the [romname] as a subtitle in the details view.
   final bool showRomFileNameSubtitle;
 
+  /// RomM's ROM id when this entry came from the RomM catalog, or null for a
+  /// game the library scanned. Set on a remote entry so a download can be
+  /// started for it; a local game keeps null here even when it is linked to
+  /// RomM (the link map owns that relation, not the list).
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entries In The Game Model"
+  final int? rommRomId;
+
+  /// Size of the ROM on the RomM server in bytes, or null when the server did
+  /// not say. Only meaningful on a remote entry — it is what the card shows
+  /// where a local game shows nothing, because the file is not here yet.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entries In The Game Model"
+  final int? remoteSizeBytes;
+
+  /// True for an entry that exists only on the RomM server: nothing local
+  /// backs it, so it cannot be launched, favourited, or collected — it can be
+  /// downloaded. The two halves are both required so that a local game whose
+  /// path is momentarily unknown never reads as remote, and a catalog row that
+  /// somehow gained a path never does either.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entries In The Game Model"
+  bool get isRemote => romPath == null && rommRomId != null;
+
   const GameModel({
     required this.romname,
     required this.realname,
@@ -138,7 +161,52 @@ class GameModel {
     this.titleName,
     this.box2dAspectRatio,
     this.showRomFileNameSubtitle = false,
+    this.rommRomId,
+    this.remoteSizeBytes,
   });
+
+  /// A remote entry: one RomM catalog [row], filed under the local [system]
+  /// its platform resolved to.
+  ///
+  /// [romPath] is deliberately null — nothing local backs the entry, and
+  /// every consumer that needs a file already treats a null path as "not on
+  /// this device" — while [rommRomId] is set, which together make [isRemote]
+  /// true. The name, RA id, genre, release year and size come from the
+  /// catalog; developer, publisher, players and rating are not catalogued and
+  /// stay empty until the game is downloaded and scraped.
+  ///
+  /// [displayName] is the name the list shows, resolved by the caller with
+  /// the same per-system name settings a local game gets (extension and tag
+  /// stripping, filename preference); it defaults to the catalog's display
+  /// name. [showRomFileNameSubtitle] follows the same rule as for a scraped
+  /// local game: on when the shown name is not the filename.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entries In The Game Model"
+  factory GameModel.fromCatalogRow(
+    RommCatalogRow row,
+    SystemModel system, {
+    String? displayName,
+    bool showRomFileNameSubtitle = false,
+  }) => GameModel(
+    romname: row.fsName,
+    realname: row.name,
+    name: displayName ?? row.name,
+    showRomFileNameSubtitle: showRomFileNameSubtitle,
+    year: row.releaseYear ?? '',
+    developer: '',
+    publisher: '',
+    genre: row.primaryGenre ?? '',
+    players: '',
+    rating: 0.0,
+    romPath: null,
+    idRa: row.raId,
+    systemId: system.id,
+    systemFolderName: system.folderName,
+    systemRealName: system.realName,
+    systemShortName: system.shortName,
+    systemRaId: system.raId,
+    rommRomId: row.rommRomId,
+    remoteSizeBytes: row.fsSizeBytes,
+  );
 
   /// Creates a [GameModel] from a JSON metadata map.
   factory GameModel.fromJson(Map<String, dynamic> json) {
@@ -268,6 +336,8 @@ class GameModel {
     String? titleName,
     String? box2dAspectRatio,
     bool? showRomFileNameSubtitle,
+    int? rommRomId,
+    int? remoteSizeBytes,
   }) {
     return GameModel(
       romname: romname ?? this.romname,
@@ -302,6 +372,8 @@ class GameModel {
       box2dAspectRatio: box2dAspectRatio ?? this.box2dAspectRatio,
       showRomFileNameSubtitle:
           showRomFileNameSubtitle ?? this.showRomFileNameSubtitle,
+      rommRomId: rommRomId ?? this.rommRomId,
+      remoteSizeBytes: remoteSizeBytes ?? this.remoteSizeBytes,
     );
   }
 
@@ -571,17 +643,23 @@ class GameModel {
 
   @override
   String toString() {
-    return 'GameModel(romname: $romname, name: $name, year: $formattedYear, system: $systemRealName, cloudSyncEnabled: $cloudSyncEnabled)';
+    return 'GameModel(romname: $romname, name: $name, year: $formattedYear, system: $systemRealName, cloudSyncEnabled: $cloudSyncEnabled, rommRomId: $rommRomId)';
   }
 
+  /// Identity is the filename plus the path, and for a remote entry the RomM
+  /// id in place of the path it does not have: two remote entries with the
+  /// same filename on different platforms (or the same game catalogued twice
+  /// under two servers) must stay two rows in the index map the views key on.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entries In The Game Model"
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
     return other is GameModel &&
         other.romname == romname &&
-        other.romPath == romPath;
+        other.romPath == romPath &&
+        other.rommRomId == rommRomId;
   }
 
   @override
-  int get hashCode => romname.hashCode ^ romPath.hashCode;
+  int get hashCode => Object.hash(romname, romPath, rommRomId);
 }

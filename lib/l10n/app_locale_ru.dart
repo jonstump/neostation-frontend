@@ -1588,4 +1588,34 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommMatchByHashReasonMissing: 'файл не найден',
   AppLocale.rommMatchByHashReasonExtractFailed: 'не удалось открыть архив',
   AppLocale.rommMatchByHashReasonError: 'не удалось прочитать файл',
+  AppLocale.rommShowLibrary: 'Показывать библиотеку RomM в моих системах',
+  AppLocale.rommShowLibrarySubtitle:
+      'Показывает каждую игру с сервера RomM под её системой с отметкой, если её нет на этом устройстве',
+  AppLocale.rommLibraryDefaultScope: 'Область библиотеки по умолчанию',
+  AppLocale.rommLibraryDefaultScopeSubtitle:
+      'С чем открывается список игр: всё на сервере или только загруженные игры',
+  AppLocale.rommCoverCacheSize: 'Размер кэша обложек RomM',
+  AppLocale.rommCoverCacheSizeSubtitle:
+      'Место на диске под обложки RomM, чтобы у удалённых игр были изображения офлайн',
+  AppLocale.rommCoverCacheSizeValue: '{size} МБ',
+  AppLocale.libraryScopeAll: 'Все игры',
+  AppLocale.libraryScopeDownloaded: 'Загруженные',
+  AppLocale.libraryScopeFooter: 'Библиотека: {scope}',
+  AppLocale.libraryScopeToggle: 'Переключить область библиотеки',
+  AppLocale.libraryScopeSwitched: 'Показано: {scope}',
+  AppLocale.libraryOfflineCached:
+      'Офлайн — показана кэшированная библиотека RomM',
+  AppLocale.rommRemoteOnlySystemLabel: 'Только на сервере RomM',
+  AppLocale.rommRefreshLibraryNow: 'Обновить библиотеку RomM сейчас',
+  AppLocale.rommRefreshLibraryRunning: 'Обновление библиотеки RomM…',
+  AppLocale.rommRefreshLibraryDone:
+      'Библиотека RomM обновлена: {count} игр на {platforms} платформах',
+  AppLocale.rommRefreshLibraryFailed: 'Не удалось обновить библиотеку RomM',
+  AppLocale.rommRefreshLibraryUnavailable:
+      'Библиотеку RomM сейчас нельзя обновить',
+  AppLocale.rommClearCachedLibrary: 'Очистить кэш библиотеки RomM',
+  AppLocale.rommClearCachedLibraryDone: 'Кэш библиотеки RomM очищен',
+  AppLocale.rommCatalogAsOf: 'Библиотека на {time}',
+  AppLocale.rommCatalogNeverRefreshed: 'Библиотека ещё не обновлялась',
+  AppLocale.rommRemoteNotDownloaded: 'Не загружено',
 };

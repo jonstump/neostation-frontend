@@ -42,6 +42,7 @@ const String _createId = 'create';
 const String _scrapeId = 'scrape';
 const String _viewModeId = 'view_mode';
 const String _randomId = 'random';
+const String _libraryScopeId = 'library_scope';
 const String _togglePrefix = 'toggle:';
 
 /// Opens the per-game Y menu anchored to [anchorKey]'s widget.
@@ -75,16 +76,24 @@ const String _togglePrefix = 'toggle:';
 /// the vertical action rail. They are grouped below the membership row,
 /// separated from it, and each is omitted when the host has nothing to bind —
 /// the menu is the only route to them for a user without a gamepad.
+///
+/// [onToggleLibraryScope] is the third view-level action: it flips the
+/// unified library between `all` and `downloaded`, the same thing Select + X
+/// does on the pad. Omitted when the feature is off. [onSettings] is null for
+/// an entry that has no per-game settings to open — a remote entry, which
+/// has no local row for them to be keyed to.
+// Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
 Future<void> showGameContextMenu({
   required BuildContext context,
   required List<GameContextMenuTarget> targets,
-  required VoidCallback onSettings,
+  required VoidCallback? onSettings,
   GlobalKey? anchorKey,
   Future<void> Function()? onCreateTarget,
   String? createTargetLabel,
   VoidCallback? onScrape,
   VoidCallback? onViewMode,
   VoidCallback? onRandom,
+  VoidCallback? onToggleLibraryScope,
 }) async {
   assert(
     onCreateTarget == null || createTargetLabel != null,
@@ -110,11 +119,12 @@ Future<void> showGameContextMenu({
   ];
 
   final items = <ContextMenuItem>[
-    ContextMenuItem(
-      id: _settingsId,
-      label: AppLocale.gameSettings.getString(context),
-      icon: Symbols.settings_rounded,
-    ),
+    if (onSettings != null)
+      ContextMenuItem(
+        id: _settingsId,
+        label: AppLocale.gameSettings.getString(context),
+        icon: Symbols.settings_rounded,
+      ),
     if (onScrape != null)
       ContextMenuItem(
         id: _scrapeId,
@@ -137,12 +147,19 @@ Future<void> showGameContextMenu({
         icon: Symbols.grid_view_rounded,
         separatorBefore: true,
       ),
+    if (onToggleLibraryScope != null)
+      ContextMenuItem(
+        id: _libraryScopeId,
+        label: AppLocale.libraryScopeToggle.getString(context),
+        icon: Symbols.cloud_rounded,
+        separatorBefore: onViewMode == null,
+      ),
     if (onRandom != null)
       ContextMenuItem(
         id: _randomId,
         label: AppLocale.randomGame.getString(context),
         icon: Symbols.casino_rounded,
-        separatorBefore: onViewMode == null,
+        separatorBefore: onViewMode == null && onToggleLibraryScope == null,
       ),
   ];
 
@@ -169,7 +186,11 @@ Future<void> showGameContextMenu({
   if (result == null) return;
 
   if (result == _settingsId) {
-    onSettings();
+    onSettings?.call();
+    return;
+  }
+  if (result == _libraryScopeId) {
+    onToggleLibraryScope?.call();
     return;
   }
   if (result == _scrapeId) {

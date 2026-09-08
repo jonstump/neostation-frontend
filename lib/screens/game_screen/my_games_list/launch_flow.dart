@@ -168,6 +168,14 @@ extension _LaunchFlow on _SystemGamesListState {
       return;
     }
 
+    // A remote entry has no file to launch. The download confirmation that
+    // will sit here is the next story's; for now the press is answered.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entries In The Game Model"
+    if (_selectedGame!.isRemote) {
+      _notifyRemoteNotDownloaded();
+      return;
+    }
+
     rebuild(() => _isGameLaunching = true);
 
     // Resolve targeted hardware system for the launch.

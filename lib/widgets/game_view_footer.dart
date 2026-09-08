@@ -6,6 +6,8 @@ import 'package:provider/provider.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/models/game_model.dart';
+import 'package:neostation/models/library_scope.dart';
+import 'package:neostation/widgets/library_scope_pill.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/sync/i_sync_provider.dart';
 import 'package:neostation/widgets/neo_sync_status_icon.dart';
@@ -58,6 +60,15 @@ class GameViewFooter extends StatelessWidget {
   final SystemModel? system;
   final ISyncProvider? syncProvider;
 
+  /// The unified library's scope, shown as a pill with its toggle chord, or
+  /// null to hide it (the feature is off, or the view has no remote entries
+  /// to scope). [libraryOffline] marks the pill while the server is
+  /// unreachable, since an `all` scope then lists the cached catalog.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
+  final LibraryScope? libraryScope;
+  final VoidCallback? onToggleLibraryScope;
+  final bool libraryOffline;
+
   const GameViewFooter({
     super.key,
     required this.game,
@@ -71,6 +82,9 @@ class GameViewFooter extends StatelessWidget {
     this.isFolder = false,
     this.system,
     this.syncProvider,
+    this.libraryScope,
+    this.onToggleLibraryScope,
+    this.libraryOffline = false,
   });
 
   @override
@@ -161,6 +175,17 @@ class GameViewFooter extends StatelessWidget {
                     showGlyphShadow: false,
                   ),
                   SizedBox(width: 8.r),
+                ],
+                // The scope leads the pills: it describes the whole list,
+                // not the selected game, so it sits before anything that does.
+                // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
+                if (libraryScope != null && onToggleLibraryScope != null) ...[
+                  LibraryScopePill(
+                    scope: libraryScope!,
+                    onToggle: onToggleLibraryScope!,
+                    offline: libraryOffline,
+                  ),
+                  SizedBox(width: 6.r),
                 ],
                 if (onToggleMute != null && hasVideo) ...[
                   _MuteHintPill(onToggleMute: onToggleMute!),

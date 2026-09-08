@@ -1567,4 +1567,33 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rommMatchByHashReasonExtractFailed:
       'the archive could not be opened',
   AppLocale.rommMatchByHashReasonError: 'the file could not be read',
+  AppLocale.rommShowLibrary: 'Show RomM library in my systems',
+  AppLocale.rommShowLibrarySubtitle:
+      'List every game the RomM server has under its system, marked when it is not on this device',
+  AppLocale.rommLibraryDefaultScope: 'Default library scope',
+  AppLocale.rommLibraryDefaultScopeSubtitle:
+      'What a game list opens with: everything on the server, or downloaded games only',
+  AppLocale.rommCoverCacheSize: 'RomM cover cache size',
+  AppLocale.rommCoverCacheSizeSubtitle:
+      'Disk space kept for RomM covers so remote games have art offline',
+  AppLocale.rommCoverCacheSizeValue: '{size} MB',
+  AppLocale.libraryScopeAll: 'All games',
+  AppLocale.libraryScopeDownloaded: 'Downloaded',
+  AppLocale.libraryScopeFooter: 'Library: {scope}',
+  AppLocale.libraryScopeToggle: 'Switch library scope',
+  AppLocale.libraryScopeSwitched: 'Showing: {scope}',
+  AppLocale.libraryOfflineCached: 'Offline — showing the cached RomM library',
+  AppLocale.rommRemoteOnlySystemLabel: 'Only on the RomM server',
+  AppLocale.rommRefreshLibraryNow: 'Refresh RomM library now',
+  AppLocale.rommRefreshLibraryRunning: 'Refreshing the RomM library…',
+  AppLocale.rommRefreshLibraryDone:
+      'RomM library refreshed: {count} games on {platforms} platforms',
+  AppLocale.rommRefreshLibraryFailed: 'The RomM library could not be refreshed',
+  AppLocale.rommRefreshLibraryUnavailable:
+      'The RomM library cannot be refreshed right now',
+  AppLocale.rommClearCachedLibrary: 'Clear cached RomM library',
+  AppLocale.rommClearCachedLibraryDone: 'Cached RomM library cleared',
+  AppLocale.rommCatalogAsOf: 'Library as of {time}',
+  AppLocale.rommCatalogNeverRefreshed: 'Library not refreshed yet',
+  AppLocale.rommRemoteNotDownloaded: 'Not downloaded',
 };

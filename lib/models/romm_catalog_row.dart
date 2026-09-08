@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../utils/romm_local_matcher.dart';
 import 'game_model.dart';
 import 'romm_rom.dart';
 import 'system_model.dart';
@@ -176,31 +177,20 @@ class RommCatalogRow {
 
   /// This row as a game the library views can draw, filed under [system].
   ///
-  /// [GameModel.romPath] is deliberately null: nothing local backs the entry,
-  /// and every consumer that needs a file already treats a null path as "not
-  /// on this device". The remote-entry fields the views read
-  /// (`rommRomId`, `remoteSizeBytes`, `isRemote`) arrive with the merge in
-  /// `GameListService`; this helper is the one place that decides how a
-  /// catalog row becomes a game so that merge has nothing to restate.
+  /// The catalog's own display name, unformatted. The merge in
+  /// `GameListService` goes through [GameModel.fromCatalogRow] directly so it
+  /// can hand over the name it resolved with the system's name settings; this
+  /// is the shorthand for callers that have no settings to apply.
   // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Remote Entries In The Game Model"
-  GameModel toGameModel(SystemModel system) => GameModel(
-    romname: fsName,
-    realname: name,
-    name: name,
-    year: releaseYear ?? '',
-    developer: '',
-    publisher: '',
-    genre: primaryGenre ?? '',
-    players: '',
-    rating: 0.0,
-    romPath: null,
-    idRa: raId,
-    systemId: system.id,
-    systemFolderName: system.folderName,
-    systemRealName: system.realName,
-    systemShortName: system.shortName,
-    systemRaId: system.raId,
-  );
+  GameModel toGameModel(SystemModel system) =>
+      GameModel.fromCatalogRow(this, system);
+
+  /// On-disk names a download of this ROM could land under, in match
+  /// priority — the filename half of the equivalence rule, for the hidden-set
+  /// check that decides whether a local file already *is* this row.
+  // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Filename Equivalence Rule"
+  List<String> get localCandidateNames =>
+      RommLocalMatcher.candidateNamesFor(fsName, multiFile: hasMultipleFiles);
 
   static int? _int(Object? value) {
     if (value == null) return null;

@@ -1676,6 +1676,39 @@ mixin AppLocale {
   static const String rommMatchByHashReasonError =
       'romm_match_by_hash_reason_error';
 
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Localized User-Facing Text"
+  static const String rommShowLibrary = 'romm_show_library';
+  static const String rommShowLibrarySubtitle = 'romm_show_library_subtitle';
+  static const String rommLibraryDefaultScope = 'romm_library_default_scope';
+  static const String rommLibraryDefaultScopeSubtitle =
+      'romm_library_default_scope_subtitle';
+  static const String rommCoverCacheSize = 'romm_cover_cache_size';
+  static const String rommCoverCacheSizeSubtitle =
+      'romm_cover_cache_size_subtitle';
+  static const String rommCoverCacheSizeValue = 'romm_cover_cache_size_value';
+  static const String libraryScopeAll = 'library_scope_all';
+  static const String libraryScopeDownloaded = 'library_scope_downloaded';
+  static const String libraryScopeFooter = 'library_scope_footer';
+  static const String libraryScopeToggle = 'library_scope_toggle';
+  static const String libraryScopeSwitched = 'library_scope_switched';
+  static const String libraryOfflineCached = 'library_offline_cached';
+  static const String rommRemoteOnlySystemLabel =
+      'romm_remote_only_system_label';
+  static const String rommRefreshLibraryNow = 'romm_refresh_library_now';
+  static const String rommRefreshLibraryRunning =
+      'romm_refresh_library_running';
+  static const String rommRefreshLibraryDone = 'romm_refresh_library_done';
+  static const String rommRefreshLibraryFailed = 'romm_refresh_library_failed';
+  static const String rommRefreshLibraryUnavailable =
+      'romm_refresh_library_unavailable';
+  static const String rommClearCachedLibrary = 'romm_clear_cached_library';
+  static const String rommClearCachedLibraryDone =
+      'romm_clear_cached_library_done';
+  static const String rommCatalogAsOf = 'romm_catalog_as_of';
+  static const String rommCatalogNeverRefreshed =
+      'romm_catalog_never_refreshed';
+  static const String rommRemoteNotDownloaded = 'romm_remote_not_downloaded';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================
