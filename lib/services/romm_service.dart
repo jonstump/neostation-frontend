@@ -20,6 +20,7 @@ import '../models/romm_rom.dart';
 import '../models/romm_search_result.dart';
 import '../models/romm_server_capabilities.dart';
 import '../models/romm_screenshot.dart';
+import '../utils/log_redaction.dart';
 import 'logger_service.dart';
 
 /// Failure modes a caller needs to tell apart programmatically (the connect
@@ -1968,18 +1969,31 @@ class RommService {
 
   /// [body] trimmed to one short line fit for the log.
   ///
-  /// Credentials are scrubbed centrally by [LoggerService]'s redacting
-  /// printer, so this only has to keep the line readable: whitespace collapsed
-  /// — an HTML error page from a reverse proxy is otherwise dozens of lines —
-  /// and the tail cut, since what identifies the refusal is always at the
-  /// front.
+  /// Whitespace is collapsed — an HTML error page from a reverse proxy is
+  /// otherwise dozens of lines — and the tail cut, since what identifies the
+  /// refusal is always at the front.
+  ///
+  /// [redactSecrets] runs *before* the cut, not after. Credentials are
+  /// otherwise scrubbed centrally by [LoggerService]'s redacting printer, but
+  /// that printer only sees what this returns: truncating first slices a
+  /// secret into a shape none of the patterns match any more — a
+  /// `"token":"…"` whose closing quote fell past the boundary, a JWT cut
+  /// before its third segment — and the printer then writes it out intact
+  /// (issue #189). Redacting here means truncation can only ever shorten text
+  /// that is already clean, and the printer's second pass is a no-op.
+  // Governing: ADR-0019, SPEC-0018 REQ "Maintenance Tasks" (the response body
+  // MUST be logged on failure)
   static String _briefBody(String body) {
-    final text = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final text = redactSecrets(body.replaceAll(RegExp(r'\s+'), ' ')).trim();
     if (text.isEmpty) return '<empty>';
     return text.length <= _maxLoggedBody
         ? text
         : '${text.substring(0, _maxLoggedBody)}...';
   }
+
+  /// Exposes [_briefBody] so a test can pin what actually reaches the log.
+  @visibleForTesting
+  static String debugBriefBody(String body) => _briefBody(body);
 
   /// Returns full detail for a single ROM.
   Future<RommRom> getRom(int id) async {
