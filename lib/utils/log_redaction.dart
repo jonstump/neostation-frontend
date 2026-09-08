@@ -20,8 +20,18 @@ const String redactedPlaceholder = '<redacted>';
 /// rest are generic names used across the HTTP clients.
 ///
 /// This list is only ever matched after a literal `?` or `&`, which is what
-/// makes a name as short as `y` safe here. See [_sensitiveFieldNames].
-const List<String> _sensitiveQueryParams = ['y', ..._sensitiveFieldNames];
+/// makes a name as short as `y` or `sid` safe here. See
+/// [_sensitiveFieldNames]. `authorization` and `sid` are anchored-only for the
+/// same reason the header and cookie cases get their own patterns below: as a
+/// bare field name `authorization` needs the scheme-aware handling
+/// [_authorizationFieldPattern] gives it, and `sid` is too short to match
+/// safely inside prose.
+const List<String> _sensitiveQueryParams = [
+  'y',
+  'authorization',
+  'sid',
+  ..._sensitiveFieldNames,
+];
 
 /// Field names whose values are credentials in JSON / map / `toString` output.
 ///
@@ -34,6 +44,12 @@ const List<String> _sensitiveFieldNames = [
   'access_token',
   'refresh_token',
   'auth',
+  // `secret` alone does not cover this one: the pattern below requires the
+  // name to be followed immediately by `:` or `=`, and `client_secret_id`
+  // continues past `secret` with `_id`. A wildcard suffix would fix the whole
+  // family at once but would also eat `keyboard:`, `keys:` and `passing:`, so
+  // suffixed credential names are listed out instead. Issue #195.
+  'client_secret_id',
   'devid',
   'devpassword',
   'key',
@@ -86,6 +102,50 @@ final RegExp _authHeaderPattern = RegExp(
   caseSensitive: false,
 );
 
+/// `Authorization: <anything>` for the values [_authHeaderPattern] does not
+/// cover: a scheme we never named (`MAC`, `Digest`, a vendor scheme) or a bare
+/// token with no scheme at all. `auth` is already in [_sensitiveFieldNames],
+/// but that pattern needs the name to be followed straight away by `:`/`=`,
+/// so `authorization:` slipped past it entirely. Issue #195.
+///
+/// The `Bearer|Basic|Token` lookahead hands those three back to
+/// [_authHeaderPattern], which keeps the scheme visible in the log — strictly
+/// more diagnostic than blanking the whole value, and it leaves that pattern's
+/// existing output untouched.
+///
+/// The lookahead sits *inside* the first group, immediately after the `:`/`=`.
+/// Placed after the trailing `\\s*` it was useless: the quantifier simply gave
+/// the space back, the lookahead then saw ` Bearer` instead of `Bearer`, and
+/// the whole `Bearer abc` value was swallowed scheme and all.
+///
+/// The unquoted value stops at `&` and `<`/`>` for the same reasons
+/// [_jsonFieldPattern] does: so it cannot run past the end of a query
+/// parameter, and so it cannot re-match an already-substituted
+/// [redactedPlaceholder]. It must also not *start* on whitespace, or the same
+/// backtracking lets a lone space stand in for the value and redaction stops
+/// being idempotent.
+final RegExp _authorizationFieldPattern = RegExp(
+  '(["\']?authorization["\']?\\s*[:=]'
+  '(?!\\s*(?:Bearer|Basic|Token)[\\s"\'])'
+  '\\s*)'
+  '(["\'][^"\']*["\']|[^\\s,&<>\\r\\n}\\]][^,&<>\\r\\n}\\]]*)',
+  caseSensitive: false,
+);
+
+/// `Set-Cookie: sid=abc; Path=/; HttpOnly` — keeps the cookie name and its
+/// attributes, drops the value, the same trade [_queryParamPattern] makes.
+///
+/// A session cookie is a bearer credential in every way that matters, and a
+/// response-header dump is exactly the kind of text an HTTP exception carries.
+/// Only the first cookie of a comma-joined header is covered; stopping at the
+/// comma is what keeps this from swallowing the neighbouring fields of a
+/// single-line `Map.toString()`. Issue #195.
+final RegExp _setCookiePattern = RegExp(
+  '(set-cookie\\s*[:=]\\s*["\']?[A-Za-z0-9_.\\-]+=)'
+  '([^;,\\s"\'<>\\]}]+)',
+  caseSensitive: false,
+);
+
 /// A JWT anywhere in the text, including ones we never named.
 final RegExp _jwtPattern = RegExp(
   r'eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]+',
@@ -108,6 +168,14 @@ String redactSecrets(String text) {
   );
   result = result.replaceAllMapped(
     _jsonFieldPattern,
+    (m) => '${m[1]}$redactedPlaceholder',
+  );
+  result = result.replaceAllMapped(
+    _setCookiePattern,
+    (m) => '${m[1]}$redactedPlaceholder',
+  );
+  result = result.replaceAllMapped(
+    _authorizationFieldPattern,
     (m) => '${m[1]}$redactedPlaceholder',
   );
   result = result.replaceAllMapped(

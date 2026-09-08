@@ -1592,4 +1592,20 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.rommLoadCollectionsFailedDetail:
       'Impossibile caricare le raccolte: {error}',
   AppLocale.rommLoadRomsFailedDetail: 'Impossibile caricare le ROM: {error}',
+  AppLocale.neoSyncNetworkError: 'Errore di rete: {error}',
+  AppLocale.neoSyncServerError: 'Errore del server: {error}',
+  AppLocale.neoSyncLoginFailed: 'Accesso non riuscito',
+  AppLocale.neoSyncRegistrationFailed: 'Registrazione non riuscita',
+  AppLocale.neoSyncVerificationFailed: 'Verifica non riuscita',
+  AppLocale.neoSyncResendVerificationFailed:
+      'Invio dell’e-mail di verifica non riuscito',
+  AppLocale.neoSyncPasswordResetEmailFailed:
+      'Invio dell’e-mail di reimpostazione della password non riuscito',
+  AppLocale.neoSyncPasswordResetFailed:
+      'Reimpostazione della password non riuscita',
+  AppLocale.neoSyncCheckoutFailed:
+      'Creazione della sessione di pagamento non riuscita',
+  AppLocale.neoSyncCancelSubscriptionFailed:
+      'Annullamento dell’abbonamento non riuscito',
+  AppLocale.neoSyncPlansFailed: 'Caricamento dei piani non riuscito',
 };

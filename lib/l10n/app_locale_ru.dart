@@ -1556,4 +1556,17 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommLoadCollectionsFailedDetail:
       'Не удалось загрузить коллекции: {error}',
   AppLocale.rommLoadRomsFailedDetail: 'Не удалось загрузить ROM: {error}',
+  AppLocale.neoSyncNetworkError: 'Ошибка сети: {error}',
+  AppLocale.neoSyncServerError: 'Ошибка сервера: {error}',
+  AppLocale.neoSyncLoginFailed: 'Не удалось войти',
+  AppLocale.neoSyncRegistrationFailed: 'Не удалось зарегистрироваться',
+  AppLocale.neoSyncVerificationFailed: 'Не удалось подтвердить',
+  AppLocale.neoSyncResendVerificationFailed:
+      'Не удалось отправить письмо с подтверждением',
+  AppLocale.neoSyncPasswordResetEmailFailed:
+      'Не удалось отправить письмо для сброса пароля',
+  AppLocale.neoSyncPasswordResetFailed: 'Не удалось сбросить пароль',
+  AppLocale.neoSyncCheckoutFailed: 'Не удалось создать сессию оплаты',
+  AppLocale.neoSyncCancelSubscriptionFailed: 'Не удалось отменить подписку',
+  AppLocale.neoSyncPlansFailed: 'Не удалось загрузить тарифы',
 };

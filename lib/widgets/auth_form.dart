@@ -8,6 +8,7 @@ import 'package:neostation/services/game_service.dart'
 import 'package:neostation/services/neosync/auth_service.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/utils/login_form_selection.dart';
+import 'package:neostation/utils/neo_sync_error_message.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/screens/app_screen.dart' show AppNavigation;
@@ -267,7 +268,10 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
         // next launch would contradict.
         _message = result['tokenPersisted'] == false
             ? AppLocale.credentialStorageUnavailable.getString(context)
-            : result['message'];
+            // Never `result['message']`: on a failure that is the server's own
+            // text or an exception string, and this box renders it on the
+            // sign-in screen. Issue #195.
+            : neoSyncResultMessage(context, result);
       });
 
       // Handle email not verified case (can come as error from backend)
@@ -321,7 +325,7 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
       );
 
       setState(() {
-        _message = result['message'];
+        _message = neoSyncResultMessage(context, result);
       });
 
       if (result['success']) {
@@ -335,7 +339,7 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
           widget.onLoginSuccess();
         } else {
           setState(() {
-            _message = loginResult['message'];
+            _message = neoSyncResultMessage(context, loginResult);
           });
         }
       }
@@ -370,7 +374,7 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
         _emailController.text.trim(),
       );
       setState(() {
-        _message = result['message'];
+        _message = neoSyncResultMessage(context, result);
       });
 
       // If email was sent successfully, start polling for verification
@@ -463,7 +467,8 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
         } else {
           setState(() {
             _message =
-                '${AppLocale.emailVerifiedLoginFailed.getString(context)}: ${loginResult['message']}';
+                '${AppLocale.emailVerifiedLoginFailed.getString(context)}: '
+                '${neoSyncResultMessage(context, loginResult)}';
             _showEmailVerification = false;
           });
         }
@@ -517,7 +522,7 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
       );
 
       setState(() {
-        _message = result['message'];
+        _message = neoSyncResultMessage(context, result);
         _isLoading = false;
       });
 
@@ -566,7 +571,7 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
       );
 
       setState(() {
-        _message = result['message'];
+        _message = neoSyncResultMessage(context, result);
         _isLoading = false;
       });
 

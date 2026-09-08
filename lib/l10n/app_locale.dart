@@ -1625,6 +1625,27 @@ mixin AppLocale {
       'romm_load_collections_failed_detail';
   static const String rommLoadRomsFailedDetail = 'romm_load_roms_failed_detail';
 
+  // NeoSync auth/billing failures. The service layer has no BuildContext, so it
+  // records one of these keys (plus the redacted detail) and the widget layer
+  // resolves it — see lib/utils/neo_sync_error_message.dart.
+  static const String neoSyncNetworkError = 'neo_sync_network_error';
+  static const String neoSyncServerError = 'neo_sync_server_error';
+  static const String neoSyncLoginFailed = 'neo_sync_login_failed';
+  static const String neoSyncRegistrationFailed =
+      'neo_sync_registration_failed';
+  static const String neoSyncVerificationFailed =
+      'neo_sync_verification_failed';
+  static const String neoSyncResendVerificationFailed =
+      'neo_sync_resend_verification_failed';
+  static const String neoSyncPasswordResetEmailFailed =
+      'neo_sync_password_reset_email_failed';
+  static const String neoSyncPasswordResetFailed =
+      'neo_sync_password_reset_failed';
+  static const String neoSyncCheckoutFailed = 'neo_sync_checkout_failed';
+  static const String neoSyncCancelSubscriptionFailed =
+      'neo_sync_cancel_subscription_failed';
+  static const String neoSyncPlansFailed = 'neo_sync_plans_failed';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================

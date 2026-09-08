@@ -11,6 +11,7 @@ import 'package:neostation/services/neosync/billing_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/centered_scroll_controller.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
+import 'package:neostation/utils/neo_sync_error_message.dart';
 import 'package:neostation/services/gamepad/gamepad_navigation_manager.dart';
 import 'package:neostation/widgets/core_footer.dart';
 import '../../app_screen.dart';
@@ -190,7 +191,7 @@ class _PlanSelectionViewState extends State<PlanSelectionView> {
             _selectedPlanIndex = 0;
           }
         } else {
-          _errorMessage = result['message'];
+          _errorMessage = neoSyncResultMessage(context, result);
         }
       });
     }

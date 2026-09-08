@@ -1606,4 +1606,20 @@ const Map<String, dynamic> appLocaleDe = {
       'Sammlungen konnten nicht geladen werden: {error}',
   AppLocale.rommLoadRomsFailedDetail:
       'ROMs konnten nicht geladen werden: {error}',
+  AppLocale.neoSyncNetworkError: 'Netzwerkfehler: {error}',
+  AppLocale.neoSyncServerError: 'Serverfehler: {error}',
+  AppLocale.neoSyncLoginFailed: 'Anmeldung fehlgeschlagen',
+  AppLocale.neoSyncRegistrationFailed: 'Registrierung fehlgeschlagen',
+  AppLocale.neoSyncVerificationFailed: 'Verifizierung fehlgeschlagen',
+  AppLocale.neoSyncResendVerificationFailed:
+      'Verifizierungs-E-Mail konnte nicht gesendet werden',
+  AppLocale.neoSyncPasswordResetEmailFailed:
+      'E-Mail zum Zurücksetzen des Passworts konnte nicht gesendet werden',
+  AppLocale.neoSyncPasswordResetFailed:
+      'Passwort konnte nicht zurückgesetzt werden',
+  AppLocale.neoSyncCheckoutFailed:
+      'Bezahlvorgang konnte nicht gestartet werden',
+  AppLocale.neoSyncCancelSubscriptionFailed:
+      'Abonnement konnte nicht gekündigt werden',
+  AppLocale.neoSyncPlansFailed: 'Abonnementpläne konnten nicht geladen werden',
 };

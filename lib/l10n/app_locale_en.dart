@@ -1536,4 +1536,17 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rommLoadCollectionsFailedDetail:
       'Failed to load collections: {error}',
   AppLocale.rommLoadRomsFailedDetail: 'Failed to load ROMs: {error}',
+  AppLocale.neoSyncNetworkError: 'Network error: {error}',
+  AppLocale.neoSyncServerError: 'Server error: {error}',
+  AppLocale.neoSyncLoginFailed: 'Login failed',
+  AppLocale.neoSyncRegistrationFailed: 'Registration failed',
+  AppLocale.neoSyncVerificationFailed: 'Verification failed',
+  AppLocale.neoSyncResendVerificationFailed:
+      'Failed to send verification email',
+  AppLocale.neoSyncPasswordResetEmailFailed:
+      'Failed to send password reset email',
+  AppLocale.neoSyncPasswordResetFailed: 'Failed to reset password',
+  AppLocale.neoSyncCheckoutFailed: 'Failed to create checkout session',
+  AppLocale.neoSyncCancelSubscriptionFailed: 'Failed to cancel subscription',
+  AppLocale.neoSyncPlansFailed: 'Failed to fetch plans',
 };

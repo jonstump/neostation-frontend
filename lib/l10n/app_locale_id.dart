@@ -1552,4 +1552,16 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommLoadPlatformsFailedDetail: 'Gagal memuat platform: {error}',
   AppLocale.rommLoadCollectionsFailedDetail: 'Gagal memuat koleksi: {error}',
   AppLocale.rommLoadRomsFailedDetail: 'Gagal memuat ROM: {error}',
+  AppLocale.neoSyncNetworkError: 'Kesalahan jaringan: {error}',
+  AppLocale.neoSyncServerError: 'Kesalahan server: {error}',
+  AppLocale.neoSyncLoginFailed: 'Gagal masuk',
+  AppLocale.neoSyncRegistrationFailed: 'Gagal mendaftar',
+  AppLocale.neoSyncVerificationFailed: 'Verifikasi gagal',
+  AppLocale.neoSyncResendVerificationFailed: 'Gagal mengirim email verifikasi',
+  AppLocale.neoSyncPasswordResetEmailFailed:
+      'Gagal mengirim email atur ulang kata sandi',
+  AppLocale.neoSyncPasswordResetFailed: 'Gagal mengatur ulang kata sandi',
+  AppLocale.neoSyncCheckoutFailed: 'Gagal membuat sesi pembayaran',
+  AppLocale.neoSyncCancelSubscriptionFailed: 'Gagal membatalkan langganan',
+  AppLocale.neoSyncPlansFailed: 'Gagal memuat paket',
 };
