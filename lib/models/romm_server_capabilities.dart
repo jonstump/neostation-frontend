@@ -143,27 +143,51 @@ enum RommFeatureSupport { supported, unsupported, unknown }
 /// one entry here and one guard at its call site. Every entry carries the RomM
 /// commit or release it was verified against, because a wrong threshold hides
 /// a feature the server actually has.
+///
+/// "Verified" means one thing here, and a comment may claim no more than what
+/// was actually done: the route was looked for in the `rommapp/romm` source at
+/// the release tags either side of the threshold, and found absent below it
+/// and present at it. A commit date is **not** evidence — `randomRom` was
+/// recorded at 4.8.0 and shipped in 5.2.0, and `playSessions` was recorded at
+/// 4.8.0 from a commit that never reached that release (issue #136). Both were
+/// reasoned from dates rather than trees.
 // Governing: ADR-0010, SPEC-0010 REQ "Feature Threshold Table"
 enum RommFeature {
   /// `POST /api/play-sessions` — playtime ingest.
   ///
-  /// Verified: play-session ingest landed on `rommapp/romm` master 2026-03-22,
-  /// after the 4.7.0 tag and before 4.8.0, so 4.8.0 is the first release that
-  /// carries it (confirmed against the 4.8.0 release notes).
-  playSessions(RommServerVersion(4, 8, 0)),
+  /// Verified against the `rommapp/romm` release trees: `backend/endpoints/
+  /// play_sessions.py` and `backend/models/play_session.py` are **absent** at
+  /// the 4.8.0 and 4.8.1 tags — whose `backend/main.py` includes no
+  /// play-sessions router — and present from 4.9.0-alpha.1 onward, so 4.9.0
+  /// (2026-06-12) is the first release that answers this endpoint.
+  ///
+  /// This entry read 4.8.0 until issue #136. The commit that added the ingest
+  /// (`75302ed5`, "Add play session ingest for game time tracking") is dated
+  /// 2026-03-22, before the 4.8.0 tag of 2026-04-01, which is what the old
+  /// comment reasoned from — but it is not an ancestor of 4.8.0 (GitHub's
+  /// compare reports `diverged`), only of 4.9.0. A commit date is not a
+  /// release; that is the same trap that put `randomRom` at 4.8.0.
+  playSessions(RommServerVersion(4, 9, 0)),
 
   /// `POST /api/client-tokens/exchange` — the pairing-code exchange behind
   /// ADR-0007's pair-code and QR login.
   ///
-  /// Verified: client API tokens with QR pairing shipped in commit e0b25fbc
-  /// (2026-03-11), released in RomM 4.8.0.
+  /// Verified against the release trees: `backend/endpoints/client_tokens.py`
+  /// does not exist at the 4.7.0 tag and carries `@router.post("/exchange")`
+  /// at 4.8.0, so 4.8.0 (2026-04-01) is the first release that answers it. The
+  /// work is commit `e0b25fbc`, "feat(client-tokens): add client API tokens
+  /// with QR pairing flow" (2026-03-10 — this comment previously said the
+  /// 11th).
   clientTokenExchange(RommServerVersion(4, 8, 0)),
 
   /// `GET /api/roms?…` lookup by file hash, used by ADR-0011's local-ROM
   /// linking.
   ///
-  /// Verified: `/api/roms/by-hash` first shipped in commit 8a66ac81
-  /// (2025-12-12), released in RomM 4.5.0.
+  /// Verified against the release trees: no `by-hash` route exists anywhere
+  /// under `backend/endpoints/` at the 4.4.1 tag, and `backend/endpoints/
+  /// rom.py` at 4.5.0 declares `"/by-hash"` → `get_rom_by_hash`, so 4.5.0
+  /// (2025-12-29) is the first release that answers it. The work is commit
+  /// `8a66ac81`, "[ROMM-2762] Add get_rom_by_hash endpoint" (2025-12-12).
   romLookupByHash(RommServerVersion(4, 5, 0)),
 
   /// `PUT /api/roms/{id}/props` taking a *bare* `RomUserData` body plus the
@@ -172,16 +196,28 @@ enum RommFeature {
   /// than a missing field, so NeoStation gates on the release instead of
   /// carrying two encoders.
   ///
-  /// Verified: the bare-body props endpoint is part of the RomM 4.9.0 release
-  /// (published 2026-06-12), the threshold recorded in ADR-0013.
+  /// Verified against the release trees, and the shape flips exactly here:
+  /// `update_rom_user` in `backend/endpoints/roms/__init__.py` takes
+  /// `payload: Annotated[RomUserUpdatePayload, Body()]` — the wrapper, with
+  /// `update_last_played` / `remove_last_played` *inside* the body — at both
+  /// 4.8.0 and 4.8.1, and takes `data: Annotated[RomUserData, Body()]` with
+  /// the two flags as `Query` parameters at 4.9.0. The change is commit
+  /// `ef35ecae`, "props rom updte endpoint" (2026-04-04), after the 4.8.1 tag
+  /// (2026-04-03), so 4.9.0 (2026-06-12) is the first release with the bare
+  /// body. Matches the threshold recorded in ADR-0013.
   // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Props Update Call"
   romPropsBareBody(RommServerVersion(4, 9, 0)),
 
   /// `POST|DELETE /api/collections/{id}/roms` — adding and removing ROMs from
   /// a collection by id, which is how the favourites collection is edited.
   ///
-  /// Verified: the collection rom add/remove endpoints are part of the RomM
-  /// 4.9.0 release (published 2026-06-12), the threshold recorded in ADR-0013.
+  /// Verified against the release trees: `backend/endpoints/collections.py`
+  /// has no `/{id}/roms` route at 4.7.0, 4.8.0 or 4.8.1, and declares both
+  /// `@protected_route(router.post, "/{id}/roms", [Scope.COLLECTIONS_WRITE])`
+  /// and the matching `router.delete` at 4.9.0. They were added by commit
+  /// `2ecefa3d`, "Fix race condition in collection and favorite rom membership
+  /// updates" (2026-04-14), after the 4.8.1 tag — so 4.9.0 (2026-06-12) is the
+  /// first release that answers them. Matches ADR-0013 and ADR-0015.
   // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Favourites Collection"
   collectionRomsAddRemove(RommServerVersion(4, 9, 0)),
 
@@ -189,10 +225,15 @@ enum RommFeature {
   /// `is_public` flags and `GET /api/screenshots/{id}/content`, which the
   /// details card's RomM gallery strip reads.
   ///
-  /// Verified: RomM 5.0.0 is the release that added the gallery flags and the
-  /// screenshot content route to `backend/endpoints/screenshots.py`; earlier
-  /// servers accept the upload (`POST /api/screenshots?rom_id=`, 3.10+) but
-  /// carry no gallery to read back. Recorded in ADR-0016.
+  /// Verified against the release trees: `backend/endpoints/screenshots.py`
+  /// is 90 lines at 4.9.0 and 4.9.2 with a single `POST ""` upload route and
+  /// no mention of `is_gallery`, `is_public` or `/{id}/content`; at 5.0.0 it
+  /// is 209 lines and declares `router.get, "/{id}/content"` plus the
+  /// `is_gallery` / `is_public` flags. Those first appear at the
+  /// 5.0.0-alpha.1 tag, so 5.0.0 (2026-07-15) is the first release that
+  /// serves the gallery. Earlier servers still accept the upload
+  /// (`POST /api/screenshots?rom_id=`) but carry no gallery to read back.
+  /// Recorded in ADR-0016.
   // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Gallery Strip"
   screenshotGallery(RommServerVersion(5, 0, 0)),
 

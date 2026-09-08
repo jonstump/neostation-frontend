@@ -257,7 +257,9 @@ void main() {
     });
 
     test('a new server keeps the playtime scopes', () async {
-      serve(heartbeat: () => json(200, heartbeatBody('4.8.0')));
+      // 4.9.0, not 4.8.0: that is the release play-session ingest shipped in
+      // (issue #136).
+      serve(heartbeat: () => json(200, heartbeatBody('4.9.0')));
       final service = configured();
 
       await service.authenticate();
