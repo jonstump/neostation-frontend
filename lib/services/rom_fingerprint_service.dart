@@ -73,12 +73,16 @@ class RomFingerprintService {
     bool keepsArchivesPacked = false,
     FingerprintEffort effort = FingerprintEffort.full,
   }) async {
-    // Under cheapOnly only a zip costs any I/O (two short reads of its tail);
-    // every other path is answered from its extension alone — a disc image
-    // is parked, the rest deferred — and an isolate hop would cost more than
-    // the answer. Those go straight to [fingerprint].
-    if (effort == FingerprintEffort.cheapOnly &&
-        !romPath.toLowerCase().endsWith('.zip')) {
+    // Under cheapOnly only a zip that is going to be opened costs any I/O
+    // (two short reads of its tail); every other path is answered from its
+    // extension and the packed flag alone — a disc image is parked, the rest
+    // deferred — and an isolate hop would cost more than the answer. Those
+    // go straight to [fingerprint].
+    if (answersInline(
+      romPath,
+      keepsArchivesPacked: keepsArchivesPacked,
+      effort: effort,
+    )) {
       return fingerprint(
         romPath,
         systemFolderName,
@@ -97,6 +101,25 @@ class RomFingerprintService {
       'token': RootIsolateToken.instance,
     });
   }
+
+  /// Whether [computeInBackground] answers [romPath] on the calling isolate.
+  ///
+  /// True exactly when [fingerprint] would do no I/O for it: under
+  /// [FingerprintEffort.cheapOnly], anything but a zip that is going to be
+  /// opened — a bare ROM, a disc image, a `.7z`, or a `.zip` on a
+  /// [keepsArchivesPacked] system, whose archive *is* the ROM and would take
+  /// a full read to hash. Spawning an isolate for a fixed answer costs more
+  /// than the answer; on an arcade library it would be one spawn per set on
+  /// every connect, since a deferred answer is never persisted.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Concurrency Safety"
+  @visibleForTesting
+  static bool answersInline(
+    String romPath, {
+    required bool keepsArchivesPacked,
+    required FingerprintEffort effort,
+  }) =>
+      effort == FingerprintEffort.cheapOnly &&
+      (keepsArchivesPacked || !romPath.toLowerCase().endsWith('.zip'));
 
   static Future<({RomFingerprint? fingerprint, String? skipReason})>
   _computeIsolate(Map<String, dynamic> params) async {

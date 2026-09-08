@@ -1585,14 +1585,66 @@ void main() {
         expect(fingerprints.writes, hasLength(1));
         expect(fingerprints.writes.single.romPath, '/roms/snes/Game (U).zip');
         expect(summary.fingerprintsComputed, 1);
+        // Deferred is its own count: nothing was parked, so the line must
+        // not read as N files skipped on every pass over a bare-ROM library.
         expect(
-          summary.fingerprintsSkipped,
+          summary.fingerprintsDeferred,
           RommLibraryLinker.fingerprintCapPerPass + 10,
         );
+        expect(summary.fingerprintsSkipped, 0);
         expect(summary.fingerprintsRemaining, 0);
         expect(map.romIdFor('snes', 'Game (U).zip'), 10);
+        expect(
+          _summaryLines().single,
+          allOf([
+            contains('0 fingerprints skipped'),
+            contains(
+              '${RommLibraryLinker.fingerprintCapPerPass + 10} '
+              'fingerprints deferred',
+            ),
+          ]),
+        );
       },
     );
+
+    test('a group the server sent no hashes for is not fingerprinted, and '
+        'the skip is logged once with the system', () async {
+      // Nothing computed now could match this pass, so the zip-tail reads
+      // are not spent; the games stay unfingerprinted for a pass that has
+      // hashes to match against.
+      final server = serverWith([
+        _rom(10, platformId: 1, fsName: 'Game (USA).zip'),
+      ]);
+      final map = _FakeMap();
+      final fingerprints = _FakeFingerprints()
+        ..answers['/roms/snes/Game (U).zip'] = (
+          fingerprint: _fp('deadbeef'),
+          skipReason: null,
+        );
+
+      final summary = await _linker(server, map, [
+        _game('Game (U).zip', 'snes'),
+        _game('Other.zip', 'snes'),
+      ], fingerprints: fingerprints).run();
+
+      expect(fingerprints.asked, isEmpty, reason: 'nothing could match');
+      expect(fingerprints.saved, isEmpty);
+      expect(map.rows, isEmpty);
+      expect(summary.fingerprintsComputed, 0);
+      expect(summary.fingerprintsSkipped, 0);
+      expect(summary.fingerprintsDeferred, 0);
+      expect(summary.fingerprintsRemaining, 0);
+      final info = LoggerService.instance
+          .takeCapture()
+          .where((l) => l.startsWith('i|'))
+          .toList();
+      expect(info, hasLength(2), reason: 'the skip line, then the summary');
+      expect(
+        info.first,
+        allOf([contains('"snes"'), contains('no hashes'), contains('2 files')]),
+      );
+      expect(info.last, startsWith('i|RomM link pass complete'));
+    });
 
     test(
       'the per-pass cap is respected and the remainder is reported',
@@ -1775,6 +1827,7 @@ void main() {
       expect(summary.hashRowsAdded, 5);
       expect(summary.fingerprintsComputed, 12);
       expect(summary.fingerprintsSkipped, 0);
+      expect(summary.fingerprintsDeferred, 0);
       expect(summary.hashMismatches, 0);
       final lines = _summaryLines();
       expect(lines, hasLength(1));
@@ -1785,6 +1838,7 @@ void main() {
           contains('5 hash rows added'),
           contains('12 fingerprints computed'),
           contains('0 fingerprints skipped'),
+          contains('0 fingerprints deferred'),
           contains('0 fingerprints left for the next pass'),
           contains('0 hash mismatches'),
         ]),

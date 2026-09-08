@@ -183,12 +183,18 @@ class RommLinkPassSummary {
   // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Pass Summary And Observability"
   final int fingerprintsComputed;
 
-  /// Fingerprint attempts that produced nothing: files parked with a skip
-  /// reason (persisted, never re-attempted) plus files whose fingerprint
-  /// would have cost a full read (not parked — nothing is wrong with them —
-  /// and answered without I/O).
+  /// Files parked with a skip reason this run: persisted, never
+  /// re-attempted by a later pass.
   // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Pass Summary And Observability"
   final int fingerprintsSkipped;
+
+  /// Files whose cheap fingerprint would have cost a full read — a bare ROM,
+  /// an arcade set — so nothing was read for them. Not parked (nothing is
+  /// wrong with them), not persisted and not charged to the cap, so a
+  /// bare-ROM library reports the same count on every pass; kept apart from
+  /// [fingerprintsSkipped] so that line does not read as N files parked.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Pass Summary And Observability"
+  final int fingerprintsDeferred;
 
   /// Unlinked games still without a fingerprint when the per-pass cap (or the
   /// stop signal) ended the fingerprint step; the next pass picks them up.
@@ -218,6 +224,7 @@ class RommLinkPassSummary {
     this.hashRowsAdded = 0,
     this.fingerprintsComputed = 0,
     this.fingerprintsSkipped = 0,
+    this.fingerprintsDeferred = 0,
     this.fingerprintsRemaining = 0,
     this.hashMismatches = 0,
   });
@@ -467,6 +474,7 @@ class RommLibraryLinker {
       '${s.conflictCount} conflicting, '
       '${s.fingerprintsComputed} fingerprints computed, '
       '${s.fingerprintsSkipped} fingerprints skipped, '
+      '${s.fingerprintsDeferred} fingerprints deferred, '
       '${s.fingerprintsRemaining} fingerprints left for the next pass, '
       '${s.hashMismatches} hash mismatches, '
       '${s.elapsed.inMilliseconds} ms',
@@ -557,6 +565,7 @@ class RommLinkStage {
   var _groupsSkipped = 0;
   var _fingerprintsComputed = 0;
   var _fingerprintsSkipped = 0;
+  var _fingerprintsDeferred = 0;
   var _fingerprintsRemaining = 0;
   var _hashMismatches = 0;
   var _fingerprintBudget = RommLibraryLinker.fingerprintCapPerPass;
@@ -734,7 +743,11 @@ class RommLinkStage {
       for (final game in _index.gamesUnder(aliases))
         if (!claims.containsKey(game)) game,
     ];
-    await _fingerprintUnlinked(candidates);
+    await _fingerprintUnlinked(
+      folder,
+      candidates,
+      hasHashes: hashes.isNotEmpty,
+    );
     final hashCount = _matchByHash(candidates, hashes, entries, entryGames);
     if (entries.isEmpty) return;
 
@@ -762,23 +775,45 @@ class RommLinkStage {
   /// the outcomes in one batch.
   ///
   /// Skipped altogether when the pass was built without the two halves of the
-  /// step. Polls the stop check before each file: a disconnect mid-step ends
-  /// the reads after the current file, persists what was computed, and the
-  /// group still matches on what it has — no server round trip is involved
-  /// past this point. A file whose fingerprint would cost a full read
-  /// (`deferredCostly`) is neither parked nor charged to the cap: nothing was
-  /// read for it and nothing is wrong with it.
+  /// step, and for a group whose hash index is empty ([hasHashes] false: the
+  /// server sent no hashes for it, or its platform failed and they were
+  /// discarded) — nothing computed now could match this pass, so up to a
+  /// cap's worth of zip-tail reads is not spent on it; the games stay
+  /// unfingerprinted and a later pass with hashes picks them up. Polls the
+  /// stop check before each file: a disconnect mid-step ends the reads after
+  /// the current file, persists what was computed, and the group still
+  /// matches on what it has — no server round trip is involved past this
+  /// point. A file whose fingerprint would cost a full read
+  /// (`deferredCostly`) is counted as deferred, not skipped: it is neither
+  /// parked nor charged to the cap, since nothing was read for it and
+  /// nothing is wrong with it.
   // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Local Fingerprints In The Link Index"
   // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Concurrency Safety"
   // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Error Handling Standards"
-  Future<void> _fingerprintUnlinked(List<_LocalGame> candidates) async {
+  Future<void> _fingerprintUnlinked(
+    String folder,
+    List<_LocalGame> candidates, {
+    required bool hasHashes,
+  }) async {
     final fingerprintCheap = _linker._fingerprintCheap;
     final save = _linker._saveFingerprints;
     if (fingerprintCheap == null || save == null) return;
 
+    if (!hasHashes) {
+      final pending = candidates.where(_wantsFingerprint).length;
+      if (pending > 0) {
+        _linker._log.i(
+          'RomM hash stage skipped fingerprinting for system "$folder": '
+          'the server sent no hashes for it, so $pending files were left '
+          'for a later pass',
+        );
+      }
+      return;
+    }
+
     final writes = <RomFingerprintWrite>[];
     for (final game in candidates) {
-      if (game.linked || game.crc32 != null || game.skipped) continue;
+      if (!_wantsFingerprint(game)) continue;
       if (_fingerprintBudget <= 0) {
         _fingerprintsRemaining++;
         continue;
@@ -820,9 +855,12 @@ class RommLinkStage {
         ));
         continue;
       }
-      _fingerprintsSkipped++;
       final reason = attempt.skipReason ?? RomFingerprintService.skipError;
-      if (reason == RomFingerprintService.deferredCostly) continue;
+      if (reason == RomFingerprintService.deferredCostly) {
+        _fingerprintsDeferred++;
+        continue;
+      }
+      _fingerprintsSkipped++;
       _fingerprintBudget--;
       game.skipped = true;
       writes.add((
@@ -835,6 +873,11 @@ class RommLinkStage {
     }
     if (writes.isNotEmpty) await save(writes);
   }
+
+  /// An unlinked game the step would fingerprint: it has no crc32 yet and
+  /// is not parked.
+  static bool _wantsFingerprint(_LocalGame game) =>
+      !game.linked && game.crc32 == null && !game.skipped;
 
   /// Matches [candidates] by crc32 against the group's hash index and
   /// appends the rows to write to [entries]; returns how many it appended.
@@ -941,6 +984,7 @@ class RommLinkStage {
       hashRowsAdded: _hashAdded,
       fingerprintsComputed: _fingerprintsComputed,
       fingerprintsSkipped: _fingerprintsSkipped,
+      fingerprintsDeferred: _fingerprintsDeferred,
       fingerprintsRemaining: _fingerprintsRemaining,
       hashMismatches: _hashMismatches,
     );
