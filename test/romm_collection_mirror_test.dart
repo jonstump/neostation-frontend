@@ -97,7 +97,11 @@ class _Fixture {
   Future<Map<String, Object?>?> findMirror(String server, String id) async {
     for (final entry in rows.entries) {
       if (entry.value.serverUrl == server && entry.value.collectionId == id) {
-        return {'id': entry.key, 'name': entry.value.name};
+        return {
+          'id': entry.key,
+          'name': entry.value.name,
+          'romm_origin': entry.value.origin,
+        };
       }
     }
     return null;
@@ -278,18 +282,61 @@ void main() {
     );
 
     // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Column"
-    test('adopting an existing collection sets origin romm', () async {
+    test('adopting a collection with no origin sets origin romm', () async {
       f.serverRoms.add(_rom(1));
       f.localPaths[1] = '/r/1.sfc';
       final first = await f.mirror().run(_bestOfSnes, serverUrl: _server);
-      // A row whose origin was never written (pre-v167) or that a push once
-      // claimed: the mirror that adopts it becomes its writer.
-      f.rows[first.collectionId]!.origin = 'local';
+      // A row whose origin was never written (pre-v167): the mirror that
+      // adopts it becomes its writer.
+      f.rows[first.collectionId]!.origin = null;
 
       final second = await f.mirror().run(_bestOfSnes, serverUrl: _server);
 
       expect(second.created, isFalse);
+      expect(second.skippedLocalOrigin, isFalse);
       expect(f.rows[first.collectionId]!.origin, 'romm');
+    });
+
+    // Scenario: the user pushed this collection (origin `local`) and later
+    // syncs the RomM collection it became. One writer per collection: the
+    // mirror MUST NOT flip it to `romm` or replace its membership.
+    // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Column"
+    test('a collection the user pushed is left alone, unfetched', () async {
+      f.serverRoms.add(_rom(1));
+      f.localPaths[1] = '/r/1.sfc';
+      final first = await f.mirror().run(_bestOfSnes, serverUrl: _server);
+      final row = f.rows[first.collectionId]!;
+      row.origin = 'local';
+      row.members.add('/r/by-hand.sfc');
+      // The server has since changed; none of it must reach the row.
+      f.serverRoms.add(_rom(2));
+      f.localPaths[2] = '/r/2.sfc';
+      f.fetchedOffsets.clear();
+      f.replaceCalls = 0;
+      // Restart the capture so only the second run's lines are read back.
+      LoggerService.instance.startCapture();
+
+      final second = await f.mirror().run(_bestOfSnes, serverUrl: _server);
+
+      expect(second.skippedLocalOrigin, isTrue);
+      expect(second.collectionId, first.collectionId);
+      expect(second.created, isFalse);
+      expect(second.wroteMembership, isFalse);
+      expect(second.added, 0);
+      expect(second.addedRomPaths, isEmpty);
+      expect(row.origin, 'local', reason: 'not flipped');
+      expect(row.members, {'/r/1.sfc', '/r/by-hand.sfc'}, reason: 'untouched');
+      expect(f.replaceCalls, 0);
+      expect(f.fetchedOffsets, isEmpty, reason: 'declined before any page');
+      expect(f.rows.length, 1, reason: 'no second collection');
+      final lines = LoggerService.instance
+          .takeCapture()
+          .where((l) => l.startsWith('i|RomM collection mirror'))
+          .toList();
+      expect(lines, hasLength(2), reason: 'the skip line and the summary');
+      expect(lines[0], contains('reason=local_origin'));
+      expect(lines[1], startsWith('i|RomM collection mirror skipped: '));
+      expect(lines[1], contains('skipped_local_origin=true'));
     });
 
     test('a hand-added member is removed', () async {
@@ -662,6 +709,7 @@ void main() {
         'unresolved=1',
         'cancelled=false',
         'failed=false',
+        'skipped_local_origin=false',
         'elapsed_ms=',
       ]) {
         expect(line, contains(field));

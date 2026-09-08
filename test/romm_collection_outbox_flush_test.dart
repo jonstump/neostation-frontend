@@ -18,11 +18,14 @@ import 'package:neostation/services/romm_service.dart';
 import 'database_test_helper.dart';
 import 'multipart_test_helper.dart';
 
-/// The collection outbox flush through a scripted RomM: one request per
-/// dirty aspect, add/remove diff on 4.9.0+ against the last pushed set and a
-/// full replace below it, artwork upload or removal, remote delete, the 404
-/// that unlinks, the failures that keep rows, the disconnect that stops the
-/// run — and the provider running it after the play-state flush.
+/// The collection outbox flush through a scripted RomM: one PUT per dirty
+/// collection that always carries `rom_ids` (the scripted server answers
+/// 422 without it, as RomM does on every version) — the resolved members
+/// when they are dirty, the last pushed baseline otherwise — an add/remove
+/// diff on 4.9.0+ for a members-only change with a baseline and a full
+/// replace below it, artwork upload or removal, remote delete, the 404 that
+/// unlinks, the failures that keep rows, the disconnect that stops the run
+/// — and the provider running it after the play-state flush.
 ///
 /// Governing: ADR-0015 (collections push), SPEC-0015 REQ "Follow-Up
 /// Pushes", REQ "Delete", REQ "Error Handling Standards"
@@ -64,6 +67,10 @@ void main() {
   /// (the flush then replaces membership in full); with one, 4.9.0+ answers
   /// the add/remove route. [scopes] is what `/api/users/me` reports the key
   /// holds; null leaves every group unknown.
+  ///
+  /// Whatever [respond] would say, a `PUT /api/collections/{id}` without
+  /// `rom_ids` is a 422: RomM declares the field required on every
+  /// version, so a rename or artwork push that leaves it out never lands.
   Future<void> serve(
     Future<http.Response> Function(http.Request) respond, {
     String? version,
@@ -86,6 +93,19 @@ void main() {
               'oauth_scopes': ?scopes,
             });
           default:
+            if (request.method == 'PUT' &&
+                RegExp(r'^/api/collections/\d+$').hasMatch(request.url.path) &&
+                !MultipartBody.of(request).fields.containsKey('rom_ids')) {
+              return json(422, {
+                'detail': [
+                  {
+                    'loc': ['body', 'rom_ids'],
+                    'msg': 'field required',
+                    'type': 'value_error.missing',
+                  },
+                ],
+              });
+            }
             return await respond(request);
         }
       }),
@@ -191,10 +211,11 @@ void main() {
     await helper.tearDown();
   });
 
-  group('one request per dirty aspect', () {
+  group('one PUT per collection, rom_ids on every one', () {
     // Scenario: offline edits — two games added and a rename while
-    // disconnected, one name update and one membership update after.
-    test('a rename and two added members are one PUT and one add', () async {
+    // disconnected — are one PUT carrying the name and the resolved
+    // members, even on a server with the add/remove route.
+    test('a rename and two added members are one PUT', () async {
       await link('zelda.smc', 42);
       await link('mario.smc', 43);
       await pushed('c1', name: 'JRPGs', members: [zeldaPath, marioPath]);
@@ -212,19 +233,86 @@ void main() {
       final summary = await flush();
 
       expect(summary, (pushed: 1, dropped: 0, kept: 0));
-      final sent = calls();
-      expect(sent, hasLength(2));
-      expect(sent[0].method, 'PUT');
-      expect(sent[0].url.path, '/api/collections/30');
-      expect(MultipartBody.of(sent[0]).fields, {'name': 'JRPGs'});
-      expect(sent[1].method, 'POST');
-      expect(sent[1].url.path, '/api/collections/30/roms');
-      expect(jsonDecode(sent[1].body), {
-        'rom_ids': [42, 43],
+      final put = calls().single;
+      expect(put.method, 'PUT');
+      expect(put.url.path, '/api/collections/30');
+      expect(MultipartBody.of(put).fields, {
+        'name': 'JRPGs',
+        'rom_ids': '[42,43]',
       });
       expect(await RommCollectionOutboxRepository.pendingCount(), 0);
       final row = (await RommCollectionOutboxRepository.get('c1'))!;
       expect(row.lastPushedRomIds, {42, 43}, reason: 'the new baseline');
+    });
+
+    // Scenario: rename only — the PUT repeats what the server holds, not
+    // what the library holds, so a RomM-side membership edit is not what
+    // the rename overwrites (and the members are not re-resolved).
+    test('a rename alone carries the last pushed baseline', () async {
+      await link('zelda.smc', 42);
+      await link('mario.smc', 43);
+      await pushed('c1', name: 'JRPGs', members: [zeldaPath]);
+      await RommCollectionOutboxRepository.recordPushedRomIds(
+        'c1',
+        const [42, 43],
+        rommServerUrl: server,
+        rommCollectionId: '30',
+      );
+      await RommCollectionOutboxService.queue('c1', name: true);
+      await serve(happyServer, version: '5.0.0');
+
+      final summary = await flush();
+
+      expect(summary, (pushed: 1, dropped: 0, kept: 0));
+      final put = calls().single;
+      expect(put.method, 'PUT');
+      expect(MultipartBody.of(put).fields, {
+        'name': 'JRPGs',
+        'rom_ids': '[42,43]',
+      });
+      expect(await RommCollectionOutboxRepository.pendingCount(), 0);
+      final row = (await RommCollectionOutboxRepository.get('c1'))!;
+      expect(row.lastPushedRomIds, {42, 43}, reason: 'baseline unchanged');
+    });
+
+    test('an artwork change alone carries the last pushed baseline', () async {
+      final image = File('${tmp.path}/c1.png')..writeAsBytesSync(const [7]);
+      await link('zelda.smc', 42);
+      await pushed('c1', imagePath: image.path, members: [zeldaPath]);
+      await RommCollectionOutboxRepository.recordPushedRomIds(
+        'c1',
+        const [42, 43],
+        rommServerUrl: server,
+        rommCollectionId: '30',
+      );
+      await RommCollectionOutboxService.queue('c1', artwork: true);
+      await serve(happyServer, version: '5.0.0');
+
+      await flush();
+
+      final put = calls().single;
+      expect(put.method, 'PUT');
+      final form = MultipartBody.of(put);
+      expect(form.fields, {'rom_ids': '[42,43]'});
+      expect(form.files.keys, ['artwork']);
+      expect(form.files['artwork']!.bytes, [7]);
+      expect(await RommCollectionOutboxRepository.pendingCount(), 0);
+    });
+
+    test('a rename with no baseline carries the resolved members', () async {
+      await link('zelda.smc', 42);
+      await pushed('c1', name: 'JRPGs', members: [zeldaPath, marioPath]);
+      await RommCollectionOutboxService.queue('c1', name: true);
+      await serve(happyServer, version: '5.0.0');
+
+      await flush();
+
+      expect(MultipartBody.of(calls().single).fields, {
+        'name': 'JRPGs',
+        'rom_ids': '[42]',
+      });
+      final row = (await RommCollectionOutboxRepository.get('c1'))!;
+      expect(row.lastPushedRomIds, {42}, reason: 'seeded by the PUT');
     });
 
     test('removed members go out as one DELETE against the baseline', () async {
@@ -249,6 +337,8 @@ void main() {
       expect(jsonDecode(sent.single.body), {
         'rom_ids': [43],
       });
+      final row = (await RommCollectionOutboxRepository.get('c1'))!;
+      expect(row.lastPushedRomIds, {42});
     });
 
     test('an add and a remove in one edit are two diff calls', () async {
@@ -343,7 +433,7 @@ void main() {
       expect(put.url.path, '/api/collections/30');
       expect(put.url.queryParameters, isEmpty);
       final form = MultipartBody.of(put);
-      expect(form.fields, isEmpty);
+      expect(form.fields, {'rom_ids': '[]'}, reason: 'no members, no baseline');
       expect(form.files['artwork']!.filename, 'c1.png');
       expect(form.files['artwork']!.bytes, [1, 2, 3, 4]);
     });
@@ -358,10 +448,12 @@ void main() {
       final put = calls().single;
       expect(put.method, 'PUT');
       expect(put.url.queryParameters, {'remove_cover': 'true'});
-      expect(MultipartBody.of(put).files, isEmpty);
+      final form = MultipartBody.of(put);
+      expect(form.fields, {'rom_ids': '[]'});
+      expect(form.files, isEmpty);
     });
 
-    test('everything dirty is three requests, name first', () async {
+    test('everything dirty is one PUT carrying all of it', () async {
       final image = File('${tmp.path}/c1.png')..writeAsBytesSync(const [9]);
       await link('zelda.smc', 42);
       await pushed('c1', imagePath: image.path, members: [zeldaPath]);
@@ -376,12 +468,14 @@ void main() {
       final summary = await flush();
 
       expect(summary.pushed, 1);
-      final sent = calls();
-      expect(sent, hasLength(3));
-      expect(MultipartBody.of(sent[0]).fields, {'name': 'RPGs'});
-      expect(MultipartBody.of(sent[1]).files.keys, ['artwork']);
-      expect(MultipartBody.of(sent[2]).fields, {'rom_ids': '[42]'});
+      final put = calls().single;
+      expect(put.method, 'PUT');
+      final form = MultipartBody.of(put);
+      expect(form.fields, {'name': 'RPGs', 'rom_ids': '[42]'});
+      expect(form.files.keys, ['artwork']);
       expect(await RommCollectionOutboxRepository.pendingCount(), 0);
+      final row = (await RommCollectionOutboxRepository.get('c1'))!;
+      expect(row.lastPushedRomIds, {42});
     });
 
     test('an edit made during the push stays queued', () async {
@@ -577,23 +671,46 @@ void main() {
       expect(await RommCollectionOutboxRepository.pendingCount(), 1);
     });
 
-    test('a partial success clears only what landed', () async {
+    test('a failed PUT keeps every aspect it carried', () async {
       await link('zelda.smc', 42);
       await pushed('c1', members: [zeldaPath]);
       await RommCollectionOutboxService.queue('c1', name: true, members: true);
-      await serve((request) async {
-        final form = MultipartBody.of(request);
-        return form.fields.containsKey('rom_ids')
-            ? http.Response('boom', 500)
-            : json(200, {'id': 30});
-      });
+      await serve((_) async => http.Response('boom', 500));
 
       final summary = await flush();
 
       expect(summary.kept, 1);
       final row = (await RommCollectionOutboxRepository.listDirty()).single;
-      expect(row.nameDirty, isFalse, reason: 'the rename landed');
-      expect(row.membersDirty, isTrue, reason: 'the members did not');
+      expect(row.nameDirty, isTrue);
+      expect(row.membersDirty, isTrue);
+      expect(row.lastPushedRomIds, isNull, reason: 'nothing landed');
+    });
+
+    test('a diff whose remove fails keeps the members dirty', () async {
+      await link('zelda.smc', 42);
+      await link('mario.smc', 43);
+      await pushed('c1', members: [marioPath]);
+      await RommCollectionOutboxRepository.recordPushedRomIds(
+        'c1',
+        const [42],
+        rommServerUrl: server,
+        rommCollectionId: '30',
+      );
+      await RommCollectionOutboxService.queue('c1', members: true);
+      await serve(
+        (request) async => request.method == 'DELETE'
+            ? http.Response('boom', 500)
+            : json(200, {'id': 30}),
+        version: '5.0.0',
+      );
+
+      final summary = await flush();
+
+      expect(summary.kept, 1);
+      expect(calls().map((r) => r.method), ['POST', 'DELETE']);
+      final row = (await RommCollectionOutboxRepository.listDirty()).single;
+      expect(row.membersDirty, isTrue);
+      expect(row.lastPushedRomIds, {42}, reason: 'baseline until confirmed');
     });
   });
 

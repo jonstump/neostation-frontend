@@ -10,8 +10,10 @@ import 'package:neostation/services/romm_service.dart';
 import 'multipart_test_helper.dart';
 
 /// The five collection write calls behind ADR-0015: exact multipart and JSON
-/// shapes, the below-4.9.0 full-replace fallback, the scope gate that must
-/// produce no request at all, and the duplicate-name 500.
+/// shapes, `rom_ids` on every PUT (the scripted server answers 422 without
+/// it, as RomM does on every version), the below-4.9.0 full-replace
+/// fallback, the scope gate that must produce no request at all, and the
+/// duplicate-name 500 told apart from any other.
 ///
 /// Governing: ADR-0015 (collections push), SPEC-0015 REQ "Collection Write
 /// Calls", REQ "Error Handling Standards"
@@ -27,12 +29,17 @@ void main() {
   );
 
   /// A RomM on [version] whose collection routes answer [collectionStatus]
-  /// (create answers [createStatus]) and whose `GET /api/collections/{id}`
-  /// reports [currentRomIds] as members.
+  /// (create answers [createStatus] with [createBody]) and whose
+  /// `GET /api/collections/{id}` reports [currentRomIds] as members.
+  ///
+  /// Like the real one, a `PUT /api/collections/{id}` without `rom_ids` is
+  /// a 422 whatever else it carries: RomM declares the field required on
+  /// every version, so no rename or artwork change can go out without it.
   void serve({
     String version = '5.0.0',
     int collectionStatus = 200,
     int createStatus = 201,
+    String? createBody,
     List<int> currentRomIds = const [],
   }) {
     RommService.debugUseHttpClient(
@@ -49,6 +56,13 @@ void main() {
         }
         if (path == '/api/users/me') return json(200, {'username': 'jon'});
         if (path == '/api/collections' && request.method == 'POST') {
+          if (createBody != null) {
+            return http.Response(
+              createBody,
+              createStatus,
+              headers: const {'content-type': 'application/json'},
+            );
+          }
           return json(createStatus, {
             'id': 77,
             'name': 'RPGs',
@@ -64,6 +78,18 @@ void main() {
               'rom_ids': currentRomIds,
             });
           }
+          if (request.method == 'PUT' &&
+              !MultipartBody.of(request).fields.containsKey('rom_ids')) {
+            return json(422, {
+              'detail': [
+                {
+                  'loc': ['body', 'rom_ids'],
+                  'msg': 'field required',
+                  'type': 'value_error.missing',
+                },
+              ],
+            });
+          }
           return http.Response('', collectionStatus);
         }
         return http.Response('not found', 404);
@@ -75,12 +101,14 @@ void main() {
     String version = '5.0.0',
     int collectionStatus = 200,
     int createStatus = 201,
+    String? createBody,
     List<int> currentRomIds = const [],
   }) async {
     serve(
       version: version,
       collectionStatus: collectionStatus,
       createStatus: createStatus,
+      createBody: createBody,
       currentRomIds: currentRomIds,
     );
     final service = RommService()
@@ -187,16 +215,76 @@ void main() {
       expect(requests, isEmpty);
     });
 
-    test('a 500 is the duplicate-name kind, with the name in it', () async {
-      final service = await connected(createStatus: 500);
+    // RomM's CollectionAlreadyExistsException is a 500 whose detail names
+    // the collection.
+    test(
+      'a 500 whose detail names the collection is the duplicate-name kind',
+      () async {
+        final service = await connected(
+          createStatus: 500,
+          createBody: jsonEncode({'detail': 'Collection RPGs already exists'}),
+        );
+
+        await expectLater(
+          service.createCollection('RPGs'),
+          throwsA(
+            isA<RommException>()
+                .having((e) => e.kind, 'kind', RommErrorKind.alreadyExists)
+                .having((e) => e.statusCode, 'statusCode', 500)
+                .having((e) => e.message, 'message', contains('name="RPGs"')),
+          ),
+        );
+      },
+    );
+
+    test('a 500 whose detail says "already exists" is the same kind', () async {
+      final service = await connected(
+        createStatus: 500,
+        createBody: jsonEncode({'detail': 'already exists'}),
+      );
+
+      await expectLater(
+        service.createCollection('RPGs'),
+        throwsA(
+          isA<RommException>().having(
+            (e) => e.kind,
+            'kind',
+            RommErrorKind.alreadyExists,
+          ),
+        ),
+      );
+    });
+
+    // A database outage is a 500 too, and must not tell the user to pick
+    // another name.
+    test('any other 500 stays the generic kind', () async {
+      final service = await connected(
+        createStatus: 500,
+        createBody: jsonEncode({'detail': 'Internal Server Error'}),
+      );
 
       await expectLater(
         service.createCollection('RPGs'),
         throwsA(
           isA<RommException>()
-              .having((e) => e.kind, 'kind', RommErrorKind.alreadyExists)
+              .having((e) => e.kind, 'kind', RommErrorKind.other)
               .having((e) => e.statusCode, 'statusCode', 500)
               .having((e) => e.message, 'message', contains('name="RPGs"')),
+        ),
+      );
+    });
+
+    test('a bare 500 with no body stays the generic kind', () async {
+      final service = await connected(createStatus: 500, createBody: '');
+
+      await expectLater(
+        service.createCollection('RPGs'),
+        throwsA(
+          isA<RommException>().having(
+            (e) => e.kind,
+            'kind',
+            RommErrorKind.other,
+          ),
         ),
       );
     });
@@ -233,17 +321,20 @@ void main() {
   });
 
   group('updateCollection', () {
-    test('a rename is one multipart PUT carrying only the name', () async {
+    test('a rename is one multipart PUT with the name and rom_ids', () async {
       final service = await connected();
 
-      expect(await service.updateCollection(77, name: 'JRPGs'), isTrue);
+      expect(
+        await service.updateCollection(77, name: 'JRPGs', romIds: [1, 2]),
+        isTrue,
+      );
 
       final request = requests.single;
       expect(request.method, 'PUT');
       expect(request.url.path, '/api/collections/77');
       expect(request.url.queryParameters, isEmpty);
       final form = MultipartBody.of(request);
-      expect(form.fields, {'name': 'JRPGs'});
+      expect(form.fields, {'name': 'JRPGs', 'rom_ids': '[1,2]'});
       expect(form.files, isEmpty);
     });
 
@@ -264,13 +355,17 @@ void main() {
       expect(MultipartBody.of(requests.single).fields, {'rom_ids': '[]'});
     });
 
-    test('artwork is the file part, nothing else', () async {
+    test('artwork is the file part beside rom_ids', () async {
       final service = await connected();
 
-      await service.updateCollection(77, artworkPath: artwork.path);
+      await service.updateCollection(
+        77,
+        romIds: [4],
+        artworkPath: artwork.path,
+      );
 
       final form = MultipartBody.of(requests.single);
-      expect(form.fields, isEmpty);
+      expect(form.fields, {'rom_ids': '[4]'});
       expect(form.files.keys, ['artwork']);
       expect(form.files['artwork']!.bytes, artwork.readAsBytesSync());
     });
@@ -278,30 +373,27 @@ void main() {
     test('removeArtwork is the remove_cover query flag', () async {
       final service = await connected();
 
-      await service.updateCollection(77, removeArtwork: true);
+      await service.updateCollection(77, romIds: [4], removeArtwork: true);
 
       final request = requests.single;
       expect(request.method, 'PUT');
       expect(request.url.queryParameters, {'remove_cover': 'true'});
-      expect(MultipartBody.of(request).fields, isEmpty);
-    });
-
-    test('nothing to send means no request', () async {
-      final service = await connected();
-      expect(await service.updateCollection(77), isFalse);
-      expect(requests, isEmpty);
+      expect(MultipartBody.of(request).fields, {'rom_ids': '[4]'});
     });
 
     test('a denied scope stops it without a request', () async {
       final service = await deniedCollectionsWrite();
-      expect(await service.updateCollection(77, name: 'x'), isFalse);
+      expect(
+        await service.updateCollection(77, name: 'x', romIds: const []),
+        isFalse,
+      );
       expect(requests, isEmpty);
     });
 
     test('a 404 throws with the collection id and status', () async {
       final service = await connected(collectionStatus: 404);
       await expectLater(
-        service.updateCollection(77, name: 'x'),
+        service.updateCollection(77, name: 'x', romIds: const []),
         throwsA(
           isA<RommException>()
               .having((e) => e.statusCode, 'statusCode', 404)

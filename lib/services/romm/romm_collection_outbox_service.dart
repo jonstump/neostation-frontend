@@ -124,16 +124,20 @@ class RommCollectionOutboxService {
   /// Pushes every dirty collection to RomM through [service], oldest change
   /// first.
   ///
-  /// Per row, in order: one name update ([RommService.updateCollection]
-  /// with `name`) when the name is dirty, one artwork update (`artwork`, or
+  /// Per row: **one** `PUT` ([RommService.updateCollection]) carrying every
+  /// dirty aspect — `name` when the name is dirty, `artwork` (or
   /// `remove_cover` when the collection has no image any more) when the
-  /// artwork is dirty, and one membership push when the members are dirty —
-  /// an add/remove diff against the row's last pushed set on a server that
-  /// answers [RommFeature.collectionRomsAddRemove] (4.9.0+) and has a
-  /// baseline, a full `rom_ids` replace otherwise. A row flagged
-  /// `delete_remote` gets one [RommService.deleteCollection] instead. Each
-  /// confirmed aspect is cleared as it lands, so a partial failure retries
-  /// only what failed.
+  /// artwork is dirty — and always `rom_ids`, which RomM requires on every
+  /// PUT: the resolved current members when the members are dirty, else
+  /// the row's `last_pushed_rom_ids` baseline (what the server holds), else
+  /// the resolved members. The one exception is a members-only change on a
+  /// server that answers [RommFeature.collectionRomsAddRemove] (4.9.0+)
+  /// with a baseline to diff against: that goes out as an add/remove diff,
+  /// which leaves a RomM-side membership edit alone where a replace would
+  /// overwrite it. A row flagged `delete_remote` gets one
+  /// [RommService.deleteCollection] instead. The aspects a confirmed
+  /// request carried are cleared together, and the baseline is refreshed
+  /// after any request that carried members.
   ///
   /// Rows that can never succeed are dropped rather than retried forever:
   /// a collection the server no longer has (404 — its provenance and origin
@@ -278,9 +282,11 @@ class RommCollectionOutboxService {
     return _RowOutcome.pushed;
   }
 
-  /// The push half of the flush: name, artwork, then membership, each
-  /// cleared as the server confirms it. Throws [RommException] out to
-  /// [flush], which decides what a status means for the row.
+  /// The push half of the flush: the diff for a members-only change on a
+  /// server with the add/remove route, one combined PUT otherwise, the
+  /// aspects it carried cleared once the server confirms. Throws
+  /// [RommException] out to [flush], which decides what a status means for
+  /// the row.
   // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Follow-Up Pushes", REQ "Error Handling Standards"
   static Future<_RowOutcome> _pushRow(
     RommService service,
@@ -311,93 +317,114 @@ class RommCollectionOutboxService {
       return _RowOutcome.dropped;
     }
 
-    var gated = false;
+    final baseline = row.lastPushedRomIds;
+    final aspectsBesideMembers = row.nameDirty || row.artworkDirty;
 
-    if (row.nameDirty) {
-      final ok = await service.updateCollection(rommId, name: collection.name);
-      if (ok) {
-        await RommCollectionOutboxRepository.clearDirty(
-          row.collectionId,
-          name: true,
-          unlessChangedSince: row.updatedAt,
-        );
-      } else {
-        gated = true;
+    // The diff only for a members-only change with a baseline on a server
+    // that has the route: a PUT for a name or image must carry `rom_ids`
+    // anyway, so a members change riding along costs nothing extra there,
+    // and a replace with the resolved members is what that PUT sends.
+    if (row.membersDirty &&
+        !aspectsBesideMembers &&
+        baseline != null &&
+        service.supports(RommFeature.collectionRomsAddRemove) ==
+            RommFeatureSupport.supported) {
+      final members = await resolveMemberRomIds(row.collectionId);
+      final add = members.romIds.difference(baseline);
+      final remove = baseline.difference(members.romIds);
+      var confirmed = true;
+      if (add.isNotEmpty) {
+        confirmed = await service.addCollectionRoms(rommId, add) && confirmed;
       }
+      if (confirmed && remove.isNotEmpty) {
+        confirmed = await service.removeCollectionRoms(rommId, remove);
+      }
+      if (!confirmed) return _kept(row, rommId);
+      await _confirmMembers(row, collection, rommId, members);
+      await RommCollectionOutboxRepository.clearDirty(
+        row.collectionId,
+        members: true,
+        unlessChangedSince: row.updatedAt,
+      );
+      return _RowOutcome.pushed;
     }
 
+    // Everything else is one PUT. `rom_ids` is required by the server on
+    // every PUT, so a rename or an image change carries the members too:
+    // the resolved set when they are dirty (the edit the row is for), the
+    // last pushed set otherwise (what the server holds, so nothing changes),
+    // and the resolved set again when there is no baseline to repeat.
+    final RommCollectionMemberIds members;
+    if (row.membersDirty || baseline == null) {
+      members = await resolveMemberRomIds(row.collectionId);
+    } else {
+      members = (romIds: baseline, unlinked: 0);
+    }
+
+    String? artworkPath;
+    var removeArtwork = false;
     if (row.artworkDirty) {
       final imagePath = collection.imagePath;
-      final hasImage = imagePath != null && File(imagePath).existsSync();
-      final ok = hasImage
-          ? await service.updateCollection(rommId, artworkPath: imagePath)
-          : await service.updateCollection(rommId, removeArtwork: true);
-      if (ok) {
-        await RommCollectionOutboxRepository.clearDirty(
-          row.collectionId,
-          artwork: true,
-          unlessChangedSince: row.updatedAt,
-        );
+      if (imagePath != null && File(imagePath).existsSync()) {
+        artworkPath = imagePath;
       } else {
-        gated = true;
+        removeArtwork = true;
       }
     }
 
-    if (row.membersDirty) {
-      final members = await resolveMemberRomIds(row.collectionId);
-      final baseline = row.lastPushedRomIds;
-      final canDiff =
-          baseline != null &&
-          service.supports(RommFeature.collectionRomsAddRemove) ==
-              RommFeatureSupport.supported;
-      final bool ok;
-      if (canDiff) {
-        final add = members.romIds.difference(baseline);
-        final remove = baseline.difference(members.romIds);
-        var confirmed = true;
-        if (add.isNotEmpty) {
-          confirmed = await service.addCollectionRoms(rommId, add) && confirmed;
-        }
-        if (confirmed && remove.isNotEmpty) {
-          confirmed = await service.removeCollectionRoms(rommId, remove);
-        }
-        ok = confirmed;
-      } else {
-        ok = await service.updateCollection(rommId, romIds: members.romIds);
-      }
-      if (ok) {
-        await RommCollectionOutboxRepository.recordPushedRomIds(
-          row.collectionId,
-          members.romIds,
-          rommServerUrl: collection.rommServerUrl,
-          rommCollectionId: collection.rommCollectionId,
-        );
-        await RommCollectionOutboxRepository.clearDirty(
-          row.collectionId,
-          members: true,
-          unlessChangedSince: row.updatedAt,
-        );
-        if (members.unlinked > 0) {
-          _log.i(
-            'RomM collection members pushed: collection=${row.collectionId} '
-            'romm_id=$rommId linked=${members.romIds.length} '
-            'unlinked=${members.unlinked}',
-          );
-        }
-      } else {
-        gated = true;
-      }
-    }
-
-    if (gated) {
-      // The service already logged which gate, once per connection.
-      _log.i(
-        'RomM collection row kept: collection=${row.collectionId} '
-        'romm_id=$rommId reason=gated',
-      );
-      return _RowOutcome.kept;
-    }
+    final ok = await service.updateCollection(
+      rommId,
+      romIds: members.romIds,
+      name: row.nameDirty ? collection.name : null,
+      artworkPath: artworkPath,
+      removeArtwork: removeArtwork,
+    );
+    if (!ok) return _kept(row, rommId);
+    await _confirmMembers(row, collection, rommId, members);
+    await RommCollectionOutboxRepository.clearDirty(
+      row.collectionId,
+      name: row.nameDirty,
+      artwork: row.artworkDirty,
+      members: row.membersDirty,
+      unlessChangedSince: row.updatedAt,
+    );
     return _RowOutcome.pushed;
+  }
+
+  /// After a confirmed request that carried members: the baseline is what
+  /// the server holds now, and a push that left unlinked members behind
+  /// says so once.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Follow-Up Pushes"
+  static Future<void> _confirmMembers(
+    RommCollectionOutboxRow row,
+    CollectionModel collection,
+    int rommId,
+    RommCollectionMemberIds members,
+  ) async {
+    await RommCollectionOutboxRepository.recordPushedRomIds(
+      row.collectionId,
+      members.romIds,
+      rommServerUrl: collection.rommServerUrl,
+      rommCollectionId: collection.rommCollectionId,
+    );
+    if (members.unlinked > 0) {
+      _log.i(
+        'RomM collection members pushed: collection=${row.collectionId} '
+        'romm_id=$rommId linked=${members.romIds.length} '
+        'unlinked=${members.unlinked}',
+      );
+    }
+  }
+
+  /// A row the service declined to send: the scope group is denied, and
+  /// the service already logged which gate, once per connection.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Follow-Up Pushes", REQ "Error Handling Standards"
+  static _RowOutcome _kept(RommCollectionOutboxRow row, int rommId) {
+    _log.i(
+      'RomM collection row kept: collection=${row.collectionId} '
+      'romm_id=$rommId reason=gated',
+    );
+    return _RowOutcome.kept;
   }
 }
 

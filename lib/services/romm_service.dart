@@ -85,9 +85,11 @@ enum RommErrorKind {
 
   /// `POST /api/collections` answered 500 for a name this account already
   /// uses. RomM keeps `(name, user_id)` unique and lets the constraint
-  /// violation surface as a bare 500 rather than a 409, so on that route the
-  /// status is the signal. Distinct because the fix is the user's — pick
-  /// another name — not a retry.
+  /// violation surface as a 500 rather than a 409, so on that route the
+  /// status plus a `detail` naming the collection (or saying "already
+  /// exists") is the signal; a 500 that says neither stays [other], since a
+  /// database outage is a 500 too. Distinct because the fix is the user's —
+  /// pick another name — not a retry.
   // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Collection Write Calls"
   alreadyExists,
 }
@@ -462,6 +464,12 @@ class RommService {
   /// this server" line is logged once per feature rather than once per call.
   final Set<RommFeature> _gatesLogged = <RommFeature>{};
 
+  /// Whether the below-4.9.0 collection membership fallback (`GET` + full
+  /// `PUT rom_ids` in place of the add/remove route) has been logged on this
+  /// connection. Not a gate: the edit still goes out, by another route.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Collection Write Calls"
+  bool _collectionFallbackLogged = false;
+
   /// Called when a request could not reach the server at all — a socket error
   /// or a timeout, never a status the server answered with.
   ///
@@ -591,6 +599,7 @@ class RommService {
     // a support log from a reconnect with no gate lines at all.
     // Governing: ADR-0010, SPEC-0010 REQ "Error Handling Standards"
     _gatesLogged.clear();
+    _collectionFallbackLogged = false;
     _apiKey = apiKey.trim();
     _username = username;
     _password = _apiKey.isEmpty ? password : '';
@@ -658,6 +667,7 @@ class RommService {
     _capabilities = null;
     _probed = false;
     _gatesLogged.clear();
+    _collectionFallbackLogged = false;
     _playSessionsSupported = true;
     _favouritesCollectionId = null;
     for (final group in RommScopeGroup.values) {
@@ -3717,33 +3727,63 @@ class RommService {
       statusCode: resp.statusCode,
       kind: switch (resp.statusCode) {
         403 => RommErrorKind.scopeDenied,
-        500 => RommErrorKind.alreadyExists,
+        500 when _isDuplicateCollectionBody(body, trimmed) =>
+          RommErrorKind.alreadyExists,
         _ => RommErrorKind.other,
       },
     );
   }
 
+  /// Whether a create's 500 body is the duplicate-name one. RomM answers a
+  /// `CollectionAlreadyExistsException` with a 500 whose `detail` names the
+  /// collection (`Collection {name} already exists`); a 500 from anything
+  /// else (the database down, a bug) says nothing of the kind, and must not
+  /// tell the user to pick another name. The status alone is not the signal.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Collection Write Calls", REQ "Error Handling Standards"
+  static bool _isDuplicateCollectionBody(String body, String name) {
+    String? detail;
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map) {
+        detail = (decoded['detail'] ?? decoded['message'])?.toString();
+      }
+    } catch (_) {
+      detail = null;
+    }
+    final text = (detail ?? body).toLowerCase();
+    if (text.isEmpty) return false;
+    return text.contains('already exists') ||
+        text.contains('duplicate') ||
+        text.contains(name.toLowerCase());
+  }
+
   /// Updates a collection (`PUT /api/collections/{id}`, multipart).
   ///
-  /// Sends only what is given: `name`, the file at [artworkPath] as
-  /// `artwork`, `?remove_cover=true` for [removeArtwork], and `rom_ids` as a
-  /// JSON array string when [romIds] is non-null — which *replaces* the
-  /// membership, an empty set included. A server below 4.9.0 has no
-  /// add/remove route, so this is how membership changes reach it.
+  /// `rom_ids` goes out on every call, as a sorted JSON array string: RomM
+  /// declares it a required form field on every version (`Form(...)` on
+  /// 4.8+, an unguarded `data["rom_ids"]` read before), so a PUT without it
+  /// is a 422 or a 500 and never a rename. It *replaces* the membership, an
+  /// empty set included — a caller changing only the name or the image
+  /// passes the members the server already holds. With it go `name` when
+  /// given, the file at [artworkPath] as `artwork`, and `?remove_cover=true`
+  /// for [removeArtwork]. A server below 4.9.0 has no add/remove route, so
+  /// this is also how membership changes reach it.
   ///
   /// Returns true when the server confirmed the write; false without a
-  /// request when the scope group is denied or nothing was given to send.
-  /// Throws [RommException] otherwise, the collection id in the message.
+  /// request when the scope group is denied. Throws [RommException]
+  /// otherwise, the collection id in the message.
   // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Collection Write Calls"
   Future<bool> updateCollection(
     int id, {
+    required Iterable<int> romIds,
     String? name,
     String? artworkPath,
     bool removeArtwork = false,
-    Iterable<int>? romIds,
   }) async {
     if (_scopeGated(RommScopeGroup.collectionsWrite)) return false;
-    final fields = <String, String>{};
+    final fields = <String, String>{
+      'rom_ids': jsonEncode(romIds.toSet().toList()..sort()),
+    };
     if (name != null) {
       final trimmed = name.trim();
       if (trimmed.isEmpty) {
@@ -3751,10 +3791,6 @@ class RommService {
       }
       fields['name'] = trimmed;
     }
-    if (romIds != null) {
-      fields['rom_ids'] = jsonEncode(romIds.toSet().toList()..sort());
-    }
-    if (fields.isEmpty && artworkPath == null && !removeArtwork) return false;
 
     var uri = _uri('/api/collections/$id');
     if (removeArtwork) {
@@ -3817,7 +3853,17 @@ class RommService {
 
     if (supports(RommFeature.collectionRomsAddRemove) ==
         RommFeatureSupport.unsupported) {
-      _logGateOnce(RommFeature.collectionRomsAddRemove);
+      // Not a gate — the edit still goes out, by the route this version
+      // has — so the gate line ("nothing sent") would be untrue here.
+      if (!_collectionFallbackLogged) {
+        _collectionFallbackLogged = true;
+        _log.i(
+          'RomM collection add/remove route unavailable, replacing '
+          'membership in full: reason=fallback_full_replace '
+          'version=${_capabilities?.version} '
+          'min_version=${RommFeature.collectionRomsAddRemove.minVersion}',
+        );
+      }
       final current = (await getCollection(id)).romIds.toSet();
       final next = add ? current.union(ids) : current.difference(ids);
       return updateCollection(id, romIds: next);
