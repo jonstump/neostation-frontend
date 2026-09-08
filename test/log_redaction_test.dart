@@ -421,8 +421,6 @@ void main() {
       'Could not read the NeoSync token: SocketException: Connection refused',
       'Error clearing RA API key: SocketException: Connection refused',
       'Error saving game session: SocketException: Connection refused',
-      'Error migrating the ScreenScraper password: '
-          'SocketException: Connection refused',
       'Error saving RomM paired-token metadata: PlatformException(x, y)',
       'RomM token refresh failed, re-authenticating: TimeoutException',
       'RomM pairing: token metadata not persisted: name=demo expires_at=never',
@@ -430,7 +428,9 @@ void main() {
           'the session ends when the app closes',
       'Error checking the pending game session: SocketException: refused',
       'Error clearing RA API key: /storage/emulated/0/neostation/app.log',
-      r'[KeyboardRaw] key="A" physical="KeyA"',
+      // A label in front is dump syntax; a plain word in front is not, and the
+      // sentence has to survive the difference.
+      'AuthService: restored the game session: SocketException: refused',
     ];
 
     for (final line in logLines) {
@@ -499,6 +499,75 @@ void main() {
       // on the back of the spared match.
       'session: "user=bob password=9f8c1d2e3a4b5c6d"': '9f8c1d2e3a4b5c6d',
       'key: "a password=9f8c1d2e3a4b5c6d"': '9f8c1d2e3a4b5c6d',
+      // --- review round 2 -------------------------------------------------
+      // The first cut let `key`/`pass`/`session`/`token` be decided by the
+      // value shape *wherever they sat*, so every branch of the value test
+      // became a leak inside a dump. One line per branch, under each of the
+      // four names, at each container shape a dump can take.
+      '{pass: 1234}': '1234', // small number
+      '{key: 4821}': '4821',
+      '{"session": 9137}': '9137',
+      '{pass: OpenSesame}': 'OpenSesame', // CamelCase
+      '{key: CorrectHorseBattery}': 'CorrectHorseBattery',
+      '{token: SecretKeyValue}': 'SecretKeyValue',
+      '{token: correcthorsebattery}': 'correcthorsebattery', // lower case
+      '{"session":"deadbeefcafebabe"}': 'deadbeefcafebabe',
+      // `/` is in the base64 alphabet, so roughly one credential in 64 starts
+      // with one and used to be handed to the path test.
+      '{token: /wEPDwUKLTcyMzY2MTA1MQ}': '/wEPDwUKLTcyMzY2MTA1MQ',
+      '{"session": "~aB3xK9zQ7mR2pL5v"}': 'aB3xK9zQ7mR2pL5v',
+      // `$` is outside the credential alphabet — a bcrypt hash is still a
+      // credential.
+      r'{pass: $2y$10$N9qo8uLOickgx2ZMRZoMye}': 'N9qo8uLOickgx2ZMRZoMye',
+      // A secret in a URL *path* — a pairing / redeem link — is not covered by
+      // the query-parameter pattern.
+      '{token: https://neosync.app/redeem/aB3xK9zQ7mR2pL5v}':
+          'aB3xK9zQ7mR2pL5v',
+      // The name reached through a snake_case prefix, and through a quote.
+      '{"session_token": "hunterhunterhunter"}': 'hunterhunterhunter',
+      '{user_pass: 1234}': '1234',
+      '[key: correcthorsebattery]': 'correcthorsebattery',
+      '{a: 1, pass: 1234}': '1234',
+      'headers: {content-type: application/json, key: 1234}': '1234',
+      'user=bob token=correcthorsebattery': 'correcthorsebattery',
+      // A quoted value is a dump's value, not a sentence's next word.
+      'session: "deadbeefcafebabe"': 'deadbeefcafebabe',
+      r'[KeyboardRaw] key="opensesame" physical="KeyA"': 'opensesame',
+      // The auth-header schemes. `Bearer` and `Basic` are never prose, so no
+      // value shape may stand them down; `Token` may, but not after an
+      // `Authorization` header name, not in a container, and not for a value
+      // longer than any word the corpus uses.
+      'Basic dxnlcjpwyxnz': 'dxnlcjpwyxnz',
+      'Bearer opensesameopen': 'opensesameopen',
+      'Token abcdefghijklmnop': 'abcdefghijklmnop',
+      'Bearer /wEPDwUKLTcyMzY2MTA1MQ': 'wEPDwUKLTcyMzY2MTA1MQ',
+      'Basic correcthorsebattery': 'correcthorsebattery',
+      'authorization: Token opensesame': 'opensesame',
+      '{"authorization": "Token opensesame"}': 'opensesame',
+      // Only the four prose-colliding names get a prose exemption. Every other
+      // sensitive name redacts on the name alone, mid-sentence included.
+      'Could not store the access_token: opensesame': 'opensesame',
+      'RA request failed for api_key: hunter': 'hunter',
+      'Rotating the client_secret_id: opensesame': 'opensesame',
+      'Wrote the signature: Deadbeef': 'Deadbeef',
+      'Using devpassword: mysecretword': 'mysecretword',
+      'Saved the secret: opensesame': 'opensesame',
+      'Error migrating the ScreenScraper password: correcthorse':
+          'correcthorse',
+      // The neighbouring token, not the separator, is what makes a
+      // space-separated dump a dump — under the four prose-colliding names
+      // too, and whether the neighbour is a `k=v` pair or a `label:`.
+      'user=bob session: 1234': '1234',
+      'req id=7 key: opensesame': 'opensesame',
+      'headers: key: correcthorse': 'correcthorse',
+      'uri=https://api.example.com/login token: opensesame': 'opensesame',
+      // `=` is assignment, never a sentence, under those four names as well.
+      'pass=1234': '1234',
+      'token=opensesame': 'opensesame',
+      // A short lower-case word is still a credential after a scheme that is
+      // not an English word.
+      'Basic opensesame': 'opensesame',
+      'Bearer letmein': 'letmein',
     };
 
     mustRedact.forEach((line, secret) {
@@ -508,6 +577,15 @@ void main() {
         expect(redacted, isNot(contains(secret)));
         expect(redacted, contains(redactedPlaceholder));
       });
+    });
+
+    test('a re-scanned nested secret keeps the context around it', () {
+      // The spared value is passed back through `redactSecrets`, and the inner
+      // match must not take the closing paren of the exception with it.
+      expect(
+        redactSecrets('token: SocketException(api_key=9f8c1d2e3a4b5c6d)'),
+        'token: SocketException(api_key=$redactedPlaceholder)',
+      );
     });
 
     test('the #199 shapes stay idempotent', () {
@@ -527,5 +605,4 @@ const List<String> restoredLines199 = <String>[
   'RomM token preserved across reconnect',
   'Scan first_pass: 3 folders',
   'Error checking the pending game session: SocketException: refused',
-  r'[KeyboardRaw] key="A" physical="KeyA"',
 ];
