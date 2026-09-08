@@ -29,6 +29,13 @@ extension _FavoritesReorder on _SystemGamesListState {
   Future<void> _toggleFavorite() async {
     if (_selectedGame == null) return;
     if (_isFolderEntry(_selectedGame)) return;
+    // A remote entry has no `user_roms` row to flag: favourites stay local
+    // until the game is downloaded.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entries In The Game Model"
+    if (_selectedGame!.isRemote) {
+      _notifyRemoteNotDownloaded();
+      return;
+    }
 
     if (widget.system.folderName == 'music') {
       try {

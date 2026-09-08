@@ -1611,4 +1611,35 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.rommMatchByHashReasonExtractFailed:
       'não foi possível abrir o arquivo',
   AppLocale.rommMatchByHashReasonError: 'não foi possível ler o ficheiro',
+  AppLocale.rommShowLibrary: 'Mostrar a biblioteca do RomM nos meus sistemas',
+  AppLocale.rommShowLibrarySubtitle:
+      'Lista todos os jogos do servidor RomM sob o seu sistema, marcados quando não estão neste dispositivo',
+  AppLocale.rommLibraryDefaultScope: 'Escopo padrão da biblioteca',
+  AppLocale.rommLibraryDefaultScopeSubtitle:
+      'Com o que uma lista de jogos abre: tudo o que há no servidor ou apenas os jogos baixados',
+  AppLocale.rommCoverCacheSize: 'Tamanho do cache de capas do RomM',
+  AppLocale.rommCoverCacheSizeSubtitle:
+      'Espaço em disco reservado para capas do RomM para que os jogos remotos tenham arte offline',
+  AppLocale.rommCoverCacheSizeValue: '{size} MB',
+  AppLocale.libraryScopeAll: 'Todos os jogos',
+  AppLocale.libraryScopeDownloaded: 'Baixados',
+  AppLocale.libraryScopeFooter: 'Biblioteca: {scope}',
+  AppLocale.libraryScopeToggle: 'Alternar o escopo da biblioteca',
+  AppLocale.libraryScopeSwitched: 'Mostrando: {scope}',
+  AppLocale.libraryOfflineCached:
+      'Offline — mostrando a biblioteca do RomM em cache',
+  AppLocale.rommRemoteOnlySystemLabel: 'Somente no servidor RomM',
+  AppLocale.rommRefreshLibraryNow: 'Atualizar a biblioteca do RomM agora',
+  AppLocale.rommRefreshLibraryRunning: 'Atualizando a biblioteca do RomM…',
+  AppLocale.rommRefreshLibraryDone:
+      'Biblioteca do RomM atualizada: {count} jogos em {platforms} plataformas',
+  AppLocale.rommRefreshLibraryFailed:
+      'Não foi possível atualizar a biblioteca do RomM',
+  AppLocale.rommRefreshLibraryUnavailable:
+      'A biblioteca do RomM não pode ser atualizada agora',
+  AppLocale.rommClearCachedLibrary: 'Limpar a biblioteca do RomM em cache',
+  AppLocale.rommClearCachedLibraryDone: 'Biblioteca do RomM em cache limpa',
+  AppLocale.rommCatalogAsOf: 'Biblioteca em {time}',
+  AppLocale.rommCatalogNeverRefreshed: 'A biblioteca ainda não foi atualizada',
+  AppLocale.rommRemoteNotDownloaded: 'Não baixado',
 };

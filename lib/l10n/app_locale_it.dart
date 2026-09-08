@@ -1629,4 +1629,34 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.rommMatchByHashReasonExtractFailed:
       'impossibile aprire l\'archivio',
   AppLocale.rommMatchByHashReasonError: 'impossibile leggere il file',
+  AppLocale.rommShowLibrary: 'Mostra la libreria RomM nei miei sistemi',
+  AppLocale.rommShowLibrarySubtitle:
+      'Elenca ogni gioco del server RomM sotto il suo sistema, contrassegnato quando non è su questo dispositivo',
+  AppLocale.rommLibraryDefaultScope: 'Ambito predefinito della libreria',
+  AppLocale.rommLibraryDefaultScopeSubtitle:
+      'Con cosa si apre un elenco di giochi: tutto ciò che c’è sul server o solo i giochi scaricati',
+  AppLocale.rommCoverCacheSize: 'Dimensione della cache delle copertine RomM',
+  AppLocale.rommCoverCacheSizeSubtitle:
+      'Spazio su disco riservato alle copertine RomM perché i giochi remoti abbiano le immagini offline',
+  AppLocale.rommCoverCacheSizeValue: '{size} MB',
+  AppLocale.libraryScopeAll: 'Tutti i giochi',
+  AppLocale.libraryScopeDownloaded: 'Scaricati',
+  AppLocale.libraryScopeFooter: 'Libreria: {scope}',
+  AppLocale.libraryScopeToggle: 'Cambia ambito della libreria',
+  AppLocale.libraryScopeSwitched: 'Visualizzazione: {scope}',
+  AppLocale.libraryOfflineCached:
+      'Offline — libreria RomM in cache visualizzata',
+  AppLocale.rommRemoteOnlySystemLabel: 'Solo sul server RomM',
+  AppLocale.rommRefreshLibraryNow: 'Aggiorna ora la libreria RomM',
+  AppLocale.rommRefreshLibraryRunning: 'Aggiornamento della libreria RomM…',
+  AppLocale.rommRefreshLibraryDone:
+      'Libreria RomM aggiornata: {count} giochi su {platforms} piattaforme',
+  AppLocale.rommRefreshLibraryFailed: 'Impossibile aggiornare la libreria RomM',
+  AppLocale.rommRefreshLibraryUnavailable:
+      'La libreria RomM non può essere aggiornata al momento',
+  AppLocale.rommClearCachedLibrary: 'Svuota la libreria RomM in cache',
+  AppLocale.rommClearCachedLibraryDone: 'Libreria RomM in cache svuotata',
+  AppLocale.rommCatalogAsOf: 'Libreria al {time}',
+  AppLocale.rommCatalogNeverRefreshed: 'Libreria non ancora aggiornata',
+  AppLocale.rommRemoteNotDownloaded: 'Non scaricato',
 };

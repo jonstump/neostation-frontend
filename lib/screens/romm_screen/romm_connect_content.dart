@@ -13,6 +13,9 @@ import '../../l10n/app_locale.dart';
 import '../../models/romm_pairing.dart';
 import '../../providers/romm_provider.dart';
 import '../../providers/sqlite_config_provider.dart';
+import '../../services/global_notification_service.dart';
+import '../../services/romm/romm_catalog_refresh.dart';
+import '../../utils/time_format.dart';
 import '../../services/game_service.dart' show GamepadNavigationManager;
 import '../../services/neosync/auth_service.dart';
 import '../../sync/providers/neo_sync_adapter.dart';
@@ -54,7 +57,7 @@ class _RommConnectContentState extends State<RommConnectContent>
     with LoginFormSelection<RommConnectContent> {
   final ScrollController _scrollController = ScrollController();
   // One per slot of the longest order: pairing mode with the scan action.
-  final List<GlobalKey> _itemKeys = List.generate(6, (_) => GlobalKey());
+  final List<GlobalKey> _itemKeys = List.generate(7, (_) => GlobalKey());
 
   final TextEditingController _urlController = TextEditingController();
   final TextEditingController _userController = TextEditingController();
@@ -131,11 +134,13 @@ class _RommConnectContentState extends State<RommConnectContent>
   @override
   List<FocusNode?> get selectionSlots {
     if (context.read<RommProvider>().isConnected) {
-      // Browse, save sync, screenshot upload, play-state push, disconnect —
-      // five action rows, none of them a text field.
+      // Browse, save sync, screenshot upload, play-state push, library
+      // refresh, library clear, disconnect — seven action rows, none of them
+      // a text field.
       // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload Toggle"
       // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Push Toggle"
-      return const [null, null, null, null, null];
+      // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
+      return const [null, null, null, null, null, null, null];
     }
     return _focusOrder.map(_focusNodeFor).toList(growable: false);
   }
@@ -255,6 +260,12 @@ class _RommConnectContentState extends State<RommConnectContent>
         // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Push Toggle"
         _togglePushPlayState();
       } else if (isSelected(4)) {
+        // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
+        _refreshCatalogNow();
+      } else if (isSelected(5)) {
+        // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
+        _clearCachedCatalog();
+      } else if (isSelected(6)) {
         _disconnect();
       }
       return;
@@ -473,6 +484,111 @@ class _RommConnectContentState extends State<RommConnectContent>
           type: NotificationType.error,
         );
     }
+  }
+
+  /// "Refresh RomM library now": one manual catalog walk through the sync
+  /// provider that owns it, reported in the notification tray from start to
+  /// outcome. Manual bypasses the hourly guard; what can still stop it is a
+  /// disconnect, a bulk sync on the same server, or a walk already running,
+  /// each of which the sync provider logs and reports here as "not right
+  /// now".
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
+  Future<void> _refreshCatalogNow() async {
+    if (_busy) return;
+    final sync = SyncManager.instance.provider(RomMSyncProvider.kProviderId);
+    final notifications = GlobalNotificationService();
+    const id = 'romm_catalog_refresh';
+    if (sync is! RomMSyncProvider) {
+      AppNotification.showNotification(
+        context,
+        AppLocale.rommRefreshLibraryUnavailable.getString(context),
+        type: NotificationType.error,
+      );
+      return;
+    }
+    notifications.show(
+      id: id,
+      message: AppLocale.rommRefreshLibraryRunning.getString(context),
+      icon: Symbols.cloud_sync_rounded,
+      ongoing: true,
+    );
+    setState(() => _busy = true);
+    RommCatalogRefreshSummary? summary;
+    try {
+      summary = await sync.refreshCatalog(reason: RommRefreshReason.manual);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    if (!mounted) return;
+    if (summary == null || !summary.ran) {
+      notifications.update(
+        id: id,
+        message: AppLocale.rommRefreshLibraryUnavailable.getString(context),
+        type: GlobalNotificationType.info,
+      );
+      return;
+    }
+    if (summary.platformsProcessed == 0 && summary.platformsFailed > 0) {
+      notifications.update(
+        id: id,
+        message: AppLocale.rommRefreshLibraryFailed.getString(context),
+        type: GlobalNotificationType.error,
+      );
+      return;
+    }
+    notifications.update(
+      id: id,
+      message: AppLocale.rommRefreshLibraryDone
+          .getString(context)
+          .replaceFirst('{count}', summary.rowsUpserted.toString())
+          .replaceFirst('{platforms}', summary.platformsProcessed.toString()),
+      type: GlobalNotificationType.success,
+    );
+  }
+
+  /// "Clear cached RomM library": drops the server's catalog rows and cover
+  /// files. The link map and the local library are untouched; the next
+  /// refresh rebuilds what was dropped.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
+  Future<void> _clearCachedCatalog() async {
+    if (_busy) return;
+    final provider = context.read<RommProvider>();
+    setState(() => _busy = true);
+    try {
+      await provider.clearCatalog();
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+    if (!mounted) return;
+    AppNotification.showNotification(
+      context,
+      AppLocale.rommClearCachedLibraryDone.getString(context),
+      type: NotificationType.success,
+    );
+  }
+
+  /// The "as of {time}" line under the refresh row: the newest completed
+  /// platform walk on the connected server, in local time and the user's
+  /// clock format, or the never-refreshed line when no walk has finished.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
+  String _catalogAsOfLine(BuildContext context) {
+    final asOf = context.watch<RommProvider>().catalogAsOf;
+    if (asOf == null) {
+      return AppLocale.rommCatalogNeverRefreshed.getString(context);
+    }
+    final local = asOf.toLocal();
+    final use12Hour = context
+        .watch<SqliteConfigProvider>()
+        .config
+        .use12HourClock;
+    final date =
+        '${local.year}-'
+        '${local.month.toString().padLeft(2, '0')}-'
+        '${local.day.toString().padLeft(2, '0')}';
+    final time = formatClockTime(local, use12Hour: use12Hour);
+    return AppLocale.rommCatalogAsOf
+        .getString(context)
+        .replaceFirst('{time}', '$date $time');
   }
 
   Future<void> _disconnect() async {
@@ -1138,9 +1254,29 @@ class _RommConnectContentState extends State<RommConnectContent>
       ),
       _buildCaption(theme, AppLocale.rommPushPlayStateHint.getString(context)),
       SizedBox(height: 10.r),
+      // The unified library's catalog: refresh it now, or drop the cached
+      // copy. The caption under the refresh row says how fresh it is.
+      // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
       _buildActionRow(
         theme,
         index: 4,
+        icon: Symbols.cloud_sync_rounded,
+        label: AppLocale.rommRefreshLibraryNow.getString(context),
+        onTap: _refreshCatalogNow,
+      ),
+      _buildCaption(theme, _catalogAsOfLine(context)),
+      SizedBox(height: 10.r),
+      _buildActionRow(
+        theme,
+        index: 5,
+        icon: Symbols.cloud_off_rounded,
+        label: AppLocale.rommClearCachedLibrary.getString(context),
+        onTap: _clearCachedCatalog,
+      ),
+      SizedBox(height: 10.r),
+      _buildActionRow(
+        theme,
+        index: 6,
         icon: Symbols.logout_rounded,
         label: AppLocale.rommDisconnect.getString(context),
         onTap: _disconnect,

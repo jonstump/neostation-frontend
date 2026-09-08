@@ -1647,4 +1647,35 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.rommMatchByHashReasonExtractFailed:
       'l\'archive n\'a pas pu être ouverte',
   AppLocale.rommMatchByHashReasonError: 'le fichier n\'a pas pu être lu',
+  AppLocale.rommShowLibrary: 'Afficher la bibliothèque RomM dans mes systèmes',
+  AppLocale.rommShowLibrarySubtitle:
+      'Liste tous les jeux du serveur RomM sous leur système, marqués lorsqu’ils ne sont pas sur cet appareil',
+  AppLocale.rommLibraryDefaultScope: 'Portée par défaut de la bibliothèque',
+  AppLocale.rommLibraryDefaultScopeSubtitle:
+      'Ce qu’une liste de jeux affiche à l’ouverture : tout le serveur ou seulement les jeux téléchargés',
+  AppLocale.rommCoverCacheSize: 'Taille du cache des jaquettes RomM',
+  AppLocale.rommCoverCacheSizeSubtitle:
+      'Espace disque réservé aux jaquettes RomM pour que les jeux distants aient des visuels hors ligne',
+  AppLocale.rommCoverCacheSizeValue: '{size} Mo',
+  AppLocale.libraryScopeAll: 'Tous les jeux',
+  AppLocale.libraryScopeDownloaded: 'Téléchargés',
+  AppLocale.libraryScopeFooter: 'Bibliothèque : {scope}',
+  AppLocale.libraryScopeToggle: 'Changer la portée de la bibliothèque',
+  AppLocale.libraryScopeSwitched: 'Affichage : {scope}',
+  AppLocale.libraryOfflineCached:
+      'Hors ligne — bibliothèque RomM en cache affichée',
+  AppLocale.rommRemoteOnlySystemLabel: 'Uniquement sur le serveur RomM',
+  AppLocale.rommRefreshLibraryNow: 'Actualiser la bibliothèque RomM maintenant',
+  AppLocale.rommRefreshLibraryRunning: 'Actualisation de la bibliothèque RomM…',
+  AppLocale.rommRefreshLibraryDone:
+      'Bibliothèque RomM actualisée : {count} jeux sur {platforms} plateformes',
+  AppLocale.rommRefreshLibraryFailed:
+      'La bibliothèque RomM n’a pas pu être actualisée',
+  AppLocale.rommRefreshLibraryUnavailable:
+      'La bibliothèque RomM ne peut pas être actualisée pour le moment',
+  AppLocale.rommClearCachedLibrary: 'Vider le cache de la bibliothèque RomM',
+  AppLocale.rommClearCachedLibraryDone: 'Cache de la bibliothèque RomM vidé',
+  AppLocale.rommCatalogAsOf: 'Bibliothèque au {time}',
+  AppLocale.rommCatalogNeverRefreshed: 'Bibliothèque pas encore actualisée',
+  AppLocale.rommRemoteNotDownloaded: 'Non téléchargé',
 };

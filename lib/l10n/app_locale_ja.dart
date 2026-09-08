@@ -1433,4 +1433,32 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommMatchByHashReasonMissing: 'ファイルが見つかりません',
   AppLocale.rommMatchByHashReasonExtractFailed: 'アーカイブを開けませんでした',
   AppLocale.rommMatchByHashReasonError: 'ファイルを読み取れませんでした',
+  AppLocale.rommShowLibrary: 'RomM ライブラリを自分のシステムに表示',
+  AppLocale.rommShowLibrarySubtitle:
+      'RomM サーバーにあるすべてのゲームをそのシステムの下に一覧表示し、この端末にないものには印を付けます',
+  AppLocale.rommLibraryDefaultScope: 'ライブラリの既定の範囲',
+  AppLocale.rommLibraryDefaultScopeSubtitle:
+      'ゲーム一覧を開いたときに表示する内容：サーバー上のすべて、またはダウンロード済みのゲームのみ',
+  AppLocale.rommCoverCacheSize: 'RomM カバーキャッシュのサイズ',
+  AppLocale.rommCoverCacheSizeSubtitle:
+      'RomM のカバー用に確保するディスク容量。オフラインでもリモートのゲームにアートを表示します',
+  AppLocale.rommCoverCacheSizeValue: '{size} MB',
+  AppLocale.libraryScopeAll: 'すべてのゲーム',
+  AppLocale.libraryScopeDownloaded: 'ダウンロード済み',
+  AppLocale.libraryScopeFooter: 'ライブラリ：{scope}',
+  AppLocale.libraryScopeToggle: 'ライブラリの範囲を切り替え',
+  AppLocale.libraryScopeSwitched: '表示中：{scope}',
+  AppLocale.libraryOfflineCached: 'オフライン — キャッシュされた RomM ライブラリを表示中',
+  AppLocale.rommRemoteOnlySystemLabel: 'RomM サーバーのみ',
+  AppLocale.rommRefreshLibraryNow: 'RomM ライブラリを今すぐ更新',
+  AppLocale.rommRefreshLibraryRunning: 'RomM ライブラリを更新中…',
+  AppLocale.rommRefreshLibraryDone:
+      'RomM ライブラリを更新しました：{platforms} プラットフォームの {count} ゲーム',
+  AppLocale.rommRefreshLibraryFailed: 'RomM ライブラリを更新できませんでした',
+  AppLocale.rommRefreshLibraryUnavailable: 'RomM ライブラリは現在更新できません',
+  AppLocale.rommClearCachedLibrary: 'キャッシュされた RomM ライブラリを消去',
+  AppLocale.rommClearCachedLibraryDone: 'キャッシュされた RomM ライブラリを消去しました',
+  AppLocale.rommCatalogAsOf: 'ライブラリの更新日時 {time}',
+  AppLocale.rommCatalogNeverRefreshed: 'ライブラリはまだ更新されていません',
+  AppLocale.rommRemoteNotDownloaded: '未ダウンロード',
 };

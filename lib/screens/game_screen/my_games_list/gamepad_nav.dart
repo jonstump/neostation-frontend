@@ -81,6 +81,11 @@ extension _GamepadNav on _SystemGamesListState {
       onSettings: _openGameSettingsDialog, // Button Start.
       onSelectButton: _handleSelectButton, // Button Select (View) - tap.
       onSelectModifierA: () => _scrapeAction?.call(), // Select + A - Scrape.
+      // Select + X - library scope (all / downloaded). Free on this screen:
+      // X alone is the view-mode picker and the other Select chords are
+      // taken by scrape and random. The footer pill shows the same chord.
+      // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
+      onSelectModifierX: _toggleLibraryScope,
       onSelectModifierY: _showRandomGameDialog, // Select + Y - Random.
       onRightStickClick: null,
       // The bumpers (and their Q/E keyboard twins) bind nothing here: tab

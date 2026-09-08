@@ -7,6 +7,7 @@ import 'dart:async';
 import '../../../models/system_model.dart';
 import '../../../utils/effective_system.dart';
 import '../../../models/game_model.dart';
+import '../../../models/library_scope.dart';
 import '../../../providers/file_provider.dart';
 import '../../../providers/romm_provider.dart';
 import '../../../providers/retro_achievements_provider.dart';
@@ -18,6 +19,7 @@ import 'dialogs/ra_match_picker_dialog.dart';
 import '../../../services/retro_achievements_helper.dart';
 import '../../../utils/artwork_cache.dart';
 import '../../../utils/scrape_result_message.dart';
+import '../../../utils/scrape_gate.dart';
 import '../../../utils/ra_coverage.dart';
 import '../../../utils/gamepad_nav.dart';
 import 'package:flutter/foundation.dart';
@@ -139,6 +141,13 @@ class GameDetailsCardList extends StatefulWidget {
   final bool isNavigatingFast;
   final VoidCallback? onBack;
 
+  /// The unified library's scope for the footer pill; null hides it. Passed
+  /// through untouched — the host owns the scope.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
+  final LibraryScope? libraryScope;
+  final VoidCallback? onToggleLibraryScope;
+  final bool libraryOffline;
+
   const GameDetailsCardList({
     super.key,
     required this.game,
@@ -180,6 +189,9 @@ class GameDetailsCardList extends StatefulWidget {
     this.onRegisterScrapeAction,
     this.isSecondaryScreenActive = false,
     this.isNavigatingFast = false,
+    this.libraryScope,
+    this.onToggleLibraryScope,
+    this.libraryOffline = false,
     this.onBack,
   });
 
@@ -896,6 +908,9 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
             onShowRandomGame: widget.onShowRandomGame,
             onToggleFavorite: widget.onToggleFavorite,
             onOpenGameSettings: widget.onOpenGameSettings,
+            libraryScope: widget.libraryScope,
+            onToggleLibraryScope: widget.onToggleLibraryScope,
+            libraryOffline: widget.libraryOffline,
           ),
 
           // Panel layer: the tabs share one strip so a D-pad step or a
@@ -1460,6 +1475,20 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
   /// ScreenScraper via ScreenScraperService.
   Future<void> _startSingleGameScrape({bool forceOverwrite = true}) async {
     if (_isScrapingGame) return;
+
+    // The list view's Select + A lands here through the registered action,
+    // bypassing the context menu's own remote check: a remote entry has no
+    // file to fingerprint, and a scrape by name would write metadata and
+    // media for a ROM that is not on this device.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entries In The Game Model"
+    if (scrapeGateFor(_game) == ScrapeGate.notDownloaded) {
+      AppNotification.showNotification(
+        context,
+        AppLocale.rommRemoteNotDownloaded.getString(context),
+        type: NotificationType.info,
+      );
+      return;
+    }
 
     // Safety: Pause video previews to avoid resource contention or audio leaks during scraping.
     if (widget.videoController != null) {

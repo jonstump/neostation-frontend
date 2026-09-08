@@ -12,6 +12,7 @@ import 'package:provider/provider.dart';
 import '../../../providers/sqlite_config_provider.dart';
 import '../../../providers/sqlite_database_provider.dart';
 import '../../../providers/file_provider.dart';
+import '../../../providers/romm_provider.dart';
 import '../../../themes/corner_radii.dart';
 import '../../../utils/gamepad_nav.dart';
 import '../../../services/game_service.dart';
@@ -541,11 +542,12 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
           ),
         );
       } else {
-        final systemMeta = configProvider.detectedSystems.firstWhere(
-          (system) => system.folderName == systemInfo.folderName,
-          orElse: () =>
-              throw Exception('System not found: ${systemInfo.folderName}'),
-        );
+        // A RomM-only system has no detected row; the shared resolver falls
+        // through to the full systems list for it.
+        // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote-Only Systems"
+        final systemMeta =
+            systemForFolder(configProvider, systemInfo.folderName) ??
+            (throw Exception('System not found: ${systemInfo.folderName}'));
         final targetScreen = SystemGamesList(
           system: systemMeta,
           fileProvider: fileProvider,
@@ -868,14 +870,26 @@ class _MySystemsCarouselState extends State<MySystemsCarousel> {
       // the recent-games and favourites queries on a screen that shows neither.
       child: widget.items != null
           ? Builder(builder: _buildContent)
-          : Selector2<SqliteConfigProvider, SqliteDatabaseProvider, int>(
-              selector: (_, config, db) => Object.hash(
+          : Selector3<
+              SqliteConfigProvider,
+              SqliteDatabaseProvider,
+              RommProvider,
+              int
+            >(
+              selector: (_, config, db, romm) => Object.hash(
                 config.detectedSystems.length,
                 config.hiddenSystemFolders.length,
                 config.totalGames,
                 config.config.hideRecentCard,
                 db.getRecentlyPlayedGames(1).firstOrNull?.romPath.hashCode,
                 db.totalFavorites,
+                // The RomM-only cards come and go with the catalog summary,
+                // the toggle, the default scope, and reachability.
+                // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote-Only Systems"
+                romm.catalogRevision,
+                romm.reachability,
+                config.config.rommShowLibrary,
+                config.config.rommLibraryDefaultScope,
               ),
               builder: (context, _, child) => _buildContent(context),
             ),

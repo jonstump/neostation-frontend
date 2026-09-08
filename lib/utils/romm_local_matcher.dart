@@ -34,12 +34,23 @@ class RommLocalMatcher {
   /// that name at download time and `RommProvider` adds it on top of these.
   ///
   /// Returns a fresh, growable list so callers may append to it.
-  static List<String> candidateNames(RommRom rom) {
-    final names = <String>[rom.fsName];
-    if (rom.isMultiFile) {
-      names.add('${rom.fsName}.m3u');
-      final stem = p.basenameWithoutExtension(rom.fsName);
-      if (stem.isNotEmpty && stem != rom.fsName) names.add('$stem.m3u');
+  static List<String> candidateNames(RommRom rom) =>
+      candidateNamesFor(rom.fsName, multiFile: rom.isMultiFile);
+
+  /// [candidateNames] for a ROM known only by its [fsName] and whether it is
+  /// served as a multi-file zip — what a catalog row holds. The one
+  /// definition of the candidate list, so the browse tab's badge, the link
+  /// pass, and the unified library's hidden set cannot drift apart.
+  // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Filename Equivalence Rule"
+  static List<String> candidateNamesFor(
+    String fsName, {
+    required bool multiFile,
+  }) {
+    final names = <String>[fsName];
+    if (multiFile) {
+      names.add('$fsName.m3u');
+      final stem = p.basenameWithoutExtension(fsName);
+      if (stem.isNotEmpty && stem != fsName) names.add('$stem.m3u');
     }
     return names;
   }

@@ -137,6 +137,29 @@ class RommRepository {
     }
   }
 
+  /// The configured server's base URL, or an empty string when no RomM
+  /// server is set up.
+  ///
+  /// The one column [getConfig] returns without touching the credential
+  /// store. A game-list build asks this on every load to key its catalog
+  /// read, and that read must not pay for — or fail on — a keychain lookup.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entries In The Game Model"
+  static Future<String> getServerUrl() async {
+    try {
+      final db = await SqliteService.getDatabase();
+      final result = await db.query(
+        'user_romm_config',
+        columns: ['server_url'],
+        limit: 1,
+      );
+      if (result.isEmpty) return '';
+      return result.first['server_url']?.toString() ?? '';
+    } catch (e) {
+      _log.e('Error reading the RomM server URL: $e');
+      return '';
+    }
+  }
+
   /// Returns the secret for [key], preferring [CredentialStore] and falling
   /// back to the legacy base64 [column].
   ///

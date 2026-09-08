@@ -1441,4 +1441,32 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommMatchByHashReasonMissing: '파일을 찾을 수 없습니다',
   AppLocale.rommMatchByHashReasonExtractFailed: '압축 파일을 열 수 없습니다',
   AppLocale.rommMatchByHashReasonError: '파일을 읽을 수 없습니다',
+  AppLocale.rommShowLibrary: '내 시스템에 RomM 라이브러리 표시',
+  AppLocale.rommShowLibrarySubtitle:
+      'RomM 서버의 모든 게임을 해당 시스템 아래에 나열하고, 이 기기에 없는 게임은 표시합니다',
+  AppLocale.rommLibraryDefaultScope: '기본 라이브러리 범위',
+  AppLocale.rommLibraryDefaultScopeSubtitle:
+      '게임 목록을 열 때 표시할 내용: 서버의 전체 게임 또는 다운로드한 게임만',
+  AppLocale.rommCoverCacheSize: 'RomM 커버 캐시 크기',
+  AppLocale.rommCoverCacheSizeSubtitle:
+      '오프라인에서도 원격 게임에 아트를 표시하도록 RomM 커버용으로 확보하는 디스크 공간',
+  AppLocale.rommCoverCacheSizeValue: '{size} MB',
+  AppLocale.libraryScopeAll: '모든 게임',
+  AppLocale.libraryScopeDownloaded: '다운로드됨',
+  AppLocale.libraryScopeFooter: '라이브러리: {scope}',
+  AppLocale.libraryScopeToggle: '라이브러리 범위 전환',
+  AppLocale.libraryScopeSwitched: '표시 중: {scope}',
+  AppLocale.libraryOfflineCached: '오프라인 — 캐시된 RomM 라이브러리를 표시 중',
+  AppLocale.rommRemoteOnlySystemLabel: 'RomM 서버에만 있음',
+  AppLocale.rommRefreshLibraryNow: '지금 RomM 라이브러리 새로 고침',
+  AppLocale.rommRefreshLibraryRunning: 'RomM 라이브러리 새로 고침 중…',
+  AppLocale.rommRefreshLibraryDone:
+      'RomM 라이브러리 새로 고침 완료: {platforms}개 플랫폼의 {count}개 게임',
+  AppLocale.rommRefreshLibraryFailed: 'RomM 라이브러리를 새로 고칠 수 없습니다',
+  AppLocale.rommRefreshLibraryUnavailable: '지금은 RomM 라이브러리를 새로 고칠 수 없습니다',
+  AppLocale.rommClearCachedLibrary: '캐시된 RomM 라이브러리 지우기',
+  AppLocale.rommClearCachedLibraryDone: '캐시된 RomM 라이브러리를 지웠습니다',
+  AppLocale.rommCatalogAsOf: '{time} 기준 라이브러리',
+  AppLocale.rommCatalogNeverRefreshed: '라이브러리가 아직 새로 고쳐지지 않았습니다',
+  AppLocale.rommRemoteNotDownloaded: '다운로드되지 않음',
 };

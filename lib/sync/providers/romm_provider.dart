@@ -1842,6 +1842,10 @@ class RomMSyncProvider extends ChangeNotifier
       final summary = await _catalogRefresh.run(reason: reason);
       final linked = summary.linkSummary?.linkedRomnames ?? const <String>[];
       if (linked.isNotEmpty) invalidateGameSyncStates(linked);
+      // A walk that ran may have added or removed systems and moved the
+      // "as of" stamp; the browse provider holds the summary the UI reads.
+      // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote-Only Systems"
+      if (summary.ran) await _browse.reloadCatalogSystems();
       return summary;
     } on RommCatalogRefreshException catch (e) {
       _log.w(e.toString());

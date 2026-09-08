@@ -9,6 +9,8 @@ import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/themes/app_themes.dart';
 import '../../../../models/system_model.dart';
 import '../../../../models/game_model.dart';
+import '../../../../models/library_scope.dart';
+import '../../../../widgets/library_scope_pill.dart';
 import '../../../../models/retro_achievements_game_info.dart';
 import 'package:neostation/themes/chrome_surface.dart';
 import '../../../../themes/corner_radii.dart';
@@ -54,6 +56,14 @@ class GameDetailsFooter extends StatelessWidget {
   /// them rather than doing nothing.
   final VoidCallback onShowGameInfo;
 
+  /// The unified library's scope as a pill with its toggle chord, or null to
+  /// hide it. See [LibraryScopePill]; [libraryOffline] marks the pill while
+  /// the server is unreachable.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
+  final LibraryScope? libraryScope;
+  final VoidCallback? onToggleLibraryScope;
+  final bool libraryOffline;
+
   const GameDetailsFooter({
     super.key,
     required this.system,
@@ -70,6 +80,9 @@ class GameDetailsFooter extends StatelessWidget {
     required this.onToggleFavorite,
     required this.onOpenGameSettings,
     required this.onShowGameInfo,
+    this.libraryScope,
+    this.onToggleLibraryScope,
+    this.libraryOffline = false,
   });
 
   @override
@@ -178,6 +191,20 @@ class GameDetailsFooter extends StatelessWidget {
                               : const SizedBox.shrink(),
                         ),
                         SizedBox(width: _rowGap),
+                        // The library scope, ahead of the per-game controls:
+                        // it acts on the whole list, and the chord it shows
+                        // is the only hint the pad user gets for it.
+                        // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
+                        if (libraryScope != null &&
+                            onToggleLibraryScope != null) ...[
+                          LibraryScopePill(
+                            scope: libraryScope!,
+                            onToggle: onToggleLibraryScope!,
+                            offline: libraryOffline,
+                            height: _controlSize,
+                          ),
+                          SizedBox(width: _rowGap),
+                        ],
                         // Controls, in the order the removed rail had them.
                         if (onShowRandomGame != null) ...[
                           _FooterActionButton(
