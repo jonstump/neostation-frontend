@@ -458,6 +458,19 @@ class RommService {
   // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Reachability"
   void Function()? onTransportSuccess;
 
+  /// Called when a heartbeat lands and [capabilities] is replaced.
+  ///
+  /// The probe runs where the service decides — lazily before a restored
+  /// session's first authenticated request, or on the provider's offline
+  /// re-probe timer — so the provider cannot know when the version it
+  /// exposes has arrived unless it is told. [onTransportSuccess] is not that
+  /// signal: it fires before the body is parsed, and the reachability state
+  /// it drives notifies only on a change, which a heartbeat on an already
+  /// online connection is not.
+  // Governing: ADR-0010 (heartbeat capability probe),
+  // SPEC-0010 REQ "Provider Exposure And Re-Probe"
+  void Function()? onCapabilitiesChanged;
+
   /// Whether playtime sync can be attempted against this server.
   ///
   /// Expressed through [hasScope]: only a *denied* playtime group stops it,
@@ -597,6 +610,17 @@ class RommService {
     _forgetServerState();
     return true;
   }
+
+  /// Drops what this connection learned about its server, for a disconnect.
+  ///
+  /// [configure] forgets a server only when the URL moves, and a disconnect
+  /// does not move it: the credentials go, the service keeps pointing where it
+  /// was. Without this, the version and the password-login flag the provider
+  /// exposes would outlive the connection that learned them, and a reconnect
+  /// to the same URL would skip the probe and run on the stale answer.
+  // Governing: ADR-0010 (heartbeat capability probe),
+  // SPEC-0010 REQ "Provider Exposure And Re-Probe"
+  void forgetServerState() => _forgetServerState();
 
   /// Drops every per-server fact this connection had learned, so nothing from
   /// the old server survives a move to a new one.
@@ -836,6 +860,8 @@ class RommService {
       'password_login_disabled=${parsed.passwordLoginDisabled}',
     );
     _applyCapabilityGates();
+    // Governing: ADR-0010, SPEC-0010 REQ "Provider Exposure And Re-Probe"
+    onCapabilitiesChanged?.call();
   }
 
   /// Folds a known-unsupported feature into the per-connection state its call

@@ -1267,7 +1267,8 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
                         AppLocale.rommConnectedAs
                                 .getString(context)
                                 .replaceAll('{user}', provider.username) +
-                            _saveSyncOwnerSuffix(),
+                            _saveSyncOwnerSuffix() +
+                            _serverVersionSuffix(provider),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -1634,6 +1635,18 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
     }
     return ' · '
         '${AppLocale.saveSyncHandledBy.getString(context).replaceFirst('{provider}', owner.meta.name)}';
+  }
+
+  /// " · Server version x.y.z" on the account strip once the heartbeat has
+  /// answered, and nothing while the version is unknown. The connected RomM
+  /// tab is this screen, not the connect form, so this is where the version
+  /// is read from a screenshot.
+  // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect Screen Surfaces"
+  String _serverVersionSuffix(RommProvider provider) {
+    final version = provider.serverVersion;
+    if (version == null) return '';
+    return ' · '
+        '${AppLocale.rommServerVersionLine.getString(context).replaceFirst('{version}', version.toString())}';
   }
 
   /// Toggles whether RomM is the active save-sync provider (vs NeoSync).

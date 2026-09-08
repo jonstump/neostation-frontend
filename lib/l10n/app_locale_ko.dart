@@ -1425,4 +1425,6 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.neoSyncCheckoutFailed: '결제 세션을 만들지 못했습니다',
   AppLocale.neoSyncCancelSubscriptionFailed: '구독을 취소하지 못했습니다',
   AppLocale.neoSyncPlansFailed: '요금제를 불러오지 못했습니다',
+  AppLocale.rommServerVersionLine: '서버 버전 {version}',
+  AppLocale.rommPasswordLoginDisabledHint: '이 서버에서는 비밀번호 로그인이 비활성화되어 있습니다',
 };

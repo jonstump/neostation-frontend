@@ -1362,4 +1362,6 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.neoSyncCheckoutFailed: '创建结账会话失败',
   AppLocale.neoSyncCancelSubscriptionFailed: '取消订阅失败',
   AppLocale.neoSyncPlansFailed: '获取计划失败',
+  AppLocale.rommServerVersionLine: '服务器版本 {version}',
+  AppLocale.rommPasswordLoginDisabledHint: '此服务器已禁用密码登录',
 };

@@ -461,6 +461,23 @@ class RommProvider extends ChangeNotifier {
   RommRomFilters get filters => _filters;
 
   RommService get service => _service;
+
+  /// The connected server's version as its heartbeat reported it, or null
+  /// while unknown: before the probe lands, after it fails, and after a
+  /// disconnect. Read live from the service, so whichever path probed —
+  /// a connect, a restored session's first authenticated request, or the
+  /// offline re-probe — is reflected the moment it lands.
+  // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Provider Exposure And Re-Probe"
+  RommServerVersion? get serverVersion => service.capabilities?.version;
+
+  /// Whether the server has turned off username/password login
+  /// (`FRONTEND.DISABLE_USERPASS_LOGIN`). False while unknown: an unprobed
+  /// server keeps the password form where it is, per ADR-0010's rule that
+  /// unknown never gates.
+  // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Provider Exposure And Re-Probe"
+  bool get passwordLoginDisabled =>
+      service.capabilities?.passwordLoginDisabled ?? false;
+
   RommDownload? downloadFor(int romId) => _downloads[romId];
 
   /// Ids transferring right now — at most one per worker, however many ROMs
@@ -712,9 +729,31 @@ class RommProvider extends ChangeNotifier {
     _transportHooksInstalled = true;
     service.onTransportSuccess = _onTransportSuccess;
     service.onTransportFailure = _onTransportFailure;
+    // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Provider Exposure And Re-Probe"
+    service.onCapabilitiesChanged = _onCapabilitiesChanged;
   }
 
   void _onTransportSuccess() => _setReachability(RommReachability.online);
+
+  /// Set by [dispose], which also detaches the hooks from the service. The
+  /// guard below is for a callback already on the stack when that happens.
+  bool _disposed = false;
+
+  /// A heartbeat landed: [serverVersion] and [passwordLoginDisabled] read the
+  /// new answer already, so all that is owed is the notification. There is no
+  /// generation to check — the getters read the service live, so a probe for
+  /// a connection that has since changed announces whatever the service holds
+  /// now, which is the right answer either way.
+  ///
+  /// This is the restored session's only notification: `initialize` restores
+  /// offline and does not probe (SPEC-0010, amended after #168), so the
+  /// version arrives here from the lazy probe before the first authenticated
+  /// request, or from the offline re-probe in [_reprobe].
+  // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Provider Exposure And Re-Probe"
+  void _onCapabilitiesChanged() {
+    if (_disposed) return;
+    notifyListeners();
+  }
 
   /// A request that never reached the server. Anything else — a 404, a 500,
   /// a refused credential — proves the server *is* there and is not this.
@@ -841,6 +880,12 @@ class RommProvider extends ChangeNotifier {
       // unknown until something actually reaches the server.
       // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Reachability"
       _reachability = RommReachability.unknown;
+      // Connected, with the capabilities still unknown: the restore is
+      // offline by design and sends nothing. [serverVersion] stays null until
+      // the service probes lazily before this session's first authenticated
+      // request (or the offline re-probe lands), and the hook installed here
+      // is what turns that into a notification.
+      // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Provider Exposure And Re-Probe"
       installTransportHooks();
       notifyListeners();
       _flushQueuedPlaytime();
@@ -1121,6 +1166,11 @@ class RommProvider extends ChangeNotifier {
     // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Reachability"
     _cancelReprobe();
     _reachability = RommReachability.unknown;
+    // The version and the password-login flag describe a server this
+    // provider no longer has; [configure] only forgets them when the URL
+    // moves, and a reconnect to the same URL would otherwise skip the probe.
+    // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Provider Exposure And Re-Probe"
+    service.forgetServerState();
     notifyListeners();
   }
 
@@ -3727,6 +3777,16 @@ class RommProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    // The service outlives this provider; a probe or request already on the
+    // wire would otherwise report into a dead notifier.
+    // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Provider Exposure And Re-Probe"
+    if (_transportHooksInstalled) {
+      service
+        ..onTransportSuccess = null
+        ..onTransportFailure = null
+        ..onCapabilitiesChanged = null;
+    }
     _settleTimer?.cancel();
     _cancelReprobe();
     bulkSync

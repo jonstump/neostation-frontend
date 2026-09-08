@@ -16,18 +16,55 @@ enum RommAuthMode {
   /// The mode A (or a tap with no segment target) advances to: one segment
   /// to the right, wrapping from the last back to the first, so repeated
   /// presses visit every mode.
-  RommAuthMode get next => values[(index + 1) % values.length];
+  RommAuthMode get next => nextIn(values);
 
   /// The segment to the left, or this one when already leftmost. A segmented
   /// control reads as positions rather than a ring, so stepping stops at the
   /// ends and the caller can stay silent on a refused move.
-  RommAuthMode get toLeft => index == 0 ? this : values[index - 1];
+  RommAuthMode get toLeft => toLeftIn(values);
 
   /// The segment to the right, or this one when already rightmost. Two
   /// presses of Right from [password] land on [pairCode].
-  RommAuthMode get toRight =>
-      index == values.length - 1 ? this : values[index + 1];
+  RommAuthMode get toRight => toRightIn(values);
+
+  /// [next] over [order] rather than the declared order, for a switch drawn
+  /// in the order [authModeOrderFor] chose: A still walks the segments left to
+  /// right as the user sees them and wraps from the last back to the first.
+  // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect Screen Surfaces"
+  RommAuthMode nextIn(List<RommAuthMode> order) =>
+      order[(order.indexOf(this) + 1) % order.length];
+
+  /// [toLeft] over [order]: one segment left as drawn, stopping at the first.
+  // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect Screen Surfaces"
+  RommAuthMode toLeftIn(List<RommAuthMode> order) {
+    final at = order.indexOf(this);
+    return at <= 0 ? this : order[at - 1];
+  }
+
+  /// [toRight] over [order]: one segment right as drawn, stopping at the last.
+  // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect Screen Surfaces"
+  RommAuthMode toRightIn(List<RommAuthMode> order) {
+    final at = order.indexOf(this);
+    return at == order.length - 1 ? this : order[at + 1];
+  }
 }
+
+/// The order the connect form draws its segments in, left to right, which is
+/// also the order Left/Right and A step through and the mode a fresh form
+/// opens on.
+///
+/// A server whose heartbeat says password login is off leads with pairing
+/// (the QR scan is a row inside that mode), then the API key, and puts the
+/// password segment last, where the form hangs the hint that this server has
+/// disabled it. Every mode stays in the list either way: the flag reorders
+/// the switch, it never removes a segment, so a user who wants the password
+/// form can still reach it. With the flag unknown or false the declared
+/// order stands.
+// Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect Screen Surfaces"
+List<RommAuthMode> authModeOrderFor({required bool passwordLoginDisabled}) =>
+    passwordLoginDisabled
+    ? const [RommAuthMode.pairCode, RommAuthMode.apiKey, RommAuthMode.password]
+    : RommAuthMode.values;
 
 /// Everything the D-pad can land on while the connect form is shown. The
 /// form's live slot list is [focusOrderFor] mapped onto focus nodes; controls

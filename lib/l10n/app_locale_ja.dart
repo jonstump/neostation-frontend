@@ -1418,4 +1418,6 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.neoSyncCheckoutFailed: '決済セッションの作成に失敗しました',
   AppLocale.neoSyncCancelSubscriptionFailed: 'サブスクリプションのキャンセルに失敗しました',
   AppLocale.neoSyncPlansFailed: 'プランの取得に失敗しました',
+  AppLocale.rommServerVersionLine: 'サーバーバージョン {version}',
+  AppLocale.rommPasswordLoginDisabledHint: 'このサーバーではパスワードによるログインが無効になっています',
 };

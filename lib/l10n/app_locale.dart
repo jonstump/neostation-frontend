@@ -1646,6 +1646,11 @@ mixin AppLocale {
       'neo_sync_cancel_subscription_failed';
   static const String neoSyncPlansFailed = 'neo_sync_plans_failed';
 
+  // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect Screen Surfaces"
+  static const String rommServerVersionLine = 'romm_server_version_line';
+  static const String rommPasswordLoginDisabledHint =
+      'romm_password_login_disabled_hint';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================

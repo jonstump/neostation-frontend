@@ -1626,4 +1626,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.neoSyncCancelSubscriptionFailed:
       'Échec de l’annulation de l’abonnement',
   AppLocale.neoSyncPlansFailed: 'Échec du chargement des plans',
+  AppLocale.rommServerVersionLine: 'Version du serveur {version}',
+  AppLocale.rommPasswordLoginDisabledHint:
+      'La connexion par mot de passe est désactivée sur ce serveur',
 };
