@@ -185,6 +185,24 @@ class RommAuthException extends RommException {
   RommAuthException(super.message, {super.statusCode});
 }
 
+/// Raised when a request never got an answer out of the server — a timeout, a
+/// dropped socket, a TLS handshake that failed.
+///
+/// A distinct type because the alternative is guessing. [RommException.statusCode]
+/// tells "the server answered badly" apart from everything else, but it is
+/// null for two failures that are *not* transport faults either: an empty base
+/// URL, which sends nothing at all, and [RommService._verifyApiKey]'s catch-all,
+/// which would also swallow a `FormatException` from a malformed URL. Both used
+/// to be logged as "could not reach the server", which is the misdiagnosis
+/// issue #181 set out to end and issue #183 finding 3 caught it still doing.
+/// Extends [RommException] so every existing catch, message and status check
+/// keeps working unchanged; only [RommService._ensureToken] reads the type.
+// Governing: ADR-0010, SPEC-0010 REQ "Probe Before The Token Grant",
+// ADR-0020, SPEC-0019 REQ "Reachability"
+class RommTransportException extends RommException {
+  RommTransportException(super.message);
+}
+
 /// HTTP client for a remote RomM server (library browse + ROM download).
 ///
 /// Holds the server base URL and credentials for one connection. Two
@@ -314,17 +332,28 @@ class RommService {
   // SPEC-0013 REQ "Optional Scope Groups", ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
   bool _apiKeyVerified = false;
 
-  /// How many API-key verifications this connection has spent on a server that
-  /// answered *badly* — a 5xx, a 429, any non-2xx that is not 401/403.
+  /// How many API-key verifications this connection has spent *in a row* on a
+  /// failure that was not a rejection and not a transport fault: a server that
+  /// answered badly (a 5xx, a 429, any non-2xx that is not 401/403), or a
+  /// failure with no status to classify at all.
   ///
-  /// Only that middle case is counted. A rejection latches on the first answer
-  /// and a transport failure is not the server's fault at all, so neither ever
-  /// increments this. Reset wherever [_apiKeyVerified] is.
+  /// Consecutive, not cumulative. A rejection latches on the first answer and a
+  /// transport failure is not the server's fault at all, so neither ever
+  /// increments this. [_noteApiKeyAccepted] clears it when the server answers
+  /// an authenticated call normally, and a verification that succeeds clears it
+  /// too; [_apiKeyVerifyFailuresTotal] is the half that nothing clears.
   // Governing: ADR-0013, SPEC-0013 REQ "Optional Scope Groups"
-  int _apiKeyServerErrors = 0;
+  int _apiKeyVerifyFailures = 0;
 
-  /// The bound on [_apiKeyServerErrors]: three verification attempts against a
-  /// server that keeps answering badly, then the one-shot stays spent.
+  /// Every failure [_apiKeyVerifyFailures] has counted since the last
+  /// [configure], healed episodes included. Reset only where [_apiKeyVerified]
+  /// is reset for a *new* connection, never by a healthy response.
+  // Governing: ADR-0013, SPEC-0013 REQ "Optional Scope Groups"
+  int _apiKeyVerifyFailuresTotal = 0;
+
+  /// The consecutive bound on [_apiKeyVerifyFailures]: three attempts against a
+  /// server that keeps answering badly, then the one-shot is put away until the
+  /// server proves it is answering again.
   ///
   /// Three, not one and not unbounded. Re-arming at all is what lets a RomM
   /// container that is mid-restart heal the connection by itself — dropping
@@ -332,12 +361,30 @@ class RommService {
   /// reconnects, which is issue #168's symptom with a 502 as the trigger.
   /// Re-arming *forever* is what issue #173 measured: one extra
   /// `GET /api/users/me` on every authenticated call, for the life of a
-  /// process pointed at a permanently broken server. A restart is over in
-  /// seconds and the next few calls fall inside it, so three attempts buy the
-  /// whole transient case; a server still answering 5xx by the third is broken
-  /// rather than busy. The cost is bounded at two extra requests per
-  /// connection instead of one per call.
-  static const int _maxApiKeyServerErrors = 3;
+  /// process pointed at a permanently broken server.
+  ///
+  /// Three *calls*, note — not three seconds. The budget this bounds is spent
+  /// per attempt, and attempts are made by calls: opening the RomM tab fires
+  /// `getPlatforms`, `getCollections` and a `getRoms` page, so a restart of a
+  /// few seconds can burn the whole consecutive budget inside one screen open.
+  /// That is why the budget is consecutive rather than per-connection, and why
+  /// [_noteApiKeyAccepted] exists: without a way back, three unlucky calls
+  /// stranded the connection until the app restarted (issue #183 finding 2).
+  static const int _maxApiKeyVerifyFailures = 3;
+
+  /// The absolute bound on [_apiKeyVerifyFailuresTotal], which nothing clears
+  /// short of a [configure]. This is the ceiling issue #173's measurement asks
+  /// for, and the consecutive bound above cannot supply it on its own.
+  ///
+  /// The healthy signal that clears the consecutive count is a 2xx to *some*
+  /// authenticated call, which is the best evidence available but not proof
+  /// that `/api/users/me` in particular has recovered: a server answering
+  /// `/api/roms` with 200 and `/api/users/me` with 500 alternates the reset and
+  /// the failure forever, and the consecutive count then never reaches three.
+  /// Nine caps that at nine extra requests for the life of the connection —
+  /// three full consecutive budgets, so three separate restart episodes can
+  /// each be healed — instead of one per call.
+  static const int _maxApiKeyVerifyFailuresTotal = 9;
 
   /// Features already reported as gated on this connection, so the "not on
   /// this server" line is logged once per feature rather than once per call.
@@ -473,7 +520,8 @@ class RommService {
     }
     _scopeGatesLogged.clear();
     _apiKeyVerified = false;
-    _apiKeyServerErrors = 0;
+    _apiKeyVerifyFailures = 0;
+    _apiKeyVerifyFailuresTotal = 0;
     _favouritesCollectionId = null;
     _playSessionsSupported = true;
     _applyCapabilityGates();
@@ -518,7 +566,8 @@ class RommService {
     }
     _scopeGatesLogged.clear();
     _apiKeyVerified = false;
-    _apiKeyServerErrors = 0;
+    _apiKeyVerifyFailures = 0;
+    _apiKeyVerifyFailuresTotal = 0;
   }
 
   static String _normalizeBaseUrl(String raw) {
@@ -797,14 +846,22 @@ class RommService {
         timeout: _requestTimeout,
       );
     } on TimeoutException {
-      throw RommException('Connection timed out');
+      // These three are the whole of "the server did not answer", and they are
+      // marked as such so [_ensureToken] can tell them from a failure that has
+      // no status for a different reason. The messages are unchanged and the
+      // type is a [RommException] subclass, so nothing else sees a difference.
+      // Governing: ADR-0010, SPEC-0010 REQ "Probe Before The Token Grant"
+      throw RommTransportException('Connection timed out');
     } on HandshakeException {
-      throw RommException(
+      throw RommTransportException(
         'TLS handshake failed — try an http:// URL if the server is not HTTPS',
       );
     } on SocketException catch (e) {
-      throw RommException('Cannot reach server: ${e.message}');
+      throw RommTransportException('Cannot reach server: ${e.message}');
     } catch (e) {
+      // Deliberately *not* a transport exception: this arm also catches a
+      // `FormatException` from a malformed URL and an `http.ClientException`,
+      // neither of which is the network being down.
       throw RommException('Connection failed: $e');
     }
 
@@ -1252,29 +1309,53 @@ class RommService {
   /// best-effort enrichment of a request that is about to be sent anyway.
   ///
   /// "Once" holds for the case that matters — a key the server accepts or
-  /// rejects is asked about exactly once. A failure splits three ways instead,
-  /// on whether and how the server answered: rejected (spent), answered badly
-  /// (retried, bounded by [_maxApiKeyServerErrors]), never answered (retried,
-  /// unbounded). Note the governing artifacts: SPEC-0010 REQ "Probe Before The
-  /// Token Grant" says a restored session verifies "at most once", which the
-  /// re-arm this method has shipped with since #169 already exceeds; the
-  /// clause wants amending to the bounded form the three cases below define.
+  /// rejects is asked about exactly once. A failure splits on whether and how
+  /// the server answered: rejected (spent for good), answered badly (retried,
+  /// bounded by [_maxApiKeyVerifyFailures] in a row and
+  /// [_maxApiKeyVerifyFailuresTotal] in all), never answered (retried,
+  /// unbounded), and — the fourth case, which no spec names because it reaches
+  /// no server — failed with no status to classify, which is bounded like the
+  /// second.
   // Governing: ADR-0010 (RomM heartbeat capability probe),
-  // SPEC-0010 REQ "Probe Before The Token Grant" (amended, #171 — the clause
-  // tying the probe to authenticate() did not cover a restored session),
-  // ADR-0013, SPEC-0013 REQ "Optional Scope Groups" (amended, #171)
+  // SPEC-0010 REQ "Probe Before The Token Grant" (amended, #171 and #184),
+  // ADR-0013, SPEC-0013 REQ "Optional Scope Groups" (amended, #171 and #184)
   Future<void> _ensureToken() async {
     if (usesApiKey && !_apiKeyVerified) {
       _apiKeyVerified = true;
       try {
         await authenticate();
+        // The verification landed. Clear the consecutive count so a failure
+        // much later gets its own three attempts rather than inheriting a
+        // number from a restart this connection has already healed from — and
+        // so [_noteApiKeyAccepted] stays inert on a healthy connection, where
+        // a zero count is what makes it a no-op.
+        _apiKeyVerifyFailures = 0;
       } on RommAuthException catch (e) {
         // Case 1 — the server answered, and its answer was "no" (401/403).
         // Asking again with the same key would only repeat it, so the attempt
         // stays spent for the life of the connection.
         _log.w('RomM API-key rejected during verification: ${e.message}');
+      } on RommTransportException catch (e) {
+        // Case 3 — the server did not answer at all: a timeout, a dropped
+        // socket, a TLS failure. Re-arm, unbounded. A handheld commonly
+        // resumes and issues its first request before Wi-Fi is up, and
+        // latching on a transport error would leave the groups unknown and the
+        // capabilities null for the rest of the process. That is issue #168's
+        // exact symptom with a narrower trigger, and `_reprobe()` does not
+        // cover it because it restores capabilities without re-running
+        // verification. The genuinely-offline case is already damped a layer
+        // up by RommProvider's reachability backoff, so a second bound here
+        // would only duplicate it.
+        //
+        // Matched by type rather than by "no status came back": that test used
+        // to catch two failures that are not transport faults at all — an
+        // empty base URL, which sends nothing, and [_verifyApiKey]'s catch-all
+        // — and logged both as an unreachable server (issue #183 finding 3).
+        // Governing: ADR-0020, SPEC-0019 REQ "Reachability"
+        _apiKeyVerified = false;
+        _log.w('RomM API-key verification could not reach the server: $e');
       } catch (e) {
-        // The other two cases are told apart by whether a *status* came back,
+        // The remaining cases are told apart by whether a *status* came back,
         // not by exception type. `RommAuthException` covers only 401/403, so
         // matching on type alone filed every 5xx and 429 under "unreachable" —
         // which is both the wrong policy (issue #173) and the wrong log line
@@ -1285,29 +1366,23 @@ class RommService {
         if (status != null) {
           // Case 2 — the server answered, badly. A 5xx is usually a container
           // mid-restart, so re-arm and let a later call heal the connection,
-          // but bound it: see [_maxApiKeyServerErrors] for why three.
-          _apiKeyServerErrors++;
-          final retrying = _apiKeyServerErrors < _maxApiKeyServerErrors;
-          if (retrying) _apiKeyVerified = false;
+          // but bound it: see [_maxApiKeyVerifyFailures] for why three in a row
+          // and [_maxApiKeyVerifyFailuresTotal] for why nine in all.
           _log.w(
             'RomM API-key verification failed: the server answered $status '
-            '(attempt $_apiKeyServerErrors of $_maxApiKeyServerErrors) — '
-            '${retrying ? 'a later call will retry' : 'giving up for this connection'}',
+            '${_spendApiKeyVerifyBudget()}',
           );
         } else {
-          // Case 3 — the server did not answer at all: a timeout, a dropped
-          // socket, a TLS failure. Re-arm, unbounded, as before. A handheld
-          // commonly resumes and issues its first request before Wi-Fi is up,
-          // and latching on a transport error would leave the groups unknown
-          // and the capabilities null for the rest of the process. That is
-          // issue #168's exact symptom with a narrower trigger, and
-          // `_reprobe()` does not cover it because it restores capabilities
-          // without re-running verification. The genuinely-offline case is
-          // already damped a layer up by RommProvider's reachability backoff,
-          // so a second bound here would only duplicate it.
-          // Governing: ADR-0020, SPEC-0019 REQ "Reachability"
-          _apiKeyVerified = false;
-          _log.w('RomM API-key verification could not reach the server: $e');
+          // Case 4 — no status and no transport fault: an empty base URL, a
+          // malformed URI, an `http.ClientException` we cannot place. Bounded
+          // like case 2 rather than latched, because the class includes
+          // failures that do cost a request and may still be transient; the
+          // point of the branch is that the line no longer blames the network
+          // for something the network did not do (issue #183 finding 3).
+          _log.w(
+            'RomM API-key verification failed without a status to classify: '
+            '$e ${_spendApiKeyVerifyBudget()}',
+          );
         }
       }
       return;
@@ -1317,6 +1392,72 @@ class RommService {
       await _refreshAccessToken();
     } else {
       await authenticate();
+    }
+  }
+
+  /// Spends one attempt from the API-key verification budget and reports where
+  /// that leaves it, as the tail of the caller's log line.
+  ///
+  /// Two counters, because one cannot express both halves of the bound. The
+  /// consecutive count is what a healthy server clears, so a container that
+  /// restarts twice in a session is forgiven twice; the total is what nothing
+  /// clears, so a server that alternates a healthy answer with a failing
+  /// verification still stops costing requests. Re-arms the one-shot only while
+  /// both bounds have room.
+  // Governing: ADR-0010, SPEC-0010 REQ "Probe Before The Token Grant",
+  // ADR-0013, SPEC-0013 REQ "Optional Scope Groups"
+  String _spendApiKeyVerifyBudget() {
+    _apiKeyVerifyFailures++;
+    _apiKeyVerifyFailuresTotal++;
+    final outOfAttempts =
+        _apiKeyVerifyFailuresTotal >= _maxApiKeyVerifyFailuresTotal;
+    final paused = _apiKeyVerifyFailures >= _maxApiKeyVerifyFailures;
+    if (!outOfAttempts && !paused) _apiKeyVerified = false;
+    final verdict = outOfAttempts
+        ? 'giving up for this connection'
+        : paused
+        ? 'waiting for the server to answer an authenticated call before '
+              'retrying'
+        : 'a later call will retry';
+    return '(attempt $_apiKeyVerifyFailures of $_maxApiKeyVerifyFailures in a '
+        'row, $_apiKeyVerifyFailuresTotal of $_maxApiKeyVerifyFailuresTotal for '
+        'this connection) — $verdict';
+  }
+
+  /// Re-arms the API-key verification one-shot when the server proves it is
+  /// answering again, so a connection whose consecutive budget was spent on a
+  /// restart heals itself instead of waiting for the app to restart.
+  ///
+  /// Called from [_sendWithAuthRetry] with the status of a request that carried
+  /// this connection's API key in its `Authorization` header, and only in
+  /// API-key mode. That is the narrowest healthy signal available: a 2xx there
+  /// means the server answered *and* accepted this exact credential. The
+  /// unauthenticated heartbeat is deliberately not a trigger — it proves only
+  /// that something is listening on the URL, and `RommProvider._reprobe()`
+  /// fires it on a timer, so resetting there would let a poll re-arm the probe
+  /// on no evidence about the key at all.
+  ///
+  /// It is not proof that `/api/users/me` has recovered — the 2xx came from
+  /// another endpoint, possibly in the very call whose verification just
+  /// failed. [_maxApiKeyVerifyFailuresTotal] is what bounds that case; this
+  /// method deliberately does not try to.
+  // Governing: ADR-0010, SPEC-0010 REQ "Probe Before The Token Grant",
+  // ADR-0013, SPEC-0013 REQ "Optional Scope Groups"
+  void _noteApiKeyAccepted(int status) {
+    if (status < 200 || status >= 300) return;
+    // A connection that has never failed a verification — the normal case —
+    // touches no state here, so the healthy path costs a comparison.
+    if (_apiKeyVerifyFailures == 0) return;
+    final wasSpent = _apiKeyVerified;
+    _apiKeyVerifyFailures = 0;
+    if (_apiKeyVerifyFailuresTotal >= _maxApiKeyVerifyFailuresTotal) return;
+    _apiKeyVerified = false;
+    if (wasSpent) {
+      _log.i(
+        'RomM API-key verification re-armed: the server answered $status to an '
+        'authenticated call after $_apiKeyVerifyFailuresTotal failed '
+        'verification(s)',
+      );
     }
   }
 
@@ -1377,7 +1518,13 @@ class RommService {
       onTransportFailure?.call(e);
       throw RommException('Cannot reach server: ${e.message}');
     }
-    if (usesApiKey) return resp;
+    if (usesApiKey) {
+      // The one healthy signal that re-arms a spent verification budget: this
+      // request carried the API key and the server answered it.
+      // Governing: ADR-0010, SPEC-0010 REQ "Probe Before The Token Grant"
+      _noteApiKeyAccepted(statusOf(resp));
+      return resp;
+    }
     if (statusOf(resp) == 401) {
       await _refreshAccessToken();
       resp = await send();
