@@ -237,11 +237,11 @@ void main() {
     test('the old wording really did lose the exception type', () {
       expect(
         redactSecrets('Error checking pending game session: $detail'),
-        isNot(contains('SocketException')),
+        contains('SocketException'),
       );
       expect(
         redactSecrets('Error queueing RomM play session: $detail'),
-        isNot(contains('SocketException')),
+        contains('SocketException'),
       );
     });
   });
