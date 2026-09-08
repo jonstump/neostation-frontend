@@ -57,6 +57,7 @@ import '../../constants/system_folder_names.dart';
 import '../../utils/artwork_cache.dart';
 import '../../utils/game_list_update.dart';
 import '../../utils/scrape_result_message.dart';
+import '../../utils/scrape_gate.dart';
 import 'package:neostation/themes/chrome_surface.dart';
 import '../../themes/corner_radii.dart';
 
@@ -367,6 +368,8 @@ class _SystemGamesListState extends State<SystemGamesList> {
   late SqliteDatabaseProvider _databaseProvider;
   late ScrapingProvider _scrapingProvider;
   int _lastArtworkRevision = 0;
+  late RommProvider _rommProvider;
+  int _lastCatalogRevision = 0;
 
   @override
   void initState() {
@@ -401,6 +404,13 @@ class _SystemGamesListState extends State<SystemGamesList> {
     _scrapingProvider = context.read<ScrapingProvider>();
     _lastArtworkRevision = _scrapingProvider.artworkRevision;
     _scrapingProvider.addListener(_onScrapingUpdated);
+
+    // A catalog refresh or clear on the RomM screen must reach a list left
+    // open under it: re-run the merge when the catalog revision moves.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
+    _rommProvider = context.read<RommProvider>();
+    _lastCatalogRevision = _rommProvider.catalogRevision;
+    _rommProvider.addListener(_onCatalogRevisionChanged);
     _artworkVersion = _lastArtworkRevision;
     _invalidateArtworkCaches();
 
@@ -491,6 +501,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
     _configProvider.removeListener(_onConfigChanged);
     _databaseProvider.removeListener(_onDatabaseUpdated);
     _scrapingProvider.removeListener(_onScrapingUpdated);
+    _rommProvider.removeListener(_onCatalogRevisionChanged);
     MusicPlayerService().removeListener(_onMusicPlayerStateChanged);
     GameService.deviceScreenOn.removeListener(_onDeviceScreenPowerChanged);
 
@@ -512,6 +523,23 @@ class _SystemGamesListState extends State<SystemGamesList> {
     // image widgets to check the artwork files again.
     _invalidateArtworkCaches();
     setState(() => _artworkVersion++);
+    _loadGames();
+  }
+
+  /// Reloads the list when [RommProvider.catalogRevision] moves — a manual
+  /// refresh wrote rows, or "Clear cached RomM library" dropped them — so the
+  /// remote entries on screen match the catalog. The provider also notifies
+  /// on every download tick; the revision check keeps those from reloading.
+  /// Views that never carry remote entries (favourites, collections, music,
+  /// the library toggle off) have nothing to re-merge and skip it.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
+  void _onCatalogRevisionChanged() {
+    final revision = _rommProvider.catalogRevision;
+    if (!mounted || revision == _lastCatalogRevision) return;
+    _lastCatalogRevision = revision;
+    if (!_libraryScopeAvailable || _isLoadingGames || _isNavigatingBack) {
+      return;
+    }
     _loadGames();
   }
 
@@ -607,9 +635,12 @@ class _SystemGamesListState extends State<SystemGamesList> {
   }
 
   /// Whether the RomM server is currently unreachable, for the footer pill's
-  /// offline mark and the cached-library notice.
-  bool get _libraryOffline =>
-      context.read<RommProvider>().reachability == RommReachability.offline;
+  /// offline mark and the cached-library notice. Set at the top of [build]
+  /// from a `select` on the provider's reachability, so a flip repaints the
+  /// pill (and its tooltip) on its own instead of waiting for an unrelated
+  /// rebuild.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
+  bool _libraryOffline = false;
 
   /// Flips the scope and rebuilds the visible list from the merged one in
   /// memory. The selection follows the same game when it survives the
@@ -650,9 +681,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
   }
 
   /// The notice for an action a remote entry cannot take yet (launch,
-  /// favourite, settings): the file is not on this device. Downloading from
-  /// the list is the next story's; until then the press is answered rather
-  /// than swallowed.
+  /// favourite, settings, scrape): the file is not on this device.
+  /// Downloading from the list is the next story's; until then the press is
+  /// answered rather than swallowed.
   // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entries In The Game Model"
   void _notifyRemoteNotDownloaded() {
     AppNotification.showNotification(
@@ -975,6 +1006,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
   @override
   Widget build(BuildContext context) {
     final isOled = context.select<ThemeProvider, bool>((t) => t.isOled);
+    _libraryOffline = context.select<RommProvider, bool>(
+      (p) => p.reachability == RommReachability.offline,
+    );
 
     return PopScope(
       canPop: _canPop,
@@ -2130,6 +2164,14 @@ class _SystemGamesListState extends State<SystemGamesList> {
     final game = _selectedGame;
     if (game == null || _isScrapingSelectedGame) return;
     if (_isFolderEntry(game)) return;
+    // The Select + A chord bypasses the context menu, so the remote check
+    // lives here too: a remote entry has no file to fingerprint, and a scrape
+    // by name would write metadata and media for a ROM that is not here.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entries In The Game Model"
+    if (scrapeGateFor(game) == ScrapeGate.notDownloaded) {
+      _notifyRemoteNotDownloaded();
+      return;
+    }
 
     // The ScreenScraper platform id is looked up from the app system id, so
     // this has to be the game's *own* system. An aggregate view's id either has
