@@ -666,6 +666,38 @@ void main() {
       expect(await RommPropsOutboxRepository.pendingCount(), 0);
     });
 
+    test('a row whose link lookup fails is kept, not dropped', () async {
+      await link('zelda.smc', 42);
+      await RommPropsOutboxRepository.upsert(romPath: zeldaPath, hidden: true);
+      serve(happyServer);
+      // The link table is gone, so resolving the row's id throws. That is a
+      // failed lookup, not a missing link, and must not read as "unlinked".
+      await db.execute('DROP TABLE app_romm_rom_map');
+
+      final summary = await browse.flushPlayStateOutbox();
+
+      expect(summary.kept, 1);
+      expect(summary.dropped, 0);
+      expect(calls(), isEmpty);
+      expect(await RommPropsOutboxRepository.pendingCount(), 1);
+    });
+
+    test('overlapping flushes share one run', () async {
+      await link('zelda.smc', 42);
+      await RommPropsOutboxRepository.upsert(romPath: zeldaPath, hidden: true);
+      serve(happyServer);
+
+      final results = await Future.wait([
+        browse.flushPlayStateOutbox(),
+        browse.flushPlayStateOutbox(),
+      ]);
+
+      // Both callers see the same summary and only one PUT went out.
+      expect(results.map((r) => r.pushed), [1, 1]);
+      expect(calls().length, 1);
+      expect(await RommPropsOutboxRepository.pendingCount(), 0);
+    });
+
     test('a server below 4.9.0 sends nothing and drops the row', () async {
       await link('zelda.smc', 42);
       await RommPropsOutboxRepository.upsert(romPath: zeldaPath, hidden: true);

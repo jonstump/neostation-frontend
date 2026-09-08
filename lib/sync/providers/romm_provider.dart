@@ -32,6 +32,7 @@ import 'package:neostation/repositories/emulator_repository.dart';
 import 'package:neostation/repositories/game_repository.dart';
 import 'package:neostation/services/retroarch_config_service.dart';
 import 'package:neostation/providers/romm_provider.dart';
+import 'package:neostation/repositories/romm_props_outbox_repository.dart';
 import 'package:neostation/repositories/romm_save_map_repository.dart';
 import 'package:neostation/repositories/romm_screenshot_map_repository.dart';
 import 'package:neostation/repositories/sync_repository.dart';
@@ -589,23 +590,30 @@ class RomMSyncProvider extends ChangeNotifier
   /// the launch/close flow. [RommPlaytimeService] throttles the pull itself, so
   /// this is cheap to call from the per-selection save detection.
   Future<void> _syncPlaytime(GameModel game, int romId) async {
-    // The play-state outbox rides along with the session flush, and is not
-    // behind the playtime gate: favourites need a different scope group.
-    // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Flush"
-    await _browse.flushPlayStateOutbox();
-    if (!_svc.playtimeSyncAvailable) return;
-    try {
-      await RommPlaytimeService.flushQueuedSessions(_svc);
-      final romPath = game.romPath;
-      if (romPath != null && romPath.isNotEmpty) {
-        await RommPlaytimeService.pullPlaytime(
-          _svc,
-          romId: romId,
-          romPath: romPath,
-        );
+    if (_svc.playtimeSyncAvailable) {
+      try {
+        await RommPlaytimeService.flushQueuedSessions(_svc);
+        final romPath = game.romPath;
+        if (romPath != null && romPath.isNotEmpty) {
+          await RommPlaytimeService.pullPlaytime(
+            _svc,
+            romId: romId,
+            romPath: romPath,
+          );
+        }
+      } catch (e) {
+        _log.w('RomM playtime sync failed for ${game.romname}: $e');
       }
-    } catch (e) {
-      _log.w('RomM playtime sync failed for ${game.romname}: $e');
+    }
+
+    // The play-state outbox goes out after the sessions — the same order as
+    // the provider's own flush, so an `update_last_played` touch lands after
+    // the session it belongs to — and is not behind the playtime gate:
+    // favourites need a different scope group. This runs per selection while
+    // browsing, so the outbox is only read when a count says it is non-empty.
+    // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Flush"
+    if (await RommPropsOutboxRepository.pendingCount() > 0) {
+      await _browse.flushPlayStateOutbox();
     }
   }
 

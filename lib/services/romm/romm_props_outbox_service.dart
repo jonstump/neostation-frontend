@@ -149,7 +149,9 @@ class RommPropsOutboxService {
   /// is created with on first use; resolved by the caller because this layer
   /// has no `BuildContext`.
   ///
-  /// Never throws; a repository failure reads as "nothing pending".
+  /// Never throws; a failure reading the outbox reads as "nothing pending",
+  /// and a failure resolving a row's link keeps that row for next time (it is
+  /// a lookup that failed, not a link that is gone).
   // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Flush", REQ "Error Handling Standards"
   static Future<RommPropsFlushSummary> flush(
     RommService service, {
@@ -174,9 +176,17 @@ class RommPropsOutboxService {
         break;
       }
 
-      final romId = await RommSaveMapRepository.getRommRomIdForRomPath(
-        row.romPath,
-      );
+      final int? romId;
+      try {
+        romId = await RommSaveMapRepository.getRommRomIdForRomPath(row.romPath);
+      } catch (e) {
+        _log.w(
+          'RomM play-state link lookup failed (kept queued): '
+          'rom_path=${row.romPath} error=$e',
+        );
+        kept++;
+        continue;
+      }
       if (romId == null) {
         _log.i(
           'RomM play-state row dropped: rom_path=${row.romPath} '

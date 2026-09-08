@@ -1172,15 +1172,34 @@ class RommProvider extends ChangeNotifier {
   /// Drains the play-state outbox (hidden, favourite, last played) to the
   /// connected server.
   ///
-  /// Runs with every play-session flush here and from the sync provider's
-  /// connect-time sweep, and stops the moment the connection goes away. The
-  /// favourites collection name is resolved at this boundary because the
-  /// service below has no `BuildContext`. Never throws; a flush is a
-  /// statistic, not something the UI waits on.
+  /// Runs with every play-session flush here, from the sync provider's
+  /// connect-time sweep and its per-game playtime pass, and stops the moment
+  /// the connection goes away. Those callers can overlap, so only one flush
+  /// runs at a time: a call that arrives while one is in flight joins it and
+  /// gets its summary, rather than listing the same rows and sending the
+  /// same requests twice. A row queued during a flush waits for the next
+  /// trigger. The favourites collection name is resolved at this boundary
+  /// because the service below has no `BuildContext`. Never throws; a flush
+  /// is a statistic, not something the UI waits on.
   // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Flush"
-  Future<RommPropsFlushSummary> flushPlayStateOutbox() async {
+  Future<RommPropsFlushSummary> flushPlayStateOutbox() {
     const nothing = (pushed: 0, dropped: 0, kept: 0);
-    if (!isConnected) return nothing;
+    if (!isConnected) return Future.value(nothing);
+    final inFlight = _playStateFlush;
+    if (inFlight != null) {
+      _log.d('RomM play-state flush already running; joining it');
+      return inFlight;
+    }
+    final flush = _runPlayStateFlush();
+    _playStateFlush = flush;
+    return flush.whenComplete(() => _playStateFlush = null);
+  }
+
+  /// The flush [flushPlayStateOutbox] is currently awaiting, if any.
+  Future<RommPropsFlushSummary>? _playStateFlush;
+
+  Future<RommPropsFlushSummary> _runPlayStateFlush() async {
+    const nothing = (pushed: 0, dropped: 0, kept: 0);
     try {
       // Via the [service] getter, not [_service], so a test can substitute
       // the server the same way the sync-provider tests do.
