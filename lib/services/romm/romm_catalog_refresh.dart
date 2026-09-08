@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../models/romm_catalog_row.dart';
@@ -69,6 +71,12 @@ typedef RommCatalogPlatformRecorder =
 
 /// When this server's catalog was last refreshed, for the hourly guard.
 typedef RommCatalogStampReader = Future<DateTime?> Function(String serverUrl);
+
+/// Warms the cover cache for the rows a run upserted. Runs detached after the
+/// summary; the production prefetcher is `RommCoverCache.prefetch`, which
+/// applies its own per-refresh bound and concurrency.
+// Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+typedef RommCoverPrefetcher = Future<void> Function(List<RommCatalogRow> rows);
 
 /// What one run of [RommCatalogRefresh] did.
 @immutable
@@ -179,6 +187,7 @@ class RommCatalogRefresh {
   final RommCatalogPlatformRecorder _recordPlatform;
   final RommCatalogStampReader _newestRefreshedAt;
   final RommLibraryLinker? _linker;
+  final RommCoverPrefetcher? _prefetchCovers;
   final DateTime Function() _clock;
   final LoggerService _log;
 
@@ -195,6 +204,7 @@ class RommCatalogRefresh {
     RommCatalogPruner? deleteUnseen,
     RommCatalogPlatformRecorder? recordPlatform,
     RommCatalogStampReader? newestRefreshedAt,
+    RommCoverPrefetcher? prefetchCovers,
     DateTime Function()? clock,
     LoggerService? logger,
   }) : _listPlatforms = listPlatforms,
@@ -208,6 +218,7 @@ class RommCatalogRefresh {
        _recordPlatform = recordPlatform ?? RommCatalogRepository.recordPlatform,
        _newestRefreshedAt =
            newestRefreshedAt ?? RommCatalogRepository.newestRefreshedAt,
+       _prefetchCovers = prefetchCovers,
        _clock = clock ?? DateTime.now,
        _log = logger ?? _defaultLog;
 
@@ -308,6 +319,11 @@ class RommCatalogRefresh {
     // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Refresh Shares The Walk"
     final writeFailures = <int>{};
     final unprunable = <int>{};
+    // Rows whose write landed, for the cover prefetch after the walk. Only
+    // fully written batches: a cover for a row the catalog does not hold is a
+    // file nothing will ever draw.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+    final upsertedRows = <RommCatalogRow>[];
 
     final walk = RommPlatformWalk(
       listPlatforms: _listPlatforms,
@@ -338,6 +354,9 @@ class RommCatalogRefresh {
           ];
           final written = await _upsert(rows);
           rowsUpserted += written;
+          if (written == rows.length && _prefetchCovers != null) {
+            upsertedRows.addAll(rows);
+          }
           if (written < rows.length) {
             // The repository writes in chunks and reports what it committed;
             // a short count is a chunk that did not land.
@@ -409,7 +428,27 @@ class RommCatalogRefresh {
       linkStageFailed: linkStageFailed,
     );
     _logSummary(summary, reason: reason);
+    _startCoverPrefetch(upsertedRows);
     return summary;
+  }
+
+  /// Hands the rows this run wrote to the cover cache, detached: the walk and
+  /// the link stage are done and summarized, and a prefetch that takes a
+  /// minute over Wi-Fi must not hold the refresh's caller for it. The cache
+  /// bounds the batch (300, concurrency 3) and never throws; this only makes
+  /// sure a failure it did not catch cannot surface as an unhandled error.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+  // Governing: SPEC-0019 REQ "Concurrency Safety"
+  void _startCoverPrefetch(List<RommCatalogRow> rows) {
+    final prefetch = _prefetchCovers;
+    if (prefetch == null || rows.isEmpty) return;
+    unawaited(
+      Future(() => prefetch(rows)).catchError((Object e) {
+        _log.w(
+          '$logLabel: cover prefetch failed: rows=${rows.length} cause=$e',
+        );
+      }),
+    );
   }
 
   /// The one info line per run, in key=value form.

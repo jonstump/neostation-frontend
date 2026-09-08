@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/models/database_game_model.dart';
 import 'package:neostation/models/romm_catalog_row.dart';
@@ -187,6 +189,7 @@ void main() {
     bool Function()? shouldStop,
     DateTime Function()? clock,
     String serverUrl = _server,
+    RommCoverPrefetcher? prefetchCovers,
   }) => RommCatalogRefresh(
     listPlatforms: server.listPlatforms,
     resolveSystem: server.resolve,
@@ -198,6 +201,7 @@ void main() {
     deleteUnseen: catalog.deleteUnseen,
     recordPlatform: catalog.recordPlatform,
     newestRefreshedAt: catalog.newestRefreshedAt,
+    prefetchCovers: prefetchCovers,
     clock: clock,
   );
 
@@ -692,6 +696,93 @@ void main() {
         isEmpty,
         reason: 'an unfinished platform is never pruned',
       );
+    });
+  });
+
+  group('cover prefetch', () {
+    // Governing: SPEC-0019 REQ "Cover Cache" — prefetch after the refresh
+    test('the upserted rows reach the prefetcher after the summary', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes'), _platform(2, 'snes')],
+        romsByPlatform: {
+          1: [
+            _rom(10, platformId: 1, fsName: 'A.sfc'),
+            _rom(11, platformId: 1, fsName: 'B.sfc'),
+          ],
+          2: [_rom(20, platformId: 2, fsName: 'C.sfc')],
+        },
+        systemBySlug: {'snes': snes},
+      );
+      final catalog = _FakeCatalog()..failingWrites = {2};
+      final handed = Completer<List<RommCatalogRow>>();
+      var summaryLoggedFirst = false;
+
+      final summary = await build(
+        server,
+        catalog,
+        prefetchCovers: (rows) async {
+          summaryLoggedFirst = _refreshLines().any(
+            (l) => l.startsWith('i|') && l.contains('rows_upserted='),
+          );
+          handed.complete(rows);
+        },
+      ).run(reason: RommRefreshReason.manual);
+
+      expect(summary.rowsUpserted, 2);
+      final rows = await handed.future;
+      expect(
+        rows.map((r) => r.rommRomId),
+        unorderedEquals([10, 11]),
+        reason: 'only rows whose write landed; platform 2 failed',
+      );
+      expect(rows.every((r) => r.serverUrl == _server), isTrue);
+      expect(summaryLoggedFirst, isTrue, reason: 'detached, after the summary');
+    });
+
+    test('a prefetcher that throws is logged, not surfaced', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes')],
+        romsByPlatform: {
+          1: [_rom(10, platformId: 1, fsName: 'A.sfc')],
+        },
+        systemBySlug: {'snes': snes},
+      );
+      final failed = Completer<void>();
+
+      final summary = await build(
+        server,
+        _FakeCatalog(),
+        prefetchCovers: (rows) {
+          failed.complete();
+          throw StateError('disk full');
+        },
+      ).run(reason: RommRefreshReason.manual);
+      await failed.future;
+      await Future<void>.delayed(Duration.zero);
+
+      expect(summary.rowsUpserted, 1);
+      expect(
+        _refreshLines().where((l) => l.contains('cover prefetch failed')),
+        hasLength(1),
+      );
+    });
+
+    test('nothing upserted, nothing prefetched', () async {
+      final server = _FakeServer(
+        platforms: [_platform(1, 'snes')],
+        romsByPlatform: {1: const []},
+        systemBySlug: {'snes': snes},
+      );
+      var calls = 0;
+
+      await build(
+        server,
+        _FakeCatalog(),
+        prefetchCovers: (rows) async => calls++,
+      ).run(reason: RommRefreshReason.manual);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(calls, 0);
     });
   });
 
