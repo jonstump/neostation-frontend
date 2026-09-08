@@ -2243,6 +2243,30 @@ class RommProvider extends ChangeNotifier {
     return null;
   }
 
+  /// Where a download of one of [system]'s ROMs would land, resolved without
+  /// creating anything — the folder the library's download confirmation
+  /// names before the user has agreed to it. Same choice as [plannedDestDir].
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Download From The Library"
+  Future<String?> destinationFor(SystemModel system, List<String> romFolders) =>
+      plannedDestDir(system, romFolders);
+
+  /// The catalog's copy of ROM [rommRomId] on the connected server as a
+  /// [RommRom], or null when it is not catalogued.
+  ///
+  /// What a remote entry in a game list resolves to when it is confirmed: the
+  /// entry carries only what a card draws, and [downloadRom] needs the
+  /// filesystem name, the multi-file flag and the cover paths the catalog
+  /// row kept. Read from the catalog, never the server, so it answers offline.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Download From The Library"
+  Future<RommRom?> catalogRomFor(int rommRomId) async {
+    if (_serverUrl.isEmpty) return null;
+    final row = await RommCatalogRepository.rowForRomId(
+      serverUrl: _serverUrl,
+      rommRomId: rommRomId,
+    );
+    return row?.toRommRom();
+  }
+
   /// The pre-flight destination probe for a bulk sync over [romFolders].
   ///
   /// Answers "which volume does this ROM land on, and how much room is left
@@ -3991,8 +4015,8 @@ class RommProvider extends ChangeNotifier {
 
   /// The whole percent a card draws for [fraction], or null when there is no
   /// figure to draw. Two chunks that round to the same number are the same
-  /// frame as far as the UI is concerned.
-  @visibleForTesting
+  /// frame as far as the UI is concerned. The library's cards draw the same
+  /// figure, so it is public rather than test-only.
   static int? renderedPercent(double? fraction) =>
       fraction == null ? null : (fraction * 100).clamp(0, 100).round();
 

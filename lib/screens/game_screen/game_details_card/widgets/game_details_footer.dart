@@ -11,6 +11,7 @@ import '../../../../models/system_model.dart';
 import '../../../../models/game_model.dart';
 import '../../../../models/library_scope.dart';
 import '../../../../widgets/library_scope_pill.dart';
+import '../../../../widgets/remote_entry_badge.dart';
 import '../../../../models/retro_achievements_game_info.dart';
 import 'package:neostation/themes/chrome_surface.dart';
 import '../../../../themes/corner_radii.dart';
@@ -257,6 +258,15 @@ class GameDetailsFooter extends StatelessWidget {
     final BorderRadius radius =
         Theme.of(context).extension<CornerRadii>()?.radiusExternal ??
         BorderRadius.circular(14.r);
+    // A remote entry's button names what A does to it now: Download, Cancel
+    // while it transfers, Retry after a failure. Watched here so the card
+    // never rebuilds for a download that starts or ends.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entry Presentation"
+    final downloadStatus = watchRemoteDownloadStatus(context, game);
+    final action = remoteEntryActionFor(
+      remoteEntryStateFor(game, downloadStatus),
+      status: downloadStatus,
+    );
 
     return Container(
       // Deliberately a fixed width. The achievements pill beside it is
@@ -313,7 +323,7 @@ class GameDetailsFooter extends StatelessWidget {
                   child: FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Text(
-                      AppLocale.playButton.getString(context),
+                      remoteEntryActionLabel(context, action),
                       maxLines: 1,
                       softWrap: false,
                       style: TextStyle(

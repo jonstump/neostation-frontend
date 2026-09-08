@@ -22,6 +22,10 @@ import 'package:neostation/utils/letter_jump.dart';
 import 'package:neostation/providers/collections_provider.dart';
 import 'package:neostation/widgets/achievements_badge.dart';
 import 'package:neostation/widgets/collection_badge.dart';
+import 'package:neostation/widgets/remote_entry_badge.dart';
+import 'package:neostation/providers/romm_provider.dart';
+import 'package:neostation/services/romm/romm_cover_cache.dart';
+import 'package:neostation/utils/cover_decode.dart';
 import 'package:neostation/widgets/game_view_mode_dropdown.dart';
 import 'package:neostation/widgets/native_carousel.dart';
 import 'package:neostation/widgets/game_view_footer.dart';
@@ -724,17 +728,20 @@ class _GamesCarouselState extends State<GamesCarousel> {
     final game = widget.games[_currentIndex];
     final folder = _folderForGame(game);
 
-    String imagePath = game.getImagePath(
-      folder,
-      'fanarts',
-      widget.fileProvider,
-    );
-    bool exists = _fileExistsCache.putIfAbsent(
-      imagePath,
-      () => File(imagePath).existsSync(),
-    );
+    // A remote entry backs the view with its cached RomM cover, never with
+    // media paths that have nothing behind them.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+    String imagePath = game.isRemote
+        ? _remoteCoverPath(game)
+        : game.getImagePath(folder, 'fanarts', widget.fileProvider);
+    bool exists =
+        imagePath.isNotEmpty &&
+        _fileExistsCache.putIfAbsent(
+          imagePath,
+          () => File(imagePath).existsSync(),
+        );
 
-    if (!exists) {
+    if (!exists && !game.isRemote) {
       imagePath = game.getScreenshotPath(folder, widget.fileProvider);
       exists = _fileExistsCache.putIfAbsent(
         imagePath,
@@ -833,6 +840,8 @@ class _GamesCarouselState extends State<GamesCarousel> {
   /// sync stat is safe, and this only runs when the selection settles — not
   /// per frame. Cached alongside the background lookups.
   bool _hasVideoFor(GameModel game) {
+    // A remote entry has no media on this device: nothing to stat.
+    if (game.isRemote) return false;
     final videoPath = game.getVideoPath(
       _folderForGame(game),
       widget.fileProvider,
@@ -843,7 +852,35 @@ class _GamesCarouselState extends State<GamesCarousel> {
     );
   }
 
+  /// The cover a remote entry draws: the RomM cover cache's file for its rom
+  /// id, or the empty string for the placeholder. A local game never comes
+  /// here — it draws its own scraped media, cache or no cache.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+  String _remoteCoverPath(GameModel game) {
+    final RommProvider provider;
+    try {
+      provider = context.read<RommProvider>();
+    } on ProviderNotFoundException {
+      return '';
+    }
+    return rommCoverPathFor(
+          isLocal: false,
+          scrapedMediaPath: null,
+          serverUrl: provider.serverUrl,
+          rommRomId: game.rommRomId,
+          cache: provider.coverCache,
+        ) ??
+        '';
+  }
+
   String _resolveImagePath(GameModel game, String imageType) {
+    // A remote entry's only artwork is its cached cover, which stands in for
+    // the box; it has no wheel or fanart to look for.
+    if (game.isRemote) {
+      if (imageType != 'box2d') return '';
+      final cover = _remoteCoverPath(game);
+      return cover.isNotEmpty && File(cover).existsSync() ? cover : '';
+    }
     final path = game.getImagePath(
       _folderForGame(game),
       imageType,
@@ -853,8 +890,8 @@ class _GamesCarouselState extends State<GamesCarousel> {
     return '';
   }
 
-  Widget _buildFanartCard(GameModel game, bool isSelected) {
-    final theme = Theme.of(context);
+  /// A local game's fanart, else its screenshot, else nothing.
+  String _localFanartBackground(GameModel game) {
     final folder = _folderForGame(game);
     final screenshotPath = game.getScreenshotPath(folder, widget.fileProvider);
     final hasScreenshot = File(screenshotPath).existsSync();
@@ -864,9 +901,15 @@ class _GamesCarouselState extends State<GamesCarousel> {
       widget.fileProvider,
     );
     final hasFanart = File(fanartPath).existsSync();
-    final bgPath = hasFanart
-        ? fanartPath
-        : (hasScreenshot ? screenshotPath : '');
+    return hasFanart ? fanartPath : (hasScreenshot ? screenshotPath : '');
+  }
+
+  Widget _buildFanartCard(GameModel game, bool isSelected) {
+    final theme = Theme.of(context);
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+    final bgPath = game.isRemote
+        ? _resolveImagePath(game, 'box2d')
+        : _localFanartBackground(game);
 
     return Container(
       clipBehavior: Clip.antiAlias,
@@ -891,7 +934,15 @@ class _GamesCarouselState extends State<GamesCarousel> {
                 File(bgPath),
                 key: ValueKey(bgPath),
                 fit: BoxFit.cover,
-                cacheWidth: 1024,
+                // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Decode At Tile Size"
+                cacheWidth: game.isRemote
+                    ? coverDecodeWidth(
+                        logicalWidth: MediaQuery.sizeOf(context).width,
+                        devicePixelRatio: MediaQuery.devicePixelRatioOf(
+                          context,
+                        ),
+                      )
+                    : 1024,
                 errorBuilder: (ctx, e, s) => _buildFallbackCard(game, theme),
               )
             else
@@ -918,6 +969,20 @@ class _GamesCarouselState extends State<GamesCarousel> {
               bottom: 0,
               child: _buildWheelOverlay(game),
             ),
+            // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entry Presentation"
+            if (game.isRemote) ...[
+              Positioned(
+                top: 8.r,
+                right: 8.r,
+                child: RemoteEntryBadge(game: game, size: 32.r),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: RemoteDownloadOverlay.carousel(game: game),
+              ),
+            ],
             if (game.isFavorite == true)
               Positioned(
                 top: 8.r,
@@ -1211,6 +1276,20 @@ class _GamesCarouselState extends State<GamesCarousel> {
         child: Stack(
           children: [
             _buildBoxFallback(game, theme),
+            // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entry Presentation"
+            if (game.isRemote) ...[
+              Positioned(
+                top: 8.r,
+                right: 8.r,
+                child: RemoteEntryBadge(game: game, size: 32.r),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: RemoteDownloadOverlay.carousel(game: game),
+              ),
+            ],
             if (game.isFavorite == true)
               Positioned(
                 top: 8.r,
@@ -1291,9 +1370,31 @@ class _GamesCarouselState extends State<GamesCarousel> {
                     File(boxPath),
                     key: ValueKey(boxPath),
                     fit: BoxFit.cover,
-                    cacheWidth: 1024,
+                    // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Decode At Tile Size"
+                    cacheWidth: game.isRemote
+                        ? coverDecodeWidth(
+                            logicalWidth: cardW,
+                            devicePixelRatio: MediaQuery.devicePixelRatioOf(
+                              context,
+                            ),
+                          )
+                        : 1024,
                     errorBuilder: (ctx, e, s) => _buildBoxFallback(game, theme),
                   ),
+                  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entry Presentation"
+                  if (game.isRemote) ...[
+                    Positioned(
+                      top: 8.r,
+                      right: 8.r,
+                      child: RemoteEntryBadge(game: game, size: 32.r),
+                    ),
+                    Positioned(
+                      left: 0,
+                      right: 0,
+                      bottom: 0,
+                      child: RemoteDownloadOverlay.carousel(game: game),
+                    ),
+                  ],
                   if (game.isFavorite == true)
                     Positioned(
                       top: 8.r,

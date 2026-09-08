@@ -37,6 +37,13 @@ import '../../repositories/neosync_save_folder_repository.dart';
 import '../../models/system_model.dart';
 import '../../models/game_model.dart';
 import '../../models/library_scope.dart';
+import '../../models/romm_rom.dart';
+import '../../repositories/romm_save_map_repository.dart';
+import '../../widgets/confirm_action_dialog.dart';
+import '../../widgets/remote_entry_badge.dart';
+import '../../services/romm/romm_cover_cache.dart';
+import '../../utils/remote_entry_secondary_state.dart';
+import 'my_games_list/remote_download_flow.dart';
 import '../../widgets/library_scope_pill.dart';
 import '../../utils/rom_tree.dart';
 import 'game_details_card/game_details_card_list.dart';
@@ -67,6 +74,7 @@ part 'my_games_list/favorites_reorder.dart';
 part 'my_games_list/data_loading.dart';
 part 'my_games_list/secondary_display.dart';
 part 'my_games_list/launch_flow.dart';
+part 'my_games_list/remote_download.dart';
 
 /// A high-fidelity list component for browsing games within a specific system.
 ///
@@ -370,6 +378,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
   int _lastArtworkRevision = 0;
   late RommProvider _rommProvider;
   int _lastCatalogRevision = 0;
+  int _lastLibraryRevision = 0;
 
   @override
   void initState() {
@@ -410,6 +419,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
     // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
     _rommProvider = context.read<RommProvider>();
     _lastCatalogRevision = _rommProvider.catalogRevision;
+    _lastLibraryRevision = _rommProvider.libraryRevision;
     _rommProvider.addListener(_onCatalogRevisionChanged);
     _artworkVersion = _lastArtworkRevision;
     _invalidateArtworkCaches();
@@ -528,15 +538,24 @@ class _SystemGamesListState extends State<SystemGamesList> {
 
   /// Reloads the list when [RommProvider.catalogRevision] moves — a manual
   /// refresh wrote rows, or "Clear cached RomM library" dropped them — so the
-  /// remote entries on screen match the catalog. The provider also notifies
-  /// on every download tick; the revision check keeps those from reloading.
-  /// Views that never carry remote entries (favourites, collections, music,
-  /// the library toggle off) have nothing to re-merge and skip it.
+  /// remote entries on screen match the catalog, and when
+  /// [RommProvider.libraryRevision] moves — the settle rescan indexed a
+  /// download — so the remote entry flips to the local game without a manual
+  /// reload. The provider also notifies on every download tick; the revision
+  /// checks keep those from reloading. Views that never carry remote entries
+  /// (favourites, collections, music, the library toggle off) have nothing to
+  /// re-merge and skip it.
   // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entry Presentation"
   void _onCatalogRevisionChanged() {
-    final revision = _rommProvider.catalogRevision;
-    if (!mounted || revision == _lastCatalogRevision) return;
-    _lastCatalogRevision = revision;
+    final catalog = _rommProvider.catalogRevision;
+    final library = _rommProvider.libraryRevision;
+    if (!mounted) return;
+    final moved =
+        catalog != _lastCatalogRevision || library != _lastLibraryRevision;
+    if (!moved) return;
+    _lastCatalogRevision = catalog;
+    _lastLibraryRevision = library;
     if (!_libraryScopeAvailable || _isLoadingGames || _isNavigatingBack) {
       return;
     }
@@ -680,10 +699,10 @@ class _SystemGamesListState extends State<SystemGamesList> {
     });
   }
 
-  /// The notice for an action a remote entry cannot take yet (launch,
-  /// favourite, settings, scrape): the file is not on this device.
-  /// Downloading from the list is the next story's; until then the press is
-  /// answered rather than swallowed.
+  /// The notice for an action a remote entry cannot take (favourite,
+  /// settings, scrape, or a download whose catalog row is gone): the file is
+  /// not on this device. The confirm press itself downloads instead — see
+  /// `_handleRemoteEntryPress`.
   // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entries In The Game Model"
   void _notifyRemoteNotDownloaded() {
     AppNotification.showNotification(

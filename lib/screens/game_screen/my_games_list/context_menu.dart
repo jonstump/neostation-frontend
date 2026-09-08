@@ -64,10 +64,19 @@ extension _ContextMenu on _SystemGamesListState {
     final canScrape = (game.systemId ?? widget.system.id) != null;
 
     // A remote entry has no local row: no favourite, no collections, no
-    // per-game settings, no scrape. The view-level actions still apply, and
-    // the scope switch is the one it most needs.
+    // per-game settings, no scrape. It gets Download instead — Cancel
+    // download while one runs, Retry after a failure — and the view-level
+    // actions still apply, the scope switch being the one it most needs.
     // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entries In The Game Model"
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Download From The Library"
     final isRemote = game.isRemote;
+    final remoteStatus = isRemote && game.rommRomId != null
+        ? _rommProvider.downloadFor(game.rommRomId!)?.status
+        : null;
+    final remoteAction = remoteEntryActionFor(
+      remoteEntryStateFor(game, remoteStatus),
+      status: remoteStatus,
+    );
 
     final targets = <GameContextMenuTarget>[
       if (isRemote)
@@ -122,6 +131,17 @@ extension _ContextMenu on _SystemGamesListState {
       targets: targets,
       anchorKey: _selectedItemKey,
       onSettings: isRemote ? null : _openGameSettingsDialog,
+      onDownload: switch (remoteAction) {
+        RemoteEntryAction.download ||
+        RemoteEntryAction.retry => () => _downloadRemoteEntry(game),
+        _ => null,
+      },
+      downloadLabel: remoteAction == RemoteEntryAction.retry
+          ? AppLocale.retry.getString(context)
+          : AppLocale.download.getString(context),
+      onCancelDownload: remoteAction == RemoteEntryAction.cancel
+          ? () => _cancelRemoteEntryDownload(game)
+          : null,
       onCreateTarget: isRemote ? null : () => _createCollectionFromMenu(game),
       createTargetLabel: AppLocale.newCollection.getString(context),
       // The view-independent path, in every view. It feeds `_scrapeProgress`

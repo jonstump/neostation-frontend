@@ -185,6 +185,47 @@ class RommCatalogRow {
   GameModel toGameModel(SystemModel system) =>
       GameModel.fromCatalogRow(this, system);
 
+  /// This row as the [RommRom] the download path takes.
+  ///
+  /// The catalog stores the subset of a ROM the library draws, so the result
+  /// carries what a download needs — id, filesystem name, multi-file flag,
+  /// cover paths, RA id — and nothing the list endpoint would have filled
+  /// beyond that (no files, hashes or companies). [RommRom.platformSlug] is
+  /// set to the resolved [systemFolder] so `RommProvider.resolveSystem` lands
+  /// on the same local system offline, without the platform table.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Download From The Library"
+  RommRom toRommRom() {
+    final ext = fsExtension ?? '';
+    final suffix = '.$ext';
+    final nameNoExt =
+        ext.isNotEmpty &&
+            fsName.length > suffix.length &&
+            fsName.toLowerCase().endsWith(suffix.toLowerCase())
+        ? fsName.substring(0, fsName.length - suffix.length)
+        : fsName;
+    return RommRom(
+      id: rommRomId,
+      name: name,
+      platformId: platformId,
+      platformSlug: systemFolder,
+      fsName: fsName,
+      fsNameNoExt: nameNoExt,
+      fsExtension: ext,
+      fsSizeBytes: fsSizeBytes ?? 0,
+      hasMultipleFiles: hasMultipleFiles,
+      urlCover: urlCover,
+      pathCoverLarge: pathCoverLarge,
+      pathCoverSmall: pathCoverSmall,
+      raId: raId,
+      genres: [
+        for (final genre in (genres ?? '').split(','))
+          if (genre.trim().isNotEmpty) genre.trim(),
+      ],
+      releaseYear: releaseYear,
+      serverUpdatedAt: serverUpdatedAt,
+    );
+  }
+
   /// On-disk names a download of this ROM could land under, in match
   /// priority — the filename half of the equivalence rule, for the hidden-set
   /// check that decides whether a local file already *is* this row.

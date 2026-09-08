@@ -16,6 +16,7 @@ import '../../models/game_model.dart';
 import '../../utils/rom_tree.dart';
 import '../../constants/system_folder_names.dart';
 import '../../providers/collections_provider.dart';
+import '../../widgets/remote_entry_badge.dart';
 import '../../sync/i_sync_provider.dart';
 import '../../sync/sync_manager.dart';
 import '../../utils/effective_system.dart';
@@ -553,6 +554,45 @@ class GameListViewState extends State<GameListView>
                                           : theme.colorScheme.onSurface,
                                     ),
                                   ),
+                                // A remote entry: its size, then the cloud
+                                // mark (the download percent rides on the mark
+                                // while a transfer runs, and it turns into the
+                                // retry mark after a failure). The row has no
+                                // subtitle line, so the size sits among the
+                                // marks in the muted row colour.
+                                // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entry Presentation"
+                                if (game.isRemote) ...[
+                                  if (remoteEntrySizeLabel(game)
+                                      case final size?)
+                                    Padding(
+                                      padding: EdgeInsets.only(left: 6.r),
+                                      child: Text(
+                                        size,
+                                        style: TextStyle(
+                                          fontSize: 9.r,
+                                          color:
+                                              (isSelected
+                                                      ? theme
+                                                            .colorScheme
+                                                            .onPrimary
+                                                      : theme
+                                                            .colorScheme
+                                                            .onSurface)
+                                                  .withValues(alpha: 0.7),
+                                        ),
+                                      ),
+                                    ),
+                                  Padding(
+                                    padding: EdgeInsets.only(left: 4.r),
+                                    child: RemoteEntryBadge.inline(
+                                      game: game,
+                                      size: 11.r,
+                                      color: isSelected
+                                          ? theme.colorScheme.onPrimary
+                                          : theme.colorScheme.onSurface,
+                                    ),
+                                  ),
+                                ],
                               ],
                             ),
                           ),

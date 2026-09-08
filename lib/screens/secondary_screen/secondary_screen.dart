@@ -983,6 +983,23 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
                                         ),
                                       ),
                                     ),
+                                  // A remote entry of the unified library: on
+                                  // the RomM server, not on this device. The
+                                  // main engine pushes the cached cover as the
+                                  // screenshot and this flag; the line is
+                                  // localized here, in this engine's own
+                                  // Localizations.
+                                  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Secondary Display And Search"
+                                  if (value.isRemoteGame &&
+                                      !value.isGameLaunching)
+                                    Positioned(
+                                      left: 0,
+                                      right: 0,
+                                      bottom: 28.r,
+                                      child: Center(
+                                        child: _buildRemoteEntryLine(),
+                                      ),
+                                    ),
                                 ],
                               ),
 
@@ -1140,6 +1157,35 @@ class _SecondaryScreenState extends State<SecondaryScreen> {
       }
     }
     return _buildDefaultLogo();
+  }
+
+  /// The "not downloaded" line under a remote entry's cover.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Secondary Display And Search"
+  Widget _buildRemoteEntryLine() {
+    final ctx = _l10nContext ?? context;
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: 14.r, vertical: 8.r),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(20.r),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.15)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Symbols.cloud_download_rounded, size: 16.r, color: Colors.white),
+          SizedBox(width: 8.r),
+          Text(
+            AppLocale.rommRemoteSecondaryState.getString(ctx),
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 13.r,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildDefaultStaticUI() {

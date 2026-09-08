@@ -19,6 +19,10 @@ import 'package:neostation/utils/game_utils.dart';
 import 'package:neostation/providers/collections_provider.dart';
 import 'package:neostation/widgets/achievements_badge.dart';
 import 'package:neostation/widgets/collection_badge.dart';
+import 'package:neostation/widgets/remote_entry_badge.dart';
+import 'package:neostation/providers/romm_provider.dart';
+import 'package:neostation/services/romm/romm_cover_cache.dart';
+import 'package:neostation/utils/cover_decode.dart';
 import 'package:neostation/widgets/game_view_mode_dropdown.dart';
 import 'package:neostation/services/game_service.dart';
 import 'package:neostation/repositories/game_repository.dart';
@@ -329,6 +333,8 @@ class _GamesGridState extends State<GamesGrid> {
   /// per frame. Memoized because a back-and-forth between two games would
   /// otherwise re-stat both every time.
   bool _hasVideoFor(GameModel game) {
+    // A remote entry has no media on this device: nothing to stat.
+    if (game.isRemote) return false;
     final videoPath = game.getVideoPath(
       _folderForGame(game),
       widget.fileProvider,
@@ -339,8 +345,30 @@ class _GamesGridState extends State<GamesGrid> {
     );
   }
 
+  /// The cover a remote entry draws: the RomM cover cache's file for its rom
+  /// id, or the empty string for the placeholder. A local game never comes
+  /// here — it draws its own scraped media, cache or no cache.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+  String _remoteCoverPath(GameModel game) {
+    final RommProvider provider;
+    try {
+      provider = context.read<RommProvider>();
+    } on ProviderNotFoundException {
+      return '';
+    }
+    return rommCoverPathFor(
+          isLocal: false,
+          scrapedMediaPath: null,
+          serverUrl: provider.serverUrl,
+          rommRomId: game.rommRomId,
+          cache: provider.coverCache,
+        ) ??
+        '';
+  }
+
   String _box2dPath(int index) {
     final game = widget.games[index];
+    if (game.isRemote) return _remoteCoverPath(game);
     return game.getImagePath(
       _folderForGame(game),
       'box2d',
@@ -350,6 +378,7 @@ class _GamesGridState extends State<GamesGrid> {
 
   String _fanartPath(int index) {
     final game = widget.games[index];
+    if (game.isRemote) return '';
     return game.getImagePath(
       _folderForGame(game),
       'fanarts',
@@ -359,6 +388,7 @@ class _GamesGridState extends State<GamesGrid> {
 
   String _wheelsPath(int index) {
     final game = widget.games[index];
+    if (game.isRemote) return '';
     return game.getImagePath(
       _folderForGame(game),
       'wheels',
@@ -368,6 +398,7 @@ class _GamesGridState extends State<GamesGrid> {
 
   String _screenshotPath(int index) {
     final game = widget.games[index];
+    if (game.isRemote) return '';
     return game.getScreenshotPath(_folderForGame(game), widget.fileProvider);
   }
 
@@ -1427,7 +1458,17 @@ class _GamesGridState extends State<GamesGrid> {
       return _buildFanartGridCard(index, rect, game, theme);
     }
 
-    final box2dPath = game.getImagePath(_folderForGame(game), 'box2d', fp);
+    final box2dPath = _box2dPath(index);
+    // A remote entry's cover is decoded at the tile's width (the SPEC-0008
+    // rule); local box art keeps the grid's bucketed decode width, which is
+    // keyed into every card's memoization.
+    // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Decode At Tile Size"
+    final decodeWidth = game.isRemote
+        ? coverDecodeWidth(
+            logicalWidth: _cardWidth,
+            devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
+          )
+        : targetWidth;
 
     return GestureDetector(
       key: ValueKey('game_${game.romname}'),
@@ -1469,9 +1510,25 @@ class _GamesGridState extends State<GamesGrid> {
                 key: ValueKey('img_${game.romname}_${widget.artworkVersion}'),
                 box2dPath: box2dPath,
                 game: game,
-                targetWidth: targetWidth,
+                targetWidth: decodeWidth,
               ),
             ),
+            // The cloud mark takes the heart's corner: a remote entry is never
+            // a favourite or a collection member, so the slot is free.
+            // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entry Presentation"
+            if (game.isRemote) ...[
+              Positioned(
+                top: 6.r,
+                right: 6.r,
+                child: RemoteEntryBadge(game: game, size: 22.r),
+              ),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: RemoteDownloadOverlay.grid(game: game),
+              ),
+            ],
             if (game.isFavorite == true)
               Positioned(
                 top: 6.r,
@@ -1565,7 +1622,11 @@ class _GamesGridState extends State<GamesGrid> {
     final hasFanart = File(fanartPath).existsSync();
     final hasScreenshot = !hasFanart && File(screenshotPath).existsSync();
     final hasWheel = File(wheelsPath).existsSync();
-    final bgPath = hasFanart
+    // A remote entry has no fanart: its cached RomM cover stands in.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+    final bgPath = game.isRemote
+        ? _remoteCoverPath(game)
+        : hasFanart
         ? fanartPath
         : (hasScreenshot ? screenshotPath : '');
 
@@ -1613,7 +1674,15 @@ class _GamesGridState extends State<GamesGrid> {
                     File(bgPath),
                     key: ValueKey('fanart_bg_${game.romname}'),
                     fit: BoxFit.cover,
-                    cacheWidth: 388,
+                    // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Decode At Tile Size"
+                    cacheWidth: game.isRemote
+                        ? coverDecodeWidth(
+                            logicalWidth: rect.width,
+                            devicePixelRatio: MediaQuery.devicePixelRatioOf(
+                              context,
+                            ),
+                          )
+                        : 388,
                     errorBuilder: (ctx, e, s) =>
                         _buildFallbackCard(game, theme),
                   )
@@ -1653,6 +1722,20 @@ class _GamesGridState extends State<GamesGrid> {
                       ),
                     ),
                   ),
+                // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entry Presentation"
+                if (game.isRemote) ...[
+                  Positioned(
+                    top: 6.r,
+                    right: 6.r,
+                    child: RemoteEntryBadge(game: game, size: 22.r),
+                  ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: RemoteDownloadOverlay.grid(game: game),
+                  ),
+                ],
                 if (game.isFavorite == true)
                   Positioned(
                     top: 6.r,

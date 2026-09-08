@@ -1659,4 +1659,24 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.rommCatalogAsOf: 'Libreria al {time}',
   AppLocale.rommCatalogNeverRefreshed: 'Libreria non ancora aggiornata',
   AppLocale.rommRemoteNotDownloaded: 'Non scaricato',
+  AppLocale.rommRemoteBadge: 'Sul server RomM, non scaricato',
+  AppLocale.rommRemoteRetryBadge:
+      'Download non riuscito, premi A per riprovare',
+  AppLocale.rommRemoteDownloadingBadge: 'Download {percent}%',
+  AppLocale.rommRemoteDownloadingIndeterminate: 'Download in corso…',
+  AppLocale.rommRemoteCancelDownload: 'Annulla download',
+  AppLocale.rommRemoteDownloadConfirmTitle: 'Scarica da RomM',
+  AppLocale.rommRemoteDownloadConfirmBody:
+      'Scaricare {name} ({size}) in {folder}?',
+  AppLocale.rommRemoteSizeUnknown: 'dimensione sconosciuta',
+  AppLocale.rommRemoteCancelConfirmTitle: 'Annulla download',
+  AppLocale.rommRemoteCancelConfirmBody:
+      'Interrompere il download di {name}? Il file parziale verrà eliminato.',
+  AppLocale.rommRemoteOfflineNotice:
+      'Non disponibile offline: il server RomM non è raggiungibile',
+  AppLocale.rommRemotePlayNow: 'Gioca ora',
+  AppLocale.rommRemotePlayLater: 'Più tardi',
+  AppLocale.rommRemoteDownloadReadyTitle: 'Download completato',
+  AppLocale.rommRemoteDownloadReadyBody: '{name} è pronto per giocare.',
+  AppLocale.rommRemoteSecondaryState: 'Sul server RomM, non scaricato',
 };

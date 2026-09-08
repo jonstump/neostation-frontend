@@ -1618,4 +1618,24 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommCatalogAsOf: 'Библиотека на {time}',
   AppLocale.rommCatalogNeverRefreshed: 'Библиотека ещё не обновлялась',
   AppLocale.rommRemoteNotDownloaded: 'Не загружено',
+  AppLocale.rommRemoteBadge: 'На сервере RomM, не загружено',
+  AppLocale.rommRemoteRetryBadge:
+      'Не удалось загрузить, нажмите A, чтобы повторить',
+  AppLocale.rommRemoteDownloadingBadge: 'Загрузка {percent}%',
+  AppLocale.rommRemoteDownloadingIndeterminate: 'Загрузка…',
+  AppLocale.rommRemoteCancelDownload: 'Отменить загрузку',
+  AppLocale.rommRemoteDownloadConfirmTitle: 'Загрузить с RomM',
+  AppLocale.rommRemoteDownloadConfirmBody:
+      'Загрузить {name} ({size}) в {folder}?',
+  AppLocale.rommRemoteSizeUnknown: 'размер неизвестен',
+  AppLocale.rommRemoteCancelConfirmTitle: 'Отменить загрузку',
+  AppLocale.rommRemoteCancelConfirmBody:
+      'Остановить загрузку {name}? Частично загруженный файл будет удалён.',
+  AppLocale.rommRemoteOfflineNotice:
+      'Недоступно офлайн: сервер RomM недоступен',
+  AppLocale.rommRemotePlayNow: 'Играть сейчас',
+  AppLocale.rommRemotePlayLater: 'Позже',
+  AppLocale.rommRemoteDownloadReadyTitle: 'Загрузка завершена',
+  AppLocale.rommRemoteDownloadReadyBody: '{name} готова к запуску.',
+  AppLocale.rommRemoteSecondaryState: 'На сервере RomM, не загружено',
 };

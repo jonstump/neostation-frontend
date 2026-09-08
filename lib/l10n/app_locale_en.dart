@@ -1596,4 +1596,23 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rommCatalogAsOf: 'Library as of {time}',
   AppLocale.rommCatalogNeverRefreshed: 'Library not refreshed yet',
   AppLocale.rommRemoteNotDownloaded: 'Not downloaded',
+  AppLocale.rommRemoteBadge: 'On the RomM server, not downloaded',
+  AppLocale.rommRemoteRetryBadge: 'Download failed, press A to retry',
+  AppLocale.rommRemoteDownloadingBadge: 'Downloading {percent}%',
+  AppLocale.rommRemoteDownloadingIndeterminate: 'Downloading…',
+  AppLocale.rommRemoteCancelDownload: 'Cancel download',
+  AppLocale.rommRemoteDownloadConfirmTitle: 'Download from RomM',
+  AppLocale.rommRemoteDownloadConfirmBody:
+      'Download {name} ({size}) to {folder}?',
+  AppLocale.rommRemoteSizeUnknown: 'unknown size',
+  AppLocale.rommRemoteCancelConfirmTitle: 'Cancel download',
+  AppLocale.rommRemoteCancelConfirmBody:
+      'Stop downloading {name}? The partial file is discarded.',
+  AppLocale.rommRemoteOfflineNotice:
+      'Not available offline: the RomM server cannot be reached',
+  AppLocale.rommRemotePlayNow: 'Play now',
+  AppLocale.rommRemotePlayLater: 'Later',
+  AppLocale.rommRemoteDownloadReadyTitle: 'Download complete',
+  AppLocale.rommRemoteDownloadReadyBody: '{name} is ready to play.',
+  AppLocale.rommRemoteSecondaryState: 'On the RomM server, not downloaded',
 };

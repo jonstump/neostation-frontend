@@ -129,6 +129,103 @@ class RommCatalogRepository {
     }
   }
 
+  /// One catalogued ROM by its RomM id, or null when the server has no row
+  /// for it (never catalogued, or deleted by a later walk).
+  ///
+  /// A primary-key read: what the download path asks when a remote entry is
+  /// confirmed, since the entry itself carries only what a card draws.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Download From The Library"
+  static Future<RommCatalogRow?> rowForRomId({
+    required String serverUrl,
+    required int rommRomId,
+  }) async {
+    if (serverUrl.isEmpty) return null;
+    try {
+      final db = await SqliteService.getDatabase();
+      final rows = await db.query(
+        _table,
+        where: 'server_url = ? AND romm_rom_id = ?',
+        whereArgs: [serverUrl, rommRomId],
+        limit: 1,
+      );
+      if (rows.isEmpty) return null;
+      return RommCatalogRow.fromDbRow(rows.first);
+    } catch (e) {
+      _log.e(
+        'RomM catalog read failed: server=$serverUrl rom=$rommRomId cause=$e',
+      );
+      return null;
+    }
+  }
+
+  /// A page of catalogued ROMs whose name contains [term], for the search
+  /// screen while the server is unreachable.
+  ///
+  /// Name-ordered and case-insensitive; [systemFolder] narrows to one system
+  /// and [genre] to rows whose genre list mentions it, the two filters the
+  /// catalog can answer (it holds no companies). [total] is the match count
+  /// across the whole catalog so the section can say how many there are
+  /// beyond the page.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Secondary Display And Search"
+  static Future<RommCatalogSearchPage> searchRows({
+    required String serverUrl,
+    required String term,
+    String? systemFolder,
+    String? genre,
+    int limit = 30,
+    int offset = 0,
+  }) async {
+    if (serverUrl.isEmpty || term.trim().isEmpty) {
+      return const RommCatalogSearchPage(rows: [], total: 0);
+    }
+    try {
+      final db = await SqliteService.getDatabase();
+      final where = StringBuffer('server_url = ? AND name LIKE ? ESCAPE ?');
+      final args = <Object?>[serverUrl, '%${_escapeLike(term.trim())}%', r'\'];
+      if (systemFolder != null && systemFolder.isNotEmpty) {
+        where.write(' AND system_folder = ?');
+        args.add(systemFolder);
+      }
+      if (genre != null && genre.isNotEmpty) {
+        where.write(' AND genres LIKE ? ESCAPE ?');
+        args
+          ..add('%${_escapeLike(genre)}%')
+          ..add(r'\');
+      }
+      final counted = await db.rawQuery(
+        'SELECT COUNT(*) AS n FROM $_table WHERE $where',
+        args,
+      );
+      final total = counted.isEmpty
+          ? 0
+          : int.tryParse(counted.first['n']?.toString() ?? '0') ?? 0;
+      final rows = await db.query(
+        _table,
+        where: where.toString(),
+        whereArgs: args,
+        orderBy: 'name COLLATE NOCASE ASC',
+        limit: limit,
+        offset: offset,
+      );
+      return RommCatalogSearchPage(
+        rows: [for (final row in rows) RommCatalogRow.fromDbRow(row)],
+        total: total,
+      );
+    } catch (e) {
+      _log.e(
+        'RomM catalog search failed: server=$serverUrl term=$term cause=$e',
+      );
+      return const RommCatalogSearchPage(rows: [], total: 0);
+    }
+  }
+
+  /// [value] with the LIKE wildcards escaped, so a name containing `%` or
+  /// `_` is matched literally.
+  static String _escapeLike(String value) => value
+      .replaceAll(r'\', r'\\')
+      .replaceAll('%', r'\%')
+      .replaceAll('_', r'\_');
+
   /// Every system folder this server has catalogued ROMs for.
   ///
   /// What the systems carousel unions with the detected systems to show a
@@ -372,4 +469,13 @@ class RommCatalogRepository {
       // must never blank the stamp a completed walk left.
       'refreshed_at = COALESCE(excluded.refreshed_at, '
       '$_platformTable.refreshed_at)';
+}
+
+/// One page of a catalog search: the rows and how many match in all.
+// Governing: ADR-0020 (unified library), SPEC-0019 REQ "Secondary Display And Search"
+class RommCatalogSearchPage {
+  final List<RommCatalogRow> rows;
+  final int total;
+
+  const RommCatalogSearchPage({required this.rows, required this.total});
 }

@@ -1613,4 +1613,22 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommCatalogAsOf: 'Pustaka per {time}',
   AppLocale.rommCatalogNeverRefreshed: 'Pustaka belum disegarkan',
   AppLocale.rommRemoteNotDownloaded: 'Belum diunduh',
+  AppLocale.rommRemoteBadge: 'Di server RomM, belum diunduh',
+  AppLocale.rommRemoteRetryBadge: 'Unduhan gagal, tekan A untuk mencoba lagi',
+  AppLocale.rommRemoteDownloadingBadge: 'Mengunduh {percent}%',
+  AppLocale.rommRemoteDownloadingIndeterminate: 'Mengunduh…',
+  AppLocale.rommRemoteCancelDownload: 'Batalkan unduhan',
+  AppLocale.rommRemoteDownloadConfirmTitle: 'Unduh dari RomM',
+  AppLocale.rommRemoteDownloadConfirmBody: 'Unduh {name} ({size}) ke {folder}?',
+  AppLocale.rommRemoteSizeUnknown: 'ukuran tidak diketahui',
+  AppLocale.rommRemoteCancelConfirmTitle: 'Batalkan unduhan',
+  AppLocale.rommRemoteCancelConfirmBody:
+      'Hentikan pengunduhan {name}? File yang belum selesai akan dibuang.',
+  AppLocale.rommRemoteOfflineNotice:
+      'Tidak tersedia saat offline: server RomM tidak dapat dijangkau',
+  AppLocale.rommRemotePlayNow: 'Mainkan sekarang',
+  AppLocale.rommRemotePlayLater: 'Nanti',
+  AppLocale.rommRemoteDownloadReadyTitle: 'Unduhan selesai',
+  AppLocale.rommRemoteDownloadReadyBody: '{name} siap dimainkan.',
+  AppLocale.rommRemoteSecondaryState: 'Di server RomM, belum diunduh',
 };

@@ -23,6 +23,12 @@ class GameDetailsBox2dTab extends StatefulWidget {
   /// one that is not there.
   final double bottomOffset;
 
+  /// The artwork a remote entry draws instead of box art it does not have:
+  /// its cached RomM cover, resolved by the card, or null for the placeholder.
+  /// A remote entry's own media paths are never probed here.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+  final String? remoteCoverPath;
+
   const GameDetailsBox2dTab({
     super.key,
     required this.system,
@@ -30,6 +36,7 @@ class GameDetailsBox2dTab extends StatefulWidget {
     required this.fileProvider,
     this.imageVersion = 0,
     this.bottomOffset = 110.0,
+    this.remoteCoverPath,
   });
 
   @override
@@ -63,11 +70,13 @@ class _GameDetailsBox2dTabState extends State<GameDetailsBox2dTab> {
   ImageStream? _currentImageStream;
   ImageStreamListener? _currentImageListener;
 
-  String get _box2dPath => widget.game.getImagePath(
-    widget.system.primaryFolderName,
-    'box2d',
-    widget.fileProvider,
-  );
+  String get _box2dPath => widget.game.isRemote
+      ? (widget.remoteCoverPath ?? '')
+      : widget.game.getImagePath(
+          widget.system.primaryFolderName,
+          'box2d',
+          widget.fileProvider,
+        );
 
   /// Artwork identity: the file, plus the version the card bumps when a scrape
   /// rewrites it, so new art is measured again rather than drawn at the old
@@ -174,7 +183,7 @@ class _GameDetailsBox2dTabState extends State<GameDetailsBox2dTab> {
   @override
   Widget build(BuildContext context) {
     final box2dPath = _box2dPath;
-    final box2dExists = File(box2dPath).existsSync();
+    final box2dExists = box2dPath.isNotEmpty && File(box2dPath).existsSync();
 
     return Positioned(
       left: 12.r,
