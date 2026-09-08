@@ -111,6 +111,11 @@ class RommCoverCache {
   /// `serverUrl -> serverHash`, so [pathFor] does not hash on every build.
   final Map<String, String> _hashes = {};
 
+  /// `serverHash -> times cleared`, so a fill that started before a [clear]
+  /// knows its bytes belong to a cache that no longer exists and neither
+  /// writes the file nor re-creates the index entry the clear removed.
+  final Map<String, int> _clears = {};
+
   String? _rootPath;
   Future<void>? _initializing;
   int _fillsSinceCheck = 0;
@@ -175,29 +180,31 @@ class RommCoverCache {
       final root = await _root();
       _rootPath = root;
       final dir = Directory(root);
+      var files = 0;
       if (!await dir.exists()) {
         await dir.create(recursive: true);
-        return;
-      }
-      var files = 0;
-      await for (final serverDir in dir.list(followLinks: false)) {
-        if (serverDir is! Directory) continue;
-        final serverHash = p.basename(serverDir.path);
-        final entries = _index.putIfAbsent(serverHash, () => {});
-        await for (final file in serverDir.list(followLinks: false)) {
-          if (file is! File) continue;
-          final romId = int.tryParse(p.basenameWithoutExtension(file.path));
-          if (romId == null) continue;
-          try {
-            final stat = await file.stat();
-            entries[romId] = RommCoverCacheEntry(
-              path: file.path,
-              sizeBytes: stat.size,
-              lastUsed: stat.modified,
-            );
-            files++;
-          } catch (e) {
-            _log.d('$_logLabel: skipped unreadable file=${file.path} cause=$e');
+      } else {
+        await for (final serverDir in dir.list(followLinks: false)) {
+          if (serverDir is! Directory) continue;
+          final serverHash = p.basename(serverDir.path);
+          final entries = _index.putIfAbsent(serverHash, () => {});
+          await for (final file in serverDir.list(followLinks: false)) {
+            if (file is! File) continue;
+            final romId = int.tryParse(p.basenameWithoutExtension(file.path));
+            if (romId == null) continue;
+            try {
+              final stat = await file.stat();
+              entries[romId] = RommCoverCacheEntry(
+                path: file.path,
+                sizeBytes: stat.size,
+                lastUsed: stat.modified,
+              );
+              files++;
+            } catch (e) {
+              _log.d(
+                '$_logLabel: skipped unreadable file=${file.path} cause=$e',
+              );
+            }
           }
         }
       }
@@ -261,8 +268,9 @@ class RommCoverCache {
   ) async {
     final urls = _coverUrls(row);
     if (urls.isEmpty) return null;
+    final generation = _generationOf(serverHash);
     for (final url in urls) {
-      if (_shouldStop()) return null;
+      if (_shouldStop() || _stale(serverHash, generation)) return null;
       Uint8List? bytes;
       try {
         bytes = await _fetch(url);
@@ -276,7 +284,17 @@ class RommCoverCache {
         _log.d('$_logLabel: miss: rom=${row.rommRomId} url=$url');
         continue;
       }
-      final path = await _write(root, serverHash, row.rommRomId, bytes);
+      // The fetch may have outlived a clear of this server; the bytes it
+      // brought back must not resurrect the directory the clear removed. A
+      // stop alone lets the fetch in flight land, as prefetch documents.
+      if (_stale(serverHash, generation)) return null;
+      final path = await _write(
+        root,
+        serverHash,
+        row.rommRomId,
+        bytes,
+        generation,
+      );
       if (path == null) return null;
       _fillsSinceCheck++;
       if (_fillsSinceCheck >= fillsPerEvictionCheck) {
@@ -290,12 +308,16 @@ class RommCoverCache {
 
   /// Writes [bytes] as `<root>/<serverHash>/<romId>.<ext>` through a temp
   /// file and a rename, so a card never reads a half-written cover, and
-  /// records it in the index. Returns null when the write failed.
+  /// records it in the index. Returns null when the write failed, or when
+  /// [clear] ran on this server while the bytes were on their way to disk:
+  /// the file is removed again rather than left as an orphan the index would
+  /// only meet on the next rebuild.
   Future<String?> _write(
     String root,
     String serverHash,
     int romId,
     Uint8List bytes,
+    int generation,
   ) async {
     final ext = RommService.imageExtensionFor(bytes);
     final dir = Directory(p.join(root, serverHash));
@@ -307,6 +329,11 @@ class RommCoverCache {
       await tmp.rename(path);
     } catch (e) {
       _log.d('$_logLabel: write failed: path=$path cause=$e');
+      return null;
+    }
+    if (_stale(serverHash, generation)) {
+      _log.d('$_logLabel: dropped a fill that outlived a clear: path=$path');
+      await _delete(path);
       return null;
     }
     final entries = _index.putIfAbsent(serverHash, () => {});
@@ -412,6 +439,7 @@ class RommCoverCache {
   Future<void> clear(String serverUrl) async {
     await initialize();
     final serverHash = _hashFor(serverUrl);
+    _clears[serverHash] = _generationOf(serverHash) + 1;
     final entries = _index.remove(serverHash);
     final root = _rootPath;
     if (root == null) return;
@@ -437,6 +465,13 @@ class RommCoverCache {
 
   String _hashFor(String serverUrl) =>
       _hashes[serverUrl] ??= serverHash(serverUrl);
+
+  int _generationOf(String serverHash) => _clears[serverHash] ?? 0;
+
+  /// Whether a fill that began at [generation] should throw its bytes away
+  /// because [clear] has run on its server since.
+  bool _stale(String serverHash, int generation) =>
+      _generationOf(serverHash) != generation;
 
   /// The directory name for [serverUrl]: a short SHA-1 of the URL with any
   /// trailing slash dropped, so `https://romm.lan` and `https://romm.lan/`

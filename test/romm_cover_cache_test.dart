@@ -454,10 +454,19 @@ void main() {
       );
       fetcher.bodies[smallUrl(1)] = _jpeg(10);
 
-      await cache.prefetch([_row(1)]);
+      await cache.prefetch([_row(1)]); // ends in an eviction pass
 
-      expect(cache.entryCount, 1);
-      expect(RommCoverCache.defaultCapMb, 200);
+      expect(cache.entryCount, 1, reason: 'the throw never reaches a caller');
+      final lines = LoggerService.instance.takeCapture();
+      expect(
+        lines.where(
+          (l) =>
+              l.contains('cap unreadable, using default') &&
+              l.contains('no config'),
+        ),
+        hasLength(1),
+        reason: 'the pass ran on the default cap, not on a failed read',
+      );
     });
   });
 
@@ -495,6 +504,38 @@ void main() {
       final cache = build();
       await cache.clear(_server);
       expect(cache.entryCount, 0);
+    });
+
+    test('a fill that finishes after clear leaves nothing behind', () async {
+      fetcher.bodies[smallUrl(1)] = _jpeg(10);
+      fetcher.gate = Completer<void>();
+      final cache = build();
+      await cache.initialize();
+      final pending = cache.ensure(_server, _row(1));
+      await Future<void>.delayed(Duration.zero);
+      expect(fetcher.inFlight, 1, reason: 'the fetch is on the wire');
+
+      await cache.clear(_server);
+      fetcher.gate!.complete();
+
+      expect(await pending, isNull);
+      expect(cache.pathFor(_server, 1), isNull);
+      expect(cache.entryCount, 0);
+      final serverDir = Directory(
+        p.join(temp.path, RommCoverCache.serverHash(_server)),
+      );
+      expect(
+        serverDir.existsSync()
+            ? serverDir.listSync()
+            : const <FileSystemEntity>[],
+        isEmpty,
+        reason: 'no orphan file survives the clear',
+      );
+
+      // The server is not poisoned: the next ask fills it again.
+      fetcher.gate = null;
+      expect(await cache.ensure(_server, _row(1)), endsWith('1.jpg'));
+      expect(cache.entryCount, 1);
     });
   });
 

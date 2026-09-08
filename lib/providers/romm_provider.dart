@@ -905,6 +905,11 @@ class RommProvider extends ChangeNotifier {
       installTransportHooks();
       notifyListeners();
       _flushQueuedPlaytime();
+      // Warm the cover index now: pathFor answers from it synchronously, and
+      // a card on an offline cold start would otherwise see a miss for a
+      // cover that is already on disk. Idempotent and never throws.
+      // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+      unawaited(coverCache.initialize());
     } catch (e) {
       _log.e('RomM initialize failed: $e');
       _status = RommConnectionStatus.disconnected;
@@ -1003,9 +1008,12 @@ class RommProvider extends ChangeNotifier {
     _serverUrl = _service.baseUrl;
     _username = _service.username;
     _status = RommConnectionStatus.connected;
-    installTransportHooks();
-    notifyListeners();
     _flushQueuedPlaytime();
+    // Warm the cover index now: pathFor answers from it synchronously, and a
+    // card on an offline cold start would otherwise see a miss for a cover
+    // that is already on disk. Idempotent and never throws.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+    unawaited(coverCache.initialize());
     if (previousServerUrl.isNotEmpty && previousServerUrl != _serverUrl) {
       // A different server: the old one's covers can never be drawn again.
       // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
