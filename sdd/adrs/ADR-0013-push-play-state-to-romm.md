@@ -35,8 +35,8 @@ Chosen option: "Push-only write-back through an outbox, with optional scope grou
 
 1. **Optional scope groups.** `_playtimeScopes` becomes one entry of `RommScopeGroup {playtime (roms.user.read roms.user.write), collectionsWrite, romsWrite, tasksRun, devices}`. `_authenticateWithPassword` requests the read scopes plus every group; on 403 it probes each group alone (read scopes plus that group), records which are granted, and issues the final grant for the union. At most `groups + 2` token POSTs, once per login. API-key mode has no grant to negotiate, so it reads the groups from the `oauth_scopes` list on `GET /api/users/me` — the call that already verifies the key — marking a group `granted` when it holds every scope in it and `denied` otherwise; a missing or empty list leaves the groups `unknown` and a per-endpoint 403 settles them, as before. (Amended after issue #168: the original "always unknown until a 403" rule made `granted` unreachable for every pair-code, QR, API-key and token-restored login, and so hid every feature gated on `granted`.) `RommService.hasScope(group)` replaces `_playtimeScopeGranted`. A group whose feature ADR-0010 reports unsupported is not requested at all.
 2. **What is pushed.** `hidden` on hide and unhide (including "unhide all"), `update_last_played=true` when a play session ends, and favourite add/remove through the favourites collection (created with `POST /api/collections?is_favorite=true` when the server has none). `rating`, `difficulty`, `completion`, `status`, `backlogged`, `now_playing`, `is_main_sibling` are not written.
-3. **Outbox.** `app_romm_props_outbox` (versioned migration) queues one row per linked game per change with the pending values; the flush runs with the play-session flush, coalesces rows per game, and deletes on success. Unlinked games are ignored; when a game links later, no historical push is made.
-4. **Gates.** Props require RomM 4.9.0 (`romPropsBareBody`) and the playtime group; favourites require 4.9.0 (`collectionRomsAddRemove`) and the collections-write group. Below the version or without the group, changes are not queued and a single info line says why.
+3. **Outbox.** `app_romm_props_outbox` (versioned migration) queues one row per linked game per change with the pending values; the flush runs with the play-session flush (and from the sync provider's per-game playtime path, where that flush already ran after a session closes), coalesces rows per game, and deletes on success. Unlinked games are ignored; when a game links later, no historical push is made.
+4. **Gates.** Props require RomM 4.9.0 (`romPropsBareBody`) and the playtime group; favourites require 4.9.0 (`collectionRomsAddRemove`) and the collections-write group. Below the version or without the group, changes are not pushed: not queued when the gate is known at hook time, and dropped at flush — without a request — when it is only knowable then (the hooks cannot see the connection's version or scopes while offline); a single info line per connection says why.
 5. **User control.** A "Push play state to RomM" toggle in the RomM settings, on by default when the groups are granted.
 
 ### Consequences
@@ -77,7 +77,7 @@ Chosen option: "Push-only write-back through an outbox, with optional scope grou
 ```mermaid
 flowchart LR
     subgraph hooks["Local actions"]
-        H["setGameHidden / unhideAll"]
+        H["GameVisibilityService.setHidden / unhideAll"]
         F["toggleFavorite"]
         E["session end"]
     end
@@ -94,5 +94,5 @@ flowchart LR
 ## More Information
 
 * RomM: `PUT /roms/{id}/props` body `RomUserData` with `ge/le` ranges, `update_last_played`/`remove_last_played` query flags (both true → 400); favourites via `is_favorite` collection; `/collections/{id}/roms` since 4.9.0.
-* NeoStation: `GameRepository.setGameHidden`, `toggleFavorite`, `recordGamePlayed`; `RommPlaytimeService.flushQueuedSessions`; `app_romm_play_sessions` outbox.
+* NeoStation: `GameRepository.setGameHidden` (the hide hook sits above it in `GameVisibilityService.setHidden`), `toggleFavorite`, `recordGamePlayed`; `RommPlaytimeService.flushQueuedSessions`; `app_romm_play_sessions` outbox. A flush failure is logged, not shown: there is no user-facing surface for it.
 * Spec: SPEC-0013. Later specs (upload, collections push, notes, library extras, device sync) require its scope groups.

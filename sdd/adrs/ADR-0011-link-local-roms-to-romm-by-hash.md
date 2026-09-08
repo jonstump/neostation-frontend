@@ -35,8 +35,8 @@ Both sides already have the content identity. RomM stores `crc_hash`, `md5_hash`
 Chosen option: "Hash stage in the connect-time link pass using page hashes and local fingerprints, plus a by-hash shortcut in the manual picker", because the bulk case costs no network beyond what the pass already spends, the fingerprints it needs are mostly already on disk, and the one place a per-file request is worth it is the picker, where the user is looking at exactly one game. Concretely:
 
 1. **Model.** `RommRom` and `RommRomFile` parse `crc_hash`, `md5_hash`, `sha1_hash`, and `ra_hash` (the file model also `chd_sha1_hash`), normalized to lowercase hex.
-2. **Local fingerprints.** The pass's local index carries each game's persisted `rom_crc32`, `ss_hash` (md5), and `rom_size`. For unlinked games with no persisted crc32, the pass computes the cheap fingerprint (zip central directory; no read for anything else) up to a per-pass cap and persists it through the existing fingerprint columns, so later passes pay nothing.
-3. **Second stage in the pass.** After the filename stage, games still unlinked are matched by crc32 against the ROMs enumerated for their system group, comparing the ROM-level hash and each file-level hash. When both sides have an md5, it must agree; when both have a size, it must agree. One local file matching more than one RomM ROM is an ambiguity and is skipped and logged, exactly as filename ambiguity is. Rows are written insert-if-absent with `link_source = 'hash'`.
+2. **Local fingerprints.** The pass's local index carries each game's persisted `rom_crc32`, `ss_hash` (md5), and `rom_size`. For unlinked games with no persisted crc32, the pass computes the cheap fingerprint (`FingerprintEffort.cheapOnly`: zip central directory; no read for anything else) up to a per-pass cap and persists it through the existing fingerprint columns, so later passes pay nothing. A file the cheap path declines — a bare ROM, a packed-archive set, a zip whose tail the parser cannot read — is deferred rather than parked: not persisted and not charged to the cap, so the scraper's full path (7-Zip included) can still fingerprint it later.
+3. **Second stage in the pass.** After the filename stage, games still unlinked are matched by crc32 against the ROMs enumerated for their system group, comparing the ROM-level hash and each file-level hash. When both sides have an md5, it must agree; when both have a size and the local file is a bare file, it must agree — RomM's size is the stored archive's while its hashes and the local size describe the inner image, so the size veto is skipped for archives. One local file matching more than one RomM ROM is an ambiguity and is skipped and logged, exactly as filename ambiguity is. Rows are written insert-if-absent with `link_source = 'hash'`.
 4. **Picker shortcut.** The manual picker (ADR-0004) gains "Match by hash": it computes the full fingerprint for the one file in the background, calls `GET /api/roms/by-hash`, and preselects the result; a 404 shows a localized "no match" line. The action is present only when ADR-0010 reports the endpoint as supported or unknown.
 5. **Same guards, same summary.** Hash matches are counted separately in the pass summary and its single log line; the pass's scheduling, cancellation, and single-instance rules are unchanged.
 
@@ -93,7 +93,7 @@ flowchart TD
         F["stage 1: filename<br/>RommLocalMatcher"]
         U["still unlinked?"]
         C["cheap fingerprint for games<br/>without rom_crc32 (capped, persisted)"]
-        H["stage 2: crc32 index<br/>md5/size must agree when both known"]
+        H["stage 2: crc32 index<br/>md5 must agree when both known;<br/>size only for bare files"]
         A["ambiguous → skip + log"]
         W["putMappingsIfAbsent<br/>link_source = hash"]
     end
@@ -111,7 +111,7 @@ flowchart TD
 
 ## More Information
 
-* `RomFingerprintService` (`lib/services/rom_fingerprint_service.dart`): `FingerprintEffort.cheap` reads the zip central directory; full effort streams crc32 and md5 in one pass; SAF reads work off the main isolate through the root isolate token.
+* `RomFingerprintService` (`lib/services/rom_fingerprint_service.dart`): `FingerprintEffort.cheapOnly` reads the zip central directory; full effort streams crc32 and md5 in one pass; SAF reads work off the main isolate through the root isolate token.
 * Migration 135 added `user_roms.rom_crc32`, `rom_size`, `rom_fingerprint_skipped`, and repurposed `ss_hash` for md5.
 * RomM: hash fields on `RomSchema` (inherited by the list schema) and `RomFileSchema`; `GET /api/roms/by-hash` since 4.5.0.
 * Extends ADR-0001 (second matching stage in the same pass) and ADR-0004 (picker action); related to ADR-0010 (version gate). Spec: SPEC-0011.

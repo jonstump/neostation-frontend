@@ -55,7 +55,7 @@ sequenceDiagram
 
     UI->>Svc: toggleFavorite / setHidden / sessionEnded
     Svc->>O: upsert(rom_path, intent)
-    Note over F: with play-session flush and connect sweep
+    Note over F: with play-session flush, connect sweep,<br/>and the sync provider's per-game _syncPlaytime
     F->>O: list()
     F->>S: updateRomProps(romId, hidden?, updateLastPlayed?)
     S->>R: PUT /api/roms/{id}/props
@@ -64,7 +64,7 @@ sequenceDiagram
     F->>O: delete(rom_path)
 ```
 
-Layering: UI → services → repositories (outbox, config) → datasource; the provider owns the flush and consults the service's gates.
+Layering: UI → services → repositories (outbox, config) → datasource; the provider owns the flush and consults the service's gates. A row the service gates at flush (server below 4.9.0, scope group denied) is dropped there without a request — the hooks cannot apply that gate while offline (SPEC-0013 REQ "Flush", ADR-0013 §4) — and a flush failure is a log line only; there is no UI surface for it.
 
 ## Risks / Trade-offs
 
