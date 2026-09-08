@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:neostation/services/logger_service.dart';
 import '../../models/game_model.dart';
@@ -202,19 +203,24 @@ class GameSessionManager {
 
       await GameSessionPersistence.clearGameSession();
     } catch (e) {
-      _log.e('Error checking pending game session: $e');
+      // No colon after "session": the log redactor treats that as a session
+      // token and blanks the token that follows it — which on this line is the
+      // exception type, the one thing that makes a crash-recovery failure
+      // diagnosable. Verified against `redactSecrets` directly.
+      _log.e('Error checking the pending game session, error=$e');
     }
   }
 
   /// The post-close hooks for a session recovered by
-  /// [checkPendingGameSession], run once the sync providers can act on them.
+  /// [checkPendingGameSession], run once the provider that will do the work
+  /// can act on it.
   ///
-  /// Same hooks, same order as the clean-exit path in [endGameSession]: the
-  /// screenshot pass first, then the save sync (which delays itself further).
-  /// The recovered session's *original* start is what is passed on, so the
-  /// collector's session window covers the captures the killed session left
-  /// behind — the window RetroArch stamped them in, not the window of the
-  /// launch that recovered them.
+  /// Same hooks as the clean-exit path in [endGameSession]: the screenshot
+  /// pass and the save sync (which delays itself further). The recovered
+  /// session's *original* start is what is passed on, so the collector's
+  /// session window covers the captures the killed session left behind — the
+  /// window RetroArch stamped them in, not the window of the launch that
+  /// recovered them.
   ///
   /// The wait exists because of when this runs. `main()` calls
   /// [checkPendingGameSession] during startup, before it builds and registers
@@ -224,62 +230,166 @@ class GameSessionManager {
   /// work (playtime, and the flag that suppresses the startup scan) where the
   /// rest of startup expects it.
   ///
+  /// The two hooks wait **separately**, each on the provider that will
+  /// actually serve it: screenshots go to whoever declares
+  /// [ISessionScreenshotSync], saves go to [SyncManager.active], and those are
+  /// routinely different providers that become ready at different moments.
+  /// Waiting on "any authenticated provider" let a NeoSync session — restored
+  /// and authenticated before either registration — satisfy a wait that RomM
+  /// was still milliseconds short of, after which the screenshot pass hit
+  /// RomM's silent `!isConnected` bail and returned 0 under a line saying the
+  /// provider was ready. Running them concurrently rather than in sequence is
+  /// deliberate too: neither hook should spend the other's timeout, and the
+  /// ordering constraint they inherit from [endGameSession] is only that the
+  /// playtime write comes first, which it already has here.
+  ///
   /// Never throws: it is detached, and an unhandled async error on this path
   /// reaches no error handler.
-  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload And Ledger" (upload at session end), SPEC-0016 REQ "Concurrency Safety" (detached, after the playtime hooks)
+  // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload And Ledger" (a crash-recovered session is a session end; defer rather than offer to an empty registry; a deferral that times out still attempts the upload), SPEC-0016 REQ "Concurrency Safety" (detached, after the playtime hooks)
   static Future<void> _runRecoveredSessionHooks(
     GameModel game,
     DateTime sessionStart,
   ) async {
     try {
-      final ready = await _awaitSyncProvider();
-      // No colon after "session": the log redactor treats that as a session
-      // token and would blank the rest of the line.
-      _log.i(
-        'Running post-close hooks for a recovered session '
-        'game="${game.romname}" providerReady=$ready',
-      );
-      _uploadScreenshotsAfterClose(game, sessionStart);
-      _syncSavesAfterClose(game);
+      await Future.wait(<Future<void>>[
+        _uploadRecoveredScreenshots(game, sessionStart),
+        _syncRecoveredSaves(game),
+      ]);
     } catch (e) {
       _log.e('Recovered session post-close hooks failed: $e');
     }
   }
 
-  /// How long [_runRecoveredSessionHooks] waits for a sync provider to finish
-  /// restoring its saved connection, and how often it looks.
+  /// How long a recovered session's hooks wait for the provider that will
+  /// serve them to finish restoring its saved connection, and how often they
+  /// look.
   ///
   /// Polled rather than listened for: [SyncManager] only re-broadcasts what a
-  /// provider notifies, and a provider restoring a saved connection does not
-  /// notify through it. The poll costs one getter read per tick, runs at most
-  /// once per launch, and only when a session was actually recovered.
+  /// provider notifies, registration itself notifies nothing, and a provider
+  /// restoring a saved connection does not notify through it either. The poll
+  /// costs one getter read per tick, runs at most once per launch, and only
+  /// when a session was actually recovered.
   static const Duration _recoveredSyncWait = Duration(seconds: 20);
   static const Duration _recoveredSyncPoll = Duration(milliseconds: 250);
 
-  /// Whether any registered provider is in a position to act, waiting up to
-  /// [_recoveredSyncWait] for one.
-  ///
-  /// Returns false on expiry, and the hooks run anyway: a user with nothing
-  /// connected gets the same logged skip the clean-exit path gives them, which
-  /// is the honest outcome rather than a silent drop.
-  static Future<bool> _awaitSyncProvider() async {
-    final deadline = DateTime.now().add(_recoveredSyncWait);
-    while (!_hasReadySyncProvider()) {
+  /// Test overrides for the poll bounds above. Production reads the constants;
+  /// a test that has to exercise the expiry path cannot spend twenty seconds
+  /// doing it.
+  @visibleForTesting
+  static Duration? debugRecoveredSyncWait;
+  @visibleForTesting
+  static Duration? debugRecoveredSyncPoll;
+
+  /// Clears both overrides. Call from `tearDown` — they are static, so a test
+  /// that leaves one set changes every later test in the run.
+  @visibleForTesting
+  static void debugResetRecoveredSyncTiming() {
+    debugRecoveredSyncWait = null;
+    debugRecoveredSyncPoll = null;
+  }
+
+  /// Polls [isReady] until it holds, or until the deadline. Returns whether it
+  /// ever held; callers run the work either way, because on this path the work
+  /// is offered exactly once and dropping it loses the session's captures for
+  /// good.
+  static Future<bool> _awaitProvider(bool Function() isReady) async {
+    final wait = debugRecoveredSyncWait ?? _recoveredSyncWait;
+    final poll = debugRecoveredSyncPoll ?? _recoveredSyncPoll;
+    final deadline = DateTime.now().add(wait);
+    while (!isReady()) {
       if (!DateTime.now().isBefore(deadline)) return false;
-      await Future<void>.delayed(_recoveredSyncPoll);
+      await Future<void>.delayed(poll);
     }
     return true;
   }
 
-  static bool _hasReadySyncProvider() {
-    for (final provider in SyncManager.instance.providers) {
-      try {
-        if (provider.isAuthenticated) return true;
-      } catch (e) {
-        _log.w('Sync provider readiness check failed: $e');
-      }
+  /// [provider.isAuthenticated] without letting a provider that throws from
+  /// its own getter take down the recovery path.
+  static bool _isProviderReady(ISyncProvider provider) {
+    try {
+      return provider.isAuthenticated;
+    } catch (e) {
+      _log.w('Sync provider readiness check failed: $e');
+      return false;
     }
-    return false;
+  }
+
+  /// Registered providers that declare [ISessionScreenshotSync] — the only
+  /// ones a screenshot pass can ever reach, and therefore the only ones whose
+  /// readiness says anything about whether the pass will do something.
+  static List<ISyncProvider> _screenshotProviders() => <ISyncProvider>[
+    for (final p in SyncManager.instance.providers)
+      if (p is ISessionScreenshotSync) p,
+  ];
+
+  /// The screenshot half of the recovered-session hooks.
+  ///
+  /// Waits for a provider that declares the capability to report ready, then
+  /// runs the pass. A provider that cannot take screenshots at all (NeoSync)
+  /// never satisfies this wait, however authenticated it is.
+  ///
+  /// Every outcome that can lose the captures is a warning, because this is
+  /// the one path where losing them is permanent: `ScreenshotCollector.collect`
+  /// bounds its window at the session start it is handed, so a killed
+  /// session's captures fall outside every later session's window and are
+  /// never offered again. RomM's own bail logs nothing, so these lines are the
+  /// only trace.
+  // Governing: SPEC-0016 REQ "Upload And Ledger" (a deferral that times out MUST still attempt the upload rather than drop it)
+  static Future<void> _uploadRecoveredScreenshots(
+    GameModel game,
+    DateTime sessionStart,
+  ) async {
+    final ready = await _awaitProvider(
+      () => _screenshotProviders().any(_isProviderReady),
+    );
+
+    // Re-read after the wait: the registry is what changed while we polled.
+    final providers = _screenshotProviders();
+    if (providers.isEmpty) {
+      _log.w(
+        'Recovered session screenshots dropped game="${game.romname}" '
+        'reason=no_capable_provider',
+      );
+      return;
+    }
+
+    final unready = providers.where((p) => !_isProviderReady(p)).toList();
+    if (!ready || unready.isNotEmpty) {
+      // Attempt anyway (the spec requires it) but say so: this is exactly the
+      // combination that used to be logged as a success.
+      _log.w(
+        'Recovered session screenshot pass running against '
+        '${unready.length} of ${providers.length} unconnected providers '
+        'game="${game.romname}" waited=$ready '
+        'unconnected=${unready.map((p) => p.providerId).join(",")} '
+        '— captures from a killed session are offered once and never again',
+      );
+    }
+
+    final uploaded = await _runScreenshotPass(providers, game, sessionStart);
+    _log.i(
+      'Recovered session screenshot pass done game="${game.romname}" '
+      'uploaded=$uploaded capable=${providers.length}',
+    );
+  }
+
+  /// The save half of the recovered-session hooks.
+  ///
+  /// Saves are a delegation, not a broadcast: [_syncSavesAfterClose] hands
+  /// them to [SyncManager.active], so that is the provider to wait on.
+  static Future<void> _syncRecoveredSaves(GameModel game) async {
+    final ready = await _awaitProvider(() {
+      final active = SyncManager.instance.active;
+      return active != null && _isProviderReady(active);
+    });
+    if (!ready) {
+      _log.w(
+        'Recovered session save sync running without a connected active '
+        'provider game="${game.romname}" '
+        'active=${SyncManager.instance.activeProviderId}',
+      );
+    }
+    _syncSavesAfterClose(game);
   }
 
   /// Registers the initiation of a game session and initializes tracking state.
@@ -496,21 +606,33 @@ class GameSessionManager {
     GameModel game,
     DateTime sessionStart,
   ) {
-    final providers = SyncManager.instance.providers
-        .whereType<ISessionScreenshotSync>()
-        .toList();
+    final providers = _screenshotProviders();
     if (providers.isEmpty) return;
-    unawaited(
-      Future<void>(() async {
-        for (final provider in providers) {
-          try {
-            await provider.uploadSessionScreenshots(game, sessionStart);
-          } catch (e) {
-            _log.e('Session screenshot upload failed after close: $e');
-          }
-        }
-      }),
-    );
+    unawaited(_runScreenshotPass(providers, game, sessionStart));
+  }
+
+  /// Offers [game]'s session to each of [providers] in turn and returns how
+  /// many captures reached a remote.
+  ///
+  /// Shared by the clean-exit and crash-recovery paths so the two cannot drift
+  /// in how they treat a provider that throws. Every entry in [providers] is
+  /// an [ISessionScreenshotSync]; the list is typed [ISyncProvider] so callers
+  /// can also read the provider's identity and readiness for the logs.
+  static Future<int> _runScreenshotPass(
+    List<ISyncProvider> providers,
+    GameModel game,
+    DateTime sessionStart,
+  ) async {
+    var uploaded = 0;
+    for (final provider in providers) {
+      try {
+        uploaded += await (provider as ISessionScreenshotSync)
+            .uploadSessionScreenshots(game, sessionStart);
+      } catch (e) {
+        _log.e('Session screenshot upload failed after close: $e');
+      }
+    }
+    return uploaded;
   }
 
   /// Queues a finished session for RomM playtime sync. A local DB write only —
@@ -533,7 +655,8 @@ class GameSessionManager {
         endTime: end,
       );
     } catch (e) {
-      _log.e('Error queueing RomM play session: $e');
+      // Also colon-free after "session" — see [checkPendingGameSession].
+      _log.e('Failed to queue a RomM play session, error=$e');
     }
   }
 }
