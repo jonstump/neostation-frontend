@@ -1363,4 +1363,6 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.neoSyncCheckoutFailed: '建立結帳工作階段失敗',
   AppLocale.neoSyncCancelSubscriptionFailed: '取消訂閱失敗',
   AppLocale.neoSyncPlansFailed: '取得方案失敗',
+  AppLocale.rommServerVersionLine: '伺服器版本 {version}',
+  AppLocale.rommPasswordLoginDisabledHint: '此伺服器已停用密碼登入',
 };

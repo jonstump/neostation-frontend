@@ -51,6 +51,107 @@ void main() {
     });
   });
 
+  // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect
+  // Screen Surfaces" — scenario "Password login disabled"
+  group('authModeOrderFor', () {
+    test('with the flag unknown or false the declared order stands', () {
+      expect(
+        authModeOrderFor(passwordLoginDisabled: false),
+        RommAuthMode.values,
+      );
+    });
+
+    test('a server without password login leads with pairing and puts the '
+        'password segment last', () {
+      expect(authModeOrderFor(passwordLoginDisabled: true), [
+        RommAuthMode.pairCode,
+        RommAuthMode.apiKey,
+        RommAuthMode.password,
+      ]);
+    });
+
+    test('the flag reorders the switch, it never drops a segment', () {
+      for (final disabled in [false, true]) {
+        final order = authModeOrderFor(passwordLoginDisabled: disabled);
+        expect(order.toSet(), RommAuthMode.values.toSet(), reason: '$disabled');
+        expect(order.length, RommAuthMode.values.length, reason: '$disabled');
+        expect(
+          order,
+          contains(RommAuthMode.password),
+          reason: 'password stays selectable ($disabled)',
+        );
+      }
+    });
+
+    test('the QR scan still follows the pairing code inside its mode', () {
+      // QR is a row of pairing mode, not a segment: "pairing, QR, API key,
+      // password" is the leading mode's rows followed by the other segments.
+      final order = authModeOrderFor(passwordLoginDisabled: true);
+      expect(order.first, RommAuthMode.pairCode);
+      expect(focusOrderFor(order.first, includeScanQr: true), const [
+        RommConnectSlot.url,
+        RommConnectSlot.authMode,
+        RommConnectSlot.pairCode,
+        RommConnectSlot.scanQr,
+        RommConnectSlot.connect,
+      ]);
+    });
+  });
+
+  // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect
+  // Screen Surfaces" — the D-pad follows the drawn order
+  group('cycling over a chosen order', () {
+    final reordered = authModeOrderFor(passwordLoginDisabled: true);
+
+    test('over the declared order the In variants match the plain ones', () {
+      for (final mode in RommAuthMode.values) {
+        expect(mode.nextIn(RommAuthMode.values), mode.next, reason: '$mode');
+        expect(
+          mode.toLeftIn(RommAuthMode.values),
+          mode.toLeft,
+          reason: '$mode',
+        );
+        expect(
+          mode.toRightIn(RommAuthMode.values),
+          mode.toRight,
+          reason: '$mode',
+        );
+      }
+    });
+
+    test('A walks the reordered switch left to right and wraps', () {
+      expect(RommAuthMode.pairCode.nextIn(reordered), RommAuthMode.apiKey);
+      expect(RommAuthMode.apiKey.nextIn(reordered), RommAuthMode.password);
+      expect(RommAuthMode.password.nextIn(reordered), RommAuthMode.pairCode);
+    });
+
+    test('Right stops at the password segment, now rightmost', () {
+      expect(RommAuthMode.pairCode.toRightIn(reordered), RommAuthMode.apiKey);
+      expect(RommAuthMode.apiKey.toRightIn(reordered), RommAuthMode.password);
+      expect(RommAuthMode.password.toRightIn(reordered), RommAuthMode.password);
+    });
+
+    test('Left stops at the pairing segment, now leftmost', () {
+      expect(RommAuthMode.password.toLeftIn(reordered), RommAuthMode.apiKey);
+      expect(RommAuthMode.apiKey.toLeftIn(reordered), RommAuthMode.pairCode);
+      expect(RommAuthMode.pairCode.toLeftIn(reordered), RommAuthMode.pairCode);
+    });
+
+    test('three presses of A visit every mode once in either order', () {
+      for (final disabled in [false, true]) {
+        final order = authModeOrderFor(passwordLoginDisabled: disabled);
+        var mode = order.first;
+        final seen = <RommAuthMode>[];
+        for (var i = 0; i < order.length; i++) {
+          seen.add(mode);
+          mode = mode.nextIn(order);
+        }
+        expect(seen, order, reason: '$disabled');
+        expect(mode, order.first, reason: '$disabled wraps');
+      }
+    });
+  });
+
   group('focusOrderFor', () {
     test('password mode: url, switch, username, password, connect', () {
       expect(focusOrderFor(RommAuthMode.password), const [

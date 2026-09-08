@@ -458,6 +458,22 @@ class RommService {
   // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Reachability"
   void Function()? onTransportSuccess;
 
+  /// Called when a heartbeat lands and [capabilities] is replaced — or when
+  /// a probe fails and drops a value that was known, so a version line drawn
+  /// from the last answer does not outlive it. A failure over nothing known
+  /// says nothing: null over null is not a change.
+  ///
+  /// The probe runs where the service decides — lazily before a restored
+  /// session's first authenticated request, or on the provider's offline
+  /// re-probe timer — so the provider cannot know when the version it
+  /// exposes has arrived unless it is told. [onTransportSuccess] is not that
+  /// signal: it fires before the body is parsed, and the reachability state
+  /// it drives notifies only on a change, which a heartbeat on an already
+  /// online connection is not.
+  // Governing: ADR-0010 (heartbeat capability probe),
+  // SPEC-0010 REQ "Provider Exposure And Re-Probe"
+  void Function()? onCapabilitiesChanged;
+
   /// Whether playtime sync can be attempted against this server.
   ///
   /// Expressed through [hasScope]: only a *denied* playtime group stops it,
@@ -597,6 +613,17 @@ class RommService {
     _forgetServerState();
     return true;
   }
+
+  /// Drops what this connection learned about its server, for a disconnect.
+  ///
+  /// [configure] forgets a server only when the URL moves, and a disconnect
+  /// does not move it: the credentials go, the service keeps pointing where it
+  /// was. Without this, the version and the password-login flag the provider
+  /// exposes would outlive the connection that learned them, and a reconnect
+  /// to the same URL would skip the probe and run on the stale answer.
+  // Governing: ADR-0010 (heartbeat capability probe),
+  // SPEC-0010 REQ "Provider Exposure And Re-Probe"
+  void forgetServerState() => _forgetServerState();
 
   /// Drops every per-server fact this connection had learned, so nothing from
   /// the old server survives a move to a new one.
@@ -749,7 +776,7 @@ class RommService {
     _probed = true;
     if (_baseUrl.isEmpty) {
       _log.w('RomM heartbeat skipped: url= endpoint=heartbeat reason=no_url');
-      _capabilities = null;
+      _dropCapabilities();
       return;
     }
 
@@ -769,31 +796,31 @@ class RommService {
         timeout: _heartbeatTimeout,
       );
     } on TimeoutException catch (e) {
-      _capabilities = null;
       onTransportFailure?.call(e);
+      _dropCapabilities();
       _log.w(
         'RomM heartbeat failed: url=$url endpoint=heartbeat '
         'reason=timeout',
       );
       return;
     } on HandshakeException catch (e) {
-      _capabilities = null;
       onTransportFailure?.call(e);
+      _dropCapabilities();
       _log.w(
         'RomM heartbeat failed: url=$url endpoint=heartbeat '
         'reason=tls_handshake',
       );
       return;
     } on SocketException catch (e) {
-      _capabilities = null;
       onTransportFailure?.call(e);
+      _dropCapabilities();
       _log.w(
         'RomM heartbeat failed: url=$url endpoint=heartbeat '
         'reason=socket cause=${e.message}',
       );
       return;
     } catch (e) {
-      _capabilities = null;
+      _dropCapabilities();
       _log.w(
         'RomM heartbeat failed: url=$url endpoint=heartbeat '
         'reason=error cause=$e',
@@ -806,7 +833,7 @@ class RommService {
     onTransportSuccess?.call();
 
     if (resp.statusCode != 200) {
-      _capabilities = null;
+      _dropCapabilities();
       _log.w(
         'RomM heartbeat failed: url=$url endpoint=heartbeat '
         'reason=status status=${resp.statusCode}',
@@ -822,7 +849,7 @@ class RommService {
       }
       parsed = RommServerCapabilities.fromJson(decoded);
     } catch (e) {
-      _capabilities = null;
+      _dropCapabilities();
       _log.w(
         'RomM heartbeat failed: url=$url endpoint=heartbeat '
         'reason=unparseable_body cause=$e',
@@ -836,6 +863,21 @@ class RommService {
       'password_login_disabled=${parsed.passwordLoginDisabled}',
     );
     _applyCapabilityGates();
+    // Governing: ADR-0010, SPEC-0010 REQ "Provider Exposure And Re-Probe"
+    onCapabilitiesChanged?.call();
+  }
+
+  /// Forgets the last heartbeat after a probe that did not land, and tells
+  /// the provider when that changes what it exposes. The failure paths used
+  /// to null [capabilities] silently: with the connection already offline the
+  /// transport hook has nothing new to report, so a version line drawn from
+  /// the previous answer stayed on screen until some unrelated rebuild read
+  /// the null. Nothing known before means nothing changed, and no call.
+  // Governing: ADR-0010, SPEC-0010 REQ "Provider Exposure And Re-Probe"
+  void _dropCapabilities() {
+    if (_capabilities == null) return;
+    _capabilities = null;
+    onCapabilitiesChanged?.call();
   }
 
   /// Folds a known-unsupported feature into the per-connection state its call

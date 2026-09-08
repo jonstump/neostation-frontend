@@ -1564,4 +1564,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.neoSyncCheckoutFailed: 'Gagal membuat sesi pembayaran',
   AppLocale.neoSyncCancelSubscriptionFailed: 'Gagal membatalkan langganan',
   AppLocale.neoSyncPlansFailed: 'Gagal memuat paket',
+  AppLocale.rommServerVersionLine: 'Versi server {version}',
+  AppLocale.rommPasswordLoginDisabledHint:
+      'Login dengan kata sandi dinonaktifkan di server ini',
 };

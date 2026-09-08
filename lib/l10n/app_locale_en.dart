@@ -1549,4 +1549,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.neoSyncCheckoutFailed: 'Failed to create checkout session',
   AppLocale.neoSyncCancelSubscriptionFailed: 'Failed to cancel subscription',
   AppLocale.neoSyncPlansFailed: 'Failed to fetch plans',
+  AppLocale.rommServerVersionLine: 'Server version {version}',
+  AppLocale.rommPasswordLoginDisabledHint:
+      'Password login is disabled on this server',
 };

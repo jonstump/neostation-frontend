@@ -87,6 +87,40 @@ class _RommConnectContentState extends State<RommConnectContent>
   List<RommConnectSlot> get _focusOrder =>
       focusOrderFor(_authMode, includeScanQr: _canScanQr);
 
+  /// What the last build saw of [RommProvider.passwordLoginDisabled]. Kept
+  /// here rather than read on each use so the switch, its Left/Right
+  /// stepping, and A all agree on one order within a frame, and so a change
+  /// can be told from a repeat (see [_followPasswordLoginFlag]).
+  // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect Screen Surfaces"
+  bool _passwordLoginDisabled = false;
+
+  /// The segments left to right as drawn, which is also the order Left/Right
+  /// and A step through — the D-pad follows the eye, whichever order the
+  /// server's flag chose.
+  // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect Screen Surfaces"
+  List<RommAuthMode> get _modeOrder =>
+      authModeOrderFor(passwordLoginDisabled: _passwordLoginDisabled);
+
+  /// Takes the provider's flag into the form at the top of a build.
+  ///
+  /// When the flag turns on while the form still sits on the password
+  /// segment — a fresh form, or one that has just learned it from a failed
+  /// password attempt — the cursor's mode moves to the segment now leading
+  /// the switch, so pairing is what the user lands on first. Only that one
+  /// transition moves it: a user who then steps back to the password segment
+  /// keeps it, because the mode stays selectable and the hint under its
+  /// fields is where the form explains what the server said. Runs inside
+  /// build, so a plain assignment is the whole update; the slot list is read
+  /// live and clamps the cursor into the new order by itself.
+  // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect Screen Surfaces"
+  void _followPasswordLoginFlag(bool disabled) {
+    if (disabled == _passwordLoginDisabled) return;
+    _passwordLoginDisabled = disabled;
+    if (disabled && _authMode == RommAuthMode.password) {
+      _authMode = _modeOrder.first;
+    }
+  }
+
   /// The slots the D-pad walks, which change with both the connection state and
   /// the authentication mode: connected it is three action rows and no field at
   /// all, disconnected it is [focusOrderFor] the current mode — the server URL,
@@ -148,8 +182,9 @@ class _RommConnectContentState extends State<RommConnectContent>
     _gamepadNav = GamepadNavigation(
       onNavigateUp: _navigateUp,
       onNavigateDown: _navigateDown,
-      onNavigateLeft: () => _setAuthMode(_authMode.toLeft),
-      onNavigateRight: () => _setAuthMode(_authMode.toRight),
+      // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect Screen Surfaces"
+      onNavigateLeft: () => _setAuthMode(_authMode.toLeftIn(_modeOrder)),
+      onNavigateRight: () => _setAuthMode(_authMode.toRightIn(_modeOrder)),
       onSelectItem: _selectCurrent,
       onBack: _handleBack,
       onPreviousTab: AppNavigation.previousTab,
@@ -244,7 +279,8 @@ class _RommConnectContentState extends State<RommConnectContent>
   /// password. Nothing at or above the switch moves, so the cursor is left
   /// where it is; only the rows below are replaced, and the mixin clamps a
   /// cursor that was parked on one of them.
-  void _toggleAuthMode() => _applyAuthMode(_authMode.next);
+  // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect Screen Surfaces"
+  void _toggleAuthMode() => _applyAuthMode(_authMode.nextIn(_modeOrder));
 
   /// Steps to a neighbouring segment, which is what Left and Right do while
   /// the cursor is on the switch: Left moves one segment left and stops at
@@ -505,6 +541,8 @@ class _RommConnectContentState extends State<RommConnectContent>
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final provider = context.watch<RommProvider>();
+    // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect Screen Surfaces"
+    _followPasswordLoginFlag(provider.passwordLoginDisabled);
 
     // Match the ScreenScraper / RetroAchievements login layout: a top-anchored,
     // horizontally-scrollable row with the credential card on the left and an
@@ -581,6 +619,7 @@ class _RommConnectContentState extends State<RommConnectContent>
             SizedBox(height: 8.r),
             _buildStatusLine(theme, provider),
             ..._buildPairedTokenLines(theme, provider),
+            ..._buildServerVersionLine(theme, provider),
           ],
           SizedBox(height: 12.r),
           if (connected)
@@ -790,6 +829,36 @@ class _RommConnectContentState extends State<RommConnectContent>
     ];
   }
 
+  /// "Server version x.y.z" under the status line once the heartbeat has
+  /// answered; nothing at all while the version is unknown, so a server that
+  /// blocks the probe shows no empty or placeholder line. Not focusable — a
+  /// caption, like the token lines above it. It is what makes a misgated
+  /// feature diagnosable from a screenshot.
+  // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect Screen Surfaces"
+  List<Widget> _buildServerVersionLine(ThemeData theme, RommProvider provider) {
+    final version = provider.serverVersion;
+    if (version == null) return const [];
+    return [
+      Padding(
+        padding: EdgeInsets.only(top: 4.r, left: 24.r),
+        child: Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            AppLocale.rommServerVersionLine
+                .getString(context)
+                .replaceFirst('{version}', version.toString()),
+            style: TextStyle(
+              fontSize: 9.r,
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      ),
+    ];
+  }
+
   List<Widget> _buildCredentialRows(ThemeData theme) {
     return [
       _buildFieldRow(
@@ -823,6 +892,17 @@ class _RommConnectContentState extends State<RommConnectContent>
             focusNode: _passwordFocus,
             obscure: true,
           ),
+          // The server said password login is off. The segment stays, the
+          // fields stay, Connect stays — the user may know better than the
+          // heartbeat — but the form says what the server said, right here.
+          // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect Screen Surfaces"
+          if (_passwordLoginDisabled) ...[
+            SizedBox(height: 4.r),
+            _buildFieldHint(
+              theme,
+              AppLocale.rommPasswordLoginDisabledHint.getString(context),
+            ),
+          ],
         ],
         RommAuthMode.apiKey => [
           _buildFieldRow(
@@ -852,7 +932,7 @@ class _RommConnectContentState extends State<RommConnectContent>
             suggestions: false,
           ),
           SizedBox(height: 4.r),
-          _buildPairCodeHint(theme),
+          _buildFieldHint(theme, AppLocale.rommPairCodeHint.getString(context)),
           // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "QR Scan Where A Camera Exists"
           if (_canScanQr) ...[
             SizedBox(height: 8.r),
@@ -871,14 +951,15 @@ class _RommConnectContentState extends State<RommConnectContent>
     ];
   }
 
-  /// Where the code comes from and how long it lives, under the code field.
-  /// Not focusable — a caption for the field above it.
-  Widget _buildPairCodeHint(ThemeData theme) {
+  /// A caption under a credential field: where the pairing code comes from
+  /// and how long it lives, or that the server has turned password login
+  /// off. Not focusable — it explains the field above it.
+  Widget _buildFieldHint(ThemeData theme, String text) {
     return Container(
       constraints: BoxConstraints(maxWidth: 220.r),
       padding: EdgeInsets.symmetric(horizontal: 4.r),
       child: Text(
-        AppLocale.rommPairCodeHint.getString(context),
+        text,
         style: TextStyle(
           fontSize: 8.r,
           color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
@@ -927,25 +1008,27 @@ class _RommConnectContentState extends State<RommConnectContent>
       ),
       child: Row(
         children: [
-          _buildAuthModeOption(
-            theme,
-            label: AppLocale.rommAuthPassword.getString(context),
-            mode: RommAuthMode.password,
-          ),
-          _buildAuthModeOption(
-            theme,
-            label: AppLocale.rommAuthApiKey.getString(context),
-            mode: RommAuthMode.apiKey,
-          ),
-          _buildAuthModeOption(
-            theme,
-            label: AppLocale.rommAuthModePairCode.getString(context),
-            mode: RommAuthMode.pairCode,
-          ),
+          // Drawn in [_modeOrder], the same list Left/Right and A walk, so
+          // the D-pad order is the visual order whichever way the server's
+          // password-login flag sorted the segments.
+          // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect Screen Surfaces",
+          // ADR-0007 (RomM pairing login), SPEC-0007 REQ "Pairing Mode On The Connect Screen"
+          for (final mode in _modeOrder)
+            _buildAuthModeOption(
+              theme,
+              label: _authModeLabel(mode).getString(context),
+              mode: mode,
+            ),
         ],
       ),
     );
   }
+
+  String _authModeLabel(RommAuthMode mode) => switch (mode) {
+    RommAuthMode.password => AppLocale.rommAuthPassword,
+    RommAuthMode.apiKey => AppLocale.rommAuthApiKey,
+    RommAuthMode.pairCode => AppLocale.rommAuthModePairCode,
+  };
 
   Widget _buildAuthModeOption(
     ThemeData theme, {

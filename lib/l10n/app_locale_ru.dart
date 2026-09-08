@@ -1569,4 +1569,7 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.neoSyncCheckoutFailed: 'Не удалось создать сессию оплаты',
   AppLocale.neoSyncCancelSubscriptionFailed: 'Не удалось отменить подписку',
   AppLocale.neoSyncPlansFailed: 'Не удалось загрузить тарифы',
+  AppLocale.rommServerVersionLine: 'Версия сервера {version}',
+  AppLocale.rommPasswordLoginDisabledHint:
+      'Вход по паролю отключён на этом сервере',
 };

@@ -1590,4 +1590,7 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.neoSyncCheckoutFailed: 'Falha ao criar a sessão de pagamento',
   AppLocale.neoSyncCancelSubscriptionFailed: 'Falha ao cancelar a assinatura',
   AppLocale.neoSyncPlansFailed: 'Falha ao obter os planos',
+  AppLocale.rommServerVersionLine: 'Versão do servidor {version}',
+  AppLocale.rommPasswordLoginDisabledHint:
+      'O login com senha está desativado neste servidor',
 };
