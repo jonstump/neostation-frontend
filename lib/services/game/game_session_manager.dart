@@ -203,11 +203,7 @@ class GameSessionManager {
 
       await GameSessionPersistence.clearGameSession();
     } catch (e) {
-      // No colon after "session": the log redactor treats that as a session
-      // token and blanks the token that follows it — which on this line is the
-      // exception type, the one thing that makes a crash-recovery failure
-      // diagnosable. Verified against `redactSecrets` directly.
-      _log.e('Error checking the pending game session, error=$e');
+      _log.e('Error checking the pending game session: $e');
     }
   }
 
@@ -655,8 +651,7 @@ class GameSessionManager {
         endTime: end,
       );
     } catch (e) {
-      // Also colon-free after "session" — see [checkPendingGameSession].
-      _log.e('Failed to queue a RomM play session, error=$e');
+      _log.e('Failed to queue a RomM play session: $e');
     }
   }
 }

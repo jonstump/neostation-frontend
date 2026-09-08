@@ -219,30 +219,31 @@ void main() {
   );
 
   group('crash-recovery log lines survive redaction', () {
-    // `session` is a sensitive field name, so a colon straight after the word
-    // makes the redactor eat the token that follows — which on these lines is
-    // the exception type, the one part that makes an unreproducible
-    // crash-recovery failure diagnosable.
+    // These two lines carried `session, error=$e` rather than `session: $e`
+    // because `session` was a sensitive field name and a colon straight after
+    // the word made the redactor eat the token that followed — which on these
+    // lines is the exception type, the one part that makes an unreproducible
+    // crash-recovery failure diagnosable. Issue #199 moved that fix into
+    // `redactSecrets`, so the wording here is natural again; both forms have
+    // to keep the exception now.
     const detail = 'SocketException: Connection refused';
 
-    test('the reworded lines pass through untouched', () {
+    test('the natural wording keeps the exception', () {
+      for (final line in [
+        'Error checking the pending game session: $detail',
+        'Failed to queue a RomM play session: $detail',
+      ]) {
+        expect(redactSecrets(line), line, reason: line);
+      }
+    });
+
+    test('the wording the workaround used still passes through untouched', () {
       for (final line in [
         'Error checking the pending game session, error=$detail',
         'Failed to queue a RomM play session, error=$detail',
       ]) {
         expect(redactSecrets(line), line, reason: line);
       }
-    });
-
-    test('the old wording really did lose the exception type', () {
-      expect(
-        redactSecrets('Error checking pending game session: $detail'),
-        isNot(contains('SocketException')),
-      );
-      expect(
-        redactSecrets('Error queueing RomM play session: $detail'),
-        isNot(contains('SocketException')),
-      );
     });
   });
 }
