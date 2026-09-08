@@ -273,6 +273,23 @@ void main() {
       expect(c.hashError, isNull);
       c.dispose();
     });
+
+    test('a later miss drops the previous hit from the pinned row', () async {
+      final fakes = _Fakes()..lookup = (_) async => _rom(41);
+      final c = fakes.controller();
+      await c.init('ct-final');
+      await c.matchByHash();
+      expect(c.hashStatus, RommMatchByHashStatus.hit);
+      expect(c.pinnedRom?.id, 41);
+
+      fakes.lookup = (_) async => null;
+      await c.matchByHash();
+
+      expect(c.hashStatus, RommMatchByHashStatus.miss);
+      expect(c.hashHit, isNull);
+      expect(c.pinnedRom, isNull);
+      c.dispose();
+    });
   });
 
   group('busy and cancel', () {

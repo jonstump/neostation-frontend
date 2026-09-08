@@ -32,13 +32,14 @@ import 'package:neostation/widgets/custom_notification.dart';
 /// D-pad row index the dialog keeps in `_selectedIndex` — and what that slot
 /// means.
 ///
-/// Slot 0 is the search field, slots `1..actionCount` are the RomM fix-up
-/// actions, and every slot after them is a search result (or the single retry
-/// row). Every index computation in the dialog goes through this rather than
-/// carrying its own offset: rows have already been inserted above the results
-/// once (the fix-up actions) and issue #81 plans a third, and a literal
-/// `+ 1` left behind by such an insertion silently highlights the wrong row —
-/// which A then confirms as the manual link.
+/// Slot 0 is the search field, slots `1..actionCount` are the action rows
+/// ("Match by hash" when the server may have the endpoint, then the RomM
+/// fix-up actions), and every slot after them is a search result (or the
+/// single retry row). Every index computation in the dialog goes through this
+/// rather than carrying its own offset: rows have been inserted above the
+/// results twice already (the fix-up actions, then match by hash), and a
+/// literal `+ 1` left behind by such an insertion silently highlights the
+/// wrong row — which A then confirms as the manual link.
 // Governing: ADR-0019 (expose RomM library filters, search and maintenance), SPEC-0018 REQ "Fix Match In The Picker"
 @immutable
 class RommMatchPickerSlots {

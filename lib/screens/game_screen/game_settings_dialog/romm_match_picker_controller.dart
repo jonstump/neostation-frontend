@@ -402,6 +402,9 @@ class RommMatchPickerController extends ChangeNotifier {
 
     final serial = ++_hashSerial;
     _hashStatus = RommMatchByHashStatus.busy;
+    // A run replaces the previous outcome wholesale: a stale hit must not stay
+    // pinned under a miss, skip, or error line that says otherwise.
+    _hashHit = null;
     _hashSkipReason = null;
     _hashError = null;
     if (!_disposed) notifyListeners();
