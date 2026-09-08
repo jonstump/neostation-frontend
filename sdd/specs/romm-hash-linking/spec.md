@@ -31,7 +31,7 @@ The connect-time link pass gains a second stage: games still unlinked after file
 
 ### Requirement: Local Fingerprints In The Link Index
 
-The link pass's local index SHALL carry each game's persisted `rom_crc32`, md5 (`ss_hash`), and `rom_size` from `user_roms`, exposed on the game model the pass reads. For games that are unlinked after the filename stage and have no persisted crc32 and are not marked fingerprint-skipped, the pass SHALL compute the cheap fingerprint (`FingerprintEffort.cheap`: zip central directory only, no read for other files), bounded by a per-pass cap of 500 files, and MUST persist the result (or the skip reason) through the existing fingerprint columns so a later pass pays nothing for that game. Computation MUST run off the UI isolate and MUST check the pass's stop signal between files.
+The link pass's local index SHALL carry each game's persisted `rom_crc32`, md5 (`ss_hash`), and `rom_size` from `user_roms`, exposed on the game model the pass reads. For games that are unlinked after the filename stage and have no persisted crc32 and are not marked fingerprint-skipped, the pass SHALL compute the cheap fingerprint (`FingerprintEffort.cheapOnly`, the enum value that already existed — this spec originally named it `cheap`: zip central directory only, no read for other files), bounded by a per-pass cap of 500 files, and MUST persist the result (or the skip reason) through the existing fingerprint columns so a later pass pays nothing for that game. A file whose cheap fingerprint would cost a full read — a bare ROM, an archive on a packed-archive system, or a zip whose tail the central-directory reader cannot parse — is answered as deferred: it MUST NOT be fingerprinted, parked, persisted, or charged to the cap, so the same files are deferred again on every pass by design until the scraper's full path fingerprints them. Computation MUST run off the UI isolate and MUST check the pass's stop signal between files.
 
 #### Scenario: Zipped unscraped library
 
@@ -45,7 +45,7 @@ The link pass's local index SHALL carry each game's persisted `rom_crc32`, md5 (
 
 ### Requirement: Hash Matching Stage
 
-After the filename stage, for each system group the pass SHALL match every still-unlinked local game that has a crc32 against the group's enumerated ROMs by crc32 equality against `allCrc32`. When both sides have an md5, the md5 MUST also agree; when both sides have a size, the sizes MUST agree. A local game whose crc32 matches more than one distinct RomM ROM id MUST be skipped and reported as an ambiguity. A filename match MUST take precedence over a hash match for the same game. Two local games matching the same RomM ROM MAY both link to it. Matching MUST happen in memory against the pages already fetched; the stage MUST NOT issue additional requests.
+After the filename stage, for each system group the pass SHALL match every still-unlinked local game that has a crc32 against the group's enumerated ROMs by crc32 equality against `allCrc32`. When both sides have an md5, the md5 MUST also agree; when both sides have a size and the local file is a bare (unpacked) file, the sizes MUST agree. The size veto MUST NOT apply to archives: RomM's `fs_size_bytes` and `file_size_bytes` are the stored archive's size, while its hashes and the local `rom_size` describe the inner image, so a size veto on an archive would reject every correct match. On a packed-archive system (arcade sets) the local size is the archive's, so the veto is lost there as well; that is harmless, because RomM's inner-content crc32 does not match the archive's crc32 in the first place. A local game whose crc32 matches more than one distinct RomM ROM id MUST be skipped and reported as an ambiguity. A filename match MUST take precedence over a hash match for the same game. Two local games matching the same RomM ROM MAY both link to it. Matching MUST happen in memory against the pages already fetched; the stage MUST NOT issue additional requests.
 
 #### Scenario: Renamed file
 
@@ -64,7 +64,7 @@ After the filename stage, for each system group the pass SHALL match every still
 
 ### Requirement: Hash Rows Follow The Link Rules
 
-Rows written by the hash stage MUST use `putMappingsIfAbsent` with a new `RommLinkSource.hash` value stored as `link_source = 'hash'`. They MUST NOT overwrite an existing row, MUST NOT replace a manual row, and a conflict with an existing row MUST be reported through the existing conflict list. The picker's provenance text SHALL name a hash-linked row as such.
+Rows written by the hash stage MUST use `putMappingsIfAbsent` with a new `RommLinkSource.hash` value stored as `link_source = 'hash'`. They MUST NOT overwrite an existing row, MUST NOT replace a manual row, and a conflict with an existing row MUST be reported through the existing conflict list. The picker's provenance text SHALL name a hash-linked row as such: "Linked by hash to {name}", matching the sibling automatic and manual lines on the Manage tab.
 
 #### Scenario: Manual row survives
 
@@ -73,7 +73,7 @@ Rows written by the hash stage MUST use `putMappingsIfAbsent` with a new `RommLi
 
 ### Requirement: Pass Summary And Observability
 
-`RommLinkPassSummary` SHALL add `hashRowsAdded`, `fingerprintsComputed`, `fingerprintsSkipped`, and `hashMismatches`, and the pass's single summary log line MUST include them. The hash stage MUST honour the pass's cancellation, single-instance, and scheduling guards unchanged.
+`RommLinkPassSummary` SHALL add `hashRowsAdded`, `fingerprintsComputed`, `fingerprintsSkipped` (files parked with a persisted skip reason), `fingerprintsDeferred` (files whose cheap fingerprint would have cost a full read — bare ROMs, packed-archive sets, a zip the cheap parser declined — neither parked nor persisted nor charged to the cap, so a bare-ROM library reports the same count on every pass; these are not "skipped"), `fingerprintsRemaining` (unlinked games still without a fingerprint when the cap stopped the pass — the "logs the remainder" scenario), and `hashMismatches`, and the pass's single summary log line MUST include them. The hash stage MUST honour the pass's cancellation, single-instance, and scheduling guards unchanged.
 
 #### Scenario: Summary line
 
@@ -123,12 +123,18 @@ All error-producing operations MUST follow structured error handling:
 
 - Errors MUST be wrapped with contextual information at each layer boundary (fingerprint failures name the file; lookup failures name the status)
 - Silent error swallowing MUST NOT occur: a fingerprint failure is persisted as a skip reason and counted; a lookup failure surfaces to the picker as a localized error
+- A zip whose tail the cheap parser cannot read (truncated, zip64, spanned) is a declined cheap path, not a failure: it MUST be deferred — re-read on the next pass, never persisted — rather than parked, because a permanent park (`extract_failed`) would stop the scraper's full path from ever trying 7-Zip extraction, which usually succeeds where the hand parser declined
 - Structured logging MUST be used for error reporting (key-value pairs, not string interpolation)
 
 #### Scenario: Unreadable file
 
-- **WHEN** a zip's central directory cannot be read
+- **WHEN** a file cannot be read at all (an I/O error the fingerprint service raises)
 - **THEN** the game is marked fingerprint-skipped with the reason, counted, and the pass continues
+
+#### Scenario: Cheap path declines a zip
+
+- **WHEN** a zip's tail cannot be parsed by the central-directory reader
+- **THEN** the game is deferred — counted in `fingerprintsDeferred`, nothing persisted, nothing charged to the cap — the pass continues, and the next pass reads it again
 
 ### Requirement: Concurrency Safety
 

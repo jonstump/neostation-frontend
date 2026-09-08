@@ -139,7 +139,7 @@ Confirming a remote entry SHALL, when reachability is not `offline`, open a conf
 
 ### Requirement: Cover Cache
 
-`RommCoverCache` SHALL store small covers under `<mediaCache>/romm_covers/<serverHash>/<romId>.<ext>`, filling a missing entry on first render (through the existing cover URL candidates and auth headers) and prefetching covers for rows upserted by a refresh, bounded to 300 per refresh with concurrency 3, after the refresh completes. The cache MUST evict least-recently-used files above `romm_cover_cache_mb` (default 200) and MUST expose `pathFor(serverUrl, romId)` for build-time use. Cards MUST prefer a local game's scraped media over the cache and MUST decode with the SPEC-0008 width rule.
+`RommCoverCache` SHALL store small covers under `<mediaCache>/romm_covers/<serverHash>/<romId>.<ext>`, filling a missing entry on first render (through the existing cover URL candidates and auth headers) and prefetching covers for rows upserted by a refresh, bounded to 300 per refresh with concurrency 3, after the refresh completes. The cache MUST evict least-recently-used files above `romm_cover_cache_mb` (default 200) and MUST expose `pathFor(serverUrl, romId)` for build-time use. Cards MUST prefer a local game's scraped media over the cache and MUST decode with the SPEC-0008 width rule. The cache serves remote entries only: a local game without scraped media MUST show the placeholder, not the RomM cover of its linked ROM (the precedence helper `rommCoverPathFor` implements this literally, per #206; the fallback was considered and not taken). The cache MUST be cleared for a server on disconnect and on a change of server URL — the cover-cache half of REQ "Settings And Actions", delivered by #206; the catalog half of that clear belongs to the lists, scope, and settings story (#107).
 
 #### Scenario: Offline render
 
@@ -162,7 +162,7 @@ Selecting a remote entry SHALL push its cached cover and a localized "not downlo
 
 ### Requirement: Settings And Actions
 
-General settings SHALL offer "Show RomM library in my systems" (`romm_show_library`, default off), "Default library scope" (`romm_library_default_scope`), and "RomM cover cache size" (`romm_cover_cache_mb`); the RomM connected settings SHALL offer "Refresh RomM library now", "Clear cached RomM library", and an "as of {time}" line from the newest `refreshed_at`. Turning the toggle off MUST hide remote entries immediately without deleting the catalog; disconnecting or changing server MUST clear the catalog and cover cache for that server.
+General settings SHALL offer "Show RomM library in my systems" (`romm_show_library`, default off), "Default library scope" (`romm_library_default_scope`), and "RomM cover cache size" (`romm_cover_cache_mb`); the RomM connected settings SHALL offer "Refresh RomM library now", "Clear cached RomM library", and an "as of {time}" line from the newest `refreshed_at`. Turning the toggle off MUST hide remote entries immediately without deleting the catalog; disconnecting or changing server MUST clear the catalog and cover cache for that server (the cover-cache clear shipped with #206 under REQ "Cover Cache"; the catalog clear is this requirement's, in #107).
 
 #### Scenario: Toggle off
 

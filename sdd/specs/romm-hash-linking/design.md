@@ -4,7 +4,7 @@
 
 See [SPEC-0011](spec.md), [ADR-0011](../../adrs/ADR-0011-link-local-roms-to-romm-by-hash.md), [SPEC-0001](../romm-existing-rom-linking/spec.md), [SPEC-0004](../romm-manual-link-picker/spec.md), and [SPEC-0010](../romm-server-capabilities/spec.md).
 
-`RommLibraryLinker` (`lib/services/romm/romm_library_linker.dart`) builds `_LocalIndex` from `GameRepository.getAllGames()` keyed by normalized folder and filename, pages each platform of each system group through the injected `fetchPage`, collects filename claims per local game, resolves ambiguity and conflicts, and writes `RommSaveMapEntry` rows through `putMappingsIfAbsent`. `RomFingerprintService` (`lib/services/rom_fingerprint_service.dart`) offers `fingerprint(path, systemFolder, {keepsArchivesPacked, effort})` with `FingerprintEffort.cheap` (zip central directory) and full (streamed crc32 and md5), and `computeInBackground` for UI-driven callers. Migration 135 added `user_roms.rom_crc32`, `rom_size`, `rom_fingerprint_skipped` and repurposed `ss_hash` as md5; the ScreenScraper path (`screenscraper_service.dart`) is their only writer today. `RommMatchPickerController` (`lib/screens/game_screen/game_settings_dialog/romm_match_picker_controller.dart`) drives the picker with injected `searchRoms`, `readMapping`, `writeMapping`, `fetchMetadata`.
+`RommLibraryLinker` (`lib/services/romm/romm_library_linker.dart`) builds `_LocalIndex` from `GameRepository.getAllGames()` keyed by normalized folder and filename, pages each platform of each system group through the injected `fetchPage`, collects filename claims per local game, resolves ambiguity and conflicts, and writes `RommSaveMapEntry` rows through `putMappingsIfAbsent`. `RomFingerprintService` (`lib/services/rom_fingerprint_service.dart`) offers `fingerprint(path, systemFolder, {keepsArchivesPacked, effort})` with `FingerprintEffort.cheapOnly` (zip central directory) and full (streamed crc32 and md5), and `computeInBackground` for UI-driven callers. Migration 135 added `user_roms.rom_crc32`, `rom_size`, `rom_fingerprint_skipped` and repurposed `ss_hash` as md5; the ScreenScraper path (`screenscraper_service.dart`) is their only writer today. `RommMatchPickerController` (`lib/screens/game_screen/game_settings_dialog/romm_match_picker_controller.dart`) drives the picker with injected `searchRoms`, `readMapping`, `writeMapping`, `fetchMetadata`.
 
 RomM: `RomSchema` (inherited by the list schema) and `RomFileSchema` carry `crc_hash`, `md5_hash`, `sha1_hash`, `ra_hash` (files also `chd_sha1_hash`); `GET /api/roms/by-hash` (4.5.0+, `roms.read`) returns a detailed ROM or 404.
 
@@ -31,7 +31,7 @@ RomM: `RomSchema` (inherited by the list schema) and `RomFileSchema` carry `crc_
 
 ### crc32 as the key, md5 and size as vetoes
 
-**Choice**: index by crc32; when both sides have an md5 they must agree, when both have a size they must agree; a crc32 matching more than one RomM ROM id is an ambiguity.
+**Choice**: index by crc32; when both sides have an md5 they must agree, when both have a size and the local file is a bare file they must agree (RomM's size is the stored archive's, its hashes and the local `rom_size` are the inner image's, so the veto is skipped for archives); a crc32 matching more than one RomM ROM id is an ambiguity.
 **Rationale**: crc32 is the fingerprint most local games already have (scraped libraries and the zip cheap path); md5 is present when a full fingerprint was computed and is decisive when it is. Requiring md5 would exclude every game that only has the cheap fingerprint.
 
 ### Compare against ROM-level and file-level hashes
@@ -41,8 +41,8 @@ RomM: `RomSchema` (inherited by the list schema) and `RomFileSchema` carry `crc_
 
 ### Cheap fingerprints only, capped, persisted
 
-**Choice**: unlinked games without `rom_crc32` and not `rom_fingerprint_skipped` get `FingerprintEffort.cheap` in a background isolate, at most 500 per pass, results and skip reasons persisted through a new `GameRepository.saveFingerprints(batch)` that writes the migration-135 columns.
-**Rationale**: the cheap path touches only the zip's tail; everything else is parked with a reason so the pass never re-walks it. The cap keeps a first connect on a large library bounded; the persisted results make the second pass free.
+**Choice**: unlinked games without `rom_crc32` and not `rom_fingerprint_skipped` get `FingerprintEffort.cheapOnly` in a background isolate, at most 500 per pass, results and skip reasons persisted through a new `GameRepository.saveFingerprints(batch)` that writes the migration-135 columns.
+**Rationale**: the cheap path touches only the zip's tail; a real failure is parked with a reason so the pass never re-walks it, while a file the cheap path merely declines (bare ROM, packed-archive set, unparseable zip tail) is deferred — not persisted, not charged to the cap — so the scraper's full path can still fingerprint it. The cap keeps a first connect on a large library bounded; the persisted results make the second pass free.
 **Alternatives considered**:
 - Full fingerprints in the pass: rejected in ADR-0001 and ADR-0011 for SAF cost.
 - No persistence: every connect would re-read every zip tail.
@@ -78,7 +78,7 @@ sequenceDiagram
         L->>F: cheap fingerprint (≤500/pass, stop checked)
         F-->>L: crc32 | skip reason
         L->>G: saveFingerprints(batch)
-        L->>L: hash stage: crc32 match, md5/size veto, ambiguity
+        L->>L: hash stage: crc32 match, md5 veto, size veto (bare files), ambiguity
         L->>M: putMappingsIfAbsent(filename rows + hash rows)
     end
     L-->>L: summary (rowsAdded, hashRowsAdded, fingerprintsComputed, ...)

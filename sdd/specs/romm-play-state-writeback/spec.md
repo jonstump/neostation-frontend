@@ -53,7 +53,7 @@ NeoStation pushes `hidden`, favourite membership, and last-played to RomM for li
 
 ### Requirement: Props Outbox
 
-The system SHALL add `app_romm_props_outbox(rom_path PRIMARY KEY, hidden INTEGER NULL, favourite INTEGER NULL, touch_last_played INTEGER NOT NULL DEFAULT 0, updated_at TEXT)` by a versioned, guarded migration, with a repository that upserts (later values win per column), lists, and deletes rows. Hooks MUST upsert a row on `setGameHidden`, `unhideAllGames(ForSystem)`, `toggleFavorite`, and play-session end, only when the push toggle is on and the game has a link row.
+The system SHALL add `app_romm_props_outbox(rom_path PRIMARY KEY, hidden INTEGER NULL, favourite INTEGER NULL, touch_last_played INTEGER NOT NULL DEFAULT 0, updated_at TEXT)` by a versioned, guarded migration, with a repository that upserts (later values win per column), lists, and deletes rows. Hooks MUST upsert a row on the hide path (`GameVisibilityService.setHidden` and its unhide-all counterpart, the single funnel above `GameRepository.setGameHidden` / `unhideAllGames(ForSystem)`, which stay plain repository methods), `FavoritesService.toggleFavorite`, and play-session end, only when the push toggle is on and the game has a link row.
 
 #### Scenario: Coalescing
 
@@ -67,12 +67,17 @@ The system SHALL add `app_romm_props_outbox(rom_path PRIMARY KEY, hidden INTEGER
 
 ### Requirement: Flush
 
-The outbox MUST flush together with the play-session flush and on the connect-time sweep: per row, one props call (when `hidden` or `touch_last_played` is set) and one favourites call (when `favourite` is set), deleting the row on success and keeping it on failure with one warning. A 404 for the ROM MUST delete the row. Rows MUST be processed in `updated_at` order and the flush MUST stop on disconnect.
+The outbox MUST flush together with the play-session flush and on the connect-time sweep, and it also runs from the sync provider's per-game `_syncPlaytime` — the third flush site, where the play-session flush already ran on the post-close sync: per row, one props call (when `hidden` or `touch_last_played` is set) and one favourites call (when `favourite` is set), deleting the row on success and keeping it on failure with one warning. A 404 for the ROM MUST delete the row. A row the service gates at flush time — the server below 4.9.0 for its feature, or its scope group `denied` — MUST be deleted without a request, with one info line per connection naming the gate: the hooks cannot know the connection's version or scopes while offline, so the gate ADR-0013 §4 describes is applied at the first place it is knowable, and a gated row is not kept for replay against a later account. Rows MUST be processed in `updated_at` order and the flush MUST stop on disconnect. A flush failure has no user-facing message: the flush is a background statistic with no UI surface, so the warning line of REQ "Error Handling Standards" is the whole report.
 
 #### Scenario: Server unreachable
 
 - **WHEN** the flush fails with a socket error
 - **THEN** rows remain and are retried on the next flush
+
+#### Scenario: Gated at flush
+
+- **WHEN** a queued row is flushed against a 4.8.0 server
+- **THEN** the row is deleted, no request is sent, and one info line names the gate
 
 ### Requirement: Push Toggle
 
@@ -85,7 +90,7 @@ The RomM settings SHALL offer "Push play state to RomM", persisted in `user_conf
 
 ### Requirement: Localized User-Facing Text
 
-Every new string (toggle, favourites collection name, messages) MUST be an `AppLocale` key with all twelve translations.
+Every new string (toggle, favourites collection name, messages) MUST be an `AppLocale` key with all twelve translations. No flush-failure message exists, because the flush has no UI surface (REQ "Flush"); one would need a surface first.
 
 #### Scenario: Missing translation
 

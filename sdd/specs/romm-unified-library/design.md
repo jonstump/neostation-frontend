@@ -52,6 +52,7 @@ Local library: `user_roms` (`UNIQUE(rom_path)`, NOT NULL) and `user_detected_sys
 
 **Choice**: files on disk, an index of `(path, size, lastUsed)` kept in memory and rebuilt from the directory on start; eviction after prefetch and on a size check every 100 fills.
 **Rationale**: covers are the offline experience; a cap keeps the handheld's storage predictable.
+The cache serves remote entries only: a local game without scraped media draws the placeholder, not the RomM cover of its linked ROM (`rommCoverPathFor`, #206). The server's directory is cleared on disconnect and on a server change (#206); the catalog clear on the same events is #107's.
 
 ### Remote-only systems through the same builder
 
@@ -94,7 +95,7 @@ flowchart LR
     SC --> V["list / grid / carousel"]
     V --> F["footer: Play | Download | Cancel | Retry"]
     V --> B["badges: cloud-download, progress, retry"]
-    V --> CV["cover: scraped media → RommCoverCache → placeholder"]
+    V --> CV["cover: local → scraped media or placeholder; remote → RommCoverCache or placeholder"]
     F -->|Download| DL["RommProvider.downloadRom"]
     DL --> T["RommDownload tracker"] --> V
     DL --> ST["settle rescan → libraryRevision → reload"]

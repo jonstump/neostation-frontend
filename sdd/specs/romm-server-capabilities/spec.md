@@ -114,7 +114,7 @@ A method whose endpoint is in the threshold table MUST return early, without sen
 
 ### Requirement: Connect Screen Surfaces
 
-The connect content SHALL show the server version on a connected server as a localized line ("Server version {version}"), and MUST show nothing when the version is unknown. When `passwordLoginDisabled` is true, the connect screen's auth-mode order SHALL lead with pairing and API key and place the password mode last with a localized hint that the server has disabled it; the password mode MUST remain selectable. Every string MUST go through `AppLocale` with all twelve translations; every control MUST stay reachable by controller.
+The connect content SHALL show the server version on a connected server as a localized line ("Server version {version}"), and MUST show nothing when the version is unknown. When `passwordLoginDisabled` is true, the connect screen's auth-mode order SHALL lead with pairing and API key and place the password mode last with a localized hint that the server has disabled it; the password mode MUST remain selectable. The reordered list MUST be the one the switch draws and the one Left/Right and A step through, so the controller order matches the visual order; SPEC-0007 REQ "Pairing Mode On The Connect Screen" and its "Mode cycling" scenario describe the default order, which this requirement changes only while the flag is set. Every string MUST go through `AppLocale` with all twelve translations; every control MUST stay reachable by controller.
 
 #### Scenario: Version line
 

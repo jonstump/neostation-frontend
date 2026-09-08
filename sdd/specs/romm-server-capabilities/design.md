@@ -32,7 +32,7 @@ RomM's `GET /api/heartbeat` is public and returns `SYSTEM {VERSION, SHOW_SETUP_W
 
 ### Probe inside `authenticate()`, not a separate provider step
 
-**Choice**: `authenticate()` probes when `_capabilities == null && !_probed` for the current base URL, then builds the scope string from the result. `fetchHeartbeat()` is also public for `initialize()`.
+**Choice**: `authenticate()` probes when `_capabilities == null && !_probed` for the current base URL, then builds the scope string from the result. `fetchHeartbeat()` is also public for SPEC-0019's reachability re-probe.
 **Rationale**: the scope request is the one consumer that must run after the probe and before the grant; putting the probe there guarantees the order for every login path (password, API key, pairing) without each provider method remembering to call it.
 **Alternatives considered**:
 - Probe in the provider before `authenticate()`: three call sites, easy to miss on the next login mode.
@@ -47,10 +47,10 @@ RomM's `GET /api/heartbeat` is public and returns `SYSTEM {VERSION, SHOW_SETUP_W
 **Choice**: `uploadPlaySessions` on `unsupported` sets `_playSessionsSupported = false` through the existing `_notePlaySessionFailure`-style path so `playtimeSyncAvailable` reads false and the outbox is not retried; the provider's queue flush therefore sees "unavailable" and behaves as it does after a 404 today.
 **Rationale**: one state for "no playtime on this connection", whatever proved it.
 
-### Restored session probes in the background
+### Restored session probes lazily, not in the background
 
-**Choice**: `initialize()` marks connected, then `unawaited(_probeCapabilities())` guarded by a generation counter; on completion, `notifyListeners()`.
-**Rationale**: startup must not wait on the network; the first gated call within that window behaves as `unknown`, which is today's behaviour.
+**Choice**: `initialize()` marks the connection connected with capabilities still unknown and sends nothing. The service probes on the connection's first authenticated request (SPEC-0010 REQ "Probe Before The Token Grant"); an offline connection re-probes on SPEC-0019 REQ "Reachability"'s backoff timer, not on a timer of its own. When either probe lands, the service's `onCapabilitiesChanged` hook reaches the provider, which calls `notifyListeners()` so `serverVersion` and `passwordLoginDisabled` redraw in place. There is no background probe and no generation counter.
+**Rationale**: startup must not wait on the network, and a probe fired by the restore runs before a handheld's network is up (issue #168); the first gated call before the probe behaves as `unknown`, which is today's behaviour. (Amended after #207: this section previously described `unawaited(_probeCapabilities())` guarded by a generation counter, which the spec and ADR-0010 had already dropped after #168.)
 
 ### Pairing gate returns a typed error
 
@@ -92,13 +92,13 @@ flowchart LR
     V --> U["connect screen: version line, mode order"]
 ```
 
-Layering: model (value object) ← service (probe, gates) ← provider (exposure, re-probe) ← UI (version line, mode order). No repository or datasource is involved.
+Layering: model (value object) ← service (probe, gates, capabilities-changed hook) ← provider (exposure; the offline re-probe is SPEC-0019 REQ "Reachability"'s backoff loop) ← UI (version line, mode order). No repository or datasource is involved.
 
 ## Risks / Trade-offs
 
 - **Wrong threshold gates a working feature** → each entry cites its verification; `unknown` never gates; a unit test pins the table; the connect screen's version line makes a misgate diagnosable from a screenshot.
 - **Heartbeat blocked by a proxy** → null capabilities, today's behaviour.
-- **Startup probe on a metered or slow network** → 5 s cap, one small body, off the critical path.
+- **Probe on a metered or slow network** → 5 s cap, one small body; nothing at startup, since the restore is offline and the probe rides the first authenticated request.
 - **Two mechanisms (version gate, scope fallback)** → each has one job and a comment saying which; the 403 path is unchanged.
 
 ## Migration Plan
