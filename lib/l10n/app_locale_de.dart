@@ -1600,4 +1600,10 @@ const Map<String, dynamic> appLocaleDe = {
       'Die Änderung konnte auf RomM nicht übernommen werden',
   AppLocale.rommConnectionFailedDetail: 'Verbindung fehlgeschlagen: {error}',
   AppLocale.rommPairingFailedDetail: 'Kopplung fehlgeschlagen: {error}',
+  AppLocale.rommLoadPlatformsFailedDetail:
+      'Plattformen konnten nicht geladen werden: {error}',
+  AppLocale.rommLoadCollectionsFailedDetail:
+      'Sammlungen konnten nicht geladen werden: {error}',
+  AppLocale.rommLoadRomsFailedDetail:
+      'ROMs konnten nicht geladen werden: {error}',
 };

@@ -1348,4 +1348,7 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.rommFixMatchApplyFailed: '无法在 RomM 上应用此更改',
   AppLocale.rommConnectionFailedDetail: '连接失败：{error}',
   AppLocale.rommPairingFailedDetail: '配对失败：{error}',
+  AppLocale.rommLoadPlatformsFailedDetail: '加载平台失败：{error}',
+  AppLocale.rommLoadCollectionsFailedDetail: '加载收藏集失败：{error}',
+  AppLocale.rommLoadRomsFailedDetail: '加载 ROM 失败：{error}',
 };

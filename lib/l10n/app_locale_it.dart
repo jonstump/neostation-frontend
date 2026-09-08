@@ -1587,4 +1587,9 @@ const Map<String, dynamic> appLocaleIt = {
       'Impossibile applicare la modifica su RomM',
   AppLocale.rommConnectionFailedDetail: 'Connessione non riuscita: {error}',
   AppLocale.rommPairingFailedDetail: 'Associazione non riuscita: {error}',
+  AppLocale.rommLoadPlatformsFailedDetail:
+      'Impossibile caricare le piattaforme: {error}',
+  AppLocale.rommLoadCollectionsFailedDetail:
+      'Impossibile caricare le raccolte: {error}',
+  AppLocale.rommLoadRomsFailedDetail: 'Impossibile caricare le ROM: {error}',
 };

@@ -1551,4 +1551,9 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommFixMatchApplyFailed: 'Не удалось применить изменение в RomM',
   AppLocale.rommConnectionFailedDetail: 'Не удалось подключиться: {error}',
   AppLocale.rommPairingFailedDetail: 'Не удалось выполнить сопряжение: {error}',
+  AppLocale.rommLoadPlatformsFailedDetail:
+      'Не удалось загрузить платформы: {error}',
+  AppLocale.rommLoadCollectionsFailedDetail:
+      'Не удалось загрузить коллекции: {error}',
+  AppLocale.rommLoadRomsFailedDetail: 'Не удалось загрузить ROM: {error}',
 };

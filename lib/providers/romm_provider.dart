@@ -388,9 +388,16 @@ class RommProvider extends ChangeNotifier {
 
   /// The last failure in English. It is a diagnostic and a log line, not the
   /// user's text: a message the provider authored itself is untranslated here,
-  /// so a surface that shows a failure MUST prefer [lastErrorLocalized] (and,
-  /// for pairing, `rommPairErrorKey(lastErrorKind)`) and fall back to this
-  /// only for a [RommException.message], which is already user-facing.
+  /// so a surface that *shows* a failure MUST prefer [lastErrorLocalized]
+  /// (and, for pairing, `rommPairErrorKey(lastErrorKind)`) and fall back to
+  /// this only for a [RommException.message], which is already user-facing.
+  ///
+  /// "Shows" is the boundary, and it is narrower than "reads": this string is
+  /// also what the log lines, the thrown [StateError] the link pass reports
+  /// itself with, and `RommSyncProvider`'s `SyncResult`/`GameSyncState`
+  /// messages carry — none of which is rendered, and none of which has a
+  /// `BuildContext` to translate with. Those consumers are meant to take the
+  /// English text; only a widget must not.
   // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Localized User-Facing Text"
   String? get lastError => _lastError;
 
@@ -860,33 +867,6 @@ class RommProvider extends ChangeNotifier {
     return fallback;
   }
 
-  /// Validates credentials against the server without persisting them.
-  /// Returns null on success, or a user-facing error message.
-  ///
-  /// Pass either [username]/[password] or an [apiKey], matching [connect].
-  Future<String?> testConnection({
-    required String serverUrl,
-    String username = '',
-    String password = '',
-    String apiKey = '',
-  }) async {
-    final probe = RommService()
-      ..configure(
-        serverUrl: serverUrl,
-        username: username,
-        password: password,
-        apiKey: apiKey,
-      );
-    try {
-      await probe.verifyConnection();
-      return null;
-    } on RommException catch (e) {
-      return e.message;
-    } catch (e) {
-      return 'Connection failed: $e';
-    }
-  }
-
   /// Authenticates, persists credentials + tokens, and marks the provider
   /// connected. Returns null on success or a user-facing error message.
   ///
@@ -1167,7 +1147,16 @@ class RommProvider extends ChangeNotifier {
     } on RommException catch (e) {
       _lastError = e.message;
     } catch (e) {
-      _lastError = 'Failed to load platforms: $e';
+      // Not a [RommException], so nothing user-facing came back from the
+      // server: the provider words this one, and therefore records it as a
+      // key the browse screen can translate. [lastError] keeps the English
+      // sentence for the log and for the diagnostic consumers.
+      // Governing: ADR-0007, SPEC-0007 REQ "Localized User-Facing Text"
+      _setLocalizedError(
+        AppLocale.rommLoadPlatformsFailedDetail,
+        fallback: 'Failed to load platforms: $e',
+        detail: '$e',
+      );
     } finally {
       _loadingPlatforms = false;
       _platformsLoad = null;
@@ -1200,7 +1189,14 @@ class RommProvider extends ChangeNotifier {
     } on RommException catch (e) {
       _lastError = e.message;
     } catch (e) {
-      _lastError = 'Failed to load collections: $e';
+      // Same as [loadPlatforms]: a failure the provider worded itself is
+      // recorded as a translatable key, never as English the user would see.
+      // Governing: ADR-0007, SPEC-0007 REQ "Localized User-Facing Text"
+      _setLocalizedError(
+        AppLocale.rommLoadCollectionsFailedDetail,
+        fallback: 'Failed to load collections: $e',
+        detail: '$e',
+      );
     } finally {
       _loadingCollections = false;
       notifyListeners();
@@ -1685,7 +1681,14 @@ class RommProvider extends ChangeNotifier {
         );
         return;
       }
-      _lastError = 'Failed to load ROMs: $e';
+      // Same as [loadPlatforms]: a failure the provider worded itself is
+      // recorded as a translatable key, never as English the user would see.
+      // Governing: ADR-0007, SPEC-0007 REQ "Localized User-Facing Text"
+      _setLocalizedError(
+        AppLocale.rommLoadRomsFailedDetail,
+        fallback: 'Failed to load ROMs: $e',
+        detail: '$e',
+      );
     } finally {
       // A stale request's loading flag was already released by [_resetRoms];
       // clearing it here would cancel the flag of the load that replaced it.

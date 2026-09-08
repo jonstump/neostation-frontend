@@ -1411,4 +1411,7 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommFixMatchApplyFailed: 'RomM에 변경을 적용하지 못했습니다',
   AppLocale.rommConnectionFailedDetail: '연결에 실패했습니다: {error}',
   AppLocale.rommPairingFailedDetail: '페어링에 실패했습니다: {error}',
+  AppLocale.rommLoadPlatformsFailedDetail: '플랫폼을 불러오지 못했습니다: {error}',
+  AppLocale.rommLoadCollectionsFailedDetail: '컬렉션을 불러오지 못했습니다: {error}',
+  AppLocale.rommLoadRomsFailedDetail: 'ROM을 불러오지 못했습니다: {error}',
 };

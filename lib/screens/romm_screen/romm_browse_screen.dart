@@ -26,6 +26,7 @@ import '../../utils/debounced_search.dart';
 import '../../utils/gamepad_nav.dart';
 import '../../utils/romm_browse_header_slots.dart';
 import '../../utils/romm_collection_sync_message.dart';
+import '../../utils/romm_pair_error_message.dart';
 import '../../utils/romm_search_message.dart';
 import '../../widgets/confirm_action_dialog.dart';
 import '../../widgets/romm_filter_menu_dialog.dart';
@@ -2365,7 +2366,16 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
       hasMore: provider.romsHasMore,
       loading: provider.loadingRoms,
     );
-    final error = provider.lastError;
+    // The provider has no BuildContext, so a failure it worded itself arrives
+    // as an AppLocale key rather than as text; resolve that here. [lastError]
+    // is only shown when it came from RommException.message, which the server
+    // already worded for the user.
+    // Governing: ADR-0007 (RomM pairing login),
+    // SPEC-0007 REQ "Localized User-Facing Text"
+    final localizedError = provider.lastErrorLocalized;
+    final error = localizedError == null
+        ? provider.lastError
+        : rommLocalizedErrorText(context, localizedError);
     final hint =
         (provider.currentCollection != null
                 ? AppLocale.rommSearchCollectionHint
