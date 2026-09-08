@@ -1,0 +1,158 @@
+name: PR Template Check
+
+# `pull_request_target`, not `pull_request`: a fork PR's `pull_request` token is
+# read-only, so it can neither comment nor label. This job deliberately never
+# checks out the head branch and never runs code from the PR — it only reads the
+# title and body out of the event payload — so the write token is not exposed to
+# anything the contributor controls.
+on:
+  pull_request_target:
+    types: [opened, edited, reopened, ready_for_review]
+
+permissions:
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  template:
+    name: PR template filled in
+    runs-on: ubuntu-latest
+    # The gate is for drive-by contributions. Skipping OWNER/MEMBER/COLLABORATOR
+    # and bots keeps it off this fork's own SDD-generated PRs and Dependabot's,
+    # where a red check would be pure noise.
+    if: >-
+      !endsWith(github.event.pull_request.user.login, '[bot]') &&
+      !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+                github.event.pull_request.author_association)
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          script: |
+            const LABEL = 'needs-pr-template';
+            const MARKER = '<!-- pr-template-gate -->';
+
+            const pr = context.payload.pull_request;
+            const title = pr.title || '';
+            const body = pr.body || '';
+
+            // The template is almost entirely HTML comments. Stripping them is
+            // what separates "left the form as-is" from "actually wrote
+            // something", since an untouched body reduces to nothing but
+            // headings and empty checkboxes.
+            const stripped = body.replace(/<!--[\s\S]*?-->/g, '');
+
+            const ticked = (stripped.match(/^\s*[-*]\s*\[[xX]\]/gm) || []).length;
+
+            // Prose under `# Description`, minus the `Closes #` line and the
+            // headings themselves. If the author replaced the template wholesale
+            // with free prose there is no heading to anchor on, so fall back to
+            // the whole stripped body — free prose is still an attempt.
+            // Split on heading lines rather than using a lookahead for the next
+            // one: JS has no `\Z`, and `$` under /m stops at the first newline,
+            // so a `# Description` that runs to the end of the body has no
+            // regex-friendly terminator. Sections are unambiguous here.
+            const sections = stripped.split(/^(?=#+\s)/m);
+            const descSection = sections.find((s) => /^#+\s*Description\s*$/m.test(s));
+            const descSource = descSection
+              ? descSection.replace(/^#+\s*Description\s*$/m, '')
+              : stripped;
+            const description = descSource
+              .replace(/^\s*Closes\s*#\s*\d*\s*$/gim, '')
+              .replace(/^\s*[-*]\s*\[[ xX]\].*$/gm, '')
+              .replace(/^#+.*$/gm, '')
+              .replace(/^\s*\d+\.\s*$/gm, '')
+              .replace(/^\s*\*\*.*\*\*\s*$/gm, '')
+              .trim();
+
+            const TYPES = 'feat|fix|docs|style|refactor|perf|test|chore|build|ci|revert';
+            const titleOk = new RegExp(
+              `^(${TYPES})(\\([a-z0-9._/-]+\\))?!?: .+`,
+            ).test(title);
+
+            // Two independent checks. Reported separately so a PR with a real
+            // description and a sloppy title is not told it left the form blank.
+            const failures = [];
+            if (description.length === 0 && ticked === 0) {
+              failures.push(
+                '**The pull request template was left unfilled.** The body still has ' +
+                'an empty Description and no checked boxes, so there is nothing ' +
+                'describing what the change does, how it was verified, or which ' +
+                'platform it was tested on.',
+              );
+            }
+            if (!titleOk) {
+              failures.push(
+                `**The title is not a Conventional Commit.** Release notes are ` +
+                `generated from PR titles, so it needs to read ` +
+                `\`type(scope): summary\` — e.g. \`fix(log): keep the exception ` +
+                `type in redacted lines\`. Types: \`${TYPES.replace(/\|/g, '`, `')}\`. ` +
+                `See CONTRIBUTING.md.`,
+              );
+            }
+
+            const number = pr.number;
+            const { owner, repo } = context.repo;
+
+            const comments = await github.paginate(
+              github.rest.issues.listComments, { owner, repo, issue_number: number, per_page: 100 },
+            );
+            const previous = comments.find((c) => (c.body || '').includes(MARKER));
+
+            const hasLabel = (pr.labels || []).some((l) => l.name === LABEL);
+
+            if (failures.length === 0) {
+              if (hasLabel) {
+                await github.rest.issues.removeLabel({
+                  owner, repo, issue_number: number, name: LABEL,
+                }).catch(() => {});
+              }
+              if (previous) {
+                await github.rest.issues.updateComment({
+                  owner, repo, comment_id: previous.id,
+                  body: `${MARKER}\nThanks — the title and template both look filled in now. ` +
+                        `This check is green.`,
+                });
+              }
+              core.info('Template check passed.');
+              return;
+            }
+
+            const message = [
+              MARKER,
+              `Thanks for the pull request. Before this can be looked at, the ` +
+              `submission itself needs a bit of work:`,
+              '',
+              ...failures.map((f) => `- ${f}`),
+              '',
+              `Editing the description and title on this PR re-runs this check ` +
+              `automatically — no need to push a new commit or open a new PR.`,
+              '',
+              `> [!NOTE]`,
+              `> This is a **personal fork** of ` +
+              `[misobadev/neostation-frontend](https://github.com/misobadev/neostation-frontend). ` +
+              `Its issues track one person's own work rather than soliciting ` +
+              `contributions, so a filled-in template here is the bar for being ` +
+              `read at all. Changes meant for NeoStation proper belong upstream.`,
+            ].join('\n');
+
+            if (previous) {
+              await github.rest.issues.updateComment({
+                owner, repo, comment_id: previous.id, body: message,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number: number, body: message,
+              });
+            }
+
+            if (!hasLabel) {
+              await github.rest.issues.addLabels({
+                owner, repo, issue_number: number, labels: [LABEL],
+              });
+            }
+
+            core.setFailed(failures.map((f) => f.replace(/\*\*/g, '')).join(' '));
