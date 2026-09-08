@@ -314,6 +314,31 @@ class RommService {
   // SPEC-0013 REQ "Optional Scope Groups", ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
   bool _apiKeyVerified = false;
 
+  /// How many API-key verifications this connection has spent on a server that
+  /// answered *badly* — a 5xx, a 429, any non-2xx that is not 401/403.
+  ///
+  /// Only that middle case is counted. A rejection latches on the first answer
+  /// and a transport failure is not the server's fault at all, so neither ever
+  /// increments this. Reset wherever [_apiKeyVerified] is.
+  // Governing: ADR-0013, SPEC-0013 REQ "Optional Scope Groups"
+  int _apiKeyServerErrors = 0;
+
+  /// The bound on [_apiKeyServerErrors]: three verification attempts against a
+  /// server that keeps answering badly, then the one-shot stays spent.
+  ///
+  /// Three, not one and not unbounded. Re-arming at all is what lets a RomM
+  /// container that is mid-restart heal the connection by itself — dropping
+  /// that would strand the session with unknown scopes until the user
+  /// reconnects, which is issue #168's symptom with a 502 as the trigger.
+  /// Re-arming *forever* is what issue #173 measured: one extra
+  /// `GET /api/users/me` on every authenticated call, for the life of a
+  /// process pointed at a permanently broken server. A restart is over in
+  /// seconds and the next few calls fall inside it, so three attempts buy the
+  /// whole transient case; a server still answering 5xx by the third is broken
+  /// rather than busy. The cost is bounded at two extra requests per
+  /// connection instead of one per call.
+  static const int _maxApiKeyServerErrors = 3;
+
   /// Features already reported as gated on this connection, so the "not on
   /// this server" line is logged once per feature rather than once per call.
   final Set<RommFeature> _gatesLogged = <RommFeature>{};
@@ -448,6 +473,7 @@ class RommService {
     }
     _scopeGatesLogged.clear();
     _apiKeyVerified = false;
+    _apiKeyServerErrors = 0;
     _favouritesCollectionId = null;
     _playSessionsSupported = true;
     _applyCapabilityGates();
@@ -492,6 +518,7 @@ class RommService {
     }
     _scopeGatesLogged.clear();
     _apiKeyVerified = false;
+    _apiKeyServerErrors = 0;
   }
 
   static String _normalizeBaseUrl(String raw) {
@@ -1223,6 +1250,15 @@ class RommService {
   /// cost is paid by the first call that actually needs the network, once per
   /// connection, and a failure is logged and swallowed because this is a
   /// best-effort enrichment of a request that is about to be sent anyway.
+  ///
+  /// "Once" holds for the case that matters — a key the server accepts or
+  /// rejects is asked about exactly once. A failure splits three ways instead,
+  /// on whether and how the server answered: rejected (spent), answered badly
+  /// (retried, bounded by [_maxApiKeyServerErrors]), never answered (retried,
+  /// unbounded). Note the governing artifacts: SPEC-0010 REQ "Probe Before The
+  /// Token Grant" says a restored session verifies "at most once", which the
+  /// re-arm this method has shipped with since #169 already exceeds; the
+  /// clause wants amending to the bounded form the three cases below define.
   // Governing: ADR-0010 (RomM heartbeat capability probe),
   // SPEC-0010 REQ "Probe Before The Token Grant" (amended, #171 — the clause
   // tying the probe to authenticate() did not cover a restored session),
@@ -1233,19 +1269,46 @@ class RommService {
       try {
         await authenticate();
       } on RommAuthException catch (e) {
-        // The server answered, and its answer was "no". Asking again with the
-        // same key would only repeat it, so the attempt stays spent.
+        // Case 1 — the server answered, and its answer was "no" (401/403).
+        // Asking again with the same key would only repeat it, so the attempt
+        // stays spent for the life of the connection.
         _log.w('RomM API-key rejected during verification: ${e.message}');
       } catch (e) {
-        // The server did not answer at all — a timeout, a dropped socket, a
-        // TLS failure. Re-arm: a handheld commonly resumes and issues its
-        // first request before Wi-Fi is up, and latching on a transport error
-        // would leave the groups unknown and the capabilities null for the
-        // rest of the process. That is issue #168's exact symptom with a
-        // narrower trigger, and `_reprobe()` does not cover it because it
-        // restores capabilities without re-running verification.
-        _apiKeyVerified = false;
-        _log.w('RomM API-key verification could not reach the server: $e');
+        // The other two cases are told apart by whether a *status* came back,
+        // not by exception type. `RommAuthException` covers only 401/403, so
+        // matching on type alone filed every 5xx and 429 under "unreachable" —
+        // which is both the wrong policy (issue #173) and the wrong log line
+        // (issue #172): #168 was diagnosed almost entirely from these lines,
+        // and one that blames the network for a 502 sends the next
+        // investigation after Wi-Fi instead of after the server.
+        final status = e is RommException ? e.statusCode : null;
+        if (status != null) {
+          // Case 2 — the server answered, badly. A 5xx is usually a container
+          // mid-restart, so re-arm and let a later call heal the connection,
+          // but bound it: see [_maxApiKeyServerErrors] for why three.
+          _apiKeyServerErrors++;
+          final retrying = _apiKeyServerErrors < _maxApiKeyServerErrors;
+          if (retrying) _apiKeyVerified = false;
+          _log.w(
+            'RomM API-key verification failed: the server answered $status '
+            '(attempt $_apiKeyServerErrors of $_maxApiKeyServerErrors) — '
+            '${retrying ? 'a later call will retry' : 'giving up for this connection'}',
+          );
+        } else {
+          // Case 3 — the server did not answer at all: a timeout, a dropped
+          // socket, a TLS failure. Re-arm, unbounded, as before. A handheld
+          // commonly resumes and issues its first request before Wi-Fi is up,
+          // and latching on a transport error would leave the groups unknown
+          // and the capabilities null for the rest of the process. That is
+          // issue #168's exact symptom with a narrower trigger, and
+          // `_reprobe()` does not cover it because it restores capabilities
+          // without re-running verification. The genuinely-offline case is
+          // already damped a layer up by RommProvider's reachability backoff,
+          // so a second bound here would only duplicate it.
+          // Governing: ADR-0020, SPEC-0019 REQ "Reachability"
+          _apiKeyVerified = false;
+          _log.w('RomM API-key verification could not reach the server: $e');
+        }
       }
       return;
     }
