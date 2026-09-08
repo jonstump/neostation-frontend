@@ -96,13 +96,28 @@ enum RommScopeGroup {
   /// Editing collections, including the favourites collection.
   collectionsWrite('collections.write', RommFeature.collectionRomsAddRemove),
 
-  /// Uploading ROMs to the server's library (SPEC-0014).
+  /// Library-wide ROM writes: the metadata fix in the match picker
+  /// (SPEC-0018) and ROM upload (SPEC-0014).
   romsWrite('roms.write', null),
 
-  /// Triggering server-side tasks such as a rescan (SPEC-0019).
+  /// Triggering server-side tasks such as a rescan — the maintenance menu
+  /// (SPEC-0018 REQ "Maintenance Tasks").
   tasksRun('tasks.run', null),
 
-  /// RomM's device registry behind negotiated save sync (SPEC-0018).
+  /// RomM's device registry (`POST /api/devices`) behind ADR-0018's
+  /// device-negotiated save sync.
+  ///
+  /// The one group with no consumer yet: ADR-0018 is `proposed` and has no
+  /// spec. It is still requested, and issue #134 asked whether it should be —
+  /// the answer, on the evidence, is yes. `devices.read` and `devices.write`
+  /// sit in RomM's READ and WRITE scope tiers, so any account above "viewer"
+  /// already holds them and asking costs nothing: they are not what makes a
+  /// combined grant 403. `tasks.run` is (RomM puts it in `FULL_SCOPES_MAP`,
+  /// admin only) and `roms.write` is (`EDIT_SCOPES_MAP`, editor and up) — and
+  /// both of those have consumers now, so the probe run they trigger is not
+  /// avoidable by dropping this group. Dropping it would save one probe POST
+  /// in a path that runs anyway, and cost every paired install a forced
+  /// re-login the day Phase 1 lands.
   devices('devices.read devices.write', null);
 
   const RommScopeGroup(this.scopes, this.gate);

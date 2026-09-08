@@ -89,21 +89,41 @@ void main() {
       }
     });
 
-    test('leaves out a group this server predates', () async {
-      // 4.8.0 has play sessions but not the 4.9.0 collection rom endpoints.
-      serve(version: '4.8.0');
+    test('leaves out the groups this server predates', () async {
+      // 4.8.x predates both 4.9.0 gates: play sessions (issue #136) and the
+      // collection rom endpoints. Only the two ungated groups are asked for.
+      serve(version: '4.8.1');
+      final service = configured();
+
+      await service.authenticate();
+
+      final scope = tokenPosts().single.bodyFields['scope']!;
+      expect(scope, contains('roms.read'));
+      expect(scope, contains('roms.write'), reason: 'romsWrite has no gate');
+      expect(scope, contains('tasks.run'), reason: 'tasksRun has no gate');
+      expect(scope, isNot(contains('roms.user.write')));
+      expect(scope, isNot(contains('collections.write')));
+      expect(
+        service.hasScope(RommScopeGroup.collectionsWrite),
+        RommScopeState.denied,
+      );
+      expect(service.hasScope(RommScopeGroup.playtime), RommScopeState.denied);
+      expect(service.playtimeSyncAvailable, isFalse);
+    });
+
+    test('a 4.9.0 server keeps the playtime group', () async {
+      // The other side of the corrected threshold: 4.9.0 is the first release
+      // that carries POST /api/play-sessions (issue #136).
+      serve(version: '4.9.0');
       final service = configured();
 
       await service.authenticate();
 
       final scope = tokenPosts().single.bodyFields['scope']!;
       expect(scope, contains('roms.user.write'));
-      expect(scope, isNot(contains('collections.write')));
-      expect(
-        service.hasScope(RommScopeGroup.collectionsWrite),
-        RommScopeState.denied,
-      );
+      expect(scope, contains('collections.write'));
       expect(service.hasScope(RommScopeGroup.playtime), RommScopeState.granted);
+      expect(service.playtimeSyncAvailable, isTrue);
     });
   });
 
@@ -141,14 +161,15 @@ void main() {
     });
 
     test('a server that predates a group shortens the probe run', () async {
-      // 4.8.0 drops collectionsWrite before the grant, so only four groups are
-      // requested and only four probes can be spent on them.
-      serve(version: '4.8.0', denied: {'tasks.run'});
+      // 4.8.1 drops both 4.9.0-gated groups (playtime and collectionsWrite)
+      // before the grant, so only three groups are requested and only three
+      // probes can be spent on them.
+      serve(version: '4.8.1', denied: {'tasks.run'});
       final service = configured();
 
       await service.authenticate();
 
-      expect(tokenPosts(), hasLength(4 + 2));
+      expect(tokenPosts(), hasLength(3 + 2));
       expect(service.hasScope(RommScopeGroup.tasksRun), RommScopeState.denied);
       expect(
         service.hasScope(RommScopeGroup.romsWrite),

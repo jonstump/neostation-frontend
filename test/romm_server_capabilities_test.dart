@@ -162,10 +162,21 @@ void main() {
   group('RommFeature threshold table', () {
     // Pinned: a silent bump here would gate (or ungate) a real endpoint.
     // Governing: SPEC-0010 REQ "Feature Threshold Table"
-    test('the thresholds are the ones ADR-0010 verified', () {
+    test('every threshold is the release its endpoint was found in', () {
+      // Each of these was checked against the rommapp/romm source at the
+      // release tags either side of it — see the citation on each entry. A
+      // silent bump here would gate (or ungate) a real endpoint.
+      // Governing: SPEC-0010 REQ "Feature Threshold Table"
+      expect(
+        RommFeature.values,
+        hasLength(7),
+        reason: 'a new entry needs a pin',
+      );
       expect(
         RommFeature.playSessions.minVersion,
-        const RommServerVersion(4, 8, 0),
+        // Not 4.8.0: play_sessions.py and models/play_session.py are absent
+        // from the 4.8.0 and 4.8.1 trees (issue #136).
+        const RommServerVersion(4, 9, 0),
       );
       expect(
         RommFeature.clientTokenExchange.minVersion,
@@ -174,6 +185,22 @@ void main() {
       expect(
         RommFeature.romLookupByHash.minVersion,
         const RommServerVersion(4, 5, 0),
+      );
+      expect(
+        RommFeature.romPropsBareBody.minVersion,
+        const RommServerVersion(4, 9, 0),
+      );
+      expect(
+        RommFeature.collectionRomsAddRemove.minVersion,
+        const RommServerVersion(4, 9, 0),
+      );
+      expect(
+        RommFeature.screenshotGallery.minVersion,
+        const RommServerVersion(5, 0, 0),
+      );
+      expect(
+        RommFeature.randomRom.minVersion,
+        const RommServerVersion(5, 2, 0),
       );
     });
 
@@ -295,7 +322,7 @@ void main() {
 
     test('at or above the threshold is supported', () {
       expect(
-        capsAt('4.8.0').supports(RommFeature.playSessions),
+        capsAt('4.9.0').supports(RommFeature.playSessions),
         RommFeatureSupport.supported,
       );
       expect(
@@ -314,6 +341,11 @@ void main() {
         RommFeatureSupport.unsupported,
       );
       expect(
+        capsAt('4.8.1').supports(RommFeature.playSessions),
+        RommFeatureSupport.unsupported,
+        reason: '4.8.x ships no play_sessions router (issue #136)',
+      );
+      expect(
         capsAt('4.7.9').supports(RommFeature.clientTokenExchange),
         RommFeatureSupport.unsupported,
       );
@@ -325,7 +357,7 @@ void main() {
 
     test('a prerelease of the threshold counts as below it', () {
       expect(
-        capsAt('4.8.0-beta.1').supports(RommFeature.playSessions),
+        capsAt('4.9.0-beta.1').supports(RommFeature.playSessions),
         RommFeatureSupport.unsupported,
       );
       expect(
