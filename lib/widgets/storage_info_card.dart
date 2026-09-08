@@ -43,7 +43,7 @@ class StorageInfoCard extends StatelessWidget {
                         color: Theme.of(
                           context,
                         ).colorScheme.onSurface.withValues(alpha: 0.7),
-                      ), // Usar tema con transparencia
+                      ), // Use the theme colour with transparency
                     ),
                   ],
                 ),

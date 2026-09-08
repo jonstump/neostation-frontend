@@ -925,7 +925,7 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.toolsSubtitle: 'ROM 정리에 도움이 되는 도구',
   AppLocale.addRomFolder: 'ROM 폴더 추가',
   AppLocale.removeRomFolder: '제거',
-  // RomM (원격 라이브러리 탐색 + 다운로드)
+  // RomM (remote library browse + download)
   AppLocale.romm: 'RomM',
   AppLocale.rommLibrary: 'RomM 라이브러리',
   AppLocale.rommLogin: 'RomM 로그인',

@@ -52,7 +52,7 @@ import 'package:window_manager/window_manager.dart';
 import 'package:neostation/screens/secondary_screen/secondary_screen.dart';
 import 'package:device_info_plus/device_info_plus.dart';
 
-// Politica personalizada para deshabilitar navegacion por teclado
+// Custom policy that disables keyboard focus traversal
 class NoFocusTraversalPolicy extends FocusTraversalPolicy {
   @override
   FocusNode? findFirstFocus(
@@ -83,7 +83,7 @@ class NoFocusTraversalPolicy extends FocusTraversalPolicy {
   ) => [];
 }
 
-// Notifier global para cambios de fullscreen
+// Global notifier for fullscreen changes
 class FullscreenNotifier extends ChangeNotifier {
   static final FullscreenNotifier _instance = FullscreenNotifier._internal();
   factory FullscreenNotifier() => _instance;
@@ -118,7 +118,7 @@ class ToggleFullscreenAction extends Action<ToggleFullscreenIntent> {
       LoggerService.instance.i('Toggle fullscreen (Native): $newState');
       FullScreenWindow.setFullScreen(newState);
 
-      // Notificar el cambio de fullscreen
+      // Notify listeners of the fullscreen change
       FullscreenNotifier().notifyFullscreenChanged(newState);
     } else if (Platform.isMacOS) {
       final isFullscreen = await windowManager.isFullScreen();
@@ -127,7 +127,7 @@ class ToggleFullscreenAction extends Action<ToggleFullscreenIntent> {
       );
       await windowManager.setFullScreen(!isFullscreen);
 
-      // Notificar el cambio de fullscreen
+      // Notify listeners of the fullscreen change
       await Future.delayed(const Duration(milliseconds: 100));
       final newState = await windowManager.isFullScreen();
       FullscreenNotifier().notifyFullscreenChanged(newState);
@@ -216,7 +216,7 @@ void main() async {
     await _awaitUserDataStorage();
   }
 
-  // Inicializar window_manager para desktop con tamano minimo 640x480
+  // Initialize window_manager for desktop with a 640x480 minimum size
   if (Platform.isWindows || Platform.isMacOS || Platform.isLinux) {
     await windowManager.ensureInitialized();
 
@@ -232,7 +232,7 @@ void main() async {
       await windowManager.focus();
     });
 
-    // Cargar configuracion de fullscreen
+    // Load the fullscreen configuration
     bool isFullscreen = true;
     try {
       final config = await ConfigRepository.getUserConfig();
@@ -266,12 +266,12 @@ void main() async {
     log.i('Window manager initialized');
   }
 
-  // Inicializar fvp para soporte extendido de video (Windows, Linux, etc.)
+  // Initialize fvp for extended video support (Windows, Linux, etc.)
   registerWith();
 
-  // Configurar manejo global de errores para evitar crashes
+  // Configure global error handling to avoid crashes
   FlutterError.onError = (FlutterErrorDetails details) {
-    // Para otros errores, usar el handler por defecto en debug
+    // For other errors, use the default handler in debug
     if (details.stack != null) {
       FlutterError.dumpErrorToConsole(details);
     }
@@ -328,11 +328,11 @@ void main() async {
     initLanguageCode: initLang.isNotEmpty ? initLang : 'en',
   );
 
-  // Inicializar AuthService antes de mostrar la app
+  // Initialize AuthService before showing the app
   final authService = AuthService();
   await authService.initialize();
 
-  // Inicializar providers criticos
+  // Initialize the critical providers
   final sqliteConfigProvider = SqliteConfigProvider();
   final sqliteDatabaseProvider = SqliteDatabaseProvider();
 
@@ -340,7 +340,7 @@ void main() async {
     // 1. Initialize SqliteConfigProvider first (it syncs the systems).
     await sqliteConfigProvider.initialize();
 
-    // 2. Inicializar DatabaseProvider (carga juegos basandose en sistemas sincronizados)
+    // 2. Initialize DatabaseProvider (loads games based on the synced systems)
     await sqliteDatabaseProvider.initialize(
       romFolders: sqliteConfigProvider.config.romFolders,
       availableSystems: sqliteConfigProvider.availableSystems,
@@ -352,11 +352,11 @@ void main() async {
     log.e('Error initializing database providers: $e');
   }
 
-  // Inicializar listener de Android para tracking de tiempo de juego
+  // Initialize the Android listener for play-time tracking
   if (Platform.isAndroid) {
     try {
       GameService.initializeAndroidGameListener();
-      // Verificar si hay una sesion de juego pendiente (app fue matada)
+      // Check whether a game session is still pending (the app was killed)
       await GameService.checkPendingGameSession();
     } catch (e) {
       log.e('Error initializing GameService: $e');

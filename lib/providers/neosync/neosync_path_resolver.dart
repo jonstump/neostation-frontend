@@ -1,8 +1,8 @@
 part of '../neo_sync_provider.dart';
 
-/// Centraliza la resolución de rutas para NeoSync
+/// Centralizes path resolution for NeoSync
 extension NeoSyncPathResolver on NeoSyncProvider {
-  /// Resuelve una lista de rutas de sincronización para un sistema
+  /// Resolves the list of sync paths for a system
   Future<List<String>> resolveUniversalPaths(
     SystemModel system, {
     GameModel? game,
@@ -35,7 +35,7 @@ extension NeoSyncPathResolver on NeoSyncProvider {
       }
     }
 
-    // Eliminar duplicados y rutas inexistentes si requireExists es true
+    // Remove duplicates, and paths that do not exist when requireExists is true
     var result = resolvedPaths.toSet();
     if (ensureExists) {
       result = result.where((p) => Directory(p).existsSync()).toSet();
@@ -43,14 +43,14 @@ extension NeoSyncPathResolver on NeoSyncProvider {
     return result.toList();
   }
 
-  /// Resuelve un string de ruta (con posibles placeholders) a una o más rutas absolutas
+  /// Resolves a path string (possibly containing placeholders) to one or more absolute paths
   Future<List<String>> _resolveSinglePath(
     String pathStr,
     SystemModel system, {
     GameModel? game,
     bool ensureExists = true,
   }) async {
-    // 1. Placeholder {SYNC_DIR} (Saves y States de RetroArch)
+    // 1. Placeholder {SYNC_DIR} (RetroArch saves and states)
     if (pathStr == '{SYNC_DIR}') {
       final List<String> paths = [];
       final saves = await _getRetroArchSavesPath();
@@ -90,7 +90,7 @@ extension NeoSyncPathResolver on NeoSyncProvider {
       return paths;
     }
 
-    // 3. Placeholder {SWITCH_NAND} o ${nandDir.path} (Switch NAND)
+    // 3. Placeholder {SWITCH_NAND} or ${nandDir.path} (Switch NAND)
     if (pathStr.contains('{SWITCH_NAND}') ||
         pathStr.contains(r'${nandDir.path}')) {
       final nands = await SwitchSaveDetector.detectEmulatorNandPaths();
@@ -131,7 +131,7 @@ extension NeoSyncPathResolver on NeoSyncProvider {
             ? '{SWITCH_NAND}'
             : r'${nandDir.path}';
 
-        // Intentar resolver carpeta específica de guardado si tenemos titleId
+        // Try to resolve the title-specific save folder when we have a titleId
         if (titleId != null && titleId.isNotEmpty && pathStr == placeholder) {
           final saveInfo = await SwitchSaveDetector.findSaveForTitleId(
             nand.nandDirectory,
@@ -164,10 +164,10 @@ extension NeoSyncPathResolver on NeoSyncProvider {
       return p != null ? [p] : [];
     }
 
-    // 4. Resolución estándar vía ConfigService (Home, AppData, etc.)
+    // 4. Standard resolution via ConfigService (Home, AppData, etc.)
     final resolved = ConfigService.resolvePath(pathStr);
 
-    // Si es absoluta y existe, retornarla
+    // If it is absolute and exists, return it
     if (path.isAbsolute(resolved)) {
       if (!ensureExists || Directory(resolved).existsSync()) {
         return [resolved];
@@ -175,8 +175,8 @@ extension NeoSyncPathResolver on NeoSyncProvider {
       return [];
     }
 
-    // Si es relativa, intentar resolverla respecto a carpetas del sistema
-    // (Esto es para sistemas que definen carpetas de ROMs pero los saves están cerca)
+    // If it is relative, try to resolve it against the system's folders
+    // (This is for systems that define ROM folders but keep their saves nearby)
     for (final sysFolder in system.folders) {
       final absPath = path.join(sysFolder, resolved);
       if (Directory(absPath).existsSync()) {
@@ -273,7 +273,7 @@ extension NeoSyncPathResolver on NeoSyncProvider {
     return _calculateRelativePath(file, basePath, isState: isState);
   }
 
-  /// Calcula la ruta relativa para sincronización
+  /// Calculates the relative path used for syncing
   String _calculateRelativePath(
     File file,
     String basePath, {
@@ -282,13 +282,13 @@ extension NeoSyncPathResolver on NeoSyncProvider {
     var relative = path.relative(file.path, from: basePath);
     String root = isState ? 'states' : 'saves';
 
-    // Si RetroArch está en la raíz o similar, 'parent' de basePath podría ser útil
-    // Pero por consistencia, NeoSync guarda como 'root/relative' si no es absoluto
+    // If RetroArch sits at the root or similar, the 'parent' of basePath could be useful
+    // But for consistency, NeoSync stores it as 'root/relative' when it is not absolute
     if (!relative.startsWith('..')) {
       return path.join(root, relative).replaceAll('\\', '/');
     }
 
-    // Si está fuera de basePath, usar solo el nombre del archivo
+    // If it lies outside basePath, use only the file name
     return path.join(root, path.basename(file.path)).replaceAll('\\', '/');
   }
 
@@ -608,9 +608,9 @@ extension NeoSyncPathResolver on NeoSyncProvider {
     }
   }
 
-  /// Resuelve la ruta local para un archivo de la nube para un juego específico
-  /// Resuelve la ruta local para un archivo de la nube para un juego específico
-  /// Puede retornar múltiples rutas si el sistema lo requiere (ej. múltiples emuladores Switch)
+  /// Resolves the local path for a cloud file belonging to a specific game
+  /// Resolves the local path for a cloud file belonging to a specific game
+  /// May return multiple paths when the system requires it (e.g. multiple Switch emulators)
   Future<List<String>> resolveCloudFileToLocalPath(
     GameModel game,
     NeoSyncFile cloudFile,
@@ -622,7 +622,7 @@ extension NeoSyncPathResolver on NeoSyncProvider {
       system,
       game: game,
       ensureExists:
-          false, // Permitir carpetas que aún no existen para descargar
+          false, // Allow folders that do not exist yet, so a download can create them
     );
     if (resolvedFolders.isEmpty) return [];
 
@@ -636,7 +636,7 @@ extension NeoSyncPathResolver on NeoSyncProvider {
         ? cloudFile.filePath
         : cloudFile.fileName;
 
-    // Buscar la carpeta más apropiada.
+    // Find the most appropriate folder.
     String targetFolder = resolvedFolders.first;
 
     // Prefer the configured custom folder for standalone emulators and shared
@@ -673,7 +673,7 @@ extension NeoSyncPathResolver on NeoSyncProvider {
       if (statesPath != null) {
         targetFolder = statesPath;
       } else {
-        // Fallback: buscar carpeta que parezca de states
+        // Fallback: look for a folder that looks like a states folder
         for (final folder in resolvedFolders) {
           if (folder.toLowerCase().contains('state') ||
               folder.toLowerCase().contains('sstates')) {
@@ -687,7 +687,7 @@ extension NeoSyncPathResolver on NeoSyncProvider {
       if (savesPath != null) {
         targetFolder = savesPath;
       } else {
-        // Fallback: buscar carpeta que parezca de saves
+        // Fallback: look for a folder that looks like a saves folder
         for (final folder in resolvedFolders) {
           if (folder.toLowerCase().contains('save') ||
               folder.toLowerCase().contains('memcards')) {
@@ -698,12 +698,12 @@ extension NeoSyncPathResolver on NeoSyncProvider {
       }
     }
 
-    // Para sistemas con memory cards compartidas (PS2, Dreamcast), el relativeName ya es el filename
-    // si usamos el logic de _calculateSyncRelativePath inverso.
-    // Pero en general, cloudFile.fileName is 'saves/subfolder/file.ext'.
+    // For systems with shared memory cards (PS2, Dreamcast) relativeName is already the filename
+    // if we invert the logic of _calculateSyncRelativePath.
+    // But in general, cloudFile.fileName is 'saves/subfolder/file.ext'.
     // The relativeName after removing 'saves/' is 'subfolder/file.ext'.
 
-    // Identificación robusta para Switch
+    // Robust identification for Switch
     final isSwitch =
         system.id?.toLowerCase() == 'switch' ||
         system.folderName.toLowerCase() == 'switch' ||
@@ -713,7 +713,7 @@ extension NeoSyncPathResolver on NeoSyncProvider {
     if (isSwitch && !isState) {
       String? titleId = game.titleId;
 
-      // Si no tenemos titleId, intentar recuperarlo de la BD con búsqueda más flexible
+      // If we have no titleId, try to recover it from the DB with a more flexible search
       if (titleId == null || titleId.isEmpty) {
         try {
           titleId = await GameRepository.getTitleIdForGame(
@@ -727,7 +727,7 @@ extension NeoSyncPathResolver on NeoSyncProvider {
         }
       }
 
-      // FALLBACK: Si todavía no hay titleId, intentar extraerlo del ROM real
+      // FALLBACK: if there is still no titleId, try to extract it from the actual ROM
       if ((titleId == null || titleId.isEmpty) && game.romPath != null) {
         try {
           final info = await SwitchTitleExtractor.extractGameInfo(
@@ -757,7 +757,7 @@ extension NeoSyncPathResolver on NeoSyncProvider {
         String internalPath = path.basename(relativeName);
         String? emulatorPrefix;
 
-        // Si tenemos la estructura de 3 niveles (emulator/game/internal), extraemos el internal y el prefix
+        // If we have the 3-level structure (emulator/game/internal), extract the internal part and the prefix
         if (parts.length >= 3) {
           emulatorPrefix = parts[0].toLowerCase();
           internalPath = parts.sublist(2).join(Platform.pathSeparator);
@@ -765,7 +765,7 @@ extension NeoSyncPathResolver on NeoSyncProvider {
 
         final allEmulators = await SwitchSaveDetector.detectEmulatorNandPaths();
 
-        // Filtrar emuladores basándonos en el prefijo del archivo de la nube para independencia
+        // Filter emulators by the cloud file's prefix so each emulator stays independent
         List<EmulatorNandInfo> emulators = allEmulators;
         if (emulatorPrefix != null) {
           emulators = allEmulators.where((emu) {
@@ -781,7 +781,7 @@ extension NeoSyncPathResolver on NeoSyncProvider {
 
         if (emulators.isNotEmpty) {
           for (final emu in emulators) {
-            // 1. Intentar encontrar save existente para este emulador
+            // 1. Try to find an existing save for this emulator
             final saveInfo = await SwitchSaveDetector.findSaveForTitleId(
               emu.nandDirectory,
               titleId,
@@ -791,7 +791,7 @@ extension NeoSyncPathResolver on NeoSyncProvider {
               final fullPath = path.join(saveInfo.savePath, internalPath);
               resultPaths.add(fullPath);
             } else {
-              // 2. Si no existe, construir la ruta en este NAND
+              // 2. If it does not exist, build the path inside this NAND
               final saveBasePath = path.join(
                 emu.nandDirectory,
                 'user',
@@ -800,7 +800,7 @@ extension NeoSyncPathResolver on NeoSyncProvider {
               );
               final saveBaseDir = Directory(saveBasePath);
 
-              // Buscar el primer directorio de usuario disponible o usar default
+              // Use the first available user directory, or fall back to the default
               String userId = '00000000000000000000000000000000';
               if (saveBaseDir.existsSync()) {
                 final entities = saveBaseDir.listSync().whereType<Directory>();

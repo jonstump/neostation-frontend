@@ -79,7 +79,7 @@ class ScrapingContentState extends State<ScrapingContent> {
 
     setState(() {});
 
-    // Obtener maxThreads de las credenciales
+    // Get maxThreads from the credentials
     final credentials = await ScreenScraperService.getSavedCredentials();
     final maxThreads = int.tryParse(credentials?['maxthreads'] ?? '4') ?? 4;
     // RomM takes part when it is connected; the step is null otherwise.
@@ -124,7 +124,7 @@ class ScrapingContentState extends State<ScrapingContent> {
         ongoing: true,
       );
 
-      // Paso 1: Sincronizar system IDs
+      // Step 1: sync the system IDs
       _log.i('Step 1: Synchronizing system IDs...');
       final syncSuccess = await ScreenScraperService.syncSystemIds();
 
@@ -145,7 +145,7 @@ class ScrapingContentState extends State<ScrapingContent> {
         _log.w('ScreenScraper system sync failed; continuing with RomM only');
       }
 
-      // Paso 2: Iniciar scraping de metadata
+      // Step 2: start scraping metadata
       _log.i('Step 2: Starting metadata scraping...');
       // The context is only used inside the service for the final summary
       // dialog, which is itself guarded by `context.mounted`, so starting the
@@ -177,7 +177,7 @@ class ScrapingContentState extends State<ScrapingContent> {
           progress: null,
         );
       } else if (!scrapingProvider.isScraping) {
-        // Si fue cancelado, no mostrar notificación de error
+        // If it was cancelled, do not show an error notification
         GlobalNotificationService().update(
           id: notificationId,
           message: localeScrapingCancelled,
@@ -241,7 +241,7 @@ class ScrapingContentState extends State<ScrapingContent> {
       case ThreadProcessingStep.completed:
         return AppLocale.ok.getString(
           context,
-        ); // O usar uno específico de 'Completed'
+        ); // Or use one specific to 'Completed'
     }
   }
 
@@ -269,7 +269,7 @@ class ScrapingContentState extends State<ScrapingContent> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Título y botón en la misma línea
+              // Title and button on the same line
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -289,7 +289,7 @@ class ScrapingContentState extends State<ScrapingContent> {
                     ),
                   ),
                   SizedBox(width: 24.r),
-                  // Botón Start/Stop con indicador de foco
+                  // Start/Stop button with a focus indicator
                   Container(
                     decoration: BoxDecoration(
                       borderRadius: BorderRadius.circular(8.r),

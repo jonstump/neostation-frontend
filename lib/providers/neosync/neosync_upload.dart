@@ -1,7 +1,7 @@
 part of '../neo_sync_provider.dart';
 
 extension NeoSyncUpload on NeoSyncProvider {
-  /// Auto-sync solo para subidas (archivos locales nuevos o modificados)
+  /// Auto-sync for uploads only (new or modified local files)
   Future<void> autoSyncUploads() async {
     if (!isNeoSyncAuthenticated) {
       return;
@@ -246,7 +246,7 @@ extension NeoSyncUpload on NeoSyncProvider {
     }
   }
 
-  /// Fase 1: Subir archivos locales
+  /// Phase 1: upload local files
   Future<void> _performUploadPhase(String basePath) async {
     _syncStatus = 'Phase 1: Uploading local files...';
     _processedItems.add('Phase 1: Scanning and uploading local files...');
@@ -277,7 +277,7 @@ extension NeoSyncUpload on NeoSyncProvider {
     }
   }
 
-  /// Procesa un archivo para auto-subida (versión optimizada)
+  /// Processes a file for auto-upload (optimized version)
   Future<void> _processAutoUploadFile(
     File file,
     String basePath, {
@@ -468,7 +468,7 @@ extension NeoSyncUpload on NeoSyncProvider {
     }
   }
 
-  /// Maneja la subida automática de archivos de Switch NAND
+  /// Handles the automatic upload of Switch NAND files
   Future<void> _handleSwitchNandAutoUpload(File file) async {
     try {
       final pathParts = file.path.split(Platform.pathSeparator);
@@ -542,7 +542,7 @@ extension NeoSyncUpload on NeoSyncProvider {
     }
   }
 
-  /// Procesa subida con detección de conflictos
+  /// Processes an upload with conflict detection
   Future<void> _processUploadFileWithConflictDetection(
     File file,
     String basePath, {

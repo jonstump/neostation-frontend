@@ -333,7 +333,7 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
             ),
             SizedBox(height: 24.r),
 
-            // Título
+            // Title
             Text(
               AppLocale.welcomeNeoStation.getString(context),
               style: TextStyle(
@@ -2009,7 +2009,7 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     // wrapper pushes the clear once completeSetup() lands.
     _finishing = true;
 
-    // Verificar que la configuración está guardada
+    // Check that the configuration has been saved
     final configProvider = Provider.of<SqliteConfigProvider>(
       context,
       listen: false,
@@ -2020,10 +2020,10 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
       _log.w('Warning: ROM folder not saved in config!');
     }
 
-    // Forzar guardado de la configuración
+    // Force the configuration to be saved
     await configProvider.saveConfig();
 
-    // Llamar al callback de completado
+    // Call the completion callback
     widget.onComplete();
   }
 }

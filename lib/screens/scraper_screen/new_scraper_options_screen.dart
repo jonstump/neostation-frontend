@@ -171,7 +171,7 @@ class _NewScraperOptionsScreenState extends State<NewScraperOptionsScreen> {
   }
 
   Future<void> _refreshAccountInfo() async {
-    // Si no hay credenciales, no intentar refrescar
+    // If there are no credentials, do not try to refresh
     if (_userInfo == null) return;
 
     await ScreenScraperService.refreshCredentials();
@@ -247,7 +247,7 @@ class _NewScraperOptionsScreenState extends State<NewScraperOptionsScreen> {
             _getContentItemCount() - 1,
           );
         });
-        // Asegurar scroll para Language
+        // Make sure Language is scrolled into view
         if (selectedKey == AppLocale.language) {
           _languageKey.currentState?.ensureVisible(_selectedContentIndex);
         }
@@ -261,7 +261,7 @@ class _NewScraperOptionsScreenState extends State<NewScraperOptionsScreen> {
         _selectedMenuIndex = (_selectedMenuIndex + 1) % _menuItems.length;
       });
     } else {
-      // Delegar navegación a Systems/Region si está seleccionado
+      // Delegate navigation to Systems/Region when it is the selected entry
       final selectedKey = _menuItems[_selectedMenuIndex].localeKey;
       if (selectedKey == AppLocale.systems) {
         _systemsKey.currentState?.navigateDown();
@@ -274,7 +274,7 @@ class _NewScraperOptionsScreenState extends State<NewScraperOptionsScreen> {
             _getContentItemCount() - 1,
           );
         });
-        // Asegurar scroll para Language
+        // Make sure Language is scrolled into view
         if (selectedKey == AppLocale.language) {
           _languageKey.currentState?.ensureVisible(_selectedContentIndex);
         }
@@ -451,7 +451,7 @@ class _NewScraperOptionsScreenState extends State<NewScraperOptionsScreen> {
       _userInfo!['username']!,
       _userInfo!['password']!,
       _userInfo,
-      newLanguage, // Pasar como cuarto parámetro
+      newLanguage, // Passed as the fourth parameter
     );
 
     if (mounted) {

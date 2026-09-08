@@ -555,7 +555,7 @@ extension _LaunchFlow on _SystemGamesListState {
 
               _scrollToSelectedItem();
 
-              // Ejecutar el juego después de un pequeño delay
+              // Launch the game after a short delay
               Future.delayed(const Duration(seconds: 1), () {
                 if (mounted) {
                   _selectCurrentGame();
