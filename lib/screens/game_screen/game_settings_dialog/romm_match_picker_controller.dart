@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:neostation/models/rom_fingerprint.dart';
 import 'package:neostation/models/romm_metadata_fetch.dart';
 import 'package:neostation/models/romm_rom.dart';
 import 'package:neostation/models/romm_rom_page.dart';
@@ -41,6 +42,20 @@ typedef RommMatchSyncInvalidator = void Function(String romname);
 typedef RommMatchMetadataFetcher =
     Future<RommMetadataOutcome> Function(RommRom rom);
 
+/// Fingerprints the game's file at full effort —
+/// `RomFingerprintService.computeInBackground` in the app, a fake in tests.
+/// A null fingerprint carries the skip reason (a disc image, an unreadable
+/// file) in the record's second field.
+// Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Match By Hash In The Picker"
+typedef RommMatchFingerprinter =
+    Future<({RomFingerprint? fingerprint, String? skipReason})> Function();
+
+/// Asks the server which ROM carries [fingerprint]'s hashes —
+/// `RommService.getRomByHash` in the app. Null is a miss; a throw is a failure.
+// Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Match By Hash In The Picker"
+typedef RommMatchHashLookup =
+    Future<RommRom?> Function(RomFingerprint fingerprint);
+
 /// A picker search that did not complete, with the query it was for and the
 /// underlying failure. A sentinel type so the dialog can tell a failed search
 /// apart from an empty one and offer a retry rather than "no results".
@@ -76,6 +91,30 @@ enum RommMatchPickerStatus {
   error,
 }
 
+/// Where the picker's "Match by hash" action stands.
+// Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Match By Hash In The Picker"
+enum RommMatchByHashStatus {
+  /// Not run, or the last run was cancelled.
+  idle,
+
+  /// The file is being fingerprinted or the server asked.
+  busy,
+
+  /// The server named a ROM; it is first in the results and preselected.
+  hit,
+
+  /// The server knows no ROM with these hashes.
+  miss,
+
+  /// The file could not be fingerprinted; see
+  /// [RommMatchPickerController.hashSkipReason].
+  skipped,
+
+  /// The fingerprint or the lookup threw; see
+  /// [RommMatchPickerController.hashError].
+  error,
+}
+
 /// The picker's search-and-confirm logic, separated from the dialog so the
 /// scoping, debounce, write key, and single invalidation are unit-testable
 /// with hand-written fakes. The dialog owns focus and layout only.
@@ -106,6 +145,18 @@ class RommMatchPickerController extends ChangeNotifier {
   /// screen opens the picker on the remote ROM the user was already looking at.
   final RommRom? preselected;
 
+  /// Fingerprints the game's file for [matchByHash]; null when the caller
+  /// offers no hash matching, which hides the action.
+  final RommMatchFingerprinter? fingerprintFile;
+
+  /// Looks a fingerprint up on the server for [matchByHash]; null hides the
+  /// action.
+  final RommMatchHashLookup? lookupByHash;
+
+  /// The capability gate: false when the heartbeat proved the server predates
+  /// `GET /api/roms/by-hash`. Unknown counts as available, per ADR-0010.
+  final bool _hashLookupGateOpen;
+
   RommMatchPickerController({
     required this.linkKey,
     required this.syncKey,
@@ -118,9 +169,12 @@ class RommMatchPickerController extends ChangeNotifier {
     required this.invalidateSyncState,
     required this.fetchMetadata,
     this.preselected,
+    this.fingerprintFile,
+    this.lookupByHash,
+    bool hashLookupAvailable = false,
     this.debounce = const Duration(milliseconds: 350),
     this.pageLimit = 25,
-  });
+  }) : _hashLookupGateOpen = hashLookupAvailable;
 
   List<int> _platformIds = const [];
   List<RommRom> _results = const [];
@@ -133,6 +187,11 @@ class RommMatchPickerController extends ChangeNotifier {
   Timer? _debounceTimer;
   int _requestSerial = 0;
   bool _disposed = false;
+  RommMatchByHashStatus _hashStatus = RommMatchByHashStatus.idle;
+  String? _hashSkipReason;
+  Object? _hashError;
+  RommRom? _hashHit;
+  int _hashSerial = 0;
 
   /// RomM platform ids the search is scoped to; empty means unscoped.
   List<int> get platformIds => _platformIds;
@@ -166,9 +225,35 @@ class RommMatchPickerController extends ChangeNotifier {
   /// otherwise.
   String? get cleanedQuery => _cleanedQuery;
 
-  /// Index of [preselected] within [results], or -1.
+  /// Whether the dialog should offer "Match by hash": the server is not
+  /// known to lack the endpoint and the caller wired both halves of the run.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Match By Hash In The Picker"
+  bool get hashLookupAvailable =>
+      _hashLookupGateOpen && fingerprintFile != null && lookupByHash != null;
+
+  RommMatchByHashStatus get hashStatus => _hashStatus;
+
+  /// True while [matchByHash] is fingerprinting or asking the server.
+  bool get isMatchingByHash => _hashStatus == RommMatchByHashStatus.busy;
+
+  /// The fingerprint service's skip token (`disc`, `oversize`, ...) while
+  /// [hashStatus] is [RommMatchByHashStatus.skipped]; null otherwise.
+  String? get hashSkipReason => _hashSkipReason;
+
+  /// The failure behind [RommMatchByHashStatus.error], for the dialog's log.
+  Object? get hashError => _hashError;
+
+  /// The ROM the last successful [matchByHash] found, or null. It outranks
+  /// [preselected] as the pinned row: the server just said this is the file.
+  RommRom? get hashHit => _hashHit;
+
+  /// The ROM pinned first in [results] and pre-selected: the hash hit when
+  /// there is one, else what the caller pinned.
+  RommRom? get pinnedRom => _hashHit ?? preselected;
+
+  /// Index of [pinnedRom] within [results], or -1.
   int get preselectedIndex {
-    final pinned = preselected;
+    final pinned = pinnedRom;
     if (pinned == null) return -1;
     return _results.indexWhere((r) => r.id == pinned.id);
   }
@@ -290,10 +375,103 @@ class RommMatchPickerController extends ChangeNotifier {
   }
 
   List<RommRom> _withPreselected(List<RommRom> items) {
-    final pinned = preselected;
+    final pinned = pinnedRom;
     if (pinned == null) return items;
     if (items.any((r) => r.id == pinned.id)) return items;
     return [pinned, ...items];
+  }
+
+  /// Fingerprints the game's file and asks the server which ROM carries those
+  /// hashes. On a hit the ROM goes first in [results] and becomes the pinned
+  /// row (see [pinnedRom]); a miss, a fingerprint skip, and a failure each
+  /// settle into their own [hashStatus] so the dialog can say which. The
+  /// search results stay as they are in every case.
+  ///
+  /// One run at a time: a press while busy is ignored. A run that
+  /// [cancelMatchByHash] retired discards whatever it later produces, so a
+  /// late hit cannot re-pin the list after the user moved on. Nothing here
+  /// writes: confirming the pinned row goes through [confirm] like any other.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Match By Hash In The Picker"
+  Future<void> matchByHash() async {
+    final fingerprinter = fingerprintFile;
+    final lookup = lookupByHash;
+    if (!hashLookupAvailable || fingerprinter == null || lookup == null) {
+      return;
+    }
+    if (_hashStatus == RommMatchByHashStatus.busy) return;
+
+    final serial = ++_hashSerial;
+    _hashStatus = RommMatchByHashStatus.busy;
+    _hashSkipReason = null;
+    _hashError = null;
+    if (!_disposed) notifyListeners();
+
+    try {
+      final printed = await fingerprinter();
+      if (_disposed || serial != _hashSerial) return;
+      final fingerprint = printed.fingerprint;
+      if (fingerprint == null) {
+        _hashSkipReason = printed.skipReason ?? 'error';
+        _hashStatus = RommMatchByHashStatus.skipped;
+        _log.i(
+          'RomM link picker: match by hash skipped '
+          '(linkKey=$linkKey, systemFolder=$systemFolder, '
+          'reason=$_hashSkipReason)',
+        );
+        notifyListeners();
+        return;
+      }
+
+      final rom = await lookup(fingerprint);
+      if (_disposed || serial != _hashSerial) return;
+      if (rom == null) {
+        _hashStatus = RommMatchByHashStatus.miss;
+        _log.i(
+          'RomM link picker: match by hash missed '
+          '(linkKey=$linkKey, systemFolder=$systemFolder, '
+          'crc32=${fingerprint.crc32})',
+        );
+      } else {
+        _hashHit = rom;
+        _results = List.unmodifiable([
+          rom,
+          ..._results.where((r) => r.id != rom.id),
+        ]);
+        _hashStatus = RommMatchByHashStatus.hit;
+        _log.i(
+          'RomM link picker: match by hash hit '
+          '(linkKey=$linkKey, systemFolder=$systemFolder, '
+          'crc32=${fingerprint.crc32}, romId=${rom.id})',
+        );
+      }
+    } catch (e, st) {
+      if (_disposed || serial != _hashSerial) return;
+      _hashError = e;
+      _hashStatus = RommMatchByHashStatus.error;
+      _log.e(
+        'RomM link picker: match by hash failed '
+        '(linkKey=$linkKey, systemFolder=$systemFolder)',
+        error: e,
+        stackTrace: st,
+      );
+    }
+    notifyListeners();
+  }
+
+  /// Retires a busy [matchByHash] run — B while the spinner shows. Returns
+  /// true when there was one to cancel, so the dialog knows the press was
+  /// consumed and does not also close. The run's eventual result is dropped.
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Match By Hash In The Picker"
+  bool cancelMatchByHash() {
+    if (_hashStatus != RommMatchByHashStatus.busy) return false;
+    _hashSerial++;
+    _hashStatus = RommMatchByHashStatus.idle;
+    _log.i(
+      'RomM link picker: match by hash cancelled '
+      '(linkKey=$linkKey, systemFolder=$systemFolder)',
+    );
+    if (!_disposed) notifyListeners();
+    return true;
   }
 
   /// Writes the manual row for [rom] under [linkKey], invalidates the game's

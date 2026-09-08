@@ -1659,6 +1659,23 @@ mixin AppLocale {
   // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Localized User-Facing Text"
   static const String rommLinkSourceHash = 'romm_link_source_hash';
 
+  // Governing: ADR-0011 (link by content hash), SPEC-0011 REQ "Match By Hash In The Picker", REQ "Localized User-Facing Text"
+  static const String rommMatchByHash = 'romm_match_by_hash';
+  static const String rommMatchByHashBusy = 'romm_match_by_hash_busy';
+  static const String rommMatchByHashNoMatch = 'romm_match_by_hash_no_match';
+  static const String rommMatchByHashSkipped = 'romm_match_by_hash_skipped';
+  static const String rommMatchByHashFailed = 'romm_match_by_hash_failed';
+  static const String rommMatchByHashReasonDisc =
+      'romm_match_by_hash_reason_disc';
+  static const String rommMatchByHashReasonOversize =
+      'romm_match_by_hash_reason_oversize';
+  static const String rommMatchByHashReasonMissing =
+      'romm_match_by_hash_reason_missing';
+  static const String rommMatchByHashReasonExtractFailed =
+      'romm_match_by_hash_reason_extract_failed';
+  static const String rommMatchByHashReasonError =
+      'romm_match_by_hash_reason_error';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================

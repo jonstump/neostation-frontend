@@ -1431,4 +1431,14 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommPushPlayStateHint:
       '연결된 게임의 숨김, 즐겨찾기, 마지막 플레이 변경 사항을 RomM에 전송합니다',
   AppLocale.rommLinkSourceHash: '{name}에 해시로 연결됨',
+  AppLocale.rommMatchByHash: '해시로 일치 찾기',
+  AppLocale.rommMatchByHashBusy: '해시로 일치 찾는 중…',
+  AppLocale.rommMatchByHashNoMatch: '이 파일의 해시를 가진 RomM 항목이 없습니다',
+  AppLocale.rommMatchByHashSkipped: '이 파일의 해시를 계산할 수 없습니다: {reason}',
+  AppLocale.rommMatchByHashFailed: '해시로 일치 찾기 실패',
+  AppLocale.rommMatchByHashReasonDisc: '디스크 이미지는 해시하지 않습니다',
+  AppLocale.rommMatchByHashReasonOversize: '파일이 너무 커서 해시할 수 없습니다',
+  AppLocale.rommMatchByHashReasonMissing: '파일을 찾을 수 없습니다',
+  AppLocale.rommMatchByHashReasonExtractFailed: '압축 파일을 열 수 없습니다',
+  AppLocale.rommMatchByHashReasonError: '파일을 읽을 수 없습니다',
 };

@@ -1633,4 +1633,18 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.rommPushPlayStateHint:
       'Envoie à RomM les changements de masquage, de favori et de dernière partie des jeux liés',
   AppLocale.rommLinkSourceHash: 'Lié par hash à {name}',
+  AppLocale.rommMatchByHash: 'Trouver par hash',
+  AppLocale.rommMatchByHashBusy: 'Recherche par hash…',
+  AppLocale.rommMatchByHashNoMatch:
+      'Aucune entrée RomM ne porte le hash de ce fichier',
+  AppLocale.rommMatchByHashSkipped:
+      'Impossible de hacher ce fichier : {reason}',
+  AppLocale.rommMatchByHashFailed: 'La recherche par hash a échoué',
+  AppLocale.rommMatchByHashReasonDisc: 'les images disque ne sont pas hachées',
+  AppLocale.rommMatchByHashReasonOversize:
+      'le fichier est trop volumineux pour être haché',
+  AppLocale.rommMatchByHashReasonMissing: 'le fichier est introuvable',
+  AppLocale.rommMatchByHashReasonExtractFailed:
+      'l\'archive n\'a pas pu être ouverte',
+  AppLocale.rommMatchByHashReasonError: 'le fichier n\'a pas pu être lu',
 };
