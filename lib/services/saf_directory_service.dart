@@ -9,6 +9,14 @@ import 'logger_service.dart';
 /// SAF provides persistent access to external directories (e.g., SD cards,
 /// USB storage) on Android 11+ where standard filesystem APIs are restricted
 /// by Scoped Storage.
+///
+/// Every method here must name a handler `MainActivity` actually registers on
+/// [platform]; `test/method_channel_names_test.dart` enforces that statically.
+/// Two never did — `releasePermission` and `uriToPath` — and were removed
+/// rather than implemented: neither had a caller, and a native URI-to-path
+/// resolver would duplicate `UserDataLocationService.safUriToRealPath`, which
+/// already maps SAF trees onto `/storage/...` paths in Dart. Anything added
+/// back here needs the Kotlin side first.
 class SafDirectoryService {
   /// Platform channel for communicating with native Android implementation.
   static const platform = MethodChannel('com.neogamelab.neostation/game');
@@ -69,38 +77,6 @@ class SafDirectoryService {
     } on MissingPluginException catch (e) {
       _log.e('SAF permission check is unavailable: $e');
       return false;
-    }
-  }
-
-  /// Releases persistent permissions for a given URI.
-  static Future<void> releasePermission(String uri) async {
-    if (!Platform.isAndroid) {
-      return;
-    }
-
-    try {
-      await platform.invokeMethod('releasePermission', {'uri': uri});
-    } on PlatformException catch (e) {
-      _log.e('Error releasing SAF permission: ${e.message}');
-    }
-  }
-
-  /// Attempts to resolve a 'content://' URI into a standard filesystem path.
-  ///
-  /// Note: This is only possible for certain providers and may return null.
-  static Future<String?> uriToPath(String uri) async {
-    if (!Platform.isAndroid) {
-      return null;
-    }
-
-    try {
-      final String? path = await platform.invokeMethod('uriToPath', {
-        'uri': uri,
-      });
-      return path;
-    } on PlatformException catch (e) {
-      _log.e('Error converting SAF URI to path: ${e.message}');
-      return null;
     }
   }
 
