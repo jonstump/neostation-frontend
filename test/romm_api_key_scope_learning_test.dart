@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -573,6 +574,40 @@ void main() {
       );
     });
 
+    test('reconfiguring clears the absolute ceiling too', () async {
+      // Issue #190 finding 2. The consecutive counter is what
+      // `reconfiguring clears the spent budget` below pins; nothing pinned the
+      // total, so deleting `_apiKeyVerifyFailuresTotal = 0` from configure()
+      // left all 26 tests green while a stale count silently shortened the
+      // next connection's budget. This alternates a healthy /api/roms with a
+      // failing /api/users/me, which is the only shape that reaches the
+      // ceiling without ever pausing on the consecutive bound.
+      serveFailing();
+      final service = configured();
+
+      for (var i = 0; i < 8; i++) {
+        await service.getRoms(limit: 1);
+      }
+      expect(me(), hasLength(8), reason: 'one short of the ceiling of nine');
+
+      service.configure(
+        serverUrl: 'https://romm.local',
+        apiKey: 'a-different-token',
+      );
+      final spentBefore = me().length;
+      for (var i = 0; i < 12; i++) {
+        await service.getRoms(limit: 1);
+      }
+
+      expect(
+        me().length - spentBefore,
+        9,
+        reason:
+            'a new credential gets a whole ceiling, not the one attempt a '
+            'carried-over total would leave it',
+      );
+    });
+
     test('reconfiguring clears the spent budget', () async {
       // A stale count across a credential or server change would spend a fresh
       // connection's attempts before it made any.
@@ -594,6 +629,133 @@ void main() {
         me(),
         hasLength(4),
         reason: 'a new credential gets its own attempts',
+      );
+    });
+  });
+
+  group('a closed connection is a dropped connection', () {
+    // Issue #190 finding 1. package:http reduces a dart:io HttpException to a
+    // bare ClientException (io_client.dart:229 in the pinned 1.6.0) —
+    // "Connection closed before full header was received" — which is what a
+    // handheld produces when Wi-Fi returns mid-request. #187 classified only
+    // TimeoutException/HandshakeException/SocketException as transport, so
+    // this landed in the bounded fourth case and a session that resumed badly
+    // nine times stopped verifying until the app restarted.
+    List<String> me() => requests
+        .where((r) => r.url.path == '/api/users/me')
+        .map((r) => r.url.path)
+        .toList();
+
+    /// Everything [run] logs in this isolate, whether or not it threw.
+    Future<List<String>> capture(Future<void> Function() run) async {
+      LoggerService.instance.startCapture();
+      try {
+        await run();
+      } catch (_) {
+        // The log line is the subject here; the request failing is expected.
+      }
+      return LoggerService.instance.takeCapture();
+    }
+
+    void serveClosedConnection() {
+      RommService.debugUseHttpClient(
+        MockClient((request) async {
+          requests.add(request);
+          if (request.url.path == '/api/heartbeat') {
+            return json(200, {
+              'SYSTEM': {'VERSION': '5.1.0'},
+            });
+          }
+          throw http.ClientException(
+            'Connection closed before full header was received',
+            request.url,
+          );
+        }),
+      );
+    }
+
+    test('it keeps the unbounded re-arm a socket error gets', () async {
+      serveClosedConnection();
+      final service = configured();
+
+      for (var i = 0; i < 12; i++) {
+        await expectLater(service.getRoms(limit: 1), throwsA(isA<Exception>()));
+      }
+
+      expect(
+        me(),
+        hasLength(12),
+        reason:
+            'nothing answered, so every call retries — bounding this at the '
+            'fourth case stops a handheld verifying after nine bad resumes',
+      );
+    });
+
+    test('it is logged as unreachable, not as unclassifiable', () async {
+      serveClosedConnection();
+      final service = configured();
+
+      final lines = await capture(() => service.getRoms(limit: 1));
+      final verification = lines.where(
+        (l) => l.contains('API-key verification'),
+      );
+
+      expect(verification, isNotEmpty);
+      expect(verification.single, contains('could not reach the server'));
+      expect(
+        verification.single,
+        isNot(contains('without a status to classify')),
+        reason: 'the connection dropped; that is not a programming error',
+      );
+    });
+
+    test('a truncated body is not treated as a dropped connection', () async {
+      // The other half of the classification, and the reason ClientException
+      // is not marked transport wholesale: io_client.dart:188 raises the same
+      // bare type from the *response stream*, where the server has already
+      // answered with a status. _sendApiKeyVerification splits the send from
+      // the body drain so this stays in the bounded fourth case; marking every
+      // ClientException transport would give a proxy that truncates this one
+      // endpoint an extra request on every authenticated call forever, which
+      // is issue #173's regression by another route.
+      final paths = <String>[];
+      RommService.debugUseHttpClient(
+        MockClient.streaming((request, _) async {
+          paths.add(request.url.path);
+          if (request.url.path == '/api/users/me') {
+            return http.StreamedResponse(
+              Stream<List<int>>.error(
+                http.ClientException(
+                  'Connection closed before full body was received',
+                  request.url,
+                ),
+              ),
+              200,
+              headers: const {'content-type': 'application/json'},
+            );
+          }
+          final body = request.url.path == '/api/heartbeat'
+              ? jsonEncode({
+                  'SYSTEM': {'VERSION': '5.1.0'},
+                })
+              : jsonEncode({'items': <dynamic>[]});
+          return http.StreamedResponse(
+            Stream<List<int>>.value(utf8.encode(body)),
+            200,
+            headers: const {'content-type': 'application/json'},
+          );
+        }),
+      );
+      final service = configured();
+
+      for (var i = 0; i < 12; i++) {
+        await service.getRoms(limit: 1);
+      }
+
+      expect(
+        paths.where((p) => p == '/api/users/me'),
+        hasLength(9),
+        reason: 'the server answered; the absolute ceiling still applies',
       );
     });
   });
@@ -702,7 +864,9 @@ void main() {
 
     test('an unclassifiable failure is not logged as unreachable', () async {
       // The catch-all in _verifyApiKey: a FormatException from a malformed
-      // URL, an http.ClientException — none of them the network being down.
+      // URL, or a response the server truncated — none of them the network
+      // being down. A *closed connection* no longer lands here; it is a
+      // transport failure now (issue #190) and has its own group below.
       RommService.debugUseHttpClient(
         MockClient((request) async {
           requests.add(request);

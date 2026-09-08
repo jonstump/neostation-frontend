@@ -196,17 +196,57 @@ class RommAuthException extends RommException {
 ///
 /// A distinct type because the alternative is guessing. [RommException.statusCode]
 /// tells "the server answered badly" apart from everything else, but it is
-/// null for two failures that are *not* transport faults either: an empty base
+/// null for failures that are *not* transport faults either: an empty base
 /// URL, which sends nothing at all, and [RommService._verifyApiKey]'s catch-all,
 /// which would also swallow a `FormatException` from a malformed URL. Both used
 /// to be logged as "could not reach the server", which is the misdiagnosis
 /// issue #181 set out to end and issue #183 finding 3 caught it still doing.
+///
+/// The membership rule is *how the failure was raised*, not "no status came
+/// back", and it covers every shape a dropped connection takes — including the
+/// one `package:http` does not express as a socket error. `IOClient` maps a
+/// `dart:io` `HttpException` raised while opening the request or reading its
+/// headers to a bare `http.ClientException` ("Connection closed before full
+/// header was received", `io_client.dart:229` in the pinned 1.6.0), which is a
+/// genuinely unanswered request and exactly what a handheld produces when
+/// Wi-Fi comes back mid-request. Leaving it out bounded issue #168's own
+/// scenario at nine retries per connection (issue #190).
+///
 /// Extends [RommException] so every existing catch, message and status check
 /// keeps working unchanged; only [RommService._ensureToken] reads the type.
 // Governing: ADR-0010, SPEC-0010 REQ "Probe Before The Token Grant",
 // ADR-0020, SPEC-0019 REQ "Reachability"
 class RommTransportException extends RommException {
   RommTransportException(super.message);
+}
+
+/// The one `http.ClientException` shape that is *not* a dropped connection: the
+/// server answered — status and headers are in hand — and the body could not be
+/// read to the end.
+///
+/// `package:http` raises the same bare `ClientException` for both, so the two
+/// are told apart by where it was raised rather than by anything on the object:
+/// [RommService._sendApiKeyVerification] separates the send from the body
+/// drain, and only the drain produces this. Deliberately not a
+/// [RommTransportException] and deliberately carries no
+/// [RommException.statusCode]: retrying cannot fix a response the server keeps
+/// truncating, so it belongs in the bounded fourth case
+/// ([RommService._ensureToken]) rather than in the unbounded transport one,
+/// where a proxy that truncates that endpoint on every call would cost one
+/// extra request per authenticated call for the life of the process — issue
+/// #173's regression, reintroduced by the back door.
+// Governing: ADR-0010, SPEC-0010 REQ "Probe Before The Token Grant",
+// ADR-0013, SPEC-0013 REQ "Optional Scope Groups"
+class _RommUnreadableResponse implements Exception {
+  _RommUnreadableResponse(this.statusCode, this.message);
+
+  final int statusCode;
+  final String message;
+
+  @override
+  String toString() =>
+      'the server answered $statusCode but the response could not be read: '
+      '$message';
 }
 
 /// HTTP client for a remote RomM server (library browse + ROM download).
@@ -390,6 +430,14 @@ class RommService {
   /// Nine caps that at nine extra requests for the life of the connection —
   /// three full consecutive budgets, so three separate restart episodes can
   /// each be healed — instead of one per call.
+  ///
+  /// Nine is the worst case in *requests*, not just in failures: a
+  /// verification that succeeds can only ever be the last one, because it
+  /// zeroes the consecutive count and [_noteApiKeyAccepted] then early-returns
+  /// on that zero, so nothing re-arms the one-shot again. The realizable
+  /// maximum is therefore eight failures plus a success, or nine failures and
+  /// no success — never ten. Measured on the suite in
+  /// `test/romm_api_key_scope_learning_test.dart`.
   static const int _maxApiKeyVerifyFailuresTotal = 9;
 
   /// Features already reported as gated on this connection, so the "not on
@@ -848,11 +896,11 @@ class RommService {
     try {
       // One budget across the scheme fallback, not one per attempt.
       resp = await _withSchemeFallback(
-        () => _httpClient.get(_uri('/api/users/me'), headers: _authHeaders),
+        _sendApiKeyVerification,
         timeout: _requestTimeout,
       );
     } on TimeoutException {
-      // These three are the whole of "the server did not answer", and they are
+      // These four are the whole of "the server did not answer", and they are
       // marked as such so [_ensureToken] can tell them from a failure that has
       // no status for a different reason. The messages are unchanged and the
       // type is a [RommException] subclass, so nothing else sees a difference.
@@ -863,11 +911,25 @@ class RommService {
         'TLS handshake failed — try an http:// URL if the server is not HTTPS',
       );
     } on SocketException catch (e) {
+      // Ahead of the `ClientException` arm on purpose: `IOClient` wraps a
+      // socket error in a `_ClientSocketException`, which *is* a
+      // `ClientException` and only implements `SocketException` for the sake
+      // of callers like this one. Reordering these would silently move every
+      // ordinary socket failure onto the message below.
+      throw RommTransportException('Cannot reach server: ${e.message}');
+    } on http.ClientException catch (e) {
+      // The connection died before any answer arrived: `IOClient` has already
+      // reduced the `dart:io` `HttpException` behind it to this
+      // ("Connection closed before full header was received"), and
+      // [_sendApiKeyVerification] has already peeled off the one shape that
+      // means the server *did* answer. See [RommTransportException] for why
+      // this must retry rather than spend budget (issue #190).
       throw RommTransportException('Cannot reach server: ${e.message}');
     } catch (e) {
-      // Deliberately *not* a transport exception: this arm also catches a
-      // `FormatException` from a malformed URL and an `http.ClientException`,
-      // neither of which is the network being down.
+      // Deliberately *not* a transport exception: this arm catches a
+      // `FormatException` from a malformed URL and a [_RommUnreadableResponse]
+      // from a body the server truncated, neither of which is the network
+      // being down, and neither of which a retry can fix.
       throw RommException('Connection failed: $e');
     }
 
@@ -891,6 +953,36 @@ class RommService {
     } catch (_) {
       // The key works; a surprising body shape only costs us the display name
       // and leaves the scope groups where they were: unknown, not denied.
+    }
+  }
+
+  /// Sends the verification request, keeping "the server never answered" apart
+  /// from "the server answered and the body could not be read".
+  ///
+  /// `http.Client.get` is `Response.fromStream(await send(request))` with the
+  /// two halves collapsed into one future, and `package:http` raises the same
+  /// bare `ClientException` from either — a closed connection from `send`
+  /// (`io_client.dart:229`) and a truncated body from the response stream
+  /// (`io_client.dart:188`). The exception object carries nothing that tells
+  /// them apart, so this splits the call instead: whatever `send` throws never
+  /// got an answer, and whatever the drain throws did. Only this endpoint
+  /// needs the distinction, because only this endpoint classifies its failures
+  /// into a retry policy; every other call in this file keeps using `get`.
+  ///
+  /// The request is built here rather than by the caller so the HTTPS→HTTP
+  /// retry in [_withSchemeFallback] picks up the rewritten [_baseUrl], and so a
+  /// `FormatException` from a malformed URL still lands in the caller's
+  /// catch-all.
+  // Governing: ADR-0010, SPEC-0010 REQ "Probe Before The Token Grant",
+  // ADR-0013, SPEC-0013 REQ "Optional Scope Groups"
+  Future<http.Response> _sendApiKeyVerification() async {
+    final request = http.Request('GET', _uri('/api/users/me'))
+      ..headers.addAll(_authHeaders);
+    final streamed = await _httpClient.send(request);
+    try {
+      return await http.Response.fromStream(streamed);
+    } on http.ClientException catch (e) {
+      throw _RommUnreadableResponse(streamed.statusCode, e.message);
     }
   }
 
@@ -1319,9 +1411,10 @@ class RommService {
   /// the server answered: rejected (spent for good), answered badly (retried,
   /// bounded by [_maxApiKeyVerifyFailures] in a row and
   /// [_maxApiKeyVerifyFailuresTotal] in all), never answered (retried,
-  /// unbounded), and — the fourth case, which no spec names because it reaches
-  /// no server — failed with no status to classify, which is bounded like the
-  /// second.
+  /// unbounded, and identified by *how* the failure was raised rather than by
+  /// a missing status), and — the fourth case — failed in a way no retry can
+  /// fix: an unset URL, a malformed one, a body the server truncated. The
+  /// fourth is bounded like the second.
   // Governing: ADR-0010 (RomM heartbeat capability probe),
   // SPEC-0010 REQ "Probe Before The Token Grant" (amended, #171 and #184),
   // ADR-0013, SPEC-0013 REQ "Optional Scope Groups" (amended, #171 and #184)
@@ -1349,9 +1442,20 @@ class RommService {
         // capabilities null for the rest of the process. That is issue #168's
         // exact symptom with a narrower trigger, and `_reprobe()` does not
         // cover it because it restores capabilities without re-running
-        // verification. The genuinely-offline case is already damped a layer
-        // up by RommProvider's reachability backoff, so a second bound here
-        // would only duplicate it.
+        // verification. Unbounded is what SPEC-0010 REQ "Probe Before The
+        // Token Grant" requires of this case, and the damping that keeps it
+        // affordable is partial, not total: [onTransportFailure] is reported
+        // by the *calls*, never by [_verifyApiKey], so RommProvider's
+        // reachability backoff only quiets this when the surrounding request
+        // fails too. That is the case this branch exists for — a handheld off
+        // Wi-Fi fails everything — but it is not the only shape. A transport
+        // failure confined to `/api/users/me` on a server answering everything
+        // else costs one extra request per authenticated call with nothing
+        // damping it (measured at 100 calls, 100 extra requests, issue #190
+        // finding 3). Reporting it here instead would mark the whole
+        // connection offline on the strength of one endpoint, which is the
+        // stranding issue #183 finding 2 fixed, so the residual is accepted
+        // rather than traded for that.
         //
         // Matched by type rather than by "no status came back": that test used
         // to catch two failures that are not transport faults at all — an
@@ -1379,12 +1483,16 @@ class RommService {
             '${_spendApiKeyVerifyBudget()}',
           );
         } else {
-          // Case 4 — no status and no transport fault: an empty base URL, a
-          // malformed URI, an `http.ClientException` we cannot place. Bounded
-          // like case 2 rather than latched, because the class includes
-          // failures that do cost a request and may still be transient; the
-          // point of the branch is that the line no longer blames the network
-          // for something the network did not do (issue #183 finding 3).
+          // Case 4 — no status and no dropped connection: an empty base URL
+          // and a malformed URI, which send nothing at all, plus a response
+          // the server began and we could not finish reading
+          // ([_RommUnreadableResponse]), which does cost a request. Bounded
+          // like case 2 rather than latched, because a truncating proxy may
+          // still be transient while a retry cannot fix any of them; the point
+          // of the branch is that the line no longer blames the network for
+          // something the network did not do (issue #183 finding 3), and no
+          // longer sweeps up the closed-connection `ClientException` that
+          // belongs in case 3 (issue #190 finding 1).
           _log.w(
             'RomM API-key verification failed without a status to classify: '
             '$e ${_spendApiKeyVerifyBudget()}',
@@ -1436,17 +1544,23 @@ class RommService {
   ///
   /// Called from [_sendWithAuthRetry] with the status of a request that carried
   /// this connection's API key in its `Authorization` header, and only in
-  /// API-key mode. That is the narrowest healthy signal available: a 2xx there
-  /// means the server answered *and* accepted this exact credential. The
-  /// unauthenticated heartbeat is deliberately not a trigger — it proves only
+  /// API-key mode. That is the narrowest healthy signal available, and it is
+  /// worth being exact about how narrow: a 2xx there proves the server
+  /// answered a request that *carried* this credential, not that it validated
+  /// it — RomM answers plenty of endpoints without checking the key closely,
+  /// and the 2xx came from a different endpoint than the one whose
+  /// verification failed, possibly in the very same call. The unauthenticated
+  /// heartbeat is weaker still and deliberately not a trigger: it proves only
   /// that something is listening on the URL, and `RommProvider._reprobe()`
   /// fires it on a timer, so resetting there would let a poll re-arm the probe
   /// on no evidence about the key at all.
   ///
-  /// It is not proof that `/api/users/me` has recovered — the 2xx came from
-  /// another endpoint, possibly in the very call whose verification just
-  /// failed. [_maxApiKeyVerifyFailuresTotal] is what bounds that case; this
-  /// method deliberately does not try to.
+  /// Because the signal is that weak, what makes re-arming safe is not the
+  /// signal but [_maxApiKeyVerifyFailuresTotal]: the ceiling nothing clears is
+  /// the only thing standing between a server that alternates a healthy answer
+  /// with a failing verification and one extra request per call forever. Do
+  /// not remove the ceiling on the strength of this method looking careful —
+  /// it is deliberately not, and does not try to be.
   // Governing: ADR-0010, SPEC-0010 REQ "Probe Before The Token Grant",
   // ADR-0013, SPEC-0013 REQ "Optional Scope Groups"
   void _noteApiKeyAccepted(int status) {
