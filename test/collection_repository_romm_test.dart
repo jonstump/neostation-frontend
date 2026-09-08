@@ -55,6 +55,7 @@ void main() {
         collectionId: '12',
         virtual: false,
         syncedAt: syncedAt,
+        origin: CollectionModel.originRomm,
       );
 
       final found = await CollectionRepository.findRommMirror(server, '12');
@@ -78,6 +79,7 @@ void main() {
         collectionId: '12',
         virtual: false,
         syncedAt: syncedAt,
+        origin: CollectionModel.originRomm,
       );
       expect(
         await CollectionRepository.findRommMirror('https://other', '12'),
@@ -94,6 +96,7 @@ void main() {
         collectionId: 'genre:rpg',
         virtual: true,
         syncedAt: syncedAt,
+        origin: CollectionModel.originRomm,
       );
       final rows = await CollectionRepository.getCollections();
       final c = CollectionModel.fromJson(rows.single);

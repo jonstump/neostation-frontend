@@ -459,7 +459,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 166;
+  static const int _databaseVersion = 167;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -2161,6 +2161,8 @@ class SqliteService {
       SqliteMigrations.createUserRetroArchConfigTableSql,
       SqliteMigrations.createUserCollectionsTableSql,
       SqliteMigrations.createUserCollectionItemsTableSql,
+      // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Follow-Up Pushes"
+      SqliteMigrations.createAppRommCollectionOutboxTableSql,
     ];
 
     for (final sql in tables) {
@@ -4658,7 +4660,7 @@ class SqliteService {
         c.id, c.name, c.image_path, c.color1, c.color2, c.sort_order,
         c.created_at, c.updated_at,
         c.romm_server_url, c.romm_collection_id, c.romm_collection_virtual,
-        c.romm_synced_at,
+        c.romm_synced_at, c.romm_origin,
         COALESCE(counts.game_count, 0) as game_count
       FROM user_collections c
       LEFT JOIN (
@@ -4679,7 +4681,7 @@ class SqliteService {
         c.id, c.name, c.image_path, c.color1, c.color2, c.sort_order,
         c.created_at, c.updated_at,
         c.romm_server_url, c.romm_collection_id, c.romm_collection_virtual,
-        c.romm_synced_at,
+        c.romm_synced_at, c.romm_origin,
         (SELECT COUNT(*) FROM user_collection_items ci
           WHERE ci.collection_id = c.id) as game_count
       FROM user_collections c
@@ -4713,7 +4715,7 @@ class SqliteService {
         c.id, c.name, c.image_path, c.color1, c.color2, c.sort_order,
         c.created_at, c.updated_at,
         c.romm_server_url, c.romm_collection_id, c.romm_collection_virtual,
-        c.romm_synced_at,
+        c.romm_synced_at, c.romm_origin,
         (SELECT COUNT(*) FROM user_collection_items ci
           WHERE ci.collection_id = c.id) as game_count
       FROM user_collections c
@@ -4726,17 +4728,21 @@ class SqliteService {
     return rows.isEmpty ? null : rows.first;
   }
 
-  /// Records (or refreshes) which RomM collection [id] mirrors.
+  /// Records (or refreshes) which RomM collection [id] is linked to, and
+  /// which side writes it ([origin]: `'romm'` for a mirror, `'local'` for a
+  /// pushed collection).
   ///
   /// Touches only the provenance columns and `updated_at`; name, artwork,
   /// colours and sort order are the user's and are never written here.
   // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Collection Provenance Columns"
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Column"
   static Future<void> setRommProvenance(
     String id, {
     required String serverUrl,
     required String collectionId,
     required bool virtual,
     required DateTime syncedAt,
+    required String origin,
   }) async {
     final db = await instance.database;
     await db.update(
@@ -4746,6 +4752,7 @@ class SqliteService {
         'romm_collection_id': collectionId,
         'romm_collection_virtual': virtual ? 1 : 0,
         'romm_synced_at': syncedAt.toIso8601String(),
+        'romm_origin': origin,
         'updated_at': DateTime.now().toIso8601String(),
       },
       where: 'id = ?',
@@ -4753,11 +4760,27 @@ class SqliteService {
     );
   }
 
-  /// Forgets which RomM collection [id] mirrors ("Unlink from RomM").
+  /// Sets only the origin of [id] (`'romm'`, `'local'`, or null), leaving
+  /// the other provenance columns as they are.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Column"
+  static Future<void> setRommOrigin(String id, String? origin) async {
+    final db = await instance.database;
+    await db.update(
+      'user_collections',
+      {'romm_origin': origin, 'updated_at': DateTime.now().toIso8601String()},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Forgets which RomM collection [id] is linked to ("Unlink from RomM"),
+  /// origin included.
   ///
   /// The collection and its members are left exactly as they are; the next
-  /// sync of that RomM collection creates a fresh local one.
+  /// sync of that RomM collection creates a fresh local one, and a pushed
+  /// collection becomes an ordinary local one whose edits no longer queue.
   // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Collection Provenance Columns"
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Column"
   static Future<void> clearRommProvenance(String id) async {
     final db = await instance.database;
     await db.update(
@@ -4767,6 +4790,7 @@ class SqliteService {
         'romm_collection_id': null,
         'romm_collection_virtual': null,
         'romm_synced_at': null,
+        'romm_origin': null,
         'updated_at': DateTime.now().toIso8601String(),
       },
       where: 'id = ?',
@@ -4779,8 +4803,10 @@ class SqliteService {
   /// an unlinked collection the next sync would duplicate.
   ///
   /// Appended at the end of the list like [insertCollection]; no artwork or
-  /// colours — those stay user-managed (ADR-0009).
+  /// colours — those stay user-managed (ADR-0009). Origin is always
+  /// `'romm'`: a collection created by the mirror is written by RomM.
   // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Database Operation Standards"
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Column"
   static Future<void> insertRommMirrorCollection({
     required String id,
     required String name,
@@ -4800,7 +4826,7 @@ class SqliteService {
         'INSERT INTO user_collections '
         '(id, name, sort_order, created_at, updated_at, '
         'romm_server_url, romm_collection_id, romm_collection_virtual, '
-        'romm_synced_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        'romm_synced_at, romm_origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         [
           id,
           name,
@@ -4811,6 +4837,7 @@ class SqliteService {
           collectionId,
           virtual ? 1 : 0,
           syncedAt.toIso8601String(),
+          'romm',
         ],
       );
     });

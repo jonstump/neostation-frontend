@@ -30,6 +30,7 @@ import '../repositories/system_repository.dart';
 import '../services/collections/collections_service.dart';
 import '../services/logger_service.dart';
 import '../services/romm/romm_collection_mirror.dart';
+import '../services/romm/romm_collection_outbox_service.dart';
 import '../services/romm/romm_cover_cache.dart';
 import '../services/romm/romm_metadata_fetch.dart';
 import '../services/romm/romm_props_outbox_service.dart';
@@ -1225,13 +1226,21 @@ class RommProvider extends ChangeNotifier {
   /// Fire-and-forget: nothing in the UI waits on a statistic.
   void _flushQueuedPlaytime() {
     playtimeFlushes++;
-    unawaited(_flushOutboxes());
+    unawaited(flushOutboxes());
   }
 
-  /// The two outboxes, in order: play sessions first, then the play-state
-  /// rows that ride along with them (SPEC-0013 REQ "Flush"). Sequential so
-  /// the `update_last_played` touch lands after the session it belongs to.
-  Future<void> _flushOutboxes() async {
+  /// The three outboxes, in order: play sessions first, then the play-state
+  /// rows that ride along with them (SPEC-0013 REQ "Flush"), then the
+  /// collection pushes (SPEC-0015 REQ "Follow-Up Pushes"). Sequential so
+  /// the `update_last_played` touch lands after the session it belongs to,
+  /// and so a favourites edit never races a collection edit for the same
+  /// scope on the same connection.
+  ///
+  /// Visible for tests, which assert the order; production entry points go
+  /// through [_flushQueuedPlaytime].
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Follow-Up Pushes"
+  @visibleForTesting
+  Future<void> flushOutboxes() async {
     if (_service.playtimeSyncAvailable) {
       try {
         await RommPlaytimeService.flushQueuedSessions(_service);
@@ -1240,6 +1249,48 @@ class RommProvider extends ChangeNotifier {
       }
     }
     await flushPlayStateOutbox();
+    await flushCollectionOutbox();
+  }
+
+  /// Drains the collection push outbox (renames, artwork, membership,
+  /// deletes of `local`-origin collections) to the connected server.
+  ///
+  /// Runs after every play-state flush here and stops the moment the
+  /// connection goes away. Same single-flight rule as
+  /// [flushPlayStateOutbox]: a call that arrives while one is running joins
+  /// it rather than listing the same rows and sending the same requests
+  /// twice; a row queued during a flush waits for the next trigger. Never
+  /// throws; a flush is a statistic, not something the UI waits on.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Follow-Up Pushes", REQ "Error Handling Standards"
+  Future<RommCollectionFlushSummary> flushCollectionOutbox() {
+    const nothing = (pushed: 0, dropped: 0, kept: 0);
+    if (!isConnected) return Future.value(nothing);
+    final inFlight = _collectionFlush;
+    if (inFlight != null) {
+      _log.d('RomM collection flush already running; joining it');
+      return inFlight;
+    }
+    final flush = _runCollectionFlush();
+    _collectionFlush = flush;
+    return flush.whenComplete(() => _collectionFlush = null);
+  }
+
+  /// The flush [flushCollectionOutbox] is currently awaiting, if any.
+  Future<RommCollectionFlushSummary>? _collectionFlush;
+
+  Future<RommCollectionFlushSummary> _runCollectionFlush() async {
+    const nothing = (pushed: 0, dropped: 0, kept: 0);
+    try {
+      // Via the [service] getter, not [_service], so a test can substitute
+      // the server the same way the play-state flush tests do.
+      return await RommCollectionOutboxService.flush(
+        service,
+        isConnected: () => isConnected,
+      );
+    } catch (e) {
+      _log.w('RomM collection flush failed: $e');
+      return nothing;
+    }
   }
 
   /// Drains the play-state outbox (hidden, favourite, last played) to the

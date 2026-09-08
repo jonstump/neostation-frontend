@@ -318,7 +318,14 @@ class SqliteMigrations {
   /// collection, and when the mirror last ran. All nullable: an ordinary
   /// collection has none of them, and "Unlink from RomM" sets them back to
   /// null without touching anything else on the row.
+  ///
+  /// `romm_origin` (v167) says *who writes* the linked RomM collection:
+  /// `'romm'` for a mirror the sync pulls into, `'local'` for a collection
+  /// this device pushed and keeps pushing, null when it is not linked. The
+  /// v161 columns say *which* RomM collection; this one decides the
+  /// direction, so a collection has exactly one writer.
   // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Collection Provenance Columns"
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Column"
   static const String createUserCollectionsTableSql = '''
     CREATE TABLE IF NOT EXISTS user_collections (
       id TEXT PRIMARY KEY,
@@ -332,7 +339,8 @@ class SqliteMigrations {
       romm_server_url TEXT,
       romm_collection_id TEXT,
       romm_collection_virtual INTEGER,
-      romm_synced_at TEXT
+      romm_synced_at TEXT,
+      romm_origin TEXT
     );
   ''';
 
@@ -345,6 +353,39 @@ class SqliteMigrations {
     'romm_collection_virtual',
     'romm_synced_at',
   ];
+
+  /// The `user_collections` column v167 adds: which side writes a linked
+  /// collection (`'romm'` | `'local'` | null). One constant so the migration,
+  /// the backfill and the fresh-install DDL name the same column.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Column"
+  static const String rommCollectionOriginColumn = 'romm_origin';
+
+  /// CREATE for the collection push outbox (v167).
+  ///
+  /// One row per *pushed* (`romm_origin = 'local'`) collection with the
+  /// aspects RomM has not been told about yet: `name_dirty`, `artwork_dirty`
+  /// and `members_dirty` are flags rather than values because the flush
+  /// reads the current name, image and membership from `user_collections`
+  /// when it runs — a burst of edits costs one request per aspect, not one
+  /// per edit. `delete_remote` asks the flush to delete the RomM collection;
+  /// the row carries the RomM id (and the server it lives on) so that still
+  /// works after the local row is gone. `last_pushed_rom_ids` is the JSON
+  /// array of ROM ids the server was last told, the baseline a 4.9.0+ server
+  /// gets an add/remove diff against instead of a full replace.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Follow-Up Pushes", REQ "Database Operation Standards"
+  static const String createAppRommCollectionOutboxTableSql = '''
+    CREATE TABLE IF NOT EXISTS app_romm_collection_outbox (
+      collection_id TEXT PRIMARY KEY,
+      romm_server_url TEXT,
+      romm_collection_id TEXT,
+      name_dirty INTEGER NOT NULL DEFAULT 0,
+      artwork_dirty INTEGER NOT NULL DEFAULT 0,
+      members_dirty INTEGER NOT NULL DEFAULT 0,
+      delete_remote INTEGER NOT NULL DEFAULT 0,
+      last_pushed_rom_ids TEXT,
+      updated_at TEXT
+    );
+  ''';
 
   /// CREATE for collection membership (v139).
   ///
@@ -830,6 +871,9 @@ class SqliteMigrations {
         break;
       case 166:
         await _migrateToVersion166(db);
+        break;
+      case 167:
+        await _migrateToVersion167(db);
         break;
       default:
         _log.w('No migration defined for version $version');
@@ -7586,6 +7630,71 @@ class SqliteMigrations {
       _log.i('Migration v166 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v166: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v167: collection origin and the collection push outbox.
+  ///
+  /// Two things, both idempotent:
+  ///
+  /// * `user_collections.romm_origin` ([rommCollectionOriginColumn]), added
+  ///   when missing and then backfilled: every row that already carries a
+  ///   `romm_collection_id` was written by the mirror (the only writer of
+  ///   provenance before this version), so it gets `'romm'`; the rest stay
+  ///   null. The backfill only touches rows whose origin is still null, so
+  ///   a second run — or a database a branch carried past this version with
+  ///   `'local'` rows already in it — changes nothing.
+  /// * `app_romm_collection_outbox` ([createAppRommCollectionOutboxTableSql]),
+  ///   `CREATE TABLE IF NOT EXISTS`.
+  ///
+  /// **Numbered 167**, the first free slot above v166 on `main`; no
+  /// in-flight branch claims it at the time of writing.
+  ///
+  /// A database without `user_collections` (nothing to migrate) still gets
+  /// the outbox table and is not failed. Fresh installs get both from the
+  /// CREATE statements in `SqliteService`.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Column", REQ "Follow-Up Pushes", REQ "Database Operation Standards"
+  static Future<void> _migrateToVersion167(Database db) async {
+    _log.i(
+      'Migration v167: Adding collection origin and the collection push '
+      'outbox',
+    );
+    try {
+      final columns = db
+          .select('PRAGMA table_info(user_collections)')
+          .map((c) => c['name'].toString())
+          .toList();
+      if (columns.isEmpty) {
+        _log.i('Table user_collections absent - nothing to backfill');
+      } else {
+        if (columns.contains(rommCollectionOriginColumn)) {
+          _log.i('Column $rommCollectionOriginColumn already exists');
+        } else {
+          db.execute(
+            'ALTER TABLE user_collections ADD COLUMN '
+            '$rommCollectionOriginColumn TEXT',
+          );
+          _log.i('Column $rommCollectionOriginColumn added via v167');
+        }
+        if (columns.contains('romm_collection_id')) {
+          db.execute(
+            'UPDATE user_collections SET $rommCollectionOriginColumn = ? '
+            'WHERE romm_collection_id IS NOT NULL '
+            'AND $rommCollectionOriginColumn IS NULL',
+            ['romm'],
+          );
+          final changed = db.updatedRows;
+          _log.i('Backfilled $rommCollectionOriginColumn on $changed row(s)');
+        }
+      }
+
+      db.execute(createAppRommCollectionOutboxTableSql);
+
+      _log.i('Migration v167 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v167: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

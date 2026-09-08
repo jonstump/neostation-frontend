@@ -82,6 +82,14 @@ enum RommErrorKind {
   // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
   // SPEC-0018 REQ "Metadata Search And Apply"
   noMetadataSource,
+
+  /// `POST /api/collections` answered 500 for a name this account already
+  /// uses. RomM keeps `(name, user_id)` unique and lets the constraint
+  /// violation surface as a bare 500 rather than a 409, so on that route the
+  /// status is the signal. Distinct because the fix is the user's — pick
+  /// another name — not a retry.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Collection Write Calls"
+  alreadyExists,
 }
 
 /// One *optional* bundle of RomM OAuth scopes, negotiated at login.
@@ -99,8 +107,18 @@ enum RommScopeGroup {
   /// Play sessions and per-user ROM props (`hidden`, `last_played`).
   playtime('roms.user.read roms.user.write', RommFeature.playSessions),
 
-  /// Editing collections, including the favourites collection.
-  collectionsWrite('collections.write', RommFeature.collectionRomsAddRemove),
+  /// Editing collections: the favourites collection (ADR-0013) and the
+  /// collections this device pushes (ADR-0015).
+  ///
+  /// No version gate, deliberately. The group was gated on
+  /// [RommFeature.collectionRomsAddRemove] (4.9.0) while favourites were its
+  /// only consumer, since favourites cannot be edited without that route.
+  /// The collection push can: `POST|PUT|DELETE /api/collections` predate
+  /// 4.9.0 and membership goes out as a `rom_ids` replace there, so on a
+  /// 4.8 server the scope is worth asking for and the favourites calls keep
+  /// their own `supports()` check.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Collection Write Calls"
+  collectionsWrite('collections.write', null),
 
   /// Library-wide ROM writes: the metadata fix in the match picker
   /// (SPEC-0018) and ROM upload (SPEC-0014).
@@ -3627,5 +3645,277 @@ class RommService {
     } catch (_) {
       return null;
     }
+  }
+
+  // -- Collection push (ADR-0015) ---------------------------------------------
+  //
+  // The write side of RomM's collections API, for collections this device
+  // pushed (origin `local`). Every call is gated on the `collections.write`
+  // scope group the same way the favourites calls are — a denied group means
+  // no request and a null/false answer, logged once per connection — and a
+  // 403 that still gets through settles the group as denied for next time.
+  // Failures throw [RommException] with the collection id and status in the
+  // message; a 404 carries its status so the outbox can drop a collection the
+  // server no longer has.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Collection Write Calls", REQ "Error Handling Standards"
+
+  /// One user collection by id (`GET /api/collections/{id}`), with its
+  /// `rom_ids`. Throws [RommException] on any non-200.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Collection Write Calls"
+  Future<RommCollection> getCollection(int id) async {
+    final resp = await _authedGet('/api/collections/$id');
+    final decoded = jsonDecode(resp.body);
+    if (decoded is! Map<String, dynamic>) {
+      throw RommException('RomM collection read failed: collection=$id');
+    }
+    return RommCollection.fromJson(decoded, isVirtual: false);
+  }
+
+  /// Creates a collection (`POST /api/collections`, multipart: `name`, and
+  /// the file at [artworkPath] as `artwork` when given).
+  ///
+  /// Returns the created collection, or null without a request when this
+  /// connection is known not to hold [RommScopeGroup.collectionsWrite].
+  /// Throws [RommException] otherwise; a 500 is
+  /// [RommErrorKind.alreadyExists] (see that kind for why), a 403 is
+  /// [RommErrorKind.scopeDenied].
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Collection Write Calls"
+  Future<RommCollection?> createCollection(
+    String name, {
+    String? artworkPath,
+  }) async {
+    if (_scopeGated(RommScopeGroup.collectionsWrite)) return null;
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      throw ArgumentError.value(name, 'name', 'must not be blank');
+    }
+
+    final resp = await _sendCollectionForm(
+      'POST',
+      _uri('/api/collections'),
+      fields: {'name': trimmed},
+      artworkPath: artworkPath,
+    );
+    final body = await resp.stream.bytesToString();
+    if (resp.statusCode == 200 || resp.statusCode == 201) {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map<String, dynamic> || decoded['id'] == null) {
+        throw RommException(
+          'RomM returned no id for the created collection: name="$trimmed"',
+        );
+      }
+      final created = RommCollection.fromJson(decoded, isVirtual: false);
+      _log.i('RomM collection created: id=${created.id} name="$trimmed"');
+      return created;
+    }
+    if (resp.statusCode == 403) {
+      _noteScopeDenial(RommScopeGroup.collectionsWrite, 403);
+    }
+    throw RommException(
+      'RomM collection create failed: name="$trimmed" '
+      'status=${resp.statusCode}',
+      statusCode: resp.statusCode,
+      kind: switch (resp.statusCode) {
+        403 => RommErrorKind.scopeDenied,
+        500 => RommErrorKind.alreadyExists,
+        _ => RommErrorKind.other,
+      },
+    );
+  }
+
+  /// Updates a collection (`PUT /api/collections/{id}`, multipart).
+  ///
+  /// Sends only what is given: `name`, the file at [artworkPath] as
+  /// `artwork`, `?remove_cover=true` for [removeArtwork], and `rom_ids` as a
+  /// JSON array string when [romIds] is non-null — which *replaces* the
+  /// membership, an empty set included. A server below 4.9.0 has no
+  /// add/remove route, so this is how membership changes reach it.
+  ///
+  /// Returns true when the server confirmed the write; false without a
+  /// request when the scope group is denied or nothing was given to send.
+  /// Throws [RommException] otherwise, the collection id in the message.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Collection Write Calls"
+  Future<bool> updateCollection(
+    int id, {
+    String? name,
+    String? artworkPath,
+    bool removeArtwork = false,
+    Iterable<int>? romIds,
+  }) async {
+    if (_scopeGated(RommScopeGroup.collectionsWrite)) return false;
+    final fields = <String, String>{};
+    if (name != null) {
+      final trimmed = name.trim();
+      if (trimmed.isEmpty) {
+        throw ArgumentError.value(name, 'name', 'must not be blank');
+      }
+      fields['name'] = trimmed;
+    }
+    if (romIds != null) {
+      fields['rom_ids'] = jsonEncode(romIds.toSet().toList()..sort());
+    }
+    if (fields.isEmpty && artworkPath == null && !removeArtwork) return false;
+
+    var uri = _uri('/api/collections/$id');
+    if (removeArtwork) {
+      uri = uri.replace(queryParameters: {'remove_cover': 'true'});
+    }
+    final resp = await _sendCollectionForm(
+      'PUT',
+      uri,
+      fields: fields,
+      artworkPath: artworkPath,
+    );
+    await resp.stream.drain<void>();
+    if (resp.statusCode >= 200 && resp.statusCode < 300) return true;
+    if (resp.statusCode == 403) {
+      _noteScopeDenial(RommScopeGroup.collectionsWrite, 403);
+    }
+    throw RommException(
+      'RomM collection update failed: collection=$id '
+      'fields=${fields.keys.join(',')} '
+      'artwork=${artworkPath != null} remove_cover=$removeArtwork '
+      'status=${resp.statusCode}',
+      statusCode: resp.statusCode,
+      kind: resp.statusCode == 403
+          ? RommErrorKind.scopeDenied
+          : RommErrorKind.other,
+    );
+  }
+
+  /// Adds [romIds] to collection [id] (`POST /api/collections/{id}/roms`,
+  /// `{"rom_ids": [...]}`).
+  ///
+  /// On a server below 4.9.0 ([RommFeature.collectionRomsAddRemove]) the
+  /// route does not exist, so the current members are read back and one
+  /// [updateCollection] replaces them with the union. Returns true when the
+  /// server confirmed (an empty [romIds] is confirmed without a request);
+  /// false without a request when the scope group is denied.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Collection Write Calls"
+  Future<bool> addCollectionRoms(int id, Iterable<int> romIds) =>
+      _editCollectionRoms(id, romIds, add: true);
+
+  /// Removes [romIds] from collection [id]
+  /// (`DELETE /api/collections/{id}/roms`, `{"rom_ids": [...]}`), with the
+  /// same below-4.9.0 fallback as [addCollectionRoms] (the difference).
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Collection Write Calls"
+  Future<bool> removeCollectionRoms(int id, Iterable<int> romIds) =>
+      _editCollectionRoms(id, romIds, add: false);
+
+  /// Shared body of [addCollectionRoms] and [removeCollectionRoms]: same URL
+  /// and payload as the favourites edit, only the verb differs — plus the
+  /// full-replace fallback for servers without the route.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Collection Write Calls"
+  Future<bool> _editCollectionRoms(
+    int id,
+    Iterable<int> romIds, {
+    required bool add,
+  }) async {
+    if (_scopeGated(RommScopeGroup.collectionsWrite)) return false;
+    final ids = romIds.toSet();
+    if (ids.isEmpty) return true;
+
+    if (supports(RommFeature.collectionRomsAddRemove) ==
+        RommFeatureSupport.unsupported) {
+      _logGateOnce(RommFeature.collectionRomsAddRemove);
+      final current = (await getCollection(id)).romIds.toSet();
+      final next = add ? current.union(ids) : current.difference(ids);
+      return updateCollection(id, romIds: next);
+    }
+
+    final uri = _uri('/api/collections/$id/roms');
+    final headers = {..._authHeaders, 'Content-Type': 'application/json'};
+    final body = jsonEncode({'rom_ids': ids.toList()..sort()});
+    final resp = await _sendWithAuthRetry<http.Response>(
+      () =>
+          (add
+                  ? _httpClient.post(uri, headers: headers, body: body)
+                  : _httpClient.delete(uri, headers: headers, body: body))
+              .timeout(const Duration(seconds: 30)),
+      statusOf: (r) => r.statusCode,
+    );
+
+    if (resp.statusCode >= 200 && resp.statusCode < 300) return true;
+    if (resp.statusCode == 403) {
+      _noteScopeDenial(RommScopeGroup.collectionsWrite, 403);
+    }
+    throw RommException(
+      'RomM collection ${add ? 'add' : 'remove'} failed: collection=$id '
+      'roms=${ids.length} status=${resp.statusCode}',
+      statusCode: resp.statusCode,
+      kind: resp.statusCode == 403
+          ? RommErrorKind.scopeDenied
+          : RommErrorKind.other,
+    );
+  }
+
+  /// Deletes collection [id] (`DELETE /api/collections/{id}`).
+  ///
+  /// Returns true when the server confirmed — or answered 404, since a
+  /// collection that is already gone is exactly the outcome asked for;
+  /// false without a request when the scope group is denied. Throws
+  /// [RommException] otherwise.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Collection Write Calls"
+  Future<bool> deleteCollection(int id) async {
+    if (_scopeGated(RommScopeGroup.collectionsWrite)) return false;
+    final resp = await _sendWithAuthRetry<http.Response>(
+      () => _httpClient
+          .delete(_uri('/api/collections/$id'), headers: _authHeaders)
+          .timeout(const Duration(seconds: 30)),
+      statusOf: (r) => r.statusCode,
+    );
+    if (resp.statusCode >= 200 && resp.statusCode < 300) return true;
+    if (resp.statusCode == 404) {
+      _log.i('RomM collection already gone: collection=$id status=404');
+      return true;
+    }
+    if (resp.statusCode == 403) {
+      _noteScopeDenial(RommScopeGroup.collectionsWrite, 403);
+    }
+    throw RommException(
+      'RomM collection delete failed: collection=$id '
+      'status=${resp.statusCode}',
+      statusCode: resp.statusCode,
+      kind: resp.statusCode == 403
+          ? RommErrorKind.scopeDenied
+          : RommErrorKind.other,
+    );
+  }
+
+  /// Sends one multipart form to the collections API under the shared
+  /// auth-retry policy: [fields] as form fields and, when [artworkPath] is
+  /// given, that file as the `artwork` part. The request is rebuilt per
+  /// attempt (a retry carries the refreshed token, and a multipart body can
+  /// only be streamed once). A missing artwork file is the caller's error,
+  /// not a server one, so it is raised before anything is sent.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Collection Write Calls"
+  Future<http.StreamedResponse> _sendCollectionForm(
+    String method,
+    Uri uri, {
+    required Map<String, String> fields,
+    String? artworkPath,
+  }) {
+    if (artworkPath != null && !File(artworkPath).existsSync()) {
+      throw ArgumentError.value(
+        artworkPath,
+        'artworkPath',
+        'artwork file does not exist',
+      );
+    }
+    return _sendWithAuthRetry<http.StreamedResponse>(() async {
+      final req = http.MultipartRequest(method, uri)
+        ..headers.addAll(_authHeaders)
+        ..fields.addAll(fields);
+      if (artworkPath != null) {
+        req.files.add(
+          await http.MultipartFile.fromPath(
+            'artwork',
+            artworkPath,
+            filename: path.basename(artworkPath),
+          ),
+        );
+      }
+      return _httpClient.send(req).timeout(const Duration(seconds: 60));
+    }, statusOf: (r) => r.statusCode);
   }
 }

@@ -40,6 +40,7 @@ class _Row {
   String collectionId;
   bool virtual;
   DateTime syncedAt;
+  String? origin;
   Set<String> members = {};
 
   _Row({
@@ -140,12 +141,14 @@ class _Fixture {
     required String collectionId,
     required bool virtual,
     required DateTime syncedAt,
+    required String origin,
   }) async {
     rows[id]!
       ..serverUrl = serverUrl
       ..collectionId = collectionId
       ..virtual = virtual
-      ..syncedAt = syncedAt;
+      ..syncedAt = syncedAt
+      ..origin = origin;
   }
 
   RommCollectionMirror mirror({DateTime Function()? clock}) =>
@@ -273,6 +276,21 @@ void main() {
         expect(f.rows[first.collectionId]!.syncedAt, at);
       },
     );
+
+    // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Column"
+    test('adopting an existing collection sets origin romm', () async {
+      f.serverRoms.add(_rom(1));
+      f.localPaths[1] = '/r/1.sfc';
+      final first = await f.mirror().run(_bestOfSnes, serverUrl: _server);
+      // A row whose origin was never written (pre-v167) or that a push once
+      // claimed: the mirror that adopts it becomes its writer.
+      f.rows[first.collectionId]!.origin = 'local';
+
+      final second = await f.mirror().run(_bestOfSnes, serverUrl: _server);
+
+      expect(second.created, isFalse);
+      expect(f.rows[first.collectionId]!.origin, 'romm');
+    });
 
     test('a hand-added member is removed', () async {
       f.serverRoms.add(_rom(1));

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../models/collection_model.dart';
 import '../../models/romm_collection.dart';
 import '../../models/romm_rom.dart';
 import '../../models/romm_rom_page.dart';
@@ -49,7 +50,10 @@ typedef RommMirrorMemberReplacer =
       Set<String> romPaths,
     );
 
-/// Refreshes a collection's provenance — in practice `romm_synced_at`.
+/// Refreshes a collection's provenance — in practice `romm_synced_at` — and
+/// its origin, which the mirror always sets to `'romm'` (ADR-0015): a
+/// collection the mirror adopts is written by RomM from then on.
+// Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Column"
 typedef RommMirrorProvenanceSetter =
     Future<void> Function(
       String id, {
@@ -57,6 +61,7 @@ typedef RommMirrorProvenanceSetter =
       required String collectionId,
       required bool virtual,
       required DateTime syncedAt,
+      required String origin,
     });
 
 /// Polled between pages; true ends the run before the next page is fetched.
@@ -538,12 +543,17 @@ class RommCollectionMirror {
 
     if (!created) {
       try {
+        // Origin `romm` on adopt as well as on create: an adopted collection
+        // is one whose provenance already names this RomM collection, and
+        // from here on RomM writes it (ADR-0015, one writer per collection).
+        // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Column"
         await _setProvenance(
           localId,
           serverUrl: serverUrl,
           collectionId: collection.id,
           virtual: collection.isVirtual,
           syncedAt: syncedAt,
+          origin: CollectionModel.originRomm,
         );
       } catch (e) {
         // Membership is in; only the timestamp is stale. Logged, and the
