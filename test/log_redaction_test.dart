@@ -181,8 +181,9 @@ void main() {
   });
 
   group('redactSecrets — the #195 keyword review', () {
-    // The four names the /sdd:review of #192 flagged as unmatched. Three are
-    // added here; `credential` is deliberately rejected — see the last test.
+    // The four names the /sdd:review of #192 flagged as unmatched. Three were
+    // added here; the fourth, `credential`, was rejected on a rationale that
+    // measurement later disproved and is now covered in the #197 group below.
 
     test('an Authorization value with no scheme is redacted', () {
       // `auth` is a sensitive field name already, but the field pattern needs
@@ -256,20 +257,6 @@ void main() {
       expect(redacted, isNot(contains('sk_xyz')));
     });
 
-    test('`credential` is deliberately NOT a sensitive field name', () {
-      // Rejected, not overlooked. The codebase logs `... credentials: \$e` in
-      // eight places (scraper_repository, screenscraper_service); adding the
-      // name would blank the exception text those lines exist to carry — the
-      // documented `Directory: /roms` failure mode. The values themselves are
-      // already covered by password/token/api_key/secret/auth.
-      const line = 'Error saving scraper credentials: SocketException: refused';
-      expect(redactSecrets(line), line);
-      expect(
-        redactSecrets('Invalid credentials: ClientException uri=https://x/y'),
-        'Invalid credentials: ClientException uri=https://x/y',
-      );
-    });
-
     test('the new patterns stay idempotent', () {
       for (final line in [
         'headers: {authorization: abc123DEF456}',
@@ -277,6 +264,126 @@ void main() {
         'Set-Cookie: sid=SESSIONSECRET; Path=/; HttpOnly',
         '{"client_secret_id": "cs_live_abc123"}',
         '/api/files?sid=SESSIONSECRET&limit=20',
+      ]) {
+        final once = redactSecrets(line);
+        expect(redactSecrets(once), once, reason: line);
+      }
+    });
+  });
+
+  group('redactSecrets — the #197 review findings', () {
+    // The nine `... credentials: <exception>` log lines this repo actually
+    // emits, rendered with the exception text they carry. `grep -rn
+    // 'credentials:' lib/` finds them in scraper_repository.dart (3) and
+    // screenscraper_service.dart (6).
+    const pluralCredentialLogLines = <String>[
+      'Error saving scraper credentials: SocketException: Connection refused',
+      'Error getting scraper credentials: SocketException: Connection refused',
+      'Error clearing scraper credentials: SocketException: Connection refused',
+      'Error verifying credentials: SocketException: Connection refused',
+      'Error saving credentials: SocketException: Connection refused',
+      'Error refreshing credentials: SocketException: Connection refused',
+      'Error getting saved credentials: SocketException: Connection refused',
+      'Error deleting credentials: SocketException: Connection refused',
+      'Invalid credentials: Erreur de login : verifiez vos identifiants',
+    ];
+
+    test('`credential` (singular) IS a sensitive field name', () {
+      // Fails if `credential` is dropped from _sensitiveFieldNames. #196
+      // rejected it believing it would blank the nine lines above; the test
+      // below measures that it does not.
+      for (final line in [
+        'credential: hunter2SECRET',
+        '{"credential": "hunter2SECRET"}',
+        "{'credential': 'hunter2SECRET'}",
+        '{credential: hunter2SECRET, user: bob}',
+        'credential=hunter2SECRET',
+        'user_credential: hunter2SECRET',
+      ]) {
+        final redacted = redactSecrets(line);
+        expect(redacted, isNot(contains('hunter2SECRET')), reason: line);
+        expect(redacted, contains(redactedPlaceholder), reason: line);
+      }
+    });
+
+    test('`credentials` (plural) must never become a sensitive field name', () {
+      // Fails the moment `credentials` is added: the field pattern would take
+      // the exception text after the `:` and these nine lines would carry
+      // `<redacted>` instead of the reason they exist to report. `credential`
+      // does not have that effect, because the pattern needs the name to end
+      // at the `:` and the plural carries on with an `s`.
+      for (final line in pluralCredentialLogLines) {
+        expect(redactSecrets(line), line, reason: line);
+      }
+    });
+
+    test('the credential store log lines survive intact', () {
+      // Singular, but followed by a space rather than a `:`/`=`.
+      for (final line in [
+        'ScreenScraper: credential store unreadable: PlatformException(x)',
+        'Skipping RetroAchievements auto-login: credential storage unavailable',
+        'moved "ra_api_key" out of the database into the credential store',
+      ]) {
+        expect(redactSecrets(line), line, reason: line);
+      }
+    });
+
+    test(
+      'the JSON-quoted Authorization keeps its scheme, as the header does',
+      () {
+        // The negative lookahead used to see `"Bearer` rather than `Bearer`, so
+        // the quoted form lost the scheme the header form kept.
+        expect(
+          redactSecrets('{"authorization": "Bearer abc123DEF456ghi"}'),
+          '{"authorization": "Bearer <redacted>"}',
+        );
+        expect(
+          redactSecrets("{'authorization': 'Bearer abc123DEF456ghi'}"),
+          "{'authorization': 'Bearer <redacted>'}",
+        );
+        expect(
+          redactSecrets('{"authorization": "Basic dXNlcjpwYXNz"}'),
+          '{"authorization": "Basic <redacted>"}',
+        );
+        expect(
+          redactSecrets('{"Authorization": "Token abc123DEF456ghi"}'),
+          '{"Authorization": "Token <redacted>"}',
+        );
+        // A scheme we never named still loses the whole value — unchanged.
+        final unknown = redactSecrets('{"authorization": "MAC k3y-material"}');
+        expect(unknown, isNot(contains('k3y-material')));
+        expect(unknown, contains(redactedPlaceholder));
+      },
+    );
+
+    test('a semicolon-joined header dump loses only the secret', () {
+      expect(
+        redactSecrets(
+          'headers: api_key=SECRETKEY; content-type=application/json; accept=*',
+        ),
+        'headers: api_key=<redacted>; content-type=application/json; accept=*',
+      );
+      expect(
+        redactSecrets(
+          'authorization=SECRETKEY; content-type=application/json; accept=*',
+        ),
+        'authorization=<redacted>; content-type=application/json; accept=*',
+      );
+      expect(
+        redactSecrets('token: SECRETTOKEN; retry=3; timeout=30s'),
+        'token: <redacted>; retry=3; timeout=30s',
+      );
+    });
+
+    test('the #197 shapes stay idempotent', () {
+      for (final line in [
+        'credential: hunter2SECRET',
+        '{"credential": "hunter2SECRET"}',
+        '{"authorization": "Bearer abc123DEF456ghi"}',
+        '{"authorization": "MAC k3y-material"}',
+        'authorization=SECRETKEY; content-type=application/json; accept=*',
+        'token: SECRETTOKEN; retry=3; timeout=30s',
+        ...pluralCredentialLogLines,
       ]) {
         final once = redactSecrets(line);
         expect(redactSecrets(once), once, reason: line);

@@ -50,6 +50,14 @@ const List<String> _sensitiveFieldNames = [
   // family at once but would also eat `keyboard:`, `keys:` and `passing:`, so
   // suffixed credential names are listed out instead. Issue #195.
   'client_secret_id',
+  // The singular name only. `credentials` (plural) is deliberately NOT here:
+  // that is the name that would eat the nine `... credentials: $e` log lines in
+  // `scraper_repository` and `screenscraper_service`, blanking the exception
+  // text those lines exist to carry. Adding `credential` leaves all nine
+  // untouched, by the same rule that made `client_secret_id` necessary above:
+  // the pattern requires the name to end at the `:`/`=`, and `credentials`
+  // carries on past it with an `s`. Measured, not assumed. Issues #195, #197.
+  'credential',
   'devid',
   'devpassword',
   'key',
@@ -86,13 +94,18 @@ final RegExp _queryParamPattern = RegExp(
 /// excluding `_` would let `user_password: hunter2` through — a leak, and far
 /// worse than over-redacting the occasional `first_pass: 3`.
 ///
-/// The unquoted value must also stop at `&` and `<`: without that it runs past
-/// the end of a query parameter and swallows the remainder of a URL, and it
-/// re-matches an already-substituted `<redacted>`, breaking idempotence.
+/// The unquoted value must also stop at `&`, `;` and `<`. Without `&` and `<`
+/// it runs past the end of a query parameter and swallows the remainder of a
+/// URL, and it re-matches an already-substituted `<redacted>`, breaking
+/// idempotence. `;` is what separates the fields of a header dump
+/// (`api_key=abc; content-type=application/json`), so without it the secret
+/// takes its neighbours down with it — over-redaction of the surrounding
+/// diagnostic text. No credential encoding this file redacts (base64,
+/// base64url, hex, a JWT) contains a `;`. Issue #197.
 final RegExp _jsonFieldPattern = RegExp(
   '(?<![A-Za-z0-9])'
   '(["\']?(?:${_sensitiveFieldNames.join('|')})["\']?\\s*[:=]\\s*)'
-  '(["\'][^"\']*["\']|[^,\\s}\\]&<>"\']+)',
+  '(["\'][^"\']*["\']|[^,;\\s}\\]&<>"\']+)',
   caseSensitive: false,
 );
 
@@ -118,17 +131,23 @@ final RegExp _authHeaderPattern = RegExp(
 /// the space back, the lookahead then saw ` Bearer` instead of `Bearer`, and
 /// the whole `Bearer abc` value was swallowed scheme and all.
 ///
-/// The unquoted value stops at `&` and `<`/`>` for the same reasons
+/// The lookahead also has to skip an opening quote. `{"authorization":
+/// "Bearer abc"}` carries the same credential as the header form, but the
+/// lookahead saw `"Bearer` rather than `Bearer` and so did not hand the match
+/// back: the JSON form lost its scheme while the header form kept it. Issue
+/// #197.
+///
+/// The unquoted value stops at `&`, `;` and `<`/`>` for the same reasons
 /// [_jsonFieldPattern] does: so it cannot run past the end of a query
-/// parameter, and so it cannot re-match an already-substituted
-/// [redactedPlaceholder]. It must also not *start* on whitespace, or the same
-/// backtracking lets a lone space stand in for the value and redaction stops
-/// being idempotent.
+/// parameter or of its own header in a `;`-joined dump, and so it cannot
+/// re-match an already-substituted [redactedPlaceholder]. It must also not
+/// *start* on whitespace, or the same backtracking lets a lone space stand in
+/// for the value and redaction stops being idempotent.
 final RegExp _authorizationFieldPattern = RegExp(
   '(["\']?authorization["\']?\\s*[:=]'
-  '(?!\\s*(?:Bearer|Basic|Token)[\\s"\'])'
+  '(?!\\s*["\']?(?:Bearer|Basic|Token)[\\s"\'])'
   '\\s*)'
-  '(["\'][^"\']*["\']|[^\\s,&<>\\r\\n}\\]][^,&<>\\r\\n}\\]]*)',
+  '(["\'][^"\']*["\']|[^\\s,;&<>\\r\\n}\\]][^,;&<>\\r\\n}\\]]*)',
   caseSensitive: false,
 );
 
