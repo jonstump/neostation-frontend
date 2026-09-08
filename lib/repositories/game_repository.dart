@@ -214,7 +214,9 @@ class GameRepository {
     remoteLastPlayed: remoteLastPlayed,
   );
 
-  static Future<void> toggleRomFavoriteByPath(String romPath) =>
+  /// Flips a ROM's favourite flag and returns the value it now holds, or
+  /// null when no row matched.
+  static Future<bool?> toggleRomFavoriteByPath(String romPath) =>
       SqliteService.toggleRomFavorite(romPath);
 
   static Future<void> recordRomPlayedByPath(String romPath) =>

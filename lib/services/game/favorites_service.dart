@@ -1,5 +1,7 @@
 import '../../models/game_model.dart';
 import '../../repositories/game_repository.dart';
+import '../logger_service.dart';
+import '../romm/romm_props_outbox_service.dart';
 
 /// Game catalogue mutations and aggregate stats.
 ///
@@ -11,10 +13,34 @@ import '../../repositories/game_repository.dart';
 class FavoritesService {
   FavoritesService._();
 
+  static final _log = LoggerService.instance;
+
   /// Toggles the favorite status of a game in the persistent database.
+  ///
+  /// The local write comes first and is never delayed by what follows: once
+  /// the row holds its new value, the change is queued for RomM when the
+  /// push toggle is on and the game is linked — every favourite entry point
+  /// (context menu, favourites reorder) funnels through here, so this is the
+  /// one hook.
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Props Outbox"
   static Future<void> toggleFavorite(GameModel game) async {
-    if (game.romPath == null) return;
-    await GameRepository.toggleRomFavoriteByPath(game.romPath!);
+    final romPath = game.romPath;
+    if (romPath == null) return;
+    final isFavorite = await GameRepository.toggleRomFavoriteByPath(romPath);
+    if (isFavorite == null) return;
+    final systemFolder = game.systemFolderName ?? '';
+    if (systemFolder.isEmpty) return;
+    try {
+      await RommPropsOutboxService.queue(
+        romname: game.romname,
+        systemFolder: systemFolder,
+        romPath: romPath,
+        pushEnabled: await RommPropsOutboxService.pushEnabled(),
+        favourite: isFavorite,
+      );
+    } catch (e) {
+      _log.e('Failed to queue a RomM favourite push for ${game.romname}: $e');
+    }
   }
 
   /// Records a new play instance for a game in the persistent database.

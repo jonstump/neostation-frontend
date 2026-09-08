@@ -11,6 +11,7 @@ import '../../sync/i_sync_provider.dart';
 import '../../sync/sync_manager.dart';
 import '../game_session_persistence.dart';
 import '../retroachievements_hash_service.dart';
+import '../romm/romm_props_outbox_service.dart';
 import '../romm_playtime_service.dart';
 
 /// Owns the game-session lifecycle and its mutable tracking state.
@@ -68,6 +69,15 @@ class GameSessionManager {
   /// Timestamp when the current game session was initiated.
   static DateTime? _gameLaunchTime;
   static DateTime? get gameLaunchTime => _gameLaunchTime;
+
+  /// Moves the running session's start (and its last playtime checkpoint)
+  /// [by] into the past, so a test can end a session that reads as longer
+  /// than the five-second floor without actually waiting it out.
+  @visibleForTesting
+  static void debugBackdateSession(Duration by) {
+    _gameLaunchTime = _gameLaunchTime?.subtract(by);
+    _lastPlaytimeSave = _lastPlaytimeSave?.subtract(by);
+  }
 
   /// Filename of the standalone emulator executable currently running.
   static String? _launchedEmulatorExe;
@@ -635,6 +645,12 @@ class GameSessionManager {
   /// no network — so it costs nothing on the game-exit path and survives being
   /// offline; the upload happens on the next RomM sync. No-ops for games that
   /// didn't come from RomM.
+  ///
+  /// A session that was queued also queues "touch last played" in the
+  /// play-state outbox, so RomM's `last_played` moves forward with the same
+  /// flush that carries the session. Behind the same floor as the session:
+  /// a launch that bounced straight back is not a play.
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Props Outbox"
   static Future<void> _recordRommPlaySession({
     required String romname,
     required String systemFolder,
@@ -642,8 +658,9 @@ class GameSessionManager {
     required DateTime start,
     required DateTime end,
   }) async {
+    final bool recorded;
     try {
-      await RommPlaytimeService.recordCompletedSession(
+      recorded = await RommPlaytimeService.recordCompletedSession(
         romname: romname,
         systemFolder: systemFolder,
         romPath: romPath,
@@ -652,6 +669,19 @@ class GameSessionManager {
       );
     } catch (e) {
       _log.e('Failed to queue a RomM play session: $e');
+      return;
+    }
+    if (!recorded) return;
+    try {
+      await RommPropsOutboxService.queue(
+        romname: romname,
+        systemFolder: systemFolder,
+        romPath: romPath,
+        pushEnabled: await RommPropsOutboxService.pushEnabled(),
+        touchLastPlayed: true,
+      );
+    } catch (e) {
+      _log.e('Failed to queue a RomM last-played push: $e');
     }
   }
 }

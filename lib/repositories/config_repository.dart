@@ -46,6 +46,33 @@ class ConfigRepository {
   static Future<void> setRommUploadScreenshots(bool value) =>
       SqliteService.saveUserConfig(rommUploadScreenshots: value ? 1 : 0);
 
+  /// Whether hide, favourite and last-played changes for RomM-linked games
+  /// are pushed to the server (`user_config.romm_push_play_state`, migration
+  /// v166).
+  ///
+  /// Defaults to true when the row or the column is missing, for the same
+  /// reason as [getRommUploadScreenshots]: the column is created with
+  /// `DEFAULT 1`, and a database that has not reached v166 yet should behave
+  /// like the shipped default. The hooks that read this still require a link
+  /// row before they queue anything, so the default never pushes for a game
+  /// RomM does not know.
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Push Toggle"
+  static Future<bool> getRommPushPlayState() async {
+    final row = await SqliteService.getUserConfig();
+    return ConfigModel.readBool(
+      row,
+      'rommPushPlayState',
+      'romm_push_play_state',
+      true,
+    );
+  }
+
+  /// Persists the "Push play state to RomM" choice as a single-column update,
+  /// for the same concurrent-writer reason as [setRommUploadScreenshots].
+  // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Push Toggle"
+  static Future<void> setRommPushPlayState(bool value) =>
+      SqliteService.saveUserConfig(rommPushPlayState: value ? 1 : 0);
+
   /// Whether the RomM server's library is shown inside the local systems
   /// (`user_config.romm_show_library`, migration v165).
   ///

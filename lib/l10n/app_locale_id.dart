@@ -1567,4 +1567,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommServerVersionLine: 'Versi server {version}',
   AppLocale.rommPasswordLoginDisabledHint:
       'Login dengan kata sandi dinonaktifkan di server ini',
+  AppLocale.rommPushPlayState: 'Kirim status bermain ke RomM',
+  AppLocale.rommPushPlayStateHint:
+      'Kirim perubahan sembunyikan, favorit, dan terakhir dimainkan untuk game tertaut ke RomM',
 };

@@ -318,6 +318,16 @@ class SqliteConfigService {
           'romm_upload_screenshots',
           true,
         ),
+        // Defaults to on, matching the column's `DEFAULT 1` and
+        // [ConfigRepository.getRommPushPlayState], which the push hooks read
+        // straight from the database.
+        // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Push Toggle"
+        rommPushPlayState: ConfigModel.readBool(
+          userConfig,
+          'rommPushPlayState',
+          'romm_push_play_state',
+          true,
+        ),
         // The unified-library settings (SPEC-0019). Absent columns read as the
         // migration defaults: feature off, `all` scope, 200 MB of covers.
         // Governing: ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Catalog Tables"
@@ -401,6 +411,7 @@ class SqliteConfigService {
         raMatchOnStartup: config.raMatchOnStartup ? 1 : 0,
         subfolderViewAll: config.subfolderViewAll ? 1 : 0,
         rommUploadScreenshots: config.rommUploadScreenshots ? 1 : 0,
+        rommPushPlayState: config.rommPushPlayState ? 1 : 0,
         rommShowLibrary: config.rommShowLibrary ? 1 : 0,
         rommLibraryDefaultScope: config.rommLibraryDefaultScope,
         rommCoverCacheMb: config.rommCoverCacheMb,

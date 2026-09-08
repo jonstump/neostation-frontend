@@ -1572,4 +1572,7 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommServerVersionLine: 'Версия сервера {version}',
   AppLocale.rommPasswordLoginDisabledHint:
       'Вход по паролю отключён на этом сервере',
+  AppLocale.rommPushPlayState: 'Отправлять состояние игры в RomM',
+  AppLocale.rommPushPlayStateHint:
+      'Отправлять в RomM изменения скрытия, избранного и последней игры для связанных игр',
 };

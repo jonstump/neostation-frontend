@@ -167,7 +167,10 @@ class DatabaseTestHelper {
         romm_upload_screenshots INTEGER DEFAULT 1,
         romm_show_library INTEGER DEFAULT 0,
         romm_library_default_scope TEXT DEFAULT 'all',
-        romm_cover_cache_mb INTEGER DEFAULT 200
+        romm_cover_cache_mb INTEGER DEFAULT 200,
+        -- Migration v166 (ADR-0013): "Push play state to RomM", on by
+        -- default. Same reason as romm_upload_screenshots above.
+        romm_push_play_state INTEGER DEFAULT 1
       )
     ''');
 
