@@ -18,6 +18,7 @@ import 'package:provider/provider.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
+import 'package:neostation/utils/neo_sync_error_message.dart';
 import 'package:neostation/services/gamepad/gamepad_navigation_manager.dart';
 import 'package:neostation/themes/corner_radii.dart';
 import 'package:neostation/sync/sync_manager.dart';
@@ -151,7 +152,10 @@ class NeoSyncContentState extends State<NeoSyncContent>
       if (!mounted) return;
       custom.AppNotification.showNotification(
         context,
-        '${AppLocale.error.getString(context)}: ${result['message']}',
+        // The localized sentence already names the failure; `result['message']`
+        // would be the server's own text, unredacted. Issue #195.
+        neoSyncResultMessage(context, result) ??
+            AppLocale.error.getString(context),
         type: custom.NotificationType.error,
       );
     }
@@ -226,7 +230,9 @@ class NeoSyncContentState extends State<NeoSyncContent>
           builder: (BuildContext context) {
             return ErrorDialog(
               title: AppLocale.error.getString(context),
-              message: result['message'] ?? AppLocale.error.getString(context),
+              message:
+                  neoSyncResultMessage(context, result) ??
+                  AppLocale.error.getString(context),
               onClose: () => Navigator.of(context).pop(),
             );
           },

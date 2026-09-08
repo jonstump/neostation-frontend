@@ -1595,4 +1595,17 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.rommLoadCollectionsFailedDetail:
       'No se pudieron cargar las colecciones: {error}',
   AppLocale.rommLoadRomsFailedDetail: 'No se pudieron cargar las ROM: {error}',
+  AppLocale.neoSyncNetworkError: 'Error de red: {error}',
+  AppLocale.neoSyncServerError: 'Error del servidor: {error}',
+  AppLocale.neoSyncLoginFailed: 'Error al iniciar sesión',
+  AppLocale.neoSyncRegistrationFailed: 'Error en el registro',
+  AppLocale.neoSyncVerificationFailed: 'Error de verificación',
+  AppLocale.neoSyncResendVerificationFailed:
+      'Error al enviar el correo de verificación',
+  AppLocale.neoSyncPasswordResetEmailFailed:
+      'Error al enviar el correo de restablecimiento de contraseña',
+  AppLocale.neoSyncPasswordResetFailed: 'Error al restablecer la contraseña',
+  AppLocale.neoSyncCheckoutFailed: 'Error al crear la sesión de pago',
+  AppLocale.neoSyncCancelSubscriptionFailed: 'Error al cancelar la suscripción',
+  AppLocale.neoSyncPlansFailed: 'Error al obtener los planes',
 };

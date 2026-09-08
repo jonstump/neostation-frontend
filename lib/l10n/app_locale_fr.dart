@@ -1610,4 +1610,20 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.rommLoadCollectionsFailedDetail:
       'Échec du chargement des collections : {error}',
   AppLocale.rommLoadRomsFailedDetail: 'Échec du chargement des ROM : {error}',
+  AppLocale.neoSyncNetworkError: 'Erreur réseau : {error}',
+  AppLocale.neoSyncServerError: 'Erreur du serveur : {error}',
+  AppLocale.neoSyncLoginFailed: 'Échec de la connexion',
+  AppLocale.neoSyncRegistrationFailed: 'Échec de l’inscription',
+  AppLocale.neoSyncVerificationFailed: 'Échec de la vérification',
+  AppLocale.neoSyncResendVerificationFailed:
+      'Échec de l’envoi de l’e-mail de vérification',
+  AppLocale.neoSyncPasswordResetEmailFailed:
+      'Échec de l’envoi de l’e-mail de réinitialisation du mot de passe',
+  AppLocale.neoSyncPasswordResetFailed:
+      'Échec de la réinitialisation du mot de passe',
+  AppLocale.neoSyncCheckoutFailed:
+      'Échec de la création de la session de paiement',
+  AppLocale.neoSyncCancelSubscriptionFailed:
+      'Échec de l’annulation de l’abonnement',
+  AppLocale.neoSyncPlansFailed: 'Échec du chargement des plans',
 };

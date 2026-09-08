@@ -179,4 +179,108 @@ void main() {
       }
     });
   });
+
+  group('redactSecrets — the #195 keyword review', () {
+    // The four names the /sdd:review of #192 flagged as unmatched. Three are
+    // added here; `credential` is deliberately rejected — see the last test.
+
+    test('an Authorization value with no scheme is redacted', () {
+      // `auth` is a sensitive field name already, but the field pattern needs
+      // the name to be followed straight away by `:`/`=`, so `authorization:`
+      // slipped past it entirely.
+      final redacted = redactSecrets('headers: {authorization: abc123DEF456}');
+      expect(redacted, isNot(contains('abc123DEF456')));
+      expect(redacted, contains('authorization: <redacted>'));
+    });
+
+    test('an Authorization value with an unknown scheme is redacted', () {
+      final redacted = redactSecrets(
+        'headers: {Authorization: MAC k3y-material-here}',
+      );
+      expect(redacted, isNot(contains('k3y-material-here')));
+      expect(redacted, contains('Authorization: <redacted>'));
+    });
+
+    test('authorization as a query parameter is redacted', () {
+      final redacted = redactSecrets('GET /api?authorization=abc123&page=2');
+      expect(redacted, isNot(contains('abc123')));
+      expect(redacted, contains('authorization=<redacted>'));
+      // The rest of the query still survives.
+      expect(redacted, contains('page=2'));
+    });
+
+    test('Bearer/Basic keep their scheme visible — unchanged by #195', () {
+      // The new authorization pattern defers to the older header pattern for
+      // the three schemes it words better. Losing `Bearer` here would be a
+      // regression in the log, not an improvement.
+      expect(
+        redactSecrets('headers: {Authorization: Bearer abc123DEF456ghi}'),
+        'headers: {Authorization: Bearer <redacted>}',
+      );
+      expect(
+        redactSecrets('Authorization: Basic dXNlcjpwYXNz'),
+        'Authorization: Basic <redacted>',
+      );
+    });
+
+    test('a Set-Cookie session value is redacted, attributes survive', () {
+      final redacted = redactSecrets(
+        'Set-Cookie: sid=SESSIONSECRET; Path=/; HttpOnly',
+      );
+      expect(redacted, isNot(contains('SESSIONSECRET')));
+      expect(redacted, 'Set-Cookie: sid=<redacted>; Path=/; HttpOnly');
+    });
+
+    test('a signed Express cookie is redacted', () {
+      final redacted = redactSecrets(
+        'set-cookie: connect.sid=s%3Aabc.def; Path=/',
+      );
+      expect(redacted, isNot(contains('s%3Aabc.def')));
+      expect(redacted, contains('connect.sid=<redacted>'));
+    });
+
+    test('sid as a query parameter is redacted', () {
+      final redacted = redactSecrets('/api/files?sid=SESSIONSECRET&limit=20');
+      expect(redacted, isNot(contains('SESSIONSECRET')));
+      expect(redacted, contains('sid=<redacted>'));
+      expect(redacted, contains('limit=20'));
+    });
+
+    test('client_secret_id is redacted alongside client_secret', () {
+      // `secret` alone never matched this one: the field pattern needs the
+      // name to end at the `:`, and `client_secret_id` carries on past it.
+      final redacted = redactSecrets(
+        '{"client_secret_id": "cs_live_abc123", "client_secret": "sk_xyz"}',
+      );
+      expect(redacted, isNot(contains('cs_live_abc123')));
+      expect(redacted, isNot(contains('sk_xyz')));
+    });
+
+    test('`credential` is deliberately NOT a sensitive field name', () {
+      // Rejected, not overlooked. The codebase logs `... credentials: \$e` in
+      // eight places (scraper_repository, screenscraper_service); adding the
+      // name would blank the exception text those lines exist to carry — the
+      // documented `Directory: /roms` failure mode. The values themselves are
+      // already covered by password/token/api_key/secret/auth.
+      const line = 'Error saving scraper credentials: SocketException: refused';
+      expect(redactSecrets(line), line);
+      expect(
+        redactSecrets('Invalid credentials: ClientException uri=https://x/y'),
+        'Invalid credentials: ClientException uri=https://x/y',
+      );
+    });
+
+    test('the new patterns stay idempotent', () {
+      for (final line in [
+        'headers: {authorization: abc123DEF456}',
+        'headers: {Authorization: Bearer abc123DEF456}',
+        'Set-Cookie: sid=SESSIONSECRET; Path=/; HttpOnly',
+        '{"client_secret_id": "cs_live_abc123"}',
+        '/api/files?sid=SESSIONSECRET&limit=20',
+      ]) {
+        final once = redactSecrets(line);
+        expect(redactSecrets(once), once, reason: line);
+      }
+    });
+  });
 }

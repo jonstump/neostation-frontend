@@ -5,6 +5,9 @@ import 'package:neostation/models/user.dart';
 import 'package:neostation/services/credential_store.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/utils/app_config.dart';
+import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/utils/log_redaction.dart';
+import 'package:neostation/utils/neo_sync_error_message.dart';
 
 /// Service responsible for managing user authentication and profile synchronization.
 ///
@@ -101,13 +104,14 @@ class AuthService extends ChangeNotifier {
               'Registration successful. Please check your email to verify your account.',
         };
       } else {
-        return {
-          'success': false,
-          'message': data['error'] ?? 'Registration failed',
-        };
+        return _serverFailure(
+          data['error'],
+          'Registration failed',
+          AppLocale.neoSyncRegistrationFailed,
+        );
       }
     } catch (e) {
-      return {'success': false, 'message': 'Network error: $e'};
+      return _networkFailure(e);
     }
   }
 
@@ -164,17 +168,22 @@ class AuthService extends ChangeNotifier {
           'tokenPersisted': tokenPersisted,
         };
       } else {
-        String errorMessage = data['error'] ?? 'Login failed';
+        // Classify on the raw server text, before redaction: the sentinel the
+        // caller looks for is prose, and scrubbing could only ever remove it.
+        final String rawError = data['error'] ?? 'Login failed';
         return {
-          'success': false,
-          'message': errorMessage,
-          'emailNotVerified': errorMessage.toLowerCase().contains(
+          ..._serverFailure(
+            data['error'],
+            'Login failed',
+            AppLocale.neoSyncLoginFailed,
+          ),
+          'emailNotVerified': rawError.toLowerCase().contains(
             'email not verified',
           ),
         };
       }
     } catch (e) {
-      return {'success': false, 'message': 'Network error: $e'};
+      return _networkFailure(e);
     }
   }
 
@@ -192,17 +201,14 @@ class AuthService extends ChangeNotifier {
       if (response.statusCode == 200) {
         return {'success': true, 'message': 'Email verified successfully'};
       } else {
-        String errorMessage = 'Verification failed';
-        if (data['error'] != null) {
-          errorMessage = data['error'];
-        } else if (data['message'] != null) {
-          errorMessage = data['message'];
-        }
-
-        return {'success': false, 'message': errorMessage};
+        return _serverFailure(
+          data['error'] ?? data['message'],
+          'Verification failed',
+          AppLocale.neoSyncVerificationFailed,
+        );
       }
     } catch (e) {
-      return {'success': false, 'message': 'Network error: $e'};
+      return _networkFailure(e);
     }
   }
 
@@ -226,13 +232,14 @@ class AuthService extends ChangeNotifier {
           'username': data['username'],
         };
       } else {
-        return {
-          'success': false,
-          'message': data['error'] ?? 'Failed to check status',
-        };
+        return _serverFailure(
+          data['error'],
+          'Failed to check status',
+          AppLocale.neoSyncVerificationFailed,
+        );
       }
     } catch (e) {
-      return {'success': false, 'message': 'Network error: $e'};
+      return _networkFailure(e);
     }
   }
 
@@ -250,13 +257,14 @@ class AuthService extends ChangeNotifier {
       if (response.statusCode == 200) {
         return {'success': true, 'message': 'Verification email sent'};
       } else {
-        return {
-          'success': false,
-          'message': data['error'] ?? 'Failed to send verification email',
-        };
+        return _serverFailure(
+          data['error'],
+          'Failed to send verification email',
+          AppLocale.neoSyncResendVerificationFailed,
+        );
       }
     } catch (e) {
-      return {'success': false, 'message': 'Network error: $e'};
+      return _networkFailure(e);
     }
   }
 
@@ -286,17 +294,16 @@ class AuthService extends ChangeNotifier {
         return {'success': true, 'user': _currentUser};
       } else {
         return {
-          'success': false,
-          'message': data['error'] ?? 'Failed to get profile',
+          ..._serverFailure(
+            data['error'],
+            'Failed to get profile',
+            AppLocale.neoSyncServerError,
+          ),
           'statusCode': response.statusCode,
         };
       }
     } catch (e) {
-      return {
-        'success': false,
-        'message': 'Network error: $e',
-        'isNetworkError': true,
-      };
+      return {..._networkFailure(e), 'isNetworkError': true};
     }
   }
 
@@ -317,16 +324,14 @@ class AuthService extends ChangeNotifier {
           'message': data['message'] ?? 'Password reset email sent',
         };
       } else {
-        return {
-          'success': false,
-          'message':
-              data['error'] ??
-              data['message'] ??
-              'Failed to send password reset email',
-        };
+        return _serverFailure(
+          data['error'] ?? data['message'],
+          'Failed to send password reset email',
+          AppLocale.neoSyncPasswordResetEmailFailed,
+        );
       }
     } catch (e) {
-      return {'success': false, 'message': 'Network error: $e'};
+      return _networkFailure(e);
     }
   }
 
@@ -350,16 +355,47 @@ class AuthService extends ChangeNotifier {
           'message': data['message'] ?? 'Password reset successfully',
         };
       } else {
-        return {
-          'success': false,
-          'message':
-              data['error'] ?? data['message'] ?? 'Failed to reset password',
-        };
+        return _serverFailure(
+          data['error'] ?? data['message'],
+          'Failed to reset password',
+          AppLocale.neoSyncPasswordResetFailed,
+        );
       }
     } catch (e) {
-      return {'success': false, 'message': 'Network error: $e'};
+      return _networkFailure(e);
     }
   }
+
+  /// A non-2xx response, worded twice: `message` is the English diagnostic
+  /// string these result maps have always carried (now redacted), and
+  /// [kNeoSyncLocalizedError] is what the screen renders.
+  ///
+  /// The server's own text is redacted because it reaches `auth_form.dart`
+  /// verbatim, and a body echoed back by an auth endpoint is exactly where a
+  /// token or a credential-bearing URL turns up. Issue #195.
+  Map<String, dynamic> _serverFailure(
+    Object? serverError,
+    String englishFallback,
+    String localeKey,
+  ) {
+    final raw = serverError?.toString().trim();
+    return {
+      'success': false,
+      'message': raw == null || raw.isEmpty
+          ? englishFallback
+          : redactSecrets(raw),
+      kNeoSyncLocalizedError: neoSyncServerError(serverError, localeKey),
+    };
+  }
+
+  /// A thrown exception, redacted. `'Network error: $e'` interpolates whatever
+  /// the HTTP client threw, and on an auth call that string carries the request
+  /// URI — query credentials included. Issue #195.
+  Map<String, dynamic> _networkFailure(Object error) => {
+    'success': false,
+    'message': 'Network error: ${redactSecrets(error.toString())}',
+    kNeoSyncLocalizedError: neoSyncNetworkError(error),
+  };
 
   /// Terminates the current user session and purges the stored authentication token.
   Future<void> logout() async {

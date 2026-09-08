@@ -4,6 +4,9 @@ import 'package:neostation/models/billing_models.dart';
 import 'package:neostation/services/credential_store.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/utils/app_config.dart';
+import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/utils/log_redaction.dart';
+import 'package:neostation/utils/neo_sync_error_message.dart';
 import 'package:flutter/material.dart';
 
 /// Service responsible for managing subscriptions, billing sessions, and available plans.
@@ -97,14 +100,14 @@ class BillingService extends ChangeNotifier {
           return {'success': true, 'session': session};
         }
       } else {
-        final error = data['error'] ?? 'Failed to create checkout session';
-        return {'success': false, 'message': error};
+        return _serverFailure(
+          data['error'],
+          'Failed to create checkout session',
+          AppLocale.neoSyncCheckoutFailed,
+        );
       }
     } catch (e) {
-      final error = 'Network error: $e';
-      _log.e('Checkout creation error: $error');
-      _lastError = error;
-      return {'success': false, 'message': error};
+      return _networkFailure(e, 'Checkout creation error');
     } finally {
       _isLoading = false;
       _safeNotifyListeners();
@@ -134,19 +137,51 @@ class BillingService extends ChangeNotifier {
         return {'success': true};
       } else {
         final data = jsonDecode(response.body);
-        final error = data['error'] ?? 'Failed to cancel subscription';
-        _log.e('Cancellation failed: $error');
-        return {'success': false, 'message': error};
+        final failure = _serverFailure(
+          data['error'],
+          'Failed to cancel subscription',
+          AppLocale.neoSyncCancelSubscriptionFailed,
+        );
+        _log.e('Cancellation failed: ${failure['message']}');
+        return failure;
       }
     } catch (e) {
-      final error = 'Network error: $e';
-      _log.e('Cancellation error: $error');
-      _lastError = error;
-      return {'success': false, 'message': error};
+      return _networkFailure(e, 'Cancellation error');
     } finally {
       _isLoading = false;
       _safeNotifyListeners();
     }
+  }
+
+  /// A non-2xx response: the redacted English string in `message` for the log
+  /// and for any caller that has not adopted the localized form, plus the
+  /// translated sentence the screen renders. Issue #195.
+  Map<String, dynamic> _serverFailure(
+    Object? serverError,
+    String englishFallback,
+    String localeKey,
+  ) {
+    final raw = serverError?.toString().trim();
+    return {
+      'success': false,
+      'message': raw == null || raw.isEmpty
+          ? englishFallback
+          : redactSecrets(raw),
+      kNeoSyncLocalizedError: neoSyncServerError(serverError, localeKey),
+    };
+  }
+
+  /// A thrown exception, redacted before it is logged, stored in [_lastError],
+  /// or shown. Issue #195.
+  Map<String, dynamic> _networkFailure(Object error, String logContext) {
+    final message = 'Network error: ${redactSecrets(error.toString())}';
+    _log.e('$logContext: $message');
+    _lastError = message;
+    return {
+      'success': false,
+      'message': message,
+      kNeoSyncLocalizedError: neoSyncNetworkError(error),
+    };
   }
 
   /// Fetches the list of subscription tiers and pricing currently offered by the service.
@@ -173,15 +208,16 @@ class BillingService extends ChangeNotifier {
         return {'success': true, 'plans': plans};
       } else {
         final data = jsonDecode(response.body);
-        final error = data['error'] ?? 'Failed to fetch plans';
-        _log.e('Plans fetch failed: $error');
-        return {'success': false, 'message': error};
+        final failure = _serverFailure(
+          data['error'],
+          'Failed to fetch plans',
+          AppLocale.neoSyncPlansFailed,
+        );
+        _log.e('Plans fetch failed: ${failure['message']}');
+        return failure;
       }
     } catch (e) {
-      final error = 'Network error: $e';
-      _log.e('Plans fetch error: $error');
-      _lastError = error;
-      return {'success': false, 'message': error};
+      return _networkFailure(e, 'Plans fetch error');
     } finally {
       _isLoading = false;
       _safeNotifyListeners();
