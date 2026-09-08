@@ -1614,6 +1614,17 @@ mixin AppLocale {
       'romm_connection_failed_detail';
   static const String rommPairingFailedDetail = 'romm_pairing_failed_detail';
 
+  // The browse screen's own load failures, worded here for the same reason:
+  // the provider catches a non-[RommException] and has no BuildContext, so it
+  // records the key and the widget layer resolves it. `{error}` carries the
+  // raw exception text for diagnosis.
+  // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Localized User-Facing Text"
+  static const String rommLoadPlatformsFailedDetail =
+      'romm_load_platforms_failed_detail';
+  static const String rommLoadCollectionsFailedDetail =
+      'romm_load_collections_failed_detail';
+  static const String rommLoadRomsFailedDetail = 'romm_load_roms_failed_detail';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================

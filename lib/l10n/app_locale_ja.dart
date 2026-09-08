@@ -1404,4 +1404,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommFixMatchApplyFailed: 'RomM に変更を適用できませんでした',
   AppLocale.rommConnectionFailedDetail: '接続に失敗しました: {error}',
   AppLocale.rommPairingFailedDetail: 'ペアリングに失敗しました: {error}',
+  AppLocale.rommLoadPlatformsFailedDetail: 'プラットフォームの読み込みに失敗しました: {error}',
+  AppLocale.rommLoadCollectionsFailedDetail: 'コレクションの読み込みに失敗しました: {error}',
+  AppLocale.rommLoadRomsFailedDetail: 'ROM の読み込みに失敗しました: {error}',
 };

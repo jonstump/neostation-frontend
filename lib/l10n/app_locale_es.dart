@@ -1590,4 +1590,9 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.rommFixMatchApplyFailed: 'No se pudo aplicar el cambio en RomM',
   AppLocale.rommConnectionFailedDetail: 'Error de conexión: {error}',
   AppLocale.rommPairingFailedDetail: 'Error de emparejamiento: {error}',
+  AppLocale.rommLoadPlatformsFailedDetail:
+      'No se pudieron cargar las plataformas: {error}',
+  AppLocale.rommLoadCollectionsFailedDetail:
+      'No se pudieron cargar las colecciones: {error}',
+  AppLocale.rommLoadRomsFailedDetail: 'No se pudieron cargar las ROM: {error}',
 };
