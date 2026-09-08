@@ -630,7 +630,7 @@ class _SystemEmulatorSettingsDialogState
   }
 
   void _closeDialog() {
-    // Limpiar gamepad antes de cerrar
+    // Clean up the gamepad before closing
     if (_openMenuIndex != -1) {
       if (_openMenuIndex < _menuControllers.length) {
         _menuControllers[_openMenuIndex].close();
@@ -809,14 +809,14 @@ class _SystemEmulatorSettingsDialogState
       // Update focus nodes for the new emulators list
       _updateFocusNodes();
 
-      // Inicializar el controller después de cargar emulators
+      // Initialize the controller after the emulators have loaded
       WidgetsBinding.instance.addPostFrameCallback((_) {
         _centeredScrollController.initialize(
           context: context,
           initialIndex: _selectedIndex,
           totalItems: _totalEmulators,
         );
-        // Actualizar el total de items después de inicializar
+        // Update the total item count after initializing
         _centeredScrollController.updateTotalItems(_totalEmulators);
       });
     } catch (e, stackTrace) {

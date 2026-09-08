@@ -46,7 +46,7 @@ class LanguageContentState extends State<LanguageContent> {
     const headerHeight = 120.0;
     const padding = 40.0;
 
-    // Calcular la posición del item en el scroll (considerando header)
+    // Compute the item's scroll position (taking the header into account)
     final itemPosition = headerHeight + (index * itemHeight);
     final itemEnd = itemPosition + itemHeight;
 
@@ -57,11 +57,11 @@ class LanguageContentState extends State<LanguageContent> {
 
     double? targetScroll;
 
-    // Si el item está cerca del borde superior, hacer scroll hacia arriba
+    // If the item is near the top edge, scroll up
     if (itemPosition < currentScroll + padding) {
       targetScroll = (itemPosition - padding).clamp(minScroll, maxScroll);
     }
-    // Si el item está cerca del borde inferior, hacer scroll hacia abajo
+    // If the item is near the bottom edge, scroll down
     else if (itemEnd > currentScroll + viewportHeight - padding) {
       targetScroll = (itemEnd - viewportHeight + padding).clamp(
         minScroll,
@@ -69,7 +69,7 @@ class LanguageContentState extends State<LanguageContent> {
       );
     }
 
-    // Si necesitamos hacer scroll
+    // If we need to scroll
     if (targetScroll != null) {
       _scrollController.animateTo(
         targetScroll,

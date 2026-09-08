@@ -31,7 +31,7 @@ class SystemsContentState extends State<SystemsContent> {
 
   static final _log = LoggerService.instance;
 
-  // Grid navigation con 5 columnas (como en el layout)
+  // Grid navigation with 5 columns (matching the layout)
   static const int _gridColumns = 5;
   int _currentIndex = 0;
 
@@ -42,7 +42,7 @@ class SystemsContentState extends State<SystemsContent> {
   }
 
   int getItemCount() {
-    // 1 item para el botón + cantidad de sistemas
+    // 1 item for the button + the number of systems
     return 1 + _availableSystems.length;
   }
 
@@ -51,13 +51,13 @@ class SystemsContentState extends State<SystemsContent> {
 
     int nextIndex;
     if (_currentIndex == 0) {
-      // Desde el botón, ir a la última fila del grid
+      // From the button, go to the last row of the grid
       final totalItems = 1 + _availableSystems.length;
       final lastRowFirstIndex =
           ((totalItems - 2) ~/ _gridColumns) * _gridColumns + 1;
       nextIndex = lastRowFirstIndex;
     } else if (_currentIndex <= _gridColumns) {
-      // Desde la primera fila del grid, ir al botón
+      // From the first row of the grid, go to the button
       nextIndex = 0;
     } else {
       nextIndex = _currentIndex - _gridColumns;
@@ -74,13 +74,13 @@ class SystemsContentState extends State<SystemsContent> {
 
     int nextIndex;
     if (_currentIndex == 0) {
-      // Desde el botón, ir al primer elemento del grid
+      // From the button, go to the first item of the grid
       nextIndex = 1;
     } else {
       final totalItems = 1 + _availableSystems.length;
       nextIndex = _currentIndex + _gridColumns;
       if (nextIndex >= totalItems) {
-        // Desde la última fila, volver al botón
+        // From the last row, go back to the button
         nextIndex = 0;
       }
     }
@@ -93,14 +93,14 @@ class SystemsContentState extends State<SystemsContent> {
 
   bool navigateLeft() {
     if (_isLoading) return false;
-    // Si estamos en el botón (índice 0), volver al menú
+    // If we are on the button (index 0), go back to the menu
     if (_currentIndex == 0) return true;
 
-    // Convertir a índice del grid (sin el botón)
+    // Convert to a grid index (excluding the button)
     final gridIndex = _currentIndex - 1;
     final currentCol = gridIndex % _gridColumns;
 
-    // Si estamos en la primera columna, volver al menú
+    // If we are in the first column, go back to the menu
     if (currentCol == 0) {
       return true;
     }
@@ -114,24 +114,24 @@ class SystemsContentState extends State<SystemsContent> {
 
   void navigateRight() {
     if (_isLoading) return;
-    // Si estamos en el botón (índice 0), no hacer nada
+    // If we are on the button (index 0), do nothing
     if (_currentIndex == 0) return;
 
     setState(() {
-      // Convertir a índice del grid (sin el botón)
+      // Convert to a grid index (excluding the button)
       final gridIndex = _currentIndex - 1;
       final currentRow = gridIndex ~/ _gridColumns;
 
-      // Calcular el índice del primer y último elemento de la fila actual
+      // Compute the index of the first and last item of the current row
       final rowFirstIndex = currentRow * _gridColumns;
       final rowLastIndex = ((currentRow + 1) * _gridColumns - 1).clamp(
         0,
         _availableSystems.length - 1,
       );
 
-      // Si estamos en la última columna de la fila, ir a la primera
+      // If we are in the last column of the row, wrap to the first
       if (gridIndex >= rowLastIndex) {
-        _currentIndex = rowFirstIndex + 1; // +1 porque el botón es el índice 0
+        _currentIndex = rowFirstIndex + 1; // +1 because the button is index 0
       } else {
         _currentIndex = _currentIndex + 1;
       }
@@ -142,11 +142,11 @@ class SystemsContentState extends State<SystemsContent> {
   void _ensureSelectedItemVisible() {
     if (!_scrollController.hasClients) return;
 
-    // Altura aproximada del header (Título + Botón)
+    // Approximate header height (title + button)
     final headerHeight = 60.r;
 
-    // Calcular dimensiones del grid dinámicamente
-    // Las tarjetas en esta pantalla son cortas (icono + texto pequeño)
+    // Compute the grid dimensions dynamically
+    // The cards on this screen are short (icon + small text)
     final itemHeight = 50.r;
     final spacing = 8.r;
     final rowHeight = itemHeight + spacing;
@@ -163,12 +163,12 @@ class SystemsContentState extends State<SystemsContent> {
       final gridIndex = _currentIndex - 1;
       final selectedRow = gridIndex ~/ _gridColumns;
 
-      // Calcular el centro de la fila seleccionada
-      // Header + Espaciado (12.h) + Posición en el grid
+      // Compute the centre of the selected row
+      // Header + spacing (12.h) + position within the grid
       final rowTop = headerHeight + 12.h + (selectedRow * rowHeight);
       final rowCenter = rowTop + (rowHeight / 2);
 
-      // Centrar la fila en el viewport
+      // Centre the row in the viewport
       targetOffset = (rowCenter - (viewportHeight / 2)).clamp(
         minScrollExtent,
         maxScrollExtent,
@@ -184,11 +184,11 @@ class SystemsContentState extends State<SystemsContent> {
 
   void selectItem() {
     if (_isLoading) return;
-    // Index 0 es el botón "Disable All / Enable All"
+    // Index 0 is the "Disable All / Enable All" button
     if (_currentIndex == 0) {
       _toggleAllSystems();
     } else {
-      // Los demás índices son sistemas (index - 1 porque el botón es el primero)
+      // Every other index is a system (index - 1 because the button comes first)
       final systemIndex = _currentIndex - 1;
       if (systemIndex >= 0 && systemIndex < _availableSystems.length) {
         final systemId = _availableSystems[systemIndex]['id'].toString();
@@ -241,7 +241,7 @@ class SystemsContentState extends State<SystemsContent> {
 
     if (mounted) {
       if (!success) {
-        // Revertir el cambio si falló
+        // Revert the change if it failed
         setState(() {
           _selectedSystems[systemId] = currentState;
         });
@@ -274,7 +274,7 @@ class SystemsContentState extends State<SystemsContent> {
       );
     } catch (e) {
       _log.e('Error toggling all systems: $e');
-      // Revertir cambios
+      // Revert the changes
       await _loadSystems();
       if (mounted) {
         AppNotification.showNotification(
@@ -302,7 +302,7 @@ class SystemsContentState extends State<SystemsContent> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Título y botón Toggle All en la misma línea
+          // Title and Toggle All button on the same line
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -355,7 +355,7 @@ class SystemsContentState extends State<SystemsContent> {
           ),
           SizedBox(height: 12.r),
 
-          // Grid de sistemas - 5 columnas
+          // Systems grid - 5 columns
           Wrap(
             spacing: 6.r,
             runSpacing: 6.r,
@@ -364,7 +364,7 @@ class SystemsContentState extends State<SystemsContent> {
               final system = entry.value;
               final systemId = system['id'].toString();
               final isEnabled = _selectedSystems[systemId] ?? false;
-              // index + 1 porque el botón toggle all es el _currentIndex 0
+              // index + 1 because the toggle all button is _currentIndex 0
               final isFocused =
                   widget.isContentFocused && _currentIndex == (index + 1);
               return SizedBox(
@@ -420,7 +420,7 @@ class SystemsContentState extends State<SystemsContent> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Icono de checkbox
+            // Checkbox icon
             Container(
               width: 24.r,
               height: 24.r,
@@ -448,7 +448,7 @@ class SystemsContentState extends State<SystemsContent> {
             ),
             SizedBox(height: 2.r),
 
-            // Nombre del sistema
+            // System name
             Text(
               system['name'].toString(),
               style: TextStyle(

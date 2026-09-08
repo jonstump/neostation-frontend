@@ -317,25 +317,25 @@ extension NeoSyncCore on NeoSyncProvider {
           relativePath = fileName;
         }
 
-        // Normalizar separadores para comparación consistente
+        // Normalize separators for consistent comparison
         relativePath = relativePath.replaceAll('\\', '/');
 
-        // Verificar si está sincronizado comparando con archivos en la nube usando la ruta relativa
+        // Check whether it is synced by comparing against the cloud files using the relative path
         final syncedFile = syncedFilesMap[relativePath];
         bool isSynced = false;
 
         if (syncedFile != null) {
-          // Comparar timestamps y tamaños para determinar si está sincronizado
+          // Compare timestamps and sizes to determine whether it is synced
           final localTimestamp = stat.modified.millisecondsSinceEpoch;
           final cloudTimestamp = syncedFile.fileModifiedAtTimestamp;
 
-          // Considerar sincronizado si los timestamps coinciden o la diferencia es mínima
+          // Treat it as synced when the timestamps match or the difference is negligible
           if (cloudTimestamp != null) {
             final timeDiff = (localTimestamp - cloudTimestamp).abs();
-            isSynced = timeDiff < 1000; // 1 segundo de tolerancia
+            isSynced = timeDiff < 1000; // 1 second of tolerance
           }
 
-          // También verificar tamaño si timestamps no están disponibles
+          // Also compare sizes when timestamps are unavailable
           if (!isSynced && syncedFile.fileSize == stat.size) {
             isSynced = true;
           }
@@ -359,24 +359,24 @@ extension NeoSyncCore on NeoSyncProvider {
       }
     }
 
-    // Ordenar por fecha de modificación (más recientes primero)
+    // Sort by modification date (most recent first)
     localSaveFiles.sort((a, b) => b.lastModified.compareTo(a.lastModified));
 
     return localSaveFiles;
   }
 
   // ==========================================
-  // MÉTODOS PARA SINCRONIZACIÓN POR JUEGO
+  // PER-GAME SYNCHRONIZATION METHODS
   // ==========================================
 
-  /// Detecta automáticamente archivos de guardado para un juego específico
-  /// y realiza sincronización automática cuando es apropiado
+  /// Automatically detects save files for a specific game
+  /// and performs an automatic sync when appropriate
   Future<void> detectGameSaveFiles(GameModel game) async {
     if (!isNeoSyncAuthenticated) {
       return;
     }
     if (game.cloudSyncEnabled != true) {
-      // Si el sync está deshabilitado para este juego, no hacer nada
+      // If sync is disabled for this game, do nothing
       _updateGameSyncState(
         game.romname,
         game.name,
@@ -385,7 +385,7 @@ extension NeoSyncCore on NeoSyncProvider {
       return;
     }
 
-    // Verificar si el sistema tiene sync deshabilitado
+    // Check whether the system has sync disabled
     final system = await _getSystemForGame(game);
     if (system != null && !system.neosync.sync) {
       _updateGameSyncState(
@@ -396,7 +396,7 @@ extension NeoSyncCore on NeoSyncProvider {
       return;
     }
 
-    // PRIMERO: Actualizar estado a "checking/syncing" para mostrar feedback visual inmediato
+    // FIRST: update the state to "checking/syncing" so the user gets immediate visual feedback
     _updateGameSyncState(
       game.romname,
       game.name,
@@ -404,12 +404,12 @@ extension NeoSyncCore on NeoSyncProvider {
     );
 
     try {
-      // Identificar si es un sistema de "memory cards compartidas"
+      // Identify whether this is a "shared memory cards" system
       final system = await _getSystemForGame(game);
       final isSharedSystem =
           system?.folderName == 'ps2' || system?.folderName == 'dreamcast';
 
-      // Verificar si hay configuración de emulador válida en Windows
+      // Check whether there is a valid emulator configuration on Windows
       if (system != null && Platform.isWindows) {
         bool hasValidEmulator = true;
 
@@ -420,7 +420,7 @@ extension NeoSyncCore on NeoSyncProvider {
               );
           hasValidEmulator = false;
 
-          // Revisar primero el seleccionado por el usuario
+          // Check the user-selected one first
           for (final emu in emulatorsList) {
             if (emu['is_user_default'].toString() == '1') {
               final path = emu['emulator_path']?.toString();
@@ -431,7 +431,7 @@ extension NeoSyncCore on NeoSyncProvider {
             }
           }
 
-          // Si no hay de usuario, revisar el default del sistema
+          // If the user has not selected one, check the system default
           if (!hasValidEmulator &&
               !emulatorsList.any(
                 (e) => e['is_user_default'].toString() == '1',
@@ -447,7 +447,7 @@ extension NeoSyncCore on NeoSyncProvider {
             }
           }
         } else {
-          // Para RetroArch y otros sistemas, verificar si las rutas se pueden resolver.
+          // For RetroArch and other systems, check whether the paths can be resolved.
           final resolvedPaths = await resolveUniversalPaths(
             system,
             game: game,
@@ -471,16 +471,16 @@ extension NeoSyncCore on NeoSyncProvider {
         }
       }
 
-      // Buscar TODOS los archivos de save locales para este juego (saves y states)
+      // Find ALL local save files for this game (saves and states)
       final localSaveFiles = await _findGameSaveFiles(game);
 
-      // Si no hay archivos locales, verificar si hay archivos en la nube para descargar
+      // With no local files, check whether there are cloud files to download
       if (localSaveFiles.isEmpty) {
-        // Buscar archivos en la nube para este juego
+        // Look for cloud files belonging to this game
         final cloudFiles = await _getCloudSaveFilesForGame(game);
 
         if (cloudFiles.isNotEmpty) {
-          // Descargar todos los archivos de la nube
+          // Download every file from the cloud
           bool allDownloadsSucceeded = true;
           for (final cloudFile in cloudFiles) {
             final downloadSuccess = await _autoDownloadCloudSave(
@@ -492,8 +492,8 @@ extension NeoSyncCore on NeoSyncProvider {
             }
           }
 
-          // Después de descargar, el estado se actualizará automáticamente
-          // Pero NO sobrescribir si ya hay un error de quota exceeded
+          // After downloading, the state updates automatically
+          // But do NOT overwrite it when a quota-exceeded error is already set
           final currentState = _gameSyncStates[game.romname];
           if (currentState?.status != neo_sync.GameSyncStatus.quotaExceeded) {
             final status = allDownloadsSucceeded
@@ -503,7 +503,7 @@ extension NeoSyncCore on NeoSyncProvider {
           }
           return;
         } else {
-          // No hay archivos locales ni en la nube
+          // There are no local files and none in the cloud
           _updateGameSyncState(
             game.romname,
             game.name,
@@ -513,16 +513,16 @@ extension NeoSyncCore on NeoSyncProvider {
         }
       }
 
-      // Hay archivos locales, verificar sincronización para cada uno
+      // There are local files; check the sync state of each one
       bool allUploadsSucceeded = true; // Track if any uploads failed
       bool quotaExceededDuringProcessing = false;
       bool allCloudDownloadsSucceeded = true;
 
       final cloudFiles = await _getCloudSaveFilesForGame(game);
 
-      // 1. Verificar cada archivo local contra la nube
+      // 1. Check each local file against the cloud
       for (final localFile in localSaveFiles) {
-        // OPTIMIZACIÓN: Si es compartido y ya lo procesamos en esta sesión, saltar el sync activo
+        // OPTIMIZATION: if it is shared and already processed this session, skip the active sync
         if (isSharedSystem &&
             _processedMultiEmulatorFilesInSession.contains(
               localFile.filePath,
@@ -530,7 +530,7 @@ extension NeoSyncCore on NeoSyncProvider {
           continue;
         }
 
-        // Encontrar archivo correspondiente en la nube por nombre (relativePath ya es el namespace)
+        // Find the matching cloud file by name (relativePath is already the namespace)
         final cloudFile = cloudFiles.firstWhere(
           (cf) => cf.fileName == localFile.relativePath,
           orElse: () => NeoSyncFile(
@@ -546,7 +546,7 @@ extension NeoSyncCore on NeoSyncProvider {
         );
 
         if (cloudFile.fileName.isEmpty) {
-          // No existe en la nube, subir
+          // It does not exist in the cloud, upload it
           try {
             final uploadSuccess = await _autoUploadLocalSave(game, localFile);
             if (!uploadSuccess) allUploadsSucceeded = false;
@@ -558,7 +558,7 @@ extension NeoSyncCore on NeoSyncProvider {
             allUploadsSucceeded = false;
           }
         } else {
-          // Ambos existen, comparar
+          // Both exist, compare them
           final syncStatus = await _calculateGameSyncStatus(
             localFile,
             cloudFile,
@@ -587,7 +587,7 @@ extension NeoSyncCore on NeoSyncProvider {
               allCloudDownloadsSucceeded = false;
             }
           } else if (syncStatus == neo_sync.GameSyncStatus.upToDate) {
-            // Si está al día, marcar como procesado para no volver a chequearlo
+            // If it is up to date, mark it processed so it is not checked again
             if (isSharedSystem) {
               _processedMultiEmulatorFilesInSession.add(localFile.filePath);
             }
@@ -595,9 +595,9 @@ extension NeoSyncCore on NeoSyncProvider {
         }
       }
 
-      // 2. Verificar archivos en la nube que no existen localmente
+      // 2. Check the cloud files that do not exist locally
       for (final cloudFile in cloudFiles) {
-        // Resolver rutas locales para chequear si ya fueron procesadas
+        // Resolve the local paths to check whether they were already processed
         final localPaths = await resolveCloudFileToLocalPath(game, cloudFile);
         if (localPaths.isEmpty) continue;
 
@@ -610,7 +610,7 @@ extension NeoSyncCore on NeoSyncProvider {
             }
           }
         } else {
-          allProcessed = false; // Forzamos chequeo si no es sistema compartido
+          allProcessed = false; // Force a check when the system is not shared
         }
 
         if (allProcessed) {
@@ -638,7 +638,7 @@ extension NeoSyncCore on NeoSyncProvider {
         }
       }
 
-      // 3. Actualizar estado final
+      // 3. Update the final state
       neo_sync.GameSyncStatus finalStatus;
       if (_quotaExceededActive || quotaExceededDuringProcessing) {
         finalStatus = neo_sync.GameSyncStatus.quotaExceeded;
@@ -662,9 +662,9 @@ extension NeoSyncCore on NeoSyncProvider {
     }
   }
 
-  /// Obtiene el nombre del ROM sin extensión para comparación con archivos de save
+  /// Gets the ROM name without its extension, for comparison against save files
   String _getRomNameWithoutExtension(String romname) {
-    // Remover la extensión del archivo si existe
+    // Strip the file extension if there is one
     if (romname.contains('.')) {
       return romname.substring(0, romname.lastIndexOf('.'));
     }
@@ -679,16 +679,16 @@ extension NeoSyncCore on NeoSyncProvider {
       final file = File(localSave.filePath);
       if (!file.existsSync()) return false;
 
-      // 1. Obtener el sistema para resolver sus rutas JSON
+      // 1. Get the system so its JSON paths can be resolved
       final system = await _getSystemForGame(game);
       if (system == null) return false;
 
-      // Verificar si el sistema tiene sync deshabilitado
+      // Check whether the system has sync disabled
       if (!system.neosync.sync) {
         return false;
       }
 
-      // 2. Determinar la ruta relativa de manera universal
+      // 2. Determine the relative path in a universal way
       final savesPath = await _getRetroArchSavesPath();
       final statesPath = await _getRetroArchStatesPath();
 
@@ -755,13 +755,13 @@ extension NeoSyncCore on NeoSyncProvider {
     }
   }
 
-  /// Descarga automáticamente un save de la nube
+  /// Automatically downloads a save from the cloud
   Future<bool> _autoDownloadCloudSave(
     GameModel game,
     NeoSyncFile cloudSave,
   ) async {
     try {
-      // 1. Resolver la ruta local de manera universal
+      // 1. Resolve the local path in a universal way
       final localPaths = await resolveCloudFileToLocalPath(game, cloudSave);
       if (localPaths.isEmpty) {
         NeoSyncProvider._log.w(
@@ -771,7 +771,7 @@ extension NeoSyncCore on NeoSyncProvider {
         return false;
       }
 
-      // Verificar si el sistema tiene sync deshabilitado
+      // Check whether the system has sync disabled
       final system = await _getSystemForGame(game);
       if (system != null && !system.neosync.sync) {
         NeoSyncProvider._log.w(
@@ -788,10 +788,10 @@ extension NeoSyncCore on NeoSyncProvider {
       for (final localPath in localPaths) {
         final localFile = File(localPath);
 
-        // 2. Crear directorio si no existe
+        // 2. Create the directory if it does not exist
         await localFile.parent.create(recursive: true);
 
-        // 3. Descargar el archivo
+        // 3. Download the file
         await _downloadCloudFile(cloudSave, localFile);
         anySuccess = true;
       }
@@ -807,7 +807,7 @@ extension NeoSyncCore on NeoSyncProvider {
     }
   }
 
-  /// Busca TODOS los archivos de guardado locales para un juego específico (saves y states)
+  /// Finds ALL local save files for a specific game (saves and states)
   /// Whether [candidate] (a filename or full path, case-insensitive) refers to
   /// a save/state of the game with [romName].
   ///
@@ -830,18 +830,18 @@ extension NeoSyncCore on NeoSyncProvider {
 
   Future<List<LocalSaveFile>> _findGameSaveFiles(GameModel game) async {
     try {
-      // 1. Obtener el sistema para resolver sus rutas JSON
+      // 1. Get the system so its JSON paths can be resolved
       final system = await _getSystemForGame(game);
       if (system == null) return [];
 
-      // Verificar si el sistema tiene sync deshabilitado
+      // Check whether the system has sync disabled
       if (!system.neosync.sync) return [];
 
-      // 2. Resolver rutas universales desde el JSON
+      // 2. Resolve the universal paths from the JSON
       final resolvedFolders = await resolveUniversalPaths(system, game: game);
       if (resolvedFolders.isEmpty) return [];
 
-      // 3. Escanear archivos en esas rutas pero en un Isolate para no bloquear la UI
+      // 3. Scan the files under those paths, in an Isolate so the UI is not blocked
       final List<File> allFiles = [];
       const int maxFileSize = 10 * 1024 * 1024; // 10MB
 
@@ -869,13 +869,13 @@ extension NeoSyncCore on NeoSyncProvider {
 
       allFiles.addAll(filePaths.map((path) => File(path)));
 
-      // 4. Filtrar archivos según el sistema
+      // 4. Filter the files according to the system
       final List<LocalSaveFile> matchingFiles = [];
       final gameRomName = _getRomNameWithoutExtension(
         game.romname,
       ).toLowerCase();
 
-      // Identificar si es un sistema de "memory cards compartidas"
+      // Identify whether this is a "shared memory cards" system
       final isSharedSystem =
           system.folderName == 'ps2' || system.folderName == 'dc';
 
@@ -888,7 +888,7 @@ extension NeoSyncCore on NeoSyncProvider {
           bool isMatch = false;
 
           if (isSharedSystem) {
-            // Para sistemas compartidos, cualquier archivo de save/state válido es un match
+            // For shared systems, any valid save/state file is a match
             // PS2: .ps2, DC: vmu_save
             if (system.folderName == 'ps2' && fileName.endsWith('.ps2')) {
               isMatch = true;
@@ -951,7 +951,7 @@ extension NeoSyncCore on NeoSyncProvider {
               ),
             );
 
-            // Marcar como procesado si es compartido para evitar re-comprobación en esta sesión
+            // Mark it processed when it is shared, to avoid re-checking it this session
             if (isSharedSystem) {
               _processedMultiEmulatorFilesInSession.add(file.path);
             }
@@ -968,7 +968,7 @@ extension NeoSyncCore on NeoSyncProvider {
     }
   }
 
-  /// Busca archivo de guardado local para un juego específico (legacy method - returns first match)
+  /// Finds the local save file for a specific game (legacy method - returns first match)
   Future<LocalSaveFile?> _findGameSaveFile(GameModel game) async {
     final allFiles = await _findGameSaveFiles(game);
     return allFiles.isNotEmpty ? allFiles.first : null;
@@ -1001,17 +1001,17 @@ extension NeoSyncCore on NeoSyncProvider {
     return resolveCloudFileToLocalPath(game, synthetic);
   }
 
-  /// Obtiene TODOS los archivos de guardado de la nube para un juego específico
+  /// Gets ALL cloud save files for a specific game
   Future<List<NeoSyncFile>> _getCloudSaveFilesForGame(GameModel game) async {
     try {
-      // 1. Obtener el sistema para resolver sus características
+      // 1. Get the system so its characteristics can be resolved
       final system = await _getSystemForGame(game);
       if (system == null) return [];
 
-      // Verificar si el sistema tiene sync deshabilitado
+      // Check whether the system has sync disabled
       if (!system.neosync.sync) return [];
 
-      // 2. Cargar archivos de la nube si no están cargados
+      // 2. Load the cloud files if they are not loaded yet
       if (_files.isEmpty) {
         final result = await _neoSyncService.getAllFiles();
         if (result['success']) {
@@ -1026,7 +1026,7 @@ extension NeoSyncCore on NeoSyncProvider {
       ).toLowerCase();
       final List<NeoSyncFile> matchingFiles = [];
 
-      // Identificar si es un sistema de "memory cards compartidas"
+      // Identify whether this is a "shared memory cards" system
       final isSharedSystem =
           system.folderName == 'ps2' || system.folderName == 'dc';
 
@@ -1035,7 +1035,7 @@ extension NeoSyncCore on NeoSyncProvider {
         bool isMatch = false;
 
         if (isSharedSystem) {
-          // Para sistemas compartidos, filtrar estrictamente por sistema
+          // For shared systems, filter strictly by system
           if (system.folderName == 'ps2' && fileName.endsWith('.ps2')) {
             isMatch = true;
           } else if (system.folderName == 'dc' &&
@@ -1068,7 +1068,7 @@ extension NeoSyncCore on NeoSyncProvider {
     }
   }
 
-  /// Obtiene archivo de guardado de la nube para un juego específico (legacy method - returns first match)
+  /// Gets the cloud save file for a specific game (legacy method - returns first match)
   Future<NeoSyncFile?> _getCloudSaveForGame(
     GameModel game, {
     LocalSaveFile? localSave,
@@ -1077,7 +1077,7 @@ extension NeoSyncCore on NeoSyncProvider {
     return allFiles.isNotEmpty ? allFiles.first : null;
   }
 
-  /// Calcula el estado de sincronización para un juego basado en save local y de nube
+  /// Computes a game's sync state from its local and cloud saves
   Future<neo_sync.GameSyncStatus> _calculateGameSyncStatus(
     LocalSaveFile? localSave,
     NeoSyncFile? cloudSave,
@@ -1094,29 +1094,29 @@ extension NeoSyncCore on NeoSyncProvider {
       return neo_sync.GameSyncStatus.localOnly;
     }
 
-    // Ambos tienen saves, verificar sincronización comparando timestamps y hashes
+    // Both have saves; check the sync state by comparing timestamps and hashes
     assert(localSave != null && cloudSave != null);
 
     try {
-      // Leer el archivo local para calcular hash
+      // Read the local file to compute its hash
       final localFile = File(localSave!.filePath);
       if (!localFile.existsSync()) {
-        return neo_sync.GameSyncStatus.localOnly; // Archivo local desapareció
+        return neo_sync.GameSyncStatus.localOnly; // The local file disappeared
       }
 
       final localBytes = await localFile.readAsBytes();
       final localHash = _neoSyncService.calculateFileHash(localBytes);
 
-      // Comparar hashes si están disponibles
+      // Compare the hashes when they are available
       final cloudHash = cloudSave!.checksum;
       final hashesMatch = cloudHash != null && localHash == cloudHash;
 
-      // 1. Si los hashes coinciden → Contenido idéntico
+      // 1. If the hashes match → identical content
       if (hashesMatch) {
         return neo_sync.GameSyncStatus.upToDate;
       }
 
-      // 2. Si los hashes NO coinciden (contenido diferente), evaluar el estado guardado.
+      // 2. If the hashes do NOT match (different content), evaluate the stored state.
       final syncState = await SyncRepository.getSyncState(
         NeoSyncProvider.kSyncProviderId,
         localSave.filePath,
@@ -1134,15 +1134,15 @@ extension NeoSyncCore on NeoSyncProvider {
         final cloudChanged = cloudTime > savedCloudTime;
 
         if (localChanged && !cloudChanged) {
-          return neo_sync.GameSyncStatus.localOnly; // Local avanzó, subir
+          return neo_sync.GameSyncStatus.localOnly; // Local ahead, upload
         } else if (!localChanged && cloudChanged) {
-          return neo_sync.GameSyncStatus.cloudOnly; // Nube avanzó, bajar
+          return neo_sync.GameSyncStatus.cloudOnly; // Cloud ahead, download
         } else if (localChanged && cloudChanged) {
-          // Ambos cambiaron - siempre preferir local (subir)
+          // Both changed - always prefer local (upload)
           return neo_sync.GameSyncStatus.localOnly;
         } else {
-          // Ninguno de los dos cambió desde la última sincronización, pero los hashes son distintos.
-          // Fallback a comparar timestamps crudos si no sabemos qué pasó.
+          // Neither changed since the last sync, yet the hashes differ.
+          // Fall back to comparing the raw timestamps when we cannot tell what happened.
           if (localTime > cloudTime) {
             return neo_sync.GameSyncStatus.localOnly;
           } else {
@@ -1151,7 +1151,7 @@ extension NeoSyncCore on NeoSyncProvider {
         }
       }
 
-      // Si NO hay estado guardado (primera vez o borrado), fallback a lógica base
+      // With NO stored state (first run, or it was cleared), fall back to the base logic
       const int toleranceMs = 2000;
       final timeDiff = (localTime - cloudTime).abs();
 
@@ -1174,7 +1174,7 @@ extension NeoSyncCore on NeoSyncProvider {
     }
   }
 
-  /// Actualiza el estado de sincronización de un juego
+  /// Updates a game's sync state
   void _updateGameSyncState(
     String gameId,
     String gameName,
@@ -1197,7 +1197,7 @@ extension NeoSyncCore on NeoSyncProvider {
     notify();
   }
 
-  /// Actualiza la configuración de sincronización en la nube para un juego
+  /// Updates a game's cloud sync configuration
   Future<void> updateGameCloudSyncEnabled(String gameId, bool enabled) async {
     try {
       // systemFolderName and filename resolution for this gameId is not yet implemented;
@@ -1227,21 +1227,21 @@ extension NeoSyncCore on NeoSyncProvider {
   }
 
   // ==========================================
-  // MÉTODOS PÚBLICOS PARA DESCARGA INDIVIDUAL
+  // PUBLIC METHODS FOR INDIVIDUAL DOWNLOADS
   // ==========================================
 
-  /// Obtiene la ruta del directorio de saves de RetroArch (método público)
+  /// Gets the path of the RetroArch saves directory (public method)
   Future<String?> getRetroArchSavesPath() async {
     return _getRetroArchSavesPath();
   }
 
-  /// Descarga un archivo de la nube a un archivo local (método público)
+  /// Downloads a cloud file to a local file (public method)
   Future<void> downloadCloudFile(NeoSyncFile cloudFile, File localFile) async {
     return _downloadCloudFile(cloudFile, localFile);
   }
 
   /// Helper to calculate relative path for sync, with special handling for Dreamcast
-  /// Sincroniza saves antes de iniciar un juego (al estilo Steam)
+  /// Syncs saves before a game starts (Steam-style)
   Future<void> syncGameSavesBeforeLaunch(
     GameModel game, {
     SyncDeadline? deadline,
@@ -1253,7 +1253,7 @@ extension NeoSyncCore on NeoSyncProvider {
     // late download abandons its write once the launch has proceeded.
     _launchDeadline = deadline;
     try {
-      // Detectar saves actuales
+      // Detect the current saves
       await detectGameSaveFiles(game);
 
       final gameState = _gameSyncStates[game.romname];
@@ -1261,13 +1261,13 @@ extension NeoSyncCore on NeoSyncProvider {
 
       // Always proceed with sync (auto-resolve)
 
-      // Sincronizar solo si es necesario
+      // Only sync when it is necessary
       if (gameState.status == neo_sync.GameSyncStatus.localOnly &&
           gameState.localSave != null) {
-        // Subir save local que no está en la nube
+        // Upload the local save that is not in the cloud
         final file = File(gameState.localSave!.filePath);
         if (file.existsSync()) {
-          // Calcular la ruta relativa correcta
+          // Compute the correct relative path
           final savesPath = await _getRetroArchSavesPath();
           if (savesPath != null) {
             final relativePath = await _calculateSyncRelativePath(
@@ -1296,23 +1296,23 @@ extension NeoSyncCore on NeoSyncProvider {
             );
 
             if (result['success']) {
-              // Actualizar estado después del sync
+              // Update the state after the sync
               await detectGameSaveFiles(game);
             }
           }
         }
       } else if (gameState.status == neo_sync.GameSyncStatus.cloudOnly &&
           gameState.cloudSave != null) {
-        // Descargar save de la nube
+        // Download the save from the cloud
         await restoreCloudBackup(gameState.cloudSave!);
-        // Actualizar estado
+        // Update the state
         await detectGameSaveFiles(game);
       }
     } on QuotaExceededException {
       NeoSyncProvider._log.e(
         'Pre-launch sync failed: storage quota exceeded for ${game.name}',
       );
-      // Actualizar el estado del juego a quota exceeded
+      // Move the game's state to quota exceeded
       _updateGameSyncState(
         game.romname,
         game.name,
@@ -1325,25 +1325,25 @@ extension NeoSyncCore on NeoSyncProvider {
     }
   }
 
-  /// Sincroniza saves después de cerrar un juego (al estilo Steam)
+  /// Syncs saves after a game closes (Steam-style)
   Future<void> syncGameSavesAfterClose(GameModel game) async {
     if (!isNeoSyncAuthenticated) return;
     if (game.cloudSyncEnabled != true) return;
 
     try {
-      // Pequeña pausa para asegurar que el juego haya terminado de escribir saves
+      // Short pause to make sure the game has finished writing its saves
       await Future.delayed(const Duration(seconds: 1));
 
-      // Detectar saves actuales (pueden haber cambiado durante el juego)
+      // Detect the current saves (they may have changed while the game ran)
       await detectGameSaveFiles(game);
 
       final gameState = _gameSyncStates[game.romname];
       if (gameState == null || gameState.localSave == null) return;
 
-      // Subir el save local (puede haber sido modificado durante el juego)
+      // Upload the local save (it may have been modified while the game ran)
       final file = File(gameState.localSave!.filePath);
       if (file.existsSync()) {
-        // Calcular la ruta relativa correcta
+        // Compute the correct relative path
         final savesPath = await _getRetroArchSavesPath();
         if (savesPath != null) {
           final relativePath = await _calculateSyncRelativePath(
@@ -1372,7 +1372,7 @@ extension NeoSyncCore on NeoSyncProvider {
           );
 
           if (result['success']) {
-            // Actualizar estado después del sync
+            // Update the state after the sync
             await detectGameSaveFiles(game);
           }
         }
@@ -1381,7 +1381,7 @@ extension NeoSyncCore on NeoSyncProvider {
       NeoSyncProvider._log.e(
         'Post-game sync failed: storage quota exceeded for ${game.name}',
       );
-      // Actualizar el estado del juego a quota exceeded
+      // Move the game's state to quota exceeded
       _updateGameSyncState(
         game.romname,
         game.name,
@@ -1392,7 +1392,7 @@ extension NeoSyncCore on NeoSyncProvider {
     }
   }
 
-  /// Restaura un backup desde la nube (descarga y sobreescribe local)
+  /// Restores a backup from the cloud (downloads and overwrites the local copy)
   Future<void> restoreCloudBackup(NeoSyncFile cloudFile) async {
     try {
       final savesPath = await _getRetroArchSavesPath();
@@ -1403,7 +1403,7 @@ extension NeoSyncCore on NeoSyncProvider {
       String targetPath;
       final fileName = cloudFile.fileName.replaceAll('\\', '/'); // Normalize
 
-      // Manejo específico para Dreamcast VMU
+      // Dreamcast VMU specific handling
       if (fileName.toLowerCase().contains('vmu_save') &&
           fileName.toLowerCase().endsWith('.bin')) {
         final systemDir = await _getRetroArchSystemPath();
@@ -1413,20 +1413,20 @@ extension NeoSyncCore on NeoSyncProvider {
           path.basename(fileName),
         );
       } else if (fileName.startsWith('saves/')) {
-        // Relativo a raiz (subir un nivel desde savesPath)
+        // Relative to the root (one level up from savesPath)
         final rootPath = Directory(savesPath).parent.path;
         targetPath = path.join(rootPath, fileName);
       } else {
-        // Relativo a savesPath
+        // Relative to savesPath
         targetPath = path.join(savesPath, fileName);
       }
 
       final file = File(targetPath);
       NeoSyncProvider._log.i('Restore: ${cloudFile.fileName} -> ${file.path}');
-      // Asegurar directorio existe
+      // Make sure the directory exists
       await file.parent.create(recursive: true);
 
-      // Usar el método común de descarga
+      // Use the shared download method
       await _downloadCloudFile(cloudFile, file);
     } catch (e) {
       NeoSyncProvider._log.e('Restore: FAILED for ${cloudFile.fileName}: $e');

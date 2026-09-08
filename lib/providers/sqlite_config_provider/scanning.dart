@@ -1225,7 +1225,7 @@ extension SqliteConfigScanning on SqliteConfigProvider {
   /// Synchronizes the list of detected systems with the current state of the database.
   Future<void> _refreshDetectedSystemsFromDatabase() async {
     try {
-      // Obtener sistemas que realmente tienen ROMs desde la base de datos
+      // Get the systems that actually have ROMs from the database
       _detectedSystems = await SystemRepository.getDetectedSystems();
       _sortDetectedSystems();
     } catch (e) {

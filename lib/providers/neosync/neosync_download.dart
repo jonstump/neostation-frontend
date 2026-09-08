@@ -1,7 +1,7 @@
 part of '../neo_sync_provider.dart';
 
 extension NeoSyncDownload on NeoSyncProvider {
-  /// Auto-sync para descargas (archivos de la nube que no están localmente o son más nuevos)
+  /// Auto-sync for downloads (cloud files missing locally, or newer than the local copy)
   Future<void> autoSyncDownloads() async {
     if (!isNeoSyncAuthenticated) {
       return;
@@ -63,7 +63,7 @@ extension NeoSyncDownload on NeoSyncProvider {
     }
   }
 
-  /// Fase 2: Descargar archivos de la nube
+  /// Phase 2: download files from the cloud
   Future<void> _performDownloadPhase(String savesPath) async {
     _syncStatus = 'Phase 2: Downloading cloud files...';
     _processedItems.add('Phase 2: Downloading files from cloud...');
@@ -90,7 +90,7 @@ extension NeoSyncDownload on NeoSyncProvider {
     }
   }
 
-  /// Procesa un archivo para auto-descarga (Universal)
+  /// Processes a file for auto-download (universal)
   Future<void> _processAutoDownloadFile(
     NeoSyncFile cloudFile,
     String savesPath,
@@ -192,7 +192,7 @@ extension NeoSyncDownload on NeoSyncProvider {
     }
   }
 
-  /// Helper para encontrar el juego de un archivo de nube
+  /// Helper that finds the game a cloud file belongs to
   Future<GameModel?> _findGameForCloudFile(NeoSyncFile cloudFile) async {
     final parts = cloudFile.fileName.split('/');
 
@@ -274,7 +274,7 @@ extension NeoSyncDownload on NeoSyncProvider {
     return null;
   }
 
-  /// Descarga un archivo de la nube
+  /// Downloads a file from the cloud
   Future<void> _downloadCloudFileImpl(
     NeoSyncFile cloudFile,
     File localFile,
@@ -338,7 +338,7 @@ extension NeoSyncDownload on NeoSyncProvider {
     }
   }
 
-  /// Procesa descarga con detección de conflictos
+  /// Processes a download with conflict detection
   Future<void> _processDownloadFileWithConflictDetection(
     NeoSyncFile cloudFile,
     String savesPath,

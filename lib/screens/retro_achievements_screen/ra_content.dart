@@ -524,7 +524,7 @@ class _RAContentState extends State<RAContent>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Header principal con logo y título
+          // Main header with logo and title
           Row(
             children: [
               Expanded(

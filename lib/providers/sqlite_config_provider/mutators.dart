@@ -284,7 +284,7 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     // ignore: unawaited_futures
     SqliteConfigService.saveConfig(_config); // No await to avoid lag
 
-    // Sincronizar con pantalla secundaria si está activa
+    // Sync with the secondary display if it is active
     if (_secondaryDisplayState != null) {
       final current = _secondaryDisplayState!.value;
       if (current != null) {
