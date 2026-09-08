@@ -66,8 +66,11 @@ void main() {
           return json(200, {'items': roms, 'total': roms.length});
         }
         if (path.startsWith('/api/tasks/run/')) {
-          return taskStatus >= 200 && taskStatus < 300
-              ? json(taskStatus, taskBody)
+          // A String [taskBody] is sent verbatim rather than JSON-encoded, so
+          // a test can serve the bodies a real failure produces and JSON
+          // cannot express: nothing at all, or a proxy's HTML error page.
+          return taskBody is String
+              ? http.Response(taskBody, taskStatus)
               : json(taskStatus, taskBody);
         }
         return http.Response('not found', 404);
@@ -258,10 +261,50 @@ void main() {
       expect(requests.length, 1);
     });
 
-    test('a 400 maps to taskBusy', () async {
+    // Issue #170: the mapping used to read `400 || saysAlreadyRunning(body)`,
+    // and `||` short-circuits, so the body never got a say on a 400 and every
+    // refusal RomM could not phrase as a 422 reached the user as "That task is
+    // already running". RomM 5.1.0's OpenAPI documents only 200 and 422 on
+    // this route, so the status carries no such meaning at all — these four
+    // pin that the body alone decides.
+    test(
+      'a 400 that does not say so is an ordinary failure, not busy',
+      () async {
+        final service = await connected(
+          taskStatus: 400,
+          taskBody: const {'detail': "Task 'scan_library' cannot be run"},
+        );
+        await expectLater(
+          service.runTask('scan_library'),
+          throwsA(
+            isA<RommException>()
+                .having((e) => e.kind, 'kind', RommErrorKind.other)
+                .having((e) => e.statusCode, 'statusCode', 400),
+          ),
+        );
+      },
+    );
+
+    test('a 400 with no body at all is an ordinary failure', () async {
+      final service = await connected(taskStatus: 400, taskBody: '');
+      // A bare status and nothing to read: the case the old mapping turned
+      // into "already running" on the strength of the 400 alone.
+      await expectLater(
+        service.runTask('scan_library'),
+        throwsA(
+          isA<RommException>().having(
+            (e) => e.kind,
+            'kind',
+            RommErrorKind.other,
+          ),
+        ),
+      );
+    });
+
+    test('a 400 that does say the task is running is still busy', () async {
       final service = await connected(
         taskStatus: 400,
-        taskBody: const {'detail': "Task 'scan_library' cannot be run"},
+        taskBody: const {'detail': "Task 'scan_library' is already running"},
       );
       await expectLater(
         service.runTask('scan_library'),
