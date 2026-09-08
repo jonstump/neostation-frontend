@@ -60,11 +60,16 @@ enum RommErrorKind {
   // Governing: ADR-0016 (sync in-game screenshots with RomM), SPEC-0016 REQ "Upload And Ledger"
   payloadTooLarge,
 
-  /// A maintenance task could not be queued because it is already running (or
-  /// the server refuses to run it manually): `POST /api/tasks/run/{name}`
-  /// answered 400, or answered "already running". Distinct because it is not a
-  /// failure the user needs to fix — the work they asked for is already
-  /// happening — so the screen says so rather than showing an error.
+  /// A maintenance task could not be queued because it is already running:
+  /// `POST /api/tasks/run/{name}` answered with a body that says so. Distinct
+  /// because it is not a failure the user needs to fix — the work they asked
+  /// for is already happening — so the screen says so rather than showing an
+  /// error.
+  ///
+  /// Read from the body alone. A status code never implies it: the 400 this
+  /// once trusted is undocumented on that route (issue #170), so every refusal
+  /// RomM could not phrase as a 422 was reported to the user as a scan that
+  /// was already underway when none had been queued.
   // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
   // SPEC-0018 REQ "Maintenance Tasks"
   taskBusy,
@@ -1722,10 +1727,19 @@ class RommService {
   ///
   /// `POST /api/tasks/run/{name}` needs the `tasks.run` scope, so a connection
   /// known not to hold [RommScopeGroup.tasksRun] returns null without sending
-  /// anything (logged once per connection by [_scopeGated]). A 400 — RomM's
-  /// answer for a task it will not run right now — and any body that says the
-  /// task is already running map to [RommErrorKind.taskBusy], which the caller
-  /// reports as "already running" rather than as a failure.
+  /// anything (logged once per connection by [_scopeGated]).
+  ///
+  /// A failure's kind is read from the *body* before the status: only an answer
+  /// that says the task is already going maps to [RommErrorKind.taskBusy],
+  /// whatever status carried it, and the caller reports that as "already
+  /// running" rather than as a failure. The status alone never means busy.
+  /// RomM 5.1.0's OpenAPI documents only 200 and 422 on this route, so the 400
+  /// observed in the wild (issue #170) is undocumented and could be any refusal
+  /// at all — a task name a RomM upgrade renamed, a server-side precondition, a
+  /// reverse proxy answering before RomM does. Reading those as "already
+  /// running" told the user a scan was underway when nothing had been queued,
+  /// so a bare 400 is now an ordinary failure and the body is logged for the
+  /// next occurrence to be diagnosed from rather than guessed at.
   // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
   // SPEC-0018 REQ "Maintenance Tasks"
   Future<String?> runTask(String name) async {
@@ -1753,15 +1767,22 @@ class RommService {
     if (resp.statusCode == 403) {
       _noteScopeDenial(RommScopeGroup.tasksRun, resp.statusCode);
     }
-    final busy = resp.statusCode == 400 || _saysAlreadyRunning(resp.body);
-    final kind = busy
-        ? RommErrorKind.taskBusy
-        : (resp.statusCode == 403
-              ? RommErrorKind.scopeDenied
-              : RommErrorKind.other);
+    // 403 is settled before the body is consulted: the server named that
+    // reason itself and `_noteScopeDenial` has just recorded it, so a proxy
+    // error page that happens to contain the words cannot turn a scope denial
+    // into "already running". Every other status defers to the body.
+    final RommErrorKind kind;
+    if (resp.statusCode == 403) {
+      kind = RommErrorKind.scopeDenied;
+    } else if (_saysAlreadyRunning(resp.body)) {
+      kind = RommErrorKind.taskBusy;
+    } else {
+      kind = RommErrorKind.other;
+    }
     _log.w(
       'RomM task run failed: endpoint=/api/tasks/run/$name '
-      'status=${resp.statusCode} kind=${kind.name}',
+      'status=${resp.statusCode} kind=${kind.name} '
+      'body=${_briefBody(resp.body)}',
     );
     throw RommException(
       'RomM task run failed: task=$name status=${resp.statusCode}',
@@ -1793,6 +1814,24 @@ class RommService {
     return text.contains('already running') ||
         text.contains('already queued') ||
         text.contains('already in progress');
+  }
+
+  /// How much of an unexpected response body reaches the log.
+  static const int _maxLoggedBody = 200;
+
+  /// [body] trimmed to one short line fit for the log.
+  ///
+  /// Credentials are scrubbed centrally by [LoggerService]'s redacting
+  /// printer, so this only has to keep the line readable: whitespace collapsed
+  /// — an HTML error page from a reverse proxy is otherwise dozens of lines —
+  /// and the tail cut, since what identifies the refusal is always at the
+  /// front.
+  static String _briefBody(String body) {
+    final text = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (text.isEmpty) return '<empty>';
+    return text.length <= _maxLoggedBody
+        ? text
+        : '${text.substring(0, _maxLoggedBody)}...';
   }
 
   /// Returns full detail for a single ROM.
