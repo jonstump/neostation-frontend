@@ -3780,7 +3780,8 @@ class RommProvider extends ChangeNotifier {
     _disposed = true;
     // The service outlives this provider; a probe or request already on the
     // wire would otherwise report into a dead notifier.
-    // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Provider Exposure And Re-Probe"
+    // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Provider Exposure And Re-Probe",
+    // ADR-0020 (show RomM library inside the local library), SPEC-0019 REQ "Reachability"
     if (_transportHooksInstalled) {
       service
         ..onTransportSuccess = null

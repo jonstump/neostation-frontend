@@ -1011,7 +1011,8 @@ class _RommConnectContentState extends State<RommConnectContent>
           // Drawn in [_modeOrder], the same list Left/Right and A walk, so
           // the D-pad order is the visual order whichever way the server's
           // password-login flag sorted the segments.
-          // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect Screen Surfaces"
+          // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect Screen Surfaces",
+          // ADR-0007 (RomM pairing login), SPEC-0007 REQ "Pairing Mode On The Connect Screen"
           for (final mode in _modeOrder)
             _buildAuthModeOption(
               theme,

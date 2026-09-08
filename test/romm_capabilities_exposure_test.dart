@@ -1,4 +1,9 @@
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:neostation/data/datasources/sqlite_migrations.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/models/romm_server_capabilities.dart';
@@ -15,8 +20,9 @@ import 'fake_credential_backends.dart';
 /// connected with the version unknown and sends nothing itself, the values
 /// appear and listeners hear about it when a probe lands — including one on
 /// an already-online connection, which the reachability state would not
-/// announce — and a disconnect clears them. Plus the connect-screen strings
-/// (REQ "Connect Screen Surfaces") in all twelve languages.
+/// announce — a failed probe drops a version that was known and says so, and
+/// a disconnect clears them. Plus the connect-screen strings (REQ "Connect
+/// Screen Surfaces") in all twelve languages.
 ///
 /// No network: the fake service answers the heartbeat however the test says,
 /// through the same hooks the real service reports on.
@@ -61,8 +67,15 @@ class _FakeService extends RommService {
     heartbeats++;
     // The real probe is a request: nothing about it is synchronous.
     await Future<void>.delayed(Duration.zero);
+    final had = caps != null;
     caps = pending;
-    if (caps == null) return;
+    if (caps == null) {
+      // The real service reports the transport failure and then, only when
+      // it had a value to lose, the drop.
+      onTransportFailure?.call(const SocketException('down'));
+      if (had) onCapabilitiesChanged?.call();
+      return;
+    }
     onTransportSuccess?.call();
     onCapabilitiesChanged?.call();
   }
@@ -175,6 +188,100 @@ void main() {
       expect(provider.passwordLoginDisabled, isFalse);
 
       provider.dispose();
+    });
+
+    test('a failed re-probe drops a known version and notifies', () async {
+      final provider = await restored();
+      provider.fake.pending = _caps('5.2.0', passwordOff: true);
+      await provider.reprobeNowForTesting();
+      expect(provider.serverVersion, isNotNull);
+      // Some other request already took the connection offline, so the
+      // probe's own failure is not a reachability change and would not
+      // notify on its own.
+      provider.fake.onTransportFailure?.call(const SocketException('down'));
+      expect(provider.reachability, RommReachability.offline);
+      var notifications = 0;
+      provider.addListener(() => notifications++);
+
+      provider.fake.pending = null;
+      await provider.fake.fetchHeartbeat();
+
+      expect(provider.serverVersion, isNull, reason: 'the version is stale');
+      expect(provider.passwordLoginDisabled, isFalse);
+      expect(notifications, 1, reason: 'the drop is the only notification');
+
+      // Nothing known, nothing lost: a second failure says nothing.
+      await provider.fake.fetchHeartbeat();
+      expect(notifications, 1);
+
+      provider.dispose();
+    });
+  });
+
+  /// The real service, against a mock server: the hook fires when a failed
+  /// probe drops a value that was known, and stays quiet when there was none.
+  // Governing: ADR-0010, SPEC-0010 REQ "Provider Exposure And Re-Probe"
+  group('RommService.fetchHeartbeat', () {
+    tearDown(() => RommService.debugUseHttpClient(null));
+
+    /// A server whose heartbeat answers [up] with 5.2.0 and otherwise is
+    /// down at the socket.
+    void serve({required bool Function() up}) {
+      RommService.debugUseHttpClient(
+        MockClient((request) async {
+          if (!up()) throw const SocketException('connection refused');
+          return http.Response(
+            jsonEncode({
+              'SYSTEM': {'VERSION': '5.2.0'},
+              'FRONTEND': {'DISABLE_USERPASS_LOGIN': false},
+            }),
+            200,
+            headers: const {'content-type': 'application/json'},
+          );
+        }),
+      );
+    }
+
+    test('a failure after a known version fires the hook once', () async {
+      var up = true;
+      serve(up: () => up);
+      final service = RommService()
+        ..configure(
+          serverUrl: 'https://romm.local',
+          username: 'jon',
+          password: 's3cret',
+        );
+      var changes = 0;
+      service.onCapabilitiesChanged = () => changes++;
+
+      await service.fetchHeartbeat();
+      expect(service.capabilities, isNotNull);
+      expect(changes, 1);
+
+      up = false;
+      await service.fetchHeartbeat();
+      expect(service.capabilities, isNull);
+      expect(changes, 2, reason: 'the known version was dropped');
+
+      await service.fetchHeartbeat();
+      expect(changes, 2, reason: 'null over null is not a change');
+    });
+
+    test('a failure with nothing known stays quiet', () async {
+      serve(up: () => false);
+      final service = RommService()
+        ..configure(
+          serverUrl: 'https://romm.local',
+          username: 'jon',
+          password: 's3cret',
+        );
+      var changes = 0;
+      service.onCapabilitiesChanged = () => changes++;
+
+      await service.fetchHeartbeat();
+
+      expect(service.capabilities, isNull);
+      expect(changes, 0);
     });
   });
 

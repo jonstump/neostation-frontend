@@ -30,19 +30,22 @@ enum RommAuthMode {
   /// [next] over [order] rather than the declared order, for a switch drawn
   /// in the order [authModeOrderFor] chose: A still walks the segments left to
   /// right as the user sees them and wraps from the last back to the first.
-  // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect Screen Surfaces"
+  // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect Screen Surfaces",
+  // ADR-0007 (RomM pairing login), SPEC-0007 REQ "Pairing Mode On The Connect Screen"
   RommAuthMode nextIn(List<RommAuthMode> order) =>
       order[(order.indexOf(this) + 1) % order.length];
 
   /// [toLeft] over [order]: one segment left as drawn, stopping at the first.
-  // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect Screen Surfaces"
+  // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect Screen Surfaces",
+  // ADR-0007 (RomM pairing login), SPEC-0007 REQ "Pairing Mode On The Connect Screen"
   RommAuthMode toLeftIn(List<RommAuthMode> order) {
     final at = order.indexOf(this);
     return at <= 0 ? this : order[at - 1];
   }
 
   /// [toRight] over [order]: one segment right as drawn, stopping at the last.
-  // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect Screen Surfaces"
+  // Governing: ADR-0010 (heartbeat capability probe), SPEC-0010 REQ "Connect Screen Surfaces",
+  // ADR-0007 (RomM pairing login), SPEC-0007 REQ "Pairing Mode On The Connect Screen"
   RommAuthMode toRightIn(List<RommAuthMode> order) {
     final at = order.indexOf(this);
     return at == order.length - 1 ? this : order[at + 1];
