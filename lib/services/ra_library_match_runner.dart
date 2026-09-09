@@ -220,7 +220,15 @@ class RaLibraryMatchRunner {
                 showOrUpdate(
                   message: strings.lookingUp,
                   type: GlobalNotificationType.info,
-                  progress: eligible > 0 ? alreadyHashed / eligible : null,
+                  // Zero, not null, when there is no denominator: the manual
+                  // pass opened this row at `progress: 0` a few lines up and
+                  // `update` clears the bar unless the call names one (#229),
+                  // so null would blank the row's bar — and Tools' inline bar,
+                  // which reads this notification's progress — for the whole
+                  // lookup pass on a library with nothing hashable in it. A
+                  // zeroed bar keeps the row looking like the running job it
+                  // is. Issue #230.
+                  progress: eligible > 0 ? alreadyHashed / eligible : 0,
                 );
               },
             );
@@ -239,6 +247,10 @@ class RaLibraryMatchRunner {
                       .replaceFirst('{done}', processed.toString())
                       .replaceFirst('{total}', total.toString()),
                   type: GlobalNotificationType.info,
+                  // Conditional, but never null: `total == 0` returned above,
+                  // so the fallback branch is a real fraction. Unlike the two
+                  // sites in #230 this one cannot blank the bar, and is left
+                  // as it stands.
                   progress: eligible > 0
                       ? ((alreadyHashed + processed) / eligible).clamp(0.0, 1.0)
                       : processed / total,

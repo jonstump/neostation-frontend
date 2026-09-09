@@ -277,27 +277,35 @@ class RommMetadataFetchRunner {
     }
   }
 
-  /// The row a run ends on. Goes through [GlobalNotificationService.show]
-  /// rather than `update`, which keeps the previous fraction when handed
-  /// `progress: null` (`progress ?? existing.progress`): the summary must not
-  /// sit under a bar left full by a completed pass or frozen part-way by a
-  /// cancel. `show` replaces the row wholesale, so the bar clears.
+  /// The row a run ends on: the summary, with no progress bar under it.
   ///
-  /// Every other field the terminal row needs already matches what `update`
-  /// produced here: this notification is shown without a title, icon or image,
-  /// and `update` takes `ongoing` as a non-nullable `false` default rather
-  /// than carrying the running row's `true` forward. Only `progress` differed
-  /// among the fields; `show` also moves the row to the end of the list, where
-  /// `update` spliced in place, and appends the row if the id has since been
-  /// dismissed where `update` would no-op. Both match the upload runner.
+  /// This went through [GlobalNotificationService.show] until #229, because
+  /// `update` resolved progress as `progress ?? existing.progress` and so kept
+  /// the running pass's fraction — the summary would sit under a bar left full
+  /// by a completed pass or frozen part-way by a cancel, and `show` was the
+  /// only way to replace the row wholesale. `update` now clears the bar unless
+  /// the call names one, so the workaround has nothing left to work around.
   ///
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
+  /// Dropping it also drops what `show` cost: `show` appends the row again
+  /// when the id has since been dismissed, so a summary reappeared in the bell
+  /// after the user had closed the running row with X. `update` no-ops on a
+  /// missing id, which is the right answer — the user said they were done with
+  /// this job. The other difference, `show` moving the row to the end of the
+  /// list where `update` splices in place, is not worth resurrecting a
+  /// dismissed row for. Issue #231.
+  ///
+  /// The remaining fields need no care: this notification carries no title,
+  /// icon or image, and `update` defaults `ongoing` to false rather than
+  /// carrying the running row's true forward.
+  ///
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass",
+  // SPEC-0014 REQ "Upload Surfaces" (notification row semantics)
   static void _showTerminal(
     GlobalNotificationService notifications, {
     required String notificationId,
     required String message,
     required GlobalNotificationType type,
   }) {
-    notifications.show(id: notificationId, message: message, type: type);
+    notifications.update(id: notificationId, message: message, type: type);
   }
 }

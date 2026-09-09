@@ -87,6 +87,45 @@ void main() {
     expect(scrapingNotification().message, contains('8 / 10'));
   });
 
+  testWidgets('holds the bar at zero while the total is still unknown', (
+    tester,
+  ) async {
+    final provider = ScrapingProvider();
+    await pumpListener(tester, provider);
+
+    // _startScraping opens the row on a zeroed bar, then synchronises the
+    // system ids over the network before any count is known.
+    GlobalNotificationService().show(
+      id: 'scraping_progress',
+      message: 'Scraping in progress',
+      type: GlobalNotificationType.info,
+      progress: 0,
+      ongoing: true,
+    );
+
+    // `startScraping` zeroes the counters and notifies immediately, so this is
+    // the state the row sits in for the whole system-id round trip.
+    provider.startScraping(maxThreads: 2);
+    await tester.pump();
+
+    expect(
+      scrapingNotification().progress,
+      0,
+      reason:
+          'a null here would blank the bar the scrape just opened at zero — '
+          '`update` clears progress unless the call names one (#229) — and it '
+          'would come back at the first counted game, so the user sees the bar '
+          'flicker out and in on every scrape. Issue #230',
+    );
+    expect(scrapingNotification().ongoing, isTrue);
+
+    // And it becomes a real fraction the moment there is a denominator.
+    provider.updateProgress(totalGames: 4, processedGames: 1);
+    await tester.pump();
+
+    expect(scrapingNotification().progress, 1 / 4);
+  });
+
   testWidgets('leaves the notification untouched once the session stops', (
     tester,
   ) async {

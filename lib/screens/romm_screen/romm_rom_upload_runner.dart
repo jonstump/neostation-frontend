@@ -346,7 +346,7 @@ class RommRomUploadRunner {
       return;
     } catch (e, st) {
       _log.e('RomM upload batch did not run', error: e, stackTrace: st);
-      _showTerminal(
+      showTerminal(
         notifications,
         strings,
         message: strings.failReasons[RommUploadFailure.other] ?? '',
@@ -372,6 +372,9 @@ class RommRomUploadRunner {
       if (context.mounted) {
         _toast(context, message, NotificationType.info);
       } else {
+        // Genuinely a new row, not a workaround for anything `update` used to
+        // get wrong: the running row was dismissed two statements up, so there
+        // is nothing left to update. Stays a `show`. Issue #231.
         notifications.show(
           id: notificationId,
           title: strings.title,
@@ -383,7 +386,7 @@ class RommRomUploadRunner {
     }
 
     final text = strings.summary(summary);
-    _showTerminal(
+    showTerminal(
       notifications,
       strings,
       message: text,
@@ -399,18 +402,34 @@ class RommRomUploadRunner {
     );
   }
 
-  /// The row a run ends on. Goes through [GlobalNotificationService.show]
-  /// rather than `update`, which keeps the previous fraction when handed
-  /// `progress: null`: the summary must not sit under a bar left full by a
-  /// completed batch or frozen part-way by a cancel.
-  static void _showTerminal(
+  /// The row a batch ends on: the summary, with no progress bar under it and
+  /// Cancel replaced by whatever [action] the outcome earns.
+  ///
+  /// This went through [GlobalNotificationService.show] until #229, because
+  /// `update` resolved progress as `progress ?? existing.progress` and so kept
+  /// the running batch's fraction — the summary would sit under a bar left
+  /// full by a completed batch or frozen part-way by a cancel, and `show` was
+  /// the only way to replace the row wholesale. `update` now clears the bar
+  /// unless the call names one, so the workaround has nothing left to work
+  /// around, and it was not free: `show` appends the row again when the id has
+  /// since been dismissed, so a summary reappeared in the bell after the user
+  /// had closed the running row with X. `update` no-ops on a missing id.
+  /// Issue #231.
+  ///
+  /// Not private only so a test can pin that: [_run] needs a connected
+  /// [RommProvider] and a live widget tree to reach here, and the behaviour
+  /// worth pinning is this row, not the batch that leads to it.
+  ///
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Upload Surfaces"
+  @visibleForTesting
+  static void showTerminal(
     GlobalNotificationService notifications,
     RommUploadStrings strings, {
     required String message,
     required GlobalNotificationType type,
     GlobalNotificationAction? action,
   }) {
-    notifications.show(
+    notifications.update(
       id: notificationId,
       title: strings.title,
       message: message,
@@ -449,9 +468,8 @@ class RommRomUploadRunner {
     GlobalNotificationService notifications, {
     required String summaryText,
   }) async {
-    // The summary row has no bar (it was shown, not updated), so nothing
-    // for this update to carry over; the action is withdrawn until the
-    // pass answers.
+    // The summary row has no bar, and `update` would not carry one over even
+    // if it had; the action is withdrawn until the pass answers.
     notifications.update(
       id: notificationId,
       message: summaryText,
@@ -473,7 +491,7 @@ class RommRomUploadRunner {
       line = strings.linkFailed;
       type = GlobalNotificationType.error;
     }
-    _showTerminal(
+    showTerminal(
       notifications,
       strings,
       message: '$summaryText\n$line',

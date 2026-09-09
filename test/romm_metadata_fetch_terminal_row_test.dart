@@ -155,6 +155,26 @@ void main() {
     expect(row.type, GlobalNotificationType.error);
   });
 
+  test('a row the user dismissed mid-pass is not resurrected', () async {
+    await run((pass) async {
+      reportProgress(0.5);
+      // The X on the bell, pressed while the pass is still running: the row
+      // goes, and `update` is a no-op on an id that is no longer listed.
+      notifications.dismiss(notificationId);
+      return const RommMetadataFetchSummary(linked: 4);
+    });
+
+    expect(
+      notifications.notifier.value.where((n) => n.id == notificationId),
+      isEmpty,
+      reason:
+          'the summary went through `show` while it was working around the '
+          'old `progress ?? existing.progress` carry-over, and `show` appends '
+          'a row whose id has since been dismissed — so a summary the user '
+          'had closed came back. Issue #231',
+    );
+  });
+
   test('a busy pass ends with no progress bar', () async {
     await run((pass) async {
       reportProgress(0.5);
