@@ -1759,6 +1759,16 @@ mixin AppLocale {
   static const String collectionPushRommMembersQueued =
       'collection_push_romm_members_queued';
 
+  // NeoSync auth success and status sentences that used to leave
+  // `AuthService` as hardcoded English (issue #200).
+  static const String neoSyncLoginSuccessfulEmailNotVerified =
+      'neo_sync_login_successful_email_not_verified';
+  static const String neoSyncVerificationEmailSent =
+      'neo_sync_verification_email_sent';
+  static const String neoSyncPasswordResetEmailSent =
+      'neo_sync_password_reset_email_sent';
+  static const String neoSyncNotAuthenticated = 'neo_sync_not_authenticated';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================

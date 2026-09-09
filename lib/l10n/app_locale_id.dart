@@ -1651,4 +1651,10 @@ const Map<String, dynamic> appLocaleId = {
       'Koleksi "{name}" dikelola dari perangkat ini dan tidak diperbarui dari RomM',
   AppLocale.collectionPushRommMembersQueued:
       '"{name}" sudah ada di RomM; gamenya akan menyusul saat server dapat dijangkau',
+  AppLocale.neoSyncLoginSuccessfulEmailNotVerified:
+      'Masuk berhasil, tetapi email Anda belum diverifikasi',
+  AppLocale.neoSyncVerificationEmailSent: 'Email verifikasi terkirim',
+  AppLocale.neoSyncPasswordResetEmailSent:
+      'Email atur ulang kata sandi terkirim',
+  AppLocale.neoSyncNotAuthenticated: 'Belum masuk',
 };

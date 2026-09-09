@@ -1497,4 +1497,9 @@ const Map<String, dynamic> appLocaleJa = {
       'コレクション「{name}」はこの端末で管理されているため、RomM から更新されませんでした',
   AppLocale.collectionPushRommMembersQueued:
       '「{name}」は RomM に作成されました。ゲームはサーバーに接続できたときに送信されます',
+  AppLocale.neoSyncLoginSuccessfulEmailNotVerified:
+      'ログインに成功しましたが、メールアドレスはまだ確認されていません',
+  AppLocale.neoSyncVerificationEmailSent: '確認メールを送信しました',
+  AppLocale.neoSyncPasswordResetEmailSent: 'パスワードリセットメールを送信しました',
+  AppLocale.neoSyncNotAuthenticated: 'ログインしていません',
 };

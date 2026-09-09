@@ -90,6 +90,62 @@ void main() {
     });
   });
 
+  group('what the sign-in screen renders for an exception it caught', () {
+    // Issue #201. `auth_form.dart` appended `': $e'` to a translated sentence
+    // at six `catch (e)` sites. The services swallow their HTTP failures, so
+    // today those sites see programming errors — but nothing enforces that no
+    // service beneath them ever rethrows an exception carrying a URL or a
+    // token, and the sign-in screen is the worst place for that to be wrong.
+    const token = 'EXAMPLEexample0123456789ABCDefgh';
+    final thrown = Exception(
+      'ClientException with SocketException: Connection refused, '
+      'uri=https://auth.neostation.app/login?token=$token&sid=SESSIONSECRET',
+    );
+
+    test('the pre-fix wording really did put the token on screen', () {
+      final before = '${AppLocale.en[AppLocale.anErrorOccurred]}: $thrown';
+      expect(before, contains(token));
+      expect(before, contains('SESSIONSECRET'));
+    });
+
+    for (final key in [
+      AppLocale.anErrorOccurred,
+      AppLocale.emailVerifiedLoginFailed,
+    ]) {
+      test('$key shows only the sentence, in every language', () {
+        final caught = neoSyncCaughtException(
+          thrown,
+          localeKey: key,
+          where: 'submit',
+        );
+        expect(caught.shown.detail, isNull);
+        for (final entry in locales.entries) {
+          final rendered = render(caught.shown, entry.value);
+          expect(rendered, entry.value[key], reason: entry.key);
+          expect(rendered, isNot(contains(token)), reason: entry.key);
+          expect(rendered, isNot(contains('SESSIONSECRET')), reason: entry.key);
+          expect(rendered, isNot(contains('uri=')), reason: entry.key);
+        }
+      });
+    }
+
+    test('the detail goes to the log, redacted and tagged with the site', () {
+      final caught = neoSyncCaughtException(
+        thrown,
+        localeKey: AppLocale.anErrorOccurred,
+        where: 'resetPassword',
+      );
+      expect(caught.logged, isNot(contains(token)));
+      expect(caught.logged, isNot(contains('SESSIONSECRET')));
+      expect(caught.logged, contains('token=$redactedPlaceholder'));
+      expect(caught.logged, contains('sid=$redactedPlaceholder'));
+      // Still diagnosable: which handler, which host, which cause.
+      expect(caught.logged, startsWith('AuthForm.resetPassword: '));
+      expect(caught.logged, contains('auth.neostation.app/login'));
+      expect(caught.logged, contains('Connection refused'));
+    });
+  });
+
   group('NeoSyncLocalizedError', () {
     test('a server that sent no error text falls back to our own sentence', () {
       final error = neoSyncServerError(null, AppLocale.neoSyncLoginFailed);

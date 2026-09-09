@@ -1434,4 +1434,8 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.rommSyncOutcomeCollectionManagedHere:
       '收藏集 "{name}" 由本设备管理，未从 RomM 更新',
   AppLocale.collectionPushRommMembersQueued: '"{name}"已在 RomM 上创建，游戏将在服务器可用时同步',
+  AppLocale.neoSyncLoginSuccessfulEmailNotVerified: '登录成功，但您的邮箱尚未验证',
+  AppLocale.neoSyncVerificationEmailSent: '验证邮件已发送',
+  AppLocale.neoSyncPasswordResetEmailSent: '密码重置邮件已发送',
+  AppLocale.neoSyncNotAuthenticated: '未登录',
 };

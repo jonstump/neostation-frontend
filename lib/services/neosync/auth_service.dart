@@ -15,10 +15,16 @@ import 'package:neostation/utils/neo_sync_error_message.dart';
 /// session persistence. Where the token is kept is [CredentialStore]'s problem,
 /// including the platforms whose secure storage cannot hold it.
 class AuthService extends ChangeNotifier {
+  /// [client] is the seam for tests: the success paths are pinned against a
+  /// `MockClient` so the sentences they carry are measured, not reasoned.
+  AuthService({http.Client? client}) : _client = client ?? http.Client();
+
   /// Storage key for the authentication JWT token.
   static const String _tokenKey = 'auth_token';
 
   static final _log = LoggerService.instance;
+
+  final http.Client _client;
 
   /// Whether a valid user session is currently active.
   bool _isLoggedIn = false;
@@ -85,7 +91,7 @@ class AuthService extends ChangeNotifier {
       final baseUrl = AppConfig.authBaseUrl;
       _log.i('Attempting registration to: $baseUrl/register');
 
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/register'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
@@ -98,11 +104,10 @@ class AuthService extends ChangeNotifier {
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 201) {
-        return {
-          'success': true,
-          'message':
-              'Registration successful. Please check your email to verify your account.',
-        };
+        return _success(
+          AppLocale.registrationSuccessCheckEmail,
+          'Registration successful. Please check your email to verify your account.',
+        );
       } else {
         return _serverFailure(
           data['error'],
@@ -124,7 +129,7 @@ class AuthService extends ChangeNotifier {
       final baseUrl = AppConfig.authBaseUrl;
       _log.i('Attempting login to: $baseUrl/login');
 
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('$baseUrl/login'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email, 'password': password}),
@@ -152,8 +157,10 @@ class AuthService extends ChangeNotifier {
         final user = User.fromJson(userData);
         if (!user.emailVerified) {
           return {
-            'success': true,
-            'message': 'Login successful, but email not verified',
+            ..._success(
+              AppLocale.neoSyncLoginSuccessfulEmailNotVerified,
+              'Login successful, but email not verified',
+            ),
             'emailVerified': false,
             'user': user,
             'tokenPersisted': tokenPersisted,
@@ -161,8 +168,7 @@ class AuthService extends ChangeNotifier {
         }
 
         return {
-          'success': true,
-          'message': 'Login successful',
+          ..._success(AppLocale.loginSuccessful, 'Login successful'),
           'emailVerified': true,
           'user': user,
           'tokenPersisted': tokenPersisted,
@@ -190,7 +196,7 @@ class AuthService extends ChangeNotifier {
   /// Verifies a user's email using a verification [token] sent via email.
   Future<Map<String, dynamic>> verifyEmail(String token) async {
     try {
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('${AppConfig.authBaseUrl}/verify-email'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'token': token}),
@@ -199,7 +205,10 @@ class AuthService extends ChangeNotifier {
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
-        return {'success': true, 'message': 'Email verified successfully'};
+        return _success(
+          AppLocale.emailVerifiedSuccess,
+          'Email verified successfully',
+        );
       } else {
         return _serverFailure(
           data['error'] ?? data['message'],
@@ -217,7 +226,7 @@ class AuthService extends ChangeNotifier {
     String email,
   ) async {
     try {
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('${AppConfig.authBaseUrl}/check-email-status'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email}),
@@ -246,7 +255,7 @@ class AuthService extends ChangeNotifier {
   /// Triggers a resend of the account verification email to the specified address.
   Future<Map<String, dynamic>> resendVerificationEmail(String email) async {
     try {
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('${AppConfig.authBaseUrl}/resend-verification'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email}),
@@ -255,7 +264,10 @@ class AuthService extends ChangeNotifier {
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
-        return {'success': true, 'message': 'Verification email sent'};
+        return _success(
+          AppLocale.neoSyncVerificationEmailSent,
+          'Verification email sent',
+        );
       } else {
         return _serverFailure(
           data['error'],
@@ -275,10 +287,16 @@ class AuthService extends ChangeNotifier {
     try {
       final token = await CredentialStore.read(_tokenKey);
       if (token == null) {
-        return {'success': false, 'message': 'Not authenticated'};
+        return {
+          'success': false,
+          'message': 'Not authenticated',
+          kNeoSyncLocalizedError: const NeoSyncLocalizedError(
+            AppLocale.neoSyncNotAuthenticated,
+          ),
+        };
       }
 
-      final response = await http.get(
+      final response = await _client.get(
         Uri.parse('${AppConfig.authBaseUrl}/auth/me'),
         headers: {
           'Authorization': 'Bearer $token',
@@ -310,7 +328,7 @@ class AuthService extends ChangeNotifier {
   /// Initiates a password recovery request for the specified email address.
   Future<Map<String, dynamic>> forgotPassword(String email) async {
     try {
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('${AppConfig.authBaseUrl}/forgot-password'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'email': email}),
@@ -319,10 +337,11 @@ class AuthService extends ChangeNotifier {
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
-        return {
-          'success': true,
-          'message': data['message'] ?? 'Password reset email sent',
-        };
+        return _success(
+          AppLocale.neoSyncPasswordResetEmailSent,
+          'Password reset email sent',
+          serverMessage: data['message'],
+        );
       } else {
         return _serverFailure(
           data['error'] ?? data['message'],
@@ -341,7 +360,7 @@ class AuthService extends ChangeNotifier {
     String newPassword,
   ) async {
     try {
-      final response = await http.post(
+      final response = await _client.post(
         Uri.parse('${AppConfig.authBaseUrl}/reset-password'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({'token': token, 'new_password': newPassword}),
@@ -350,10 +369,11 @@ class AuthService extends ChangeNotifier {
       final data = jsonDecode(response.body);
 
       if (response.statusCode == 200) {
-        return {
-          'success': true,
-          'message': data['message'] ?? 'Password reset successfully',
-        };
+        return _success(
+          AppLocale.passwordResetSuccess,
+          'Password reset successfully',
+          serverMessage: data['message'],
+        );
       } else {
         return _serverFailure(
           data['error'] ?? data['message'],
@@ -364,6 +384,33 @@ class AuthService extends ChangeNotifier {
     } catch (e) {
       return _networkFailure(e);
     }
+  }
+
+  /// A 2xx response, worded twice like [_serverFailure]: `message` is the
+  /// English diagnostic string these result maps have always carried, and
+  /// [kNeoSyncLocalizedError] is what the screen renders. Issue #200.
+  ///
+  /// [serverMessage] is the body's `message` field where the endpoint sends
+  /// one (`forgot-password`, `reset-password`). This used to take precedence on
+  /// screen (`data['message'] ?? 'Password reset successfully'`); now it does
+  /// not. Deliberately: the server's text is English-only, which is the very
+  /// complaint here, and it says nothing the `AppLocale` sentence does not. It
+  /// still replaces [englishMessage] in `message` — redacted, since a body from
+  /// an auth endpoint can echo what it was sent — so the log keeps the server's
+  /// specific wording for diagnosis.
+  Map<String, dynamic> _success(
+    String localeKey,
+    String englishMessage, {
+    Object? serverMessage,
+  }) {
+    final raw = serverMessage?.toString().trim();
+    return {
+      'success': true,
+      'message': raw == null || raw.isEmpty
+          ? englishMessage
+          : redactSecrets(raw),
+      kNeoSyncLocalizedError: neoSyncSuccess(localeKey),
+    };
   }
 
   /// A non-2xx response, worded twice: `message` is the English diagnostic

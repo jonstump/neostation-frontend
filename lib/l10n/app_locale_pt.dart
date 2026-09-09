@@ -1683,4 +1683,10 @@ const Map<String, dynamic> appLocalePt = {
       'A coleção "{name}" é gerenciada a partir deste dispositivo e não foi atualizada do RomM',
   AppLocale.collectionPushRommMembersQueued:
       '"{name}" está no RomM; os jogos serão enviados quando o servidor estiver acessível',
+  AppLocale.neoSyncLoginSuccessfulEmailNotVerified:
+      'Login realizado com sucesso, mas seu e-mail ainda não foi verificado',
+  AppLocale.neoSyncVerificationEmailSent: 'E-mail de verificação enviado',
+  AppLocale.neoSyncPasswordResetEmailSent:
+      'E-mail de redefinição de senha enviado',
+  AppLocale.neoSyncNotAuthenticated: 'Não conectado',
 };
