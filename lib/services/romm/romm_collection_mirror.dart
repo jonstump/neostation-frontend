@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../models/collection_model.dart';
 import '../../models/romm_collection.dart';
 import '../../models/romm_rom.dart';
 import '../../models/romm_rom_page.dart';
@@ -49,7 +50,10 @@ typedef RommMirrorMemberReplacer =
       Set<String> romPaths,
     );
 
-/// Refreshes a collection's provenance — in practice `romm_synced_at`.
+/// Refreshes a collection's provenance — in practice `romm_synced_at` — and
+/// its origin, which the mirror always sets to `'romm'` (ADR-0015): a
+/// collection the mirror adopts is written by RomM from then on.
+// Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Column"
 typedef RommMirrorProvenanceSetter =
     Future<void> Function(
       String id, {
@@ -57,6 +61,7 @@ typedef RommMirrorProvenanceSetter =
       required String collectionId,
       required bool virtual,
       required DateTime syncedAt,
+      required String origin,
     });
 
 /// Polled between pages; true ends the run before the next page is fetched.
@@ -102,6 +107,14 @@ class RommCollectionMirrorSummary {
   /// Membership was not written unless the failure came after the write.
   final bool failed;
 
+  /// True when the local collection linked to this RomM collection is one
+  /// the user pushed (origin `local`), so the mirror left it alone: nothing
+  /// was fetched or written, and [collectionId] names the collection it
+  /// declined to adopt. One writer per collection (ADR-0015): the push side
+  /// owns it until the user unlinks it.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Column"
+  final bool skippedLocalOrigin;
+
   /// The failure behind [failed], or null.
   final Object? error;
 
@@ -118,6 +131,7 @@ class RommCollectionMirrorSummary {
     this.unresolved = 0,
     this.cancelled = false,
     this.failed = false,
+    this.skippedLocalOrigin = false,
     this.error,
     this.elapsed = Duration.zero,
   });
@@ -127,7 +141,8 @@ class RommCollectionMirrorSummary {
   int get members => added + kept;
 
   /// True when the run wrote membership.
-  bool get wroteMembership => !cancelled && !failed && collectionId != null;
+  bool get wroteMembership =>
+      !cancelled && !failed && !skippedLocalOrigin && collectionId != null;
 }
 
 /// What a collection sync asks the UI to fetch metadata for once its mirror
@@ -401,6 +416,26 @@ class RommCollectionMirror {
     }
     final existingId = existing?['id']?.toString();
 
+    // A collection the user pushed is the push side's to write (ADR-0015,
+    // one writer per collection): adopting it would flip its origin, replace
+    // its membership from the server and drop its queued edits at the next
+    // flush, all without the user asking. Declined before any page is
+    // fetched; the summary says so, for the UI to show.
+    // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Column"
+    if (existingId != null &&
+        existing?['romm_origin']?.toString() == CollectionModel.originLocal) {
+      _log.i(
+        'RomM collection mirror skipped: collection=${collection.id} '
+        'local=$existingId reason=local_origin '
+        '(pushed from this device; not adopted)',
+      );
+      return RommCollectionMirrorSummary(
+        collectionId: existingId,
+        skippedLocalOrigin: true,
+        elapsed: elapsed(),
+      );
+    }
+
     // Page the whole RomM collection and resolve every ROM before touching
     // the database: membership is written once, from the complete set.
     final resolved = <String>{};
@@ -538,12 +573,17 @@ class RommCollectionMirror {
 
     if (!created) {
       try {
+        // Origin `romm` on adopt as well as on create: an adopted collection
+        // is one whose provenance already names this RomM collection, and
+        // from here on RomM writes it (ADR-0015, one writer per collection).
+        // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Column"
         await _setProvenance(
           localId,
           serverUrl: serverUrl,
           collectionId: collection.id,
           virtual: collection.isVirtual,
           syncedAt: syncedAt,
+          origin: CollectionModel.originRomm,
         );
       } catch (e) {
         // Membership is in; only the timestamp is stale. Logged, and the
@@ -577,13 +617,16 @@ class RommCollectionMirror {
         ? 'failed'
         : s.cancelled
         ? 'cancelled'
+        : s.skippedLocalOrigin
+        ? 'skipped'
         : 'complete';
     _log.i(
       'RomM collection mirror $outcome: collection=${collection.id} '
       'virtual=${collection.isVirtual} local=${s.collectionId ?? '-'} '
       'created=${s.created} added=${s.added} removed=${s.removed} '
       'kept=${s.kept} unresolved=${s.unresolved} cancelled=${s.cancelled} '
-      'failed=${s.failed} elapsed_ms=${s.elapsed.inMilliseconds}',
+      'failed=${s.failed} skipped_local_origin=${s.skippedLocalOrigin} '
+      'elapsed_ms=${s.elapsed.inMilliseconds}',
     );
   }
 }

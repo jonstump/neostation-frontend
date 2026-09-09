@@ -32,6 +32,14 @@ class RommCollection {
   /// montage in the browse grid.
   final List<String> coverUrls;
 
+  /// The ROM ids RomM reports as members (`rom_ids`), when the body carries
+  /// them; empty otherwise. The full-replace fallback of the collection
+  /// write calls reads it to build the new set from the server's current
+  /// one, so it must not be mistaken for "no members" when the list endpoint
+  /// omits the field — check [romCount] for that.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Collection Write Calls"
+  final List<int> romIds;
+
   const RommCollection({
     required this.id,
     required this.name,
@@ -39,6 +47,7 @@ class RommCollection {
     this.isVirtual = false,
     this.urlCover,
     this.coverUrls = const [],
+    this.romIds = const [],
   });
 
   factory RommCollection.fromJson(
@@ -60,7 +69,15 @@ class RommCollection {
       isVirtual: isVirtual,
       urlCover: cover,
       coverUrls: covers,
+      romIds: _intList(json['rom_ids']),
     );
+  }
+
+  /// Coerces a JSON `rom_ids` list into ints, dropping anything that is not
+  /// one; a missing or non-list value is an empty list.
+  static List<int> _intList(dynamic value) {
+    if (value is! List) return const [];
+    return [for (final e in value) ?int.tryParse(e.toString())];
   }
 
   /// Coerces a JSON value that may be a list of paths (or a single path) into a

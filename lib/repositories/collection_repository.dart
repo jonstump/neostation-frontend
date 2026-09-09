@@ -1,4 +1,5 @@
 import '../data/datasources/sqlite_service.dart';
+import '../models/collection_model.dart';
 import '../models/database_game_model.dart';
 
 /// Repository for user-defined collections (`user_collections` /
@@ -96,29 +97,43 @@ class CollectionRepository {
     String collectionId,
   ) => SqliteService.findRommMirror(serverUrl, collectionId);
 
-  /// Records (or refreshes) which RomM collection [id] mirrors. Only the
-  /// provenance columns are written.
+  /// Records (or refreshes) which RomM collection [id] is linked to and
+  /// which side writes it — [origin] is [CollectionModel.originRomm] from the
+  /// mirror, [CollectionModel.originLocal] from a push. Only the provenance
+  /// columns are written.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Column"
   static Future<void> setRommProvenance(
     String id, {
     required String serverUrl,
     required String collectionId,
     required bool virtual,
     required DateTime syncedAt,
+    required String origin,
   }) => SqliteService.setRommProvenance(
     id,
     serverUrl: serverUrl,
     collectionId: collectionId,
     virtual: virtual,
     syncedAt: syncedAt,
+    origin: origin,
   );
 
-  /// Forgets which RomM collection [id] mirrors; the collection and its
-  /// members are untouched.
+  /// Sets only the origin of [id] (`'romm'`, `'local'`, or null to forget
+  /// it), leaving the other provenance columns alone.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Column"
+  static Future<void> setRommOrigin(String id, String? origin) =>
+      SqliteService.setRommOrigin(id, origin);
+
+  /// Forgets which RomM collection [id] is linked to — server, id, virtual
+  /// flag, sync time and origin together; the collection and its members are
+  /// untouched. After this a pushed collection's edits no longer queue.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Column"
   static Future<void> clearRommProvenance(String id) =>
       SqliteService.clearRommProvenance(id);
 
   /// Creates a collection mirroring a RomM collection — row and provenance
-  /// in one transaction.
+  /// in one transaction, origin [CollectionModel.originRomm].
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Column"
   static Future<void> insertRommMirrorCollection({
     required String id,
     required String name,

@@ -37,6 +37,10 @@ String? rommPairErrorKey(RommErrorKind? kind) {
     // Governing: ADR-0019 (expose RomM library filters, search and
     // maintenance), SPEC-0018 REQ "Metadata Search And Apply"
     RommErrorKind.noMetadataSource => null,
+    // A duplicate collection name only comes from the collection push, which
+    // words it itself.
+    // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Collection Write Calls"
+    RommErrorKind.alreadyExists => null,
     // Every non-pairing kind falls back to the provider's own message, the
     // same as [RommErrorKind.other]: they cannot arise from an exchange.
     RommErrorKind.other || RommErrorKind.payloadTooLarge || null => null,

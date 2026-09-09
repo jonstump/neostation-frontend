@@ -90,8 +90,10 @@ void main() {
     });
 
     test('leaves out the groups this server predates', () async {
-      // 4.8.x predates both 4.9.0 gates: play sessions (issue #136) and the
-      // collection rom endpoints. Only the two ungated groups are asked for.
+      // 4.8.x predates the one gated group's feature: play sessions (issue
+      // #136). Every ungated group is asked for — collectionsWrite included,
+      // since the collection push (ADR-0015) writes through `PUT rom_ids`
+      // on a 4.8 server even though the favourites route needs 4.9.0.
       serve(version: '4.8.1');
       final service = configured();
 
@@ -101,11 +103,15 @@ void main() {
       expect(scope, contains('roms.read'));
       expect(scope, contains('roms.write'), reason: 'romsWrite has no gate');
       expect(scope, contains('tasks.run'), reason: 'tasksRun has no gate');
+      expect(
+        scope,
+        contains('collections.write'),
+        reason: 'collectionsWrite has no gate since ADR-0015',
+      );
       expect(scope, isNot(contains('roms.user.write')));
-      expect(scope, isNot(contains('collections.write')));
       expect(
         service.hasScope(RommScopeGroup.collectionsWrite),
-        RommScopeState.denied,
+        RommScopeState.granted,
       );
       expect(service.hasScope(RommScopeGroup.playtime), RommScopeState.denied);
       expect(service.playtimeSyncAvailable, isFalse);
@@ -161,18 +167,24 @@ void main() {
     });
 
     test('a server that predates a group shortens the probe run', () async {
-      // 4.8.1 drops both 4.9.0-gated groups (playtime and collectionsWrite)
-      // before the grant, so only three groups are requested and only three
-      // probes can be spent on them.
+      // 4.8.1 drops the one 4.9.0-gated group (playtime) before the grant,
+      // so only four groups are requested and only four probes can be spent
+      // on them. collectionsWrite is still asked for: the collection push
+      // (ADR-0015) writes through `PUT rom_ids` on a 4.8 server.
       serve(version: '4.8.1', denied: {'tasks.run'});
       final service = configured();
 
       await service.authenticate();
 
-      expect(tokenPosts(), hasLength(3 + 2));
+      expect(tokenPosts(), hasLength(4 + 2));
       expect(service.hasScope(RommScopeGroup.tasksRun), RommScopeState.denied);
+      expect(service.hasScope(RommScopeGroup.playtime), RommScopeState.denied);
       expect(
         service.hasScope(RommScopeGroup.romsWrite),
+        RommScopeState.granted,
+      );
+      expect(
+        service.hasScope(RommScopeGroup.collectionsWrite),
         RommScopeState.granted,
       );
     });
@@ -335,10 +347,11 @@ void main() {
 
     test('each group names the feature that would make it pointless', () {
       expect(RommScopeGroup.playtime.gate, RommFeature.playSessions);
-      expect(
-        RommScopeGroup.collectionsWrite.gate,
-        RommFeature.collectionRomsAddRemove,
-      );
+      // Not gated since ADR-0015: the collection push works below 4.9.0
+      // through `PUT rom_ids`; only the favourites route needs 4.9.0, and
+      // those calls check `supports()` themselves.
+      // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Collection Write Calls"
+      expect(RommScopeGroup.collectionsWrite.gate, isNull);
       expect(RommScopeGroup.romsWrite.gate, isNull);
     });
   });

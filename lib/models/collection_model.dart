@@ -62,6 +62,21 @@ class CollectionModel {
   /// When the mirror last set this collection's membership, or null.
   final DateTime? rommSyncedAt;
 
+  /// Which side writes the linked RomM collection (v167): [originRomm] for
+  /// a mirror the sync pulls into, [originLocal] for a collection this device
+  /// pushed and keeps pushing, null when not linked. Read through
+  /// [isRommMirror] and [isPushedToRomm]; written only with the provenance.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Column"
+  final String? rommOrigin;
+
+  /// [rommOrigin] of a collection the mirror created or adopted: RomM writes
+  /// it, the next sync overwrites local membership edits.
+  static const String originRomm = 'romm';
+
+  /// [rommOrigin] of a collection pushed from this device: local edits queue
+  /// in the collection outbox and are pushed to RomM.
+  static const String originLocal = 'local';
+
   const CollectionModel({
     required this.id,
     required this.name,
@@ -76,11 +91,18 @@ class CollectionModel {
     this.rommCollectionId,
     this.rommCollectionVirtual = false,
     this.rommSyncedAt,
+    this.rommOrigin,
   });
 
   /// True when this collection mirrors a RomM collection: its membership is
   /// managed by the sync, and the browser marks it and offers to unlink it.
   bool get isRommMirror => rommCollectionId != null;
+
+  /// True when this collection was pushed to RomM from this device: its
+  /// name, artwork and membership changes queue for the collection outbox.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Column"
+  bool get isPushedToRomm =>
+      rommCollectionId != null && rommOrigin == originLocal;
 
   /// Builds a model from a `user_collections` row, including the joined
   /// `game_count` produced by the listing query when present.
@@ -99,6 +121,7 @@ class CollectionModel {
       rommCollectionId: _nullIfEmpty(json['romm_collection_id']),
       rommCollectionVirtual: _toInt(json['romm_collection_virtual']) == 1,
       rommSyncedAt: DateTime.tryParse(json['romm_synced_at']?.toString() ?? ''),
+      rommOrigin: _nullIfEmpty(json['romm_origin']),
     );
   }
 
@@ -138,6 +161,7 @@ class CollectionModel {
     String? rommCollectionId,
     bool? rommCollectionVirtual,
     DateTime? rommSyncedAt,
+    String? rommOrigin,
     bool clearRommProvenance = false,
   }) {
     return CollectionModel(
@@ -162,6 +186,7 @@ class CollectionModel {
       rommSyncedAt: clearRommProvenance
           ? null
           : (rommSyncedAt ?? this.rommSyncedAt),
+      rommOrigin: clearRommProvenance ? null : (rommOrigin ?? this.rommOrigin),
     );
   }
 
@@ -180,7 +205,8 @@ class CollectionModel {
           other.rommServerUrl == rommServerUrl &&
           other.rommCollectionId == rommCollectionId &&
           other.rommCollectionVirtual == rommCollectionVirtual &&
-          other.rommSyncedAt == rommSyncedAt;
+          other.rommSyncedAt == rommSyncedAt &&
+          other.rommOrigin == rommOrigin;
 
   @override
   int get hashCode => Object.hash(
@@ -196,6 +222,7 @@ class CollectionModel {
     rommCollectionId,
     rommCollectionVirtual,
     rommSyncedAt,
+    rommOrigin,
   );
 
   @override
