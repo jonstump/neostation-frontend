@@ -1628,6 +1628,17 @@ class RommProvider extends ChangeNotifier {
       _service.supports(RommFeature.randomRom) !=
           RommFeatureSupport.unsupported;
 
+  /// Whether the collections browser offers "Push to RomM": connected, and
+  /// this login is not known to lack the `collections.write` group. Unknown
+  /// (an old server, a restored token) still offers it, like the write calls
+  /// themselves — the push is the user's own action and a 403 settles the
+  /// group with a clear message, where hiding it would leave no way in.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Push Action"
+  bool get canPushCollections =>
+      isConnected &&
+      _service.hasScope(RommScopeGroup.collectionsWrite) !=
+          RommScopeState.denied;
+
   /// Whether the server-maintenance menu is worth offering: this connection is
   /// *known* to hold the `tasks.run` scope group.
   ///

@@ -1737,6 +1737,26 @@ mixin AppLocale {
       'romm_remote_download_ready_body';
   static const String rommRemoteSecondaryState = 'romm_remote_secondary_state';
 
+  // Push to RomM (ADR-0015 / SPEC-0015)
+  static const String collectionPushRomm = 'collection_push_romm';
+  static const String collectionRommPushed = 'collection_romm_pushed';
+  static const String collectionPushRommOutcome =
+      'collection_push_romm_outcome';
+  static const String collectionPushRommAlreadyExists =
+      'collection_push_romm_already_exists';
+  static const String collectionPushRommDenied = 'collection_push_romm_denied';
+  static const String collectionPushRommFailed = 'collection_push_romm_failed';
+  static const String collectionDeleteRommTitle =
+      'collection_delete_romm_title';
+  static const String collectionDeleteRommBody = 'collection_delete_romm_body';
+  static const String collectionDeleteRommConfirm =
+      'collection_delete_romm_confirm';
+  static const String collectionDeleteRommKeep = 'collection_delete_romm_keep';
+  static const String collectionUnlinkPushedConfirm =
+      'collection_unlink_pushed_confirm';
+  static const String rommSyncOutcomeCollectionManagedHere =
+      'romm_sync_outcome_collection_managed_here';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================

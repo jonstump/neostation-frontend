@@ -1486,4 +1486,20 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommRemoteDownloadReadyTitle: '다운로드 완료',
   AppLocale.rommRemoteDownloadReadyBody: '{name}을(를) 플레이할 수 있습니다.',
   AppLocale.rommRemoteSecondaryState: 'RomM 서버에 있음, 다운로드되지 않음',
+  AppLocale.collectionPushRomm: 'RomM으로 보내기',
+  AppLocale.collectionRommPushed: 'RomM으로 보냄',
+  AppLocale.collectionPushRommOutcome:
+      '"{name}"을(를) RomM으로 보냈습니다: {pushed}개 보냄, {unlinked}개 연결 안 됨',
+  AppLocale.collectionPushRommAlreadyExists: '같은 이름의 컬렉션이 RomM에 이미 있습니다',
+  AppLocale.collectionPushRommDenied: '이 RomM 로그인은 컬렉션을 쓸 수 없습니다',
+  AppLocale.collectionPushRommFailed: '"{name}"을(를) RomM으로 보낼 수 없습니다',
+  AppLocale.collectionDeleteRommTitle: 'RomM에서도 삭제할까요?',
+  AppLocale.collectionDeleteRommBody:
+      '"{name}"은(는) RomM으로 보내졌습니다. RomM에서도 삭제할까요, 아니면 RomM 사본을 유지할까요?',
+  AppLocale.collectionDeleteRommConfirm: 'RomM에서 삭제',
+  AppLocale.collectionDeleteRommKeep: 'RomM에 유지',
+  AppLocale.collectionUnlinkPushedConfirm:
+      '이 컬렉션은 더 이상 변경 사항을 RomM으로 보내지 않습니다. 게임은 이 기기와 RomM에 그대로 남습니다.',
+  AppLocale.rommSyncOutcomeCollectionManagedHere:
+      '컬렉션 "{name}"은(는) 이 기기에서 관리되므로 RomM에서 업데이트되지 않았습니다',
 };

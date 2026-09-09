@@ -1696,4 +1696,23 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.rommRemoteDownloadReadyBody: '{name} ist spielbereit.',
   AppLocale.rommRemoteSecondaryState:
       'Auf dem RomM-Server, nicht heruntergeladen',
+  AppLocale.collectionPushRomm: 'An RomM senden',
+  AppLocale.collectionRommPushed: 'An RomM gesendet',
+  AppLocale.collectionPushRommOutcome:
+      '„{name}“ an RomM gesendet: {pushed} gesendet, {unlinked} nicht verknüpft',
+  AppLocale.collectionPushRommAlreadyExists:
+      'Eine Sammlung mit diesem Namen existiert bereits auf RomM',
+  AppLocale.collectionPushRommDenied:
+      'Diese RomM-Anmeldung darf keine Sammlungen schreiben',
+  AppLocale.collectionPushRommFailed:
+      '„{name}“ konnte nicht an RomM gesendet werden',
+  AppLocale.collectionDeleteRommTitle: 'Auch auf RomM löschen?',
+  AppLocale.collectionDeleteRommBody:
+      '„{name}“ wurde an RomM gesendet. Dort ebenfalls löschen oder die RomM-Kopie behalten?',
+  AppLocale.collectionDeleteRommConfirm: 'Auf RomM löschen',
+  AppLocale.collectionDeleteRommKeep: 'Auf RomM behalten',
+  AppLocale.collectionUnlinkPushedConfirm:
+      'Diese Sammlung sendet ihre Änderungen nicht mehr an RomM. Ihre Spiele bleiben hier und auf RomM.',
+  AppLocale.rommSyncOutcomeCollectionManagedHere:
+      'Die Sammlung „{name}“ wird von diesem Gerät verwaltet und wurde nicht von RomM aktualisiert',
 };

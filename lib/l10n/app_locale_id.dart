@@ -1631,4 +1631,22 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommRemoteDownloadReadyTitle: 'Unduhan selesai',
   AppLocale.rommRemoteDownloadReadyBody: '{name} siap dimainkan.',
   AppLocale.rommRemoteSecondaryState: 'Di server RomM, belum diunduh',
+  AppLocale.collectionPushRomm: 'Kirim ke RomM',
+  AppLocale.collectionRommPushed: 'Dikirim ke RomM',
+  AppLocale.collectionPushRommOutcome:
+      '"{name}" dikirim ke RomM: {pushed} dikirim, {unlinked} belum tertaut',
+  AppLocale.collectionPushRommAlreadyExists:
+      'Koleksi dengan nama ini sudah ada di RomM',
+  AppLocale.collectionPushRommDenied:
+      'Login RomM ini tidak dapat menulis koleksi',
+  AppLocale.collectionPushRommFailed: '"{name}" tidak dapat dikirim ke RomM',
+  AppLocale.collectionDeleteRommTitle: 'Hapus juga di RomM?',
+  AppLocale.collectionDeleteRommBody:
+      '"{name}" telah dikirim ke RomM. Hapus juga di sana, atau simpan salinan RomM?',
+  AppLocale.collectionDeleteRommConfirm: 'Hapus di RomM',
+  AppLocale.collectionDeleteRommKeep: 'Simpan di RomM',
+  AppLocale.collectionUnlinkPushedConfirm:
+      'Koleksi ini akan berhenti mengirim perubahannya ke RomM. Gamenya tetap ada di sini dan di RomM.',
+  AppLocale.rommSyncOutcomeCollectionManagedHere:
+      'Koleksi "{name}" dikelola dari perangkat ini dan tidak diperbarui dari RomM',
 };

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../models/collection_model.dart';
 import '../models/game_model.dart';
 import '../services/collections/collections_service.dart';
+import '../services/romm_service.dart';
 
 /// Holds the user's collections for the widget tree.
 ///
@@ -131,17 +132,35 @@ class CollectionsProvider extends ChangeNotifier {
   }
 
   /// Deletes a collection (and its artwork) and refreshes the list.
-  Future<void> delete(String id) async {
-    await CollectionsService.deleteCollection(id);
+  ///
+  /// [deleteOnRomm] is the answer to the browser's prompt for a pushed
+  /// collection; it has no effect on any other kind.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Delete"
+  Future<void> delete(String id, {bool deleteOnRomm = false}) async {
+    await CollectionsService.deleteCollection(id, deleteOnRomm: deleteOnRomm);
     await _refresh();
   }
 
   /// Clears [id]'s RomM provenance and reloads, so the browser's indicator
-  /// goes away; the collection and its games stay.
+  /// goes away; the collection and its games stay. Applies to a mirror and
+  /// to a pushed collection alike.
   // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Mirrored Collections In The Browser"
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Badge"
   Future<void> unlinkFromRomm(String id) async {
     await CollectionsService.unlinkFromRomm(id);
     await _refresh();
+  }
+
+  /// Pushes collection [id] to the RomM server behind [romm] and reloads,
+  /// so the browser shows its new badge. See
+  /// [CollectionsService.pushToRomm] for the outcome and the errors.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Push Action"
+  Future<CollectionPushOutcome?> pushToRomm(String id, RommService romm) async {
+    try {
+      return await CollectionsService.pushToRomm(id, romm);
+    } finally {
+      await _refresh();
+    }
   }
 
   /// Replaces a collection's artwork with a copy of [pickedFilePath].

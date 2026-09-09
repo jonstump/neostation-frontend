@@ -15,6 +15,7 @@ import 'package:neostation/models/collection_model.dart';
 import 'package:neostation/models/system_model.dart';
 import 'package:neostation/providers/collections_provider.dart';
 import 'package:neostation/providers/file_provider.dart';
+import 'package:neostation/providers/romm_provider.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/models/my_systems.dart';
 import 'package:neostation/responsive.dart';
@@ -22,6 +23,7 @@ import 'package:neostation/utils/collection_sort.dart';
 import 'package:neostation/services/collections/collections_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/permission_service.dart';
+import 'package:neostation/services/romm_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/widgets/confirm_action_dialog.dart';
 import 'package:neostation/widgets/context_menu/anchored_context_menu.dart';
@@ -254,10 +256,13 @@ class _CollectionsBrowserScreenState extends State<CollectionsBrowserScreen> {
     // Which entries this collection gets is decided by [collectionMenuIds]
     // (pure, tested); this only dresses each id with its label and icon. The
     // menu widget itself is domain-agnostic and the ids are local to it.
+    // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Push Action", REQ "Origin Badge"
     final items = [
       for (final id in collectionMenuIds(
         hasImage: collection.imagePath != null,
         isRommMirror: collection.isRommMirror,
+        isPushedToRomm: collection.isPushedToRomm,
+        canPushToRomm: context.read<RommProvider>().canPushCollections,
       ))
         _menuItem(id),
     ];
@@ -289,6 +294,8 @@ class _CollectionsBrowserScreenState extends State<CollectionsBrowserScreen> {
         await _deleteCollection(collection);
       case kCollectionMenuUnlinkRomm:
         await _unlinkFromRomm(collection);
+      case kCollectionMenuPushRomm:
+        await _pushToRomm(collection);
       case kCollectionMenuViewMode:
         await _openViewMenu();
     }
@@ -323,14 +330,25 @@ class _CollectionsBrowserScreenState extends State<CollectionsBrowserScreen> {
           separatorBefore: true,
         );
       case kCollectionMenuUnlinkRomm:
-        // Only a mirrored collection gets this row (see [collectionMenuIds]);
-        // it sits with the other per-collection actions, above the view-mode
-        // hairline, and is one more D-pad step down from Delete.
+        // Only a linked collection — a mirror or a pushed one — gets this row
+        // (see [collectionMenuIds]); it sits with the other per-collection
+        // actions, above the view-mode hairline, and is one more D-pad step
+        // down from Delete.
         // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Mirrored Collections In The Browser"
+        // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Badge"
         return ContextMenuItem(
           id: id,
           label: AppLocale.collectionUnlinkRomm.getString(context),
           icon: Symbols.cloud_off_rounded,
+        );
+      case kCollectionMenuPushRomm:
+        // The same slot, for an unlinked collection while a server that may
+        // write collections is connected (see [collectionMenuIds]).
+        // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Push Action"
+        return ContextMenuItem(
+          id: id,
+          label: AppLocale.collectionPushRomm.getString(context),
+          icon: kRommPushedGlyph,
         );
       case kCollectionMenuViewMode:
         // View-level action, below the hairline that marks where the menu
@@ -453,8 +471,38 @@ class _CollectionsBrowserScreenState extends State<CollectionsBrowserScreen> {
     }
     if (!confirmed || !mounted) return;
 
+    // A pushed collection has a copy on RomM that is this device's to
+    // manage: ask whether it goes too. B / the cancel button keeps it — the
+    // local delete still happens either way. A mirror is never asked: its
+    // RomM collection is RomM's, and the next sync recreates the mirror.
+    // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Delete"
+    var deleteOnRomm = false;
+    if (collection.isPushedToRomm) {
+      _isBusy = true;
+      try {
+        deleteOnRomm = await ConfirmActionDialog.show(
+          context,
+          title: AppLocale.collectionDeleteRommTitle.getString(context),
+          body: AppLocale.collectionDeleteRommBody
+              .getString(context)
+              .replaceFirst('{name}', collection.name),
+          confirmLabel: AppLocale.collectionDeleteRommConfirm.getString(
+            context,
+          ),
+          cancelLabel: AppLocale.collectionDeleteRommKeep.getString(context),
+          icon: Symbols.cloud_off_rounded,
+        );
+      } finally {
+        _isBusy = false;
+      }
+      if (!mounted) return;
+    }
+
     try {
-      await context.read<CollectionsProvider>().delete(collection.id);
+      await context.read<CollectionsProvider>().delete(
+        collection.id,
+        deleteOnRomm: deleteOnRomm,
+      );
       if (!mounted) return;
       setState(() {
         // Collections plus the trailing create card.
@@ -472,10 +520,13 @@ class _CollectionsBrowserScreenState extends State<CollectionsBrowserScreen> {
     }
   }
 
-  /// Turns a mirrored collection back into an ordinary one after the user
-  /// confirms. The games stay; only the link to the RomM collection goes, so
-  /// the next sync of that RomM collection creates a fresh local one.
+  /// Turns a linked collection back into an ordinary one after the user
+  /// confirms. The games stay; only the link to the RomM collection goes.
+  /// For a mirror, the next sync of that RomM collection creates a fresh
+  /// local one; for a pushed collection, its edits stop queueing for RomM
+  /// and the RomM copy is left as it is.
   // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Mirrored Collections In The Browser"
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Badge"
   Future<void> _unlinkFromRomm(CollectionModel collection) async {
     if (_isBusy) return;
     _isBusy = true;
@@ -484,7 +535,9 @@ class _CollectionsBrowserScreenState extends State<CollectionsBrowserScreen> {
       confirmed = await ConfirmActionDialog.show(
         context,
         title: AppLocale.collectionUnlinkRomm.getString(context),
-        body: AppLocale.collectionUnlinkRommConfirm.getString(context),
+        body: collection.isPushedToRomm
+            ? AppLocale.collectionUnlinkPushedConfirm.getString(context)
+            : AppLocale.collectionUnlinkRommConfirm.getString(context),
         confirmLabel: AppLocale.collectionUnlinkRomm.getString(context),
         icon: Symbols.cloud_off_rounded,
       );
@@ -500,6 +553,71 @@ class _CollectionsBrowserScreenState extends State<CollectionsBrowserScreen> {
         'Collection unlink from RomM failed: id=${collection.id} error=$e',
       );
       _reportSaveError();
+    }
+  }
+
+  /// Pushes an unlinked collection to the connected RomM server and reports
+  /// how many members went and how many had no link to resolve a ROM id
+  /// from. A duplicate name on the server and a login that may not write
+  /// collections each get their own line; anything else is the generic
+  /// failure. The provider reloads the list either way, so the card's badge
+  /// appears as soon as the collection is linked.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Push Action"
+  Future<void> _pushToRomm(CollectionModel collection) async {
+    if (_isBusy) return;
+    final romm = context.read<RommProvider>();
+    if (!romm.canPushCollections) return;
+    _isBusy = true;
+    try {
+      final outcome = await context.read<CollectionsProvider>().pushToRomm(
+        collection.id,
+        romm.service,
+      );
+      if (!mounted) return;
+      if (outcome == null) {
+        _notify(
+          AppLocale.collectionPushRommDenied.getString(context),
+          NotificationType.error,
+        );
+        return;
+      }
+      _notify(
+        AppLocale.collectionPushRommOutcome
+            .getString(context)
+            .replaceFirst('{name}', collection.name)
+            .replaceFirst('{pushed}', '${outcome.pushed}')
+            .replaceFirst('{unlinked}', '${outcome.unlinked}'),
+        NotificationType.success,
+      );
+    } on RommException catch (e) {
+      _log.w(
+        'Collection push failed: id=${collection.id} status=${e.statusCode} '
+        'kind=${e.kind.name} error=${e.message}',
+      );
+      if (!mounted) return;
+      final String text;
+      switch (e.kind) {
+        case RommErrorKind.alreadyExists:
+          text = AppLocale.collectionPushRommAlreadyExists.getString(context);
+        case RommErrorKind.scopeDenied:
+          text = AppLocale.collectionPushRommDenied.getString(context);
+        default:
+          text = AppLocale.collectionPushRommFailed
+              .getString(context)
+              .replaceFirst('{name}', collection.name);
+      }
+      _notify(text, NotificationType.error);
+    } catch (e) {
+      _log.e('Collection push failed: id=${collection.id} error=$e');
+      if (!mounted) return;
+      _notify(
+        AppLocale.collectionPushRommFailed
+            .getString(context)
+            .replaceFirst('{name}', collection.name),
+        NotificationType.error,
+      );
+    } finally {
+      _isBusy = false;
     }
   }
 
@@ -798,6 +916,8 @@ class _CollectionsBrowserScreenState extends State<CollectionsBrowserScreen> {
           rommMirroredLabel: AppLocale.collectionRommMirrored.getString(
             context,
           ),
+          // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Badge"
+          rommPushedLabel: AppLocale.collectionRommPushed.getString(context),
         ),
       newCollectionCardInfo(AppLocale.createCollection.getString(context)),
     ];

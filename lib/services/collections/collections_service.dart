@@ -7,9 +7,19 @@ import 'package:path/path.dart' as path;
 import 'package:neostation/services/logger_service.dart';
 import '../../models/collection_model.dart';
 import '../../models/game_model.dart';
+import '../../models/romm_server_capabilities.dart';
 import '../../repositories/collection_repository.dart';
+import '../../repositories/romm_collection_outbox_repository.dart';
 import '../config_service.dart';
 import '../game/game_list_service.dart';
+import '../romm/romm_collection_outbox_service.dart';
+import '../romm_service.dart';
+
+/// What [CollectionsService.pushToRomm] achieved: the members that reached
+/// RomM and the ones that could not, having no link row to resolve a ROM id
+/// from. The browser's outcome toast reads both.
+// Governing: ADR-0015 (collections push), SPEC-0015 REQ "Push Action"
+typedef CollectionPushOutcome = ({int pushed, int unlinked});
 
 /// User-defined collections of games.
 ///
@@ -88,18 +98,43 @@ class CollectionsService {
   }
 
   /// Renames a collection. Duplicate names are allowed by design.
+  ///
+  /// A pushed collection's new name queues for RomM.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Follow-Up Pushes"
   static Future<void> renameCollection(String id, String name) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) return;
     await CollectionRepository.updateCollection(id, name: trimmed);
+    await _queueRommPush(id, name: true);
   }
 
   /// Deletes a collection, its membership rows, and its artwork file.
   ///
   /// The file delete is best effort: an unreadable or already-missing image
   /// must not stop the collection going away.
-  static Future<void> deleteCollection(String id) async {
+  ///
+  /// [deleteOnRomm] is the user's answer to the browser's "also delete on
+  /// RomM?" prompt for a pushed collection: true queues the remote delete
+  /// **before** the local row goes (the outbox row copies the provenance,
+  /// so the flush still knows its target afterwards) and triggers a flush;
+  /// false drops whatever was queued for the collection so nothing is
+  /// pushed for a collection that no longer exists here. The outbox
+  /// service's origin rule means a mirror (`romm`-origin) or an unlinked
+  /// collection never queues a delete whatever the flag says — RomM is not
+  /// touched.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Delete"
+  static Future<void> deleteCollection(
+    String id, {
+    bool deleteOnRomm = false,
+  }) async {
     final existing = await getCollection(id);
+    if (deleteOnRomm && existing != null && existing.isPushedToRomm) {
+      await _queueRommPush(id, deleteRemote: true);
+    } else if (existing != null && existing.isRommMirror) {
+      // Only a linked collection can hold an outbox row (the queue's origin
+      // rule; a 404 or an unlink drops the row with the link).
+      await RommCollectionOutboxService.discard(id);
+    }
     await CollectionRepository.deleteCollection(id);
     await _deleteImageFile(existing?.imagePath);
   }
@@ -108,12 +143,176 @@ class CollectionsService {
   static Future<void> setCollectionSortOrder(String id, int sortOrder) =>
       CollectionRepository.updateCollection(id, sortOrder: sortOrder);
 
-  /// Turns a mirrored collection back into an ordinary one: the RomM
-  /// provenance is cleared, the row and its members are untouched, and the
-  /// next sync of that RomM collection creates a new local collection.
+  /// Turns a linked collection back into an ordinary one: the RomM
+  /// provenance and origin are cleared, the row and its members are
+  /// untouched. For a mirror, the next sync of that RomM collection creates
+  /// a new local collection; for a pushed collection, whatever was queued
+  /// for it is forgotten and later edits no longer queue.
   // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Mirrored Collections In The Browser"
-  static Future<void> unlinkFromRomm(String id) =>
-      CollectionRepository.clearRommProvenance(id);
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Badge"
+  static Future<void> unlinkFromRomm(String id) async {
+    await CollectionRepository.clearRommProvenance(id);
+    await RommCollectionOutboxService.discard(id);
+  }
+
+  // ── RomM push ──────────────────────────────────────────────────────────────
+
+  /// Called after an edit to a pushed collection has been queued in the
+  /// collection outbox, so a connected `RommProvider` can flush it now
+  /// rather than at the next play-state flush.
+  ///
+  /// Set by the composition root (`main.dart`); a service never imports a
+  /// provider, so the trigger is a callback rather than a call. Null (the
+  /// default, and the case in the secondary engine) means the row waits for
+  /// the next scheduled flush.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Follow-Up Pushes"
+  static void Function()? onRommOutboxQueued;
+
+  /// Pushes collection [id] to the RomM server behind [romm] and records it
+  /// as `local`-origin, so its later edits queue for the collection outbox.
+  ///
+  /// The RomM collection is created with the local name and, when the
+  /// collection has an artwork file, that image; then its membership is set
+  /// to the members that resolve to a ROM id through the link map —
+  /// `POST .../roms` on a server with the add/remove route, one
+  /// `PUT rom_ids` below 4.9.0. Members without a link row are counted in
+  /// the outcome, not pushed (ADR-0015).
+  ///
+  /// Provenance is recorded right after the create, before the membership
+  /// call: a membership failure then leaves a linked collection whose
+  /// members are queued for the flush to retry, instead of an orphan on
+  /// the server that the next push would answer "already exists" for. The
+  /// pushed ROM ids seed the outbox baseline so a later members-only edit
+  /// can go out as a diff.
+  ///
+  /// Returns null without a request when the collection is gone or already
+  /// linked (a mirror or a pushed collection — one writer per collection),
+  /// and when [romm] declined the create because this login is known not
+  /// to hold the `collections.write` scope. Throws [RommException] on a
+  /// server failure; [RommErrorKind.alreadyExists] is the duplicate name.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Push Action", REQ "Error Handling Standards"
+  static Future<CollectionPushOutcome?> pushToRomm(
+    String id,
+    RommService romm,
+  ) async {
+    final collection = await getCollection(id);
+    if (collection == null) {
+      _log.w('Collection push skipped: collection=$id reason=missing');
+      return null;
+    }
+    if (collection.isRommMirror) {
+      _log.w(
+        'Collection push skipped: collection=$id '
+        'reason=already_linked origin=${collection.rommOrigin}',
+      );
+      return null;
+    }
+
+    final members = await RommCollectionOutboxService.resolveMemberRomIds(id);
+
+    final imagePath = collection.imagePath;
+    final artworkPath = imagePath != null && File(imagePath).existsSync()
+        ? imagePath
+        : null;
+    final created = await romm.createCollection(
+      collection.name,
+      artworkPath: artworkPath,
+    );
+    if (created == null) {
+      _log.i('Collection push skipped: collection=$id reason=scope_denied');
+      return null;
+    }
+
+    await CollectionRepository.setRommProvenance(
+      id,
+      serverUrl: romm.baseUrl,
+      collectionId: created.id,
+      virtual: false,
+      syncedAt: DateTime.now(),
+      origin: CollectionModel.originLocal,
+    );
+
+    final rommId = int.tryParse(created.id);
+    if (rommId == null) {
+      throw RommException(
+        'RomM returned a non-numeric collection id: collection=$id '
+        'romm_id=${created.id}',
+      );
+    }
+
+    if (members.romIds.isNotEmpty) {
+      final bool confirmed;
+      try {
+        confirmed =
+            romm.supports(RommFeature.collectionRomsAddRemove) ==
+                RommFeatureSupport.supported
+            ? await romm.addCollectionRoms(rommId, members.romIds)
+            : await romm.updateCollection(rommId, romIds: members.romIds);
+      } catch (e) {
+        // The collection exists and is linked; the members go out with the
+        // next flush rather than being lost with the error.
+        _log.w(
+          'Collection push members failed (queued): collection=$id '
+          'romm_id=$rommId error=$e',
+        );
+        await _queueRommPush(id, members: true);
+        rethrow;
+      }
+      if (!confirmed) {
+        await _queueRommPush(id, members: true);
+        return null;
+      }
+    }
+
+    await RommCollectionOutboxRepository.recordPushedRomIds(
+      id,
+      members.romIds,
+      rommServerUrl: romm.baseUrl,
+      rommCollectionId: created.id,
+    );
+    _log.i(
+      'Collection pushed to RomM: collection=$id romm_id=$rommId '
+      'pushed=${members.romIds.length} unlinked=${members.unlinked}',
+    );
+    return (pushed: members.romIds.length, unlinked: members.unlinked);
+  }
+
+  /// Queues an edit to collection [id] for the collection outbox and, when
+  /// something was queued, asks the connected provider to flush it.
+  ///
+  /// The origin rule is inside [RommCollectionOutboxService.queue]: a
+  /// collection that is not `local`-origin queues nothing, so every edit
+  /// path calls this unconditionally. Never throws — the local edit has
+  /// already landed, and a failure to queue must not undo it in the user's
+  /// eyes.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Follow-Up Pushes", REQ "Error Handling Standards"
+  static Future<void> _queueRommPush(
+    String id, {
+    bool name = false,
+    bool artwork = false,
+    bool members = false,
+    bool deleteRemote = false,
+  }) async {
+    bool queued;
+    try {
+      queued = await RommCollectionOutboxService.queue(
+        id,
+        name: name,
+        artwork: artwork,
+        members: members,
+        deleteRemote: deleteRemote,
+      );
+    } catch (e) {
+      _log.w('Collection push could not be queued: collection=$id error=$e');
+      return;
+    }
+    if (!queued) return;
+    try {
+      onRommOutboxQueued?.call();
+    } catch (e) {
+      _log.w('Collection push flush trigger failed: collection=$id error=$e');
+    }
+  }
 
   // ── Artwork ────────────────────────────────────────────────────────────────
 
@@ -158,6 +357,8 @@ class CollectionsService {
 
       await _evictImageCache(target);
       await CollectionRepository.updateCollection(id, imagePath: target);
+      // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Follow-Up Pushes"
+      await _queueRommPush(id, artwork: true);
       return target;
     } catch (e) {
       _log.e('Error setting image for collection $id: $e');
@@ -165,12 +366,15 @@ class CollectionsService {
     }
   }
 
-  /// Clears a collection's artwork, deleting the file (best effort).
+  /// Clears a collection's artwork, deleting the file (best effort). A
+  /// pushed collection's cover removal queues for RomM.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Follow-Up Pushes"
   static Future<void> clearCollectionImage(String id) async {
     final existing = await getCollection(id);
     await CollectionRepository.updateCollection(id, clearImagePath: true);
     await _deleteImageFile(existing?.imagePath);
     await _evictImageCache(existing?.imagePath);
+    await _queueRommPush(id, artwork: true);
   }
 
   /// Absolute path of the folder collection artwork is stored in.
@@ -186,31 +390,42 @@ class CollectionsService {
   /// Keyed on the raw `rom_path`: on Android that is a URL-encoded SAF
   /// `content://` URI and must be stored exactly as `user_roms` holds it, or
   /// membership and favourites disagree about the same game.
+  ///
+  /// A pushed collection's membership change queues for RomM.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Follow-Up Pushes"
   static Future<void> addGame(String collectionId, GameModel game) async {
     final romPath = game.romPath;
     if (romPath == null || romPath.isEmpty) return;
     await CollectionRepository.addRomToCollection(collectionId, romPath);
+    await _queueRommPush(collectionId, members: true);
   }
 
   /// Removes [game] from a collection. Removing a non-member is a no-op.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Follow-Up Pushes"
   static Future<void> removeGame(String collectionId, GameModel game) async {
     final romPath = game.romPath;
     if (romPath == null || romPath.isEmpty) return;
     await CollectionRepository.removeRomFromCollection(collectionId, romPath);
+    await _queueRommPush(collectionId, members: true);
   }
 
   /// Adds or removes [game] and returns whether it is now a member.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Follow-Up Pushes"
   static Future<bool> toggleGame(String collectionId, GameModel game) async {
     final romPath = game.romPath;
     if (romPath == null || romPath.isEmpty) return false;
 
     final ids = await CollectionRepository.getCollectionIdsForRom(romPath);
+    final bool member;
     if (ids.contains(collectionId)) {
       await CollectionRepository.removeRomFromCollection(collectionId, romPath);
-      return false;
+      member = false;
+    } else {
+      await CollectionRepository.addRomToCollection(collectionId, romPath);
+      member = true;
     }
-    await CollectionRepository.addRomToCollection(collectionId, romPath);
-    return true;
+    await _queueRommPush(collectionId, members: true);
+    return member;
   }
 
   /// Returns the ids of every collection [game] belongs to.
