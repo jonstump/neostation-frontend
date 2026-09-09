@@ -41,6 +41,12 @@ String? rommPairErrorKey(RommErrorKind? kind) {
     // words it itself.
     // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Collection Write Calls"
     RommErrorKind.alreadyExists => null,
+    // The ROM upload's own outcomes (cancelled, failed, one already running)
+    // are worded by the upload surface, not by a pairing screen.
+    // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Chunked Upload Session"
+    RommErrorKind.uploadCancelled ||
+    RommErrorKind.uploadFailed ||
+    RommErrorKind.uploadBusy => null,
     // Every non-pairing kind falls back to the provider's own message, the
     // same as [RommErrorKind.other]: they cannot arise from an exchange.
     RommErrorKind.other || RommErrorKind.payloadTooLarge || null => null,

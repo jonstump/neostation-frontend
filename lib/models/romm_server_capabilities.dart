@@ -254,7 +254,26 @@ enum RommFeature {
   /// "Surprise me" on every 4.8–5.1 server and earned a 404 on every press.
   // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
   // SPEC-0018 REQ "Filter Parameters"
-  randomRom(RommServerVersion(5, 2, 0));
+  randomRom(RommServerVersion(5, 2, 0)),
+
+  /// The chunked ROM upload session: `POST /api/roms/upload/start`,
+  /// `PUT /api/roms/upload/{id}`, `POST .../complete` and `POST .../cancel`,
+  /// behind ADR-0014's "Upload to RomM".
+  ///
+  /// Verified against the release trees: `backend/endpoints/roms/upload.py`
+  /// does not exist at the 4.7.0 tag, whose `backend/endpoints/rom.py`
+  /// carries only the older single-shot `POST /api/roms` (it reads
+  /// `x-upload-platform` and `x-upload-filename`, but no
+  /// `x-upload-total-chunks`, and declares nothing under `/upload/`); at the
+  /// 4.8.0 tag the file exists and declares all four routes above under
+  /// `Scope.ROMS_WRITE`, with `start` answering `{"upload_id"}`, `complete`
+  /// a bare 201 and a name collision a 400 "File {name} already exists". So
+  /// 4.8.0 (2026-04-01) is the first release that answers the session.
+  /// ADR-0014's More Information records the work as commit d21ce46 (the
+  /// session) and a999e7e (the move to `/roms/upload/...`); the trees, not
+  /// those dates, are what this entry rests on.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Chunked Upload Session"
+  romUpload(RommServerVersion(4, 8, 0));
 
   const RommFeature(this.minVersion);
 
