@@ -47,11 +47,13 @@ Local library: `user_roms` (`UNIQUE(rom_path)`, NOT NULL) and `user_detected_sys
 
 **Choice**: confirm → `RommProvider.downloadRom(rom from catalog row)`; the card reads `downloadFor(romId)`; the settle rescan and `libraryRevision` trigger the list reload that flips the row.
 **Rationale**: the same tracker, unpack, metadata fetch, link row, and rescan as the RomM tab.
+The catalog row becomes the `RommRom` through `RommCatalogRow.toRommRom()` with `platformSlug = systemFolder`, so `resolveSystem` lands on the same local system offline without the platform table; `downloadRom` needs only the name from it, the metadata columns come from `getRomDetail`. The press goes through `RemoteDownloadFlow` (a plain class with every effect injected): `reachability == offline` → notice and no request; otherwise the destination is resolved without creating anything through `RommProvider.destinationFor` (a public face on `plannedDestDir`), the `ConfirmActionDialog` shows name, size, and folder, and only a yes starts the download. `destinationFor` mirrors `plannedDestDir` while `downloadRom` uses `_existingRomDir ?? _resolveDestDir`, so the folder the confirmation names can differ from the one the download lands in when the base folder is writable but the subfolder is not, or when an unindexed local copy sits in an alias folder — the same trade the RomM tab's pre-flight makes, accepted at the #215 review. A press during a transfer asks before cancelling. On completion the flow awaits the tracker's `indexed` future (45 s bound), reloads once on a miss (reusing an in-flight load rather than starting a second), and offers Play now / Later as a one-time `ConfirmActionDialog`; a settle that lands while a load is in flight sets a pending flag that `_loadGames` re-checks when it finishes, so the flip is never swallowed.
 
 ### Cover cache under the media cache with LRU
 
 **Choice**: files on disk, an index of `(path, size, lastUsed)` kept in memory and rebuilt from the directory on start; eviction after prefetch and on a size check every 100 fills.
 **Rationale**: covers are the offline experience; a cap keeps the handheld's storage predictable.
+The lazy fill on the cards is `RommProvider.warmCover(rommRomId)` (#215): it reads the catalog row, calls `RommCoverCache.ensure` once per rom id and connection (the request set clears on connect, disconnect, catalog change, and when reachability comes back online), and bumps `coverRevision` coalesced at 150 ms; the grid's row signature carries the revision, the carousel re-resolves its background on it and stats a remote cover directly instead of memoising a negative in its file-exists cache, and the list host re-pushes the secondary display for a selected remote entry.
 The cache serves remote entries only: a local game without scraped media draws the placeholder, not the RomM cover of its linked ROM (`rommCoverPathFor`, #206). The server's directory is cleared on disconnect and on a server change (#206); the catalog clear on the same events is #107's.
 
 ### Remote-only systems through the same builder
@@ -69,10 +71,10 @@ The cache serves remote entries only: a local game without scraped media draws t
 **Choice**: switching to `all` while offline toasts the localized "offline, showing the cached RomM library" line once, and the footer pill wears a cloud-off mark whose tooltip carries the same line for as long as the view is `all` and offline.
 **Rationale**: the footer is one line high and already carries the chord and the scope name; a persistent banner would cost list height for a state the pill already shows. The pill has a label slot should a persistent line be wanted later.
 
-### Remote entries are inert until the download flow lands
+### Remote entries answer the download press and nothing else
 
-**Choice**: with #108 (cards, badges, download-from-the-list, secondary display) still open, a launch, favourite, per-game settings, or scrape press on a remote entry answers with a localized "Not downloaded" notice (`_notifyRemoteNotDownloaded`) instead of writing rows keyed to a file that is not there; the context menu drops favourite, collections, settings, and scrape for `isRemote` and keeps the view-level items. The scrape guard must cover the Select + A chord as well as the menu (the #213 review found the chord bypassing it).
-**Rationale**: `user_roms`-keyed writes for a path-less entry would be exactly the identity leak ADR-0020 rejected; the search screen and the secondary display are untouched, since a remote entry reaching the secondary display resolves its media paths to files that do not exist and draws the placeholder.
+**Choice**: the launch press on a remote entry downloads it (the section above); a favourite, per-game settings, or scrape press answers with a localized "Not downloaded" notice (`_notifyRemoteNotDownloaded`) instead of writing rows keyed to a file that is not there; the context menu drops favourite, collections, settings, and scrape for `isRemote` and keeps the download items and the view-level items; the random picker skips remote entries. The scrape guard must cover the Select + A chord as well as the menu (the #213 review found the chord bypassing it). Before #108 the launch press was inert as well.
+**Rationale**: `user_roms`-keyed writes for a path-less entry would be exactly the identity leak ADR-0020 rejected. With #108 the secondary display gets its own push (`remoteEntrySecondaryStateFor`: cached cover, `romm:<id>` id, `isRemoteGame` flag) instead of resolving media paths to files that do not exist, and the search screen gets the catalog as its offline source (`remoteSearchSourceFor`) plus the same offline gate on its download action.
 
 ## Architecture
 
@@ -108,7 +110,7 @@ flowchart LR
     L & C & H --> M["merged List<GameModel>"]
     M --> SC["scope predicate (all | downloaded): Select + X, footer pill, context menu"]
     SC --> V["list / grid / carousel"]
-    V --> F["footer: Play | Download | Cancel | Retry"]
+    V --> F["footer: Play | Download | Cancel | Retry | Downloading…"]
     V --> B["badges: cloud-download, progress, retry"]
     V --> CV["cover: local → scraped media or placeholder; remote → RommCoverCache or placeholder"]
     F -->|Download| DL["RommProvider.downloadRom"]
@@ -137,4 +139,4 @@ One versioned migration: two catalog tables with index, config columns `romm_sho
 
 - Should remote entries appear in collections that mirror RomM collections (ADR-0009) as unresolved members? Deferred; would let a mirrored collection show its undownloaded games.
 - Incremental refresh by `updated_at` ordering instead of a full walk, once RomM exposes a stable `updated_at` filter; the full walk is the ADR-0001 cost model for now.
-- Auto-play after download: a single "Play now" toast is specified; a setting to auto-launch is not.
+- Auto-play after download: a single Play now / Later prompt is specified (a `ConfirmActionDialog`, since the tray has no action affordance); a setting to auto-launch is not. The prompt has no tray fallback when the list route was left before the settle: the user then gets no completion notice.
