@@ -1495,4 +1495,6 @@ const Map<String, dynamic> appLocaleJa = {
       'このコレクションは変更を RomM に送信しなくなります。ゲームはこの端末と RomM の両方に残ります。',
   AppLocale.rommSyncOutcomeCollectionManagedHere:
       'コレクション「{name}」はこの端末で管理されているため、RomM から更新されませんでした',
+  AppLocale.collectionPushRommMembersQueued:
+      '「{name}」は RomM に作成されました。ゲームはサーバーに接続できたときに送信されます',
 };

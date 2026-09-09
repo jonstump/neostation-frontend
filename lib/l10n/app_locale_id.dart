@@ -1649,4 +1649,6 @@ const Map<String, dynamic> appLocaleId = {
       'Koleksi ini akan berhenti mengirim perubahannya ke RomM. Gamenya tetap ada di sini dan di RomM.',
   AppLocale.rommSyncOutcomeCollectionManagedHere:
       'Koleksi "{name}" dikelola dari perangkat ini dan tidak diperbarui dari RomM',
+  AppLocale.collectionPushRommMembersQueued:
+      '"{name}" sudah ada di RomM; gamenya akan menyusul saat server dapat dijangkau',
 };

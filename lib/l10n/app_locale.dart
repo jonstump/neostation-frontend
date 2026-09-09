@@ -1756,6 +1756,8 @@ mixin AppLocale {
       'collection_unlink_pushed_confirm';
   static const String rommSyncOutcomeCollectionManagedHere =
       'romm_sync_outcome_collection_managed_here';
+  static const String collectionPushRommMembersQueued =
+      'collection_push_romm_members_queued';
 
   // ==========================================================================
   // Localization Maps

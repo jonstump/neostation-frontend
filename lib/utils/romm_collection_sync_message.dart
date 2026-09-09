@@ -37,8 +37,7 @@ class RommCollectionSyncMessage {
 /// ([RommCollectionMirrorSummary.skippedLocalOrigin]) says it is managed
 /// here, so the user knows why the sync changed nothing. [name] is the RomM
 /// collection's name, which is also the local collection's name at creation.
-// Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Sync Dialog And Outcome"
-// Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Column"
+// Governing: ADR-0009 (mirror synced RomM collections), ADR-0015 (collections push), SPEC-0009 REQ "Sync Dialog And Outcome"
 RommCollectionSyncMessage? rommCollectionOutcomeMessage(
   RommCollectionMirrorSummary? summary, {
   required String name,

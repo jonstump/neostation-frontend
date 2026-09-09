@@ -426,6 +426,7 @@ void main() {
       AppLocale.collectionDeleteRommKeep,
       AppLocale.collectionUnlinkPushedConfirm,
       AppLocale.rommSyncOutcomeCollectionManagedHere,
+      AppLocale.collectionPushRommMembersQueued,
     };
 
     test('every new key has a value in every language', () {
@@ -456,6 +457,7 @@ void main() {
           AppLocale.collectionPushRommFailed,
           AppLocale.collectionDeleteRommBody,
           AppLocale.rommSyncOutcomeCollectionManagedHere,
+          AppLocale.collectionPushRommMembersQueued,
         ]) {
           expect(maps[key], contains('{name}'), reason: '$key ${entry.key}');
         }

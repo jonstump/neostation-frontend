@@ -1698,4 +1698,6 @@ const Map<String, dynamic> appLocaleEs = {
       'Esta colección dejará de enviar sus cambios a RomM. Sus juegos permanecen aquí y en RomM.',
   AppLocale.rommSyncOutcomeCollectionManagedHere:
       'La colección "{name}" se gestiona desde este dispositivo y no se actualizó desde RomM',
+  AppLocale.collectionPushRommMembersQueued:
+      '"{name}" está en RomM; sus juegos se enviarán cuando el servidor esté disponible',
 };

@@ -1502,4 +1502,6 @@ const Map<String, dynamic> appLocaleKo = {
       '이 컬렉션은 더 이상 변경 사항을 RomM으로 보내지 않습니다. 게임은 이 기기와 RomM에 그대로 남습니다.',
   AppLocale.rommSyncOutcomeCollectionManagedHere:
       '컬렉션 "{name}"은(는) 이 기기에서 관리되므로 RomM에서 업데이트되지 않았습니다',
+  AppLocale.collectionPushRommMembersQueued:
+      '"{name}"이(가) RomM에 생성되었습니다. 게임은 서버에 연결되면 전송됩니다',
 };

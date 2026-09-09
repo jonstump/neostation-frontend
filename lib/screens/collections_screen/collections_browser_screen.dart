@@ -559,9 +559,11 @@ class _CollectionsBrowserScreenState extends State<CollectionsBrowserScreen> {
   /// Pushes an unlinked collection to the connected RomM server and reports
   /// how many members went and how many had no link to resolve a ROM id
   /// from. A duplicate name on the server and a login that may not write
-  /// collections each get their own line; anything else is the generic
-  /// failure. The provider reloads the list either way, so the card's badge
-  /// appears as soon as the collection is linked.
+  /// collections each get their own line; a create that succeeded but a
+  /// membership call that did not says the collection is on RomM and its
+  /// games will follow (the service queued them); anything else is the
+  /// generic failure. The provider reloads the list either way, so the
+  /// card's badge appears as soon as the collection is linked.
   // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Push Action"
   Future<void> _pushToRomm(CollectionModel collection) async {
     if (_isBusy) return;
@@ -575,6 +577,12 @@ class _CollectionsBrowserScreenState extends State<CollectionsBrowserScreen> {
       );
       if (!mounted) return;
       if (outcome == null) {
+        // The service also answers null for a missing or already-linked
+        // collection and for a membership call the server declined after a
+        // create it accepted; none is reachable from this menu (the entry
+        // is hidden for linked collections, and an accepted create settles
+        // the scope), and each is logged by the service. The only null a
+        // user can reach here is the scope-denied create.
         _notify(
           AppLocale.collectionPushRommDenied.getString(context),
           NotificationType.error,
@@ -588,6 +596,18 @@ class _CollectionsBrowserScreenState extends State<CollectionsBrowserScreen> {
             .replaceFirst('{pushed}', '${outcome.pushed}')
             .replaceFirst('{unlinked}', '${outcome.unlinked}'),
         NotificationType.success,
+      );
+    } on RommCollectionPushMembersQueuedException catch (e) {
+      _log.w(
+        'Collection push partial (members queued): id=${collection.id} '
+        'status=${e.statusCode} kind=${e.kind.name} error=${e.message}',
+      );
+      if (!mounted) return;
+      _notify(
+        AppLocale.collectionPushRommMembersQueued
+            .getString(context)
+            .replaceFirst('{name}', collection.name),
+        NotificationType.info,
       );
     } on RommException catch (e) {
       _log.w(

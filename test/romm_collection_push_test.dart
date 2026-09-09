@@ -381,7 +381,9 @@ void main() {
         await expectLater(
           CollectionsService.pushToRomm(id, romm),
           throwsA(
-            isA<RommException>().having((e) => e.statusCode, 'status', 503),
+            isA<RommCollectionPushMembersQueuedException>()
+                .having((e) => e.statusCode, 'status', 503)
+                .having((e) => e.cause, 'cause', isA<RommException>()),
           ),
         );
 

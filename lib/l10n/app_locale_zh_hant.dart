@@ -1435,4 +1435,5 @@ const Map<String, dynamic> appLocaleZhHant = {
       '此收藏集將不再向 RomM 推送變更。其中的遊戲在本機和 RomM 上都會保留。',
   AppLocale.rommSyncOutcomeCollectionManagedHere:
       '收藏集 "{name}" 由本裝置管理，未從 RomM 更新',
+  AppLocale.collectionPushRommMembersQueued: '「{name}」已在 RomM 上建立，遊戲將在伺服器可用時同步',
 };

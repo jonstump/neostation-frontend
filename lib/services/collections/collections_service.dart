@@ -21,6 +21,23 @@ import '../romm_service.dart';
 // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Push Action"
 typedef CollectionPushOutcome = ({int pushed, int unlinked});
 
+/// [CollectionsService.pushToRomm] created and linked the collection on
+/// RomM, but the membership call failed: the members are queued
+/// (`members_dirty`) and go out with the next flush, so the collection is
+/// on RomM and carries the pushed badge. [cause] is the membership failure;
+/// its status and kind are copied when it is a [RommException] so callers
+/// that log them see the server's answer.
+// Governing: ADR-0015 (collections push), SPEC-0015 REQ "Push Action", REQ "Error Handling Standards"
+class RommCollectionPushMembersQueuedException extends RommException {
+  final Object cause;
+  RommCollectionPushMembersQueuedException(this.cause)
+    : super(
+        'Collection created on RomM; membership failed and was queued: $cause',
+        statusCode: cause is RommException ? cause.statusCode : null,
+        kind: cause is RommException ? cause.kind : RommErrorKind.other,
+      );
+}
+
 /// User-defined collections of games.
 ///
 /// Owns the read/write API above [CollectionRepository]: CRUD on the
@@ -129,6 +146,11 @@ class CollectionsService {
   }) async {
     final existing = await getCollection(id);
     if (deleteOnRomm && existing != null && existing.isPushedToRomm) {
+      // Queue (and trigger the flush) before the local delete: the outbox
+      // row copies the provenance and the table has no FK, so _deleteRemote
+      // is correct whether it runs against a still-present or an
+      // already-deleted local row (the row's own romm_collection_id is the
+      // target, and clearRommProvenance is guarded by local != null).
       await _queueRommPush(id, deleteRemote: true);
     } else if (existing != null && existing.isRommMirror) {
       // Only a linked collection can hold an outbox row (the queue's origin
@@ -190,6 +212,9 @@ class CollectionsService {
   /// and when [romm] declined the create because this login is known not
   /// to hold the `collections.write` scope. Throws [RommException] on a
   /// server failure; [RommErrorKind.alreadyExists] is the duplicate name.
+  /// Throws [RommCollectionPushMembersQueuedException] when the create
+  /// succeeded but the membership call did not: the collection is linked
+  /// and its members are queued for the next flush.
   // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Push Action", REQ "Error Handling Standards"
   static Future<CollectionPushOutcome?> pushToRomm(
     String id,
@@ -256,9 +281,16 @@ class CollectionsService {
           'romm_id=$rommId error=$e',
         );
         await _queueRommPush(id, members: true);
-        rethrow;
+        throw RommCollectionPushMembersQueuedException(e);
       }
       if (!confirmed) {
+        // Not reachable after a create the server accepted (that settles
+        // the scope group as granted); kept so a declined membership call
+        // still leaves the link and the queued members behind.
+        _log.w(
+          'Collection push members declined (queued): collection=$id '
+          'romm_id=$rommId reason=scope_denied',
+        );
         await _queueRommPush(id, members: true);
         return null;
       }
