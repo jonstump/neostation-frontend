@@ -599,16 +599,21 @@ void main() {
         expect(summary, isNotNull, reason: 'the standalone pass answered');
       });
 
-      test('a disposed provider', () async {
+      // The one refusal that does not fall through: SPEC-0001 has the pass
+      // stop early on dispose, and a provider disposed before the pass began
+      // has nothing left to serve — an upload summary's "Link now" that
+      // outlived it must not walk the library either.
+      // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Pass Scheduling and Guards"
+      test('a disposed provider runs nothing', () async {
         final refresh = _FakeRefresh();
         await build(autoSweep: false, withRefresh: refresh);
         browse.connected = true;
         provider.dispose();
 
-        await provider.linkLibrary();
+        expect(await provider.linkLibrary(), isNull);
 
         expect(refresh.reasons, isEmpty, reason: 'no walk after dispose');
-        expect(linker.runs, 1);
+        expect(linker.runs, 0, reason: 'no standalone pass after dispose');
       });
 
       // The walk happened but the link stage never opened — a local library

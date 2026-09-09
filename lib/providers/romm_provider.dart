@@ -1657,7 +1657,7 @@ class RommProvider extends ChangeNotifier {
   // ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
   bool get canRunServerTasks =>
       isConnected &&
-      _service.hasScope(RommScopeGroup.tasksRun) == RommScopeState.granted;
+      service.hasScope(RommScopeGroup.tasksRun) == RommScopeState.granted;
 
   /// Asks the server for one ROM out of the open platform or collection, and
   /// locates it in the loaded list.
@@ -1773,7 +1773,7 @@ class RommProvider extends ChangeNotifier {
   // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
   // SPEC-0018 REQ "Maintenance Tasks"
   Future<String?> runServerTask(String name) async {
-    final id = await _service.runTask(name);
+    final id = await service.runTask(name);
     await _persistRefreshedTokens();
     return id;
   }
@@ -1792,13 +1792,17 @@ class RommProvider extends ChangeNotifier {
   /// Unknown counts as offered, like [canPushCollections]: the upload is the
   /// user's own action, and a 403 settles the group with a clear message
   /// where hiding the row would leave no way in.
-  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Upload Surfaces"
+  ///
+  /// Reads the server through [service], the seam the provider tests
+  /// substitute, as the batch below does.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Upload Surfaces",
+  // ADR-0013 (push play state to RomM), SPEC-0013 REQ "Optional Scope Groups"
   bool get canUploadRoms =>
       isConnected &&
       _reachability != RommReachability.offline &&
-      _service.supports(RommFeature.romUpload) !=
+      service.supports(RommFeature.romUpload) !=
           RommFeatureSupport.unsupported &&
-      _service.hasScope(RommScopeGroup.romsWrite) != RommScopeState.denied;
+      service.hasScope(RommScopeGroup.romsWrite) != RommScopeState.denied;
 
   /// Runs the connect-time link pass on demand. Installed by the sync
   /// provider, which owns the pass; this provider only knows that a user
@@ -1808,7 +1812,8 @@ class RommProvider extends ChangeNotifier {
 
   /// "Link now": the link pass, once, if the sync provider is wired up and
   /// the connection is still there. Null when it did not run.
-  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Scan And Link After Upload"
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Scan And Link After Upload",
+  // ADR-0001 (filename linking), SPEC-0001 REQ "Pass Scheduling and Guards"
   Future<RommLinkPassSummary?> linkNow() async {
     final hook = onLinkRequested;
     if (hook == null || !isConnected) return null;
@@ -1949,7 +1954,7 @@ class RommProvider extends ChangeNotifier {
             onProgress,
             shouldCancel,
           }) async {
-            final sent = await _service.uploadRom(
+            final sent = await service.uploadRom(
               source,
               platformId: platformId,
               fileName: fileName,
@@ -1963,6 +1968,9 @@ class RommProvider extends ChangeNotifier {
       // batch, not when it is bound: a group learned while the files were
       // going up counts. Null from here is the gated answer the engine
       // reports as pending.
+      // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Optional Scope Groups",
+      // ADR-0019 (expose RomM library filters, search and maintenance),
+      // SPEC-0018 REQ "Maintenance Tasks"
       requestScan: () async {
         if (!canRunServerTasks) return null;
         return runServerTask(RommRomUpload.scanTaskName);
@@ -2320,7 +2328,8 @@ class RommProvider extends ChangeNotifier {
   /// one folder — and then this returns null too, with a warning naming the
   /// candidates: a wrong platform folder is worse than a refusal, and
   /// picking the first would be picking at random.
-  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Platform Mapping"
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Platform Mapping",
+  // ADR-0001 (filename linking), SPEC-0001 REQ "Filename Equivalence Rule"
   Future<RommPlatform?> platformForSystem(SystemModel system) async {
     await loadPlatforms();
     await platformsLoaded;

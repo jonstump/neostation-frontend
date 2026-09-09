@@ -206,9 +206,12 @@ class RomMSyncProvider extends ChangeNotifier
   @override
   void dispose() {
     _disposed = true;
-    if (identical(_browse.onLinkRequested, linkLibrary)) {
-      _browse.onLinkRequested = null;
-    }
+    // Cleared unconditionally, like `onReconnected` below: a tear-off of
+    // `linkLibrary` is a fresh closure each time, so comparing the installed
+    // hook against another tear-off (`identical`) never matches and would
+    // leave the browse provider holding a closure into a disposed provider.
+    // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Scan And Link After Upload"
+    _browse.onLinkRequested = null;
     if (_autoSweep) {
       _browse.removeListener(_onBrowseChanged);
       _browse.onReconnected = null;
@@ -1772,6 +1775,12 @@ class RomMSyncProvider extends ChangeNotifier
   /// skipped.
   // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Pass Scheduling and Guards"
   Future<RommLinkPassSummary?> linkLibrary() async {
+    // A hook captured before dispose (an upload summary's "Link now" that
+    // outlived this provider) must not walk the catalog on a dead provider.
+    if (_disposed) {
+      _log.i('RomM link pass skipped: provider disposed');
+      return null;
+    }
     if (!_browse.isConnected) {
       _log.i('RomM link pass skipped: disconnected');
       return null;

@@ -31,6 +31,7 @@ class RommUploadStrings {
   final String linkNow;
   final String linkNowResultTemplate;
   final String linkNowNothing;
+  final String linkFailed;
   final String skippedLineTemplate;
   final String failedLineTemplate;
   final String moreTemplate;
@@ -57,6 +58,7 @@ class RommUploadStrings {
     required this.linkNow,
     required this.linkNowResultTemplate,
     required this.linkNowNothing,
+    required this.linkFailed,
     required this.skippedLineTemplate,
     required this.failedLineTemplate,
     required this.moreTemplate,
@@ -86,6 +88,7 @@ class RommUploadStrings {
       linkNow: s(AppLocale.rommUploadLinkNow),
       linkNowResultTemplate: s(AppLocale.rommUploadLinkNowResult),
       linkNowNothing: s(AppLocale.rommUploadLinkNowNothing),
+      linkFailed: s(AppLocale.rommLinkFailed),
       skippedLineTemplate: s(AppLocale.rommUploadSkippedLine),
       failedLineTemplate: s(AppLocale.rommUploadFailedLine),
       moreTemplate: s(AppLocale.rommUploadMore),
@@ -233,7 +236,14 @@ class RommRomUploadRunner {
     final romm = context.read<RommProvider>();
     return _run(
       context,
-      subject: game.systemRealName ?? game.systemFolderName ?? '',
+      // The aggregate views pass the folder the row lives under; a row that
+      // carries no system names of its own (a cross-system list entry) would
+      // otherwise toast "no platform matching " with nothing after it.
+      subject: _firstNamed([
+        game.systemRealName,
+        game.systemFolderName,
+        systemFolder,
+      ]),
       singleGame: true,
       start: (onProgress) => romm.uploadToRomm(
         game,
@@ -336,11 +346,11 @@ class RommRomUploadRunner {
       return;
     } catch (e, st) {
       _log.e('RomM upload batch did not run', error: e, stackTrace: st);
-      notifications.update(
-        id: notificationId,
+      _showTerminal(
+        notifications,
+        strings,
         message: strings.failReasons[RommUploadFailure.other] ?? '',
         type: GlobalNotificationType.error,
-        progress: null,
       );
       return;
     }
@@ -373,25 +383,60 @@ class RommRomUploadRunner {
     }
 
     final text = strings.summary(summary);
-    notifications.update(
-      id: notificationId,
+    _showTerminal(
+      notifications,
+      strings,
       message: text,
       type: summary.failed.isNotEmpty
           ? GlobalNotificationType.error
           : (summary.end == RommUploadEnd.completed
                 ? GlobalNotificationType.success
                 : GlobalNotificationType.info),
-      progress: null,
       // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Scan And Link After Upload"
       action: summary.wroteSomething
-          ? GlobalNotificationAction(
-              label: strings.linkNow,
-              onPressed: () => unawaited(
-                _linkNow(romm, strings, notifications, summaryText: text),
-              ),
-            )
+          ? _linkNowAction(romm, strings, notifications, summaryText: text)
           : null,
     );
+  }
+
+  /// The row a run ends on. Goes through [GlobalNotificationService.show]
+  /// rather than `update`, which keeps the previous fraction when handed
+  /// `progress: null`: the summary must not sit under a bar left full by a
+  /// completed batch or frozen part-way by a cancel.
+  static void _showTerminal(
+    GlobalNotificationService notifications,
+    RommUploadStrings strings, {
+    required String message,
+    required GlobalNotificationType type,
+    GlobalNotificationAction? action,
+  }) {
+    notifications.show(
+      id: notificationId,
+      title: strings.title,
+      message: message,
+      type: type,
+      action: action,
+    );
+  }
+
+  static GlobalNotificationAction _linkNowAction(
+    RommProvider romm,
+    RommUploadStrings strings,
+    GlobalNotificationService notifications, {
+    required String summaryText,
+  }) => GlobalNotificationAction(
+    label: strings.linkNow,
+    onPressed: () => unawaited(
+      _linkNow(romm, strings, notifications, summaryText: summaryText),
+    ),
+  );
+
+  /// The first non-empty name, or an empty string when there is none.
+  static String _firstNamed(List<String?> candidates) {
+    for (final candidate in candidates) {
+      if (candidate != null && candidate.isNotEmpty) return candidate;
+    }
+    return '';
   }
 
   /// "Link now": runs the link pass once and appends what it linked to the
@@ -404,27 +449,42 @@ class RommRomUploadRunner {
     GlobalNotificationService notifications, {
     required String summaryText,
   }) async {
+    // The summary row has no bar (it was shown, not updated), so nothing
+    // for this update to carry over; the action is withdrawn until the
+    // pass answers.
     notifications.update(
       id: notificationId,
       message: summaryText,
-      progress: null,
       ongoing: true,
     );
-    final result = await romm.linkNow();
-    final linked = result?.rowsAdded ?? 0;
-    notifications.update(
-      id: notificationId,
-      message:
-          '$summaryText\n'
-          '${linked > 0 ? strings.linkNowResult(linked) : strings.linkNowNothing}',
-      type: linked > 0 ? GlobalNotificationType.success : null,
-      progress: null,
-      // The pass can be run again once the server has scanned.
-      action: GlobalNotificationAction(
-        label: strings.linkNow,
-        onPressed: () => unawaited(
-          _linkNow(romm, strings, notifications, summaryText: summaryText),
-        ),
+    String line;
+    var type = GlobalNotificationType.info;
+    try {
+      final result = await romm.linkNow();
+      final linked = result?.rowsAdded ?? 0;
+      line = linked > 0
+          ? strings.linkNowResult(linked)
+          : strings.linkNowNothing;
+      if (linked > 0) type = GlobalNotificationType.success;
+    } catch (e, st) {
+      // `linkLibrary` is documented not to throw; this is what keeps a throw
+      // from leaving the row `ongoing` with its action gone and no way back.
+      _log.e('RomM link pass did not run', error: e, stackTrace: st);
+      line = strings.linkFailed;
+      type = GlobalNotificationType.error;
+    }
+    _showTerminal(
+      notifications,
+      strings,
+      message: '$summaryText\n$line',
+      type: type,
+      // The pass can be run again once the server has scanned, or after a
+      // failure.
+      action: _linkNowAction(
+        romm,
+        strings,
+        notifications,
+        summaryText: summaryText,
       ),
     );
   }
