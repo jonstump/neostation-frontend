@@ -71,15 +71,19 @@ NeoSyncLocalizedError neoSyncSuccess(String localeKey) =>
 /// the widget layer is the wrong place to rely on every service beneath it
 /// never rethrowing something that carries a URL or a token. The sentence alone
 /// is what the user can act on; the detail is only useful in the log, so
-/// [logged] carries it there, redacted, tagged with [where] (the handler that
-/// caught it) so the log line still says which path failed.
+/// [logged] carries it there, redacted, tagged with [where] so the log line
+/// still says which path failed.
+///
+/// [where] is the complete tag, class included (`'AuthForm.submit'`): this
+/// helper does not know who called it, so a second adopter names its own site
+/// rather than inheriting the first one's prefix.
 ({NeoSyncLocalizedError shown, String logged}) neoSyncCaughtException(
   Object error, {
   required String localeKey,
   required String where,
 }) => (
   shown: NeoSyncLocalizedError(localeKey),
-  logged: 'AuthForm.$where: ${redactSecrets(error.toString())}',
+  logged: '$where: ${redactSecrets(error.toString())}',
 );
 
 /// The "Network error: {error}" sentence for a thrown [error], with the

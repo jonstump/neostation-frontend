@@ -116,7 +116,7 @@ void main() {
         final caught = neoSyncCaughtException(
           thrown,
           localeKey: key,
-          where: 'submit',
+          where: 'AuthForm.submit',
         );
         expect(caught.shown.detail, isNull);
         for (final entry in locales.entries) {
@@ -133,13 +133,14 @@ void main() {
       final caught = neoSyncCaughtException(
         thrown,
         localeKey: AppLocale.anErrorOccurred,
-        where: 'resetPassword',
+        where: 'AuthForm.resetPassword',
       );
       expect(caught.logged, isNot(contains(token)));
       expect(caught.logged, isNot(contains('SESSIONSECRET')));
       expect(caught.logged, contains('token=$redactedPlaceholder'));
       expect(caught.logged, contains('sid=$redactedPlaceholder'));
-      // Still diagnosable: which handler, which host, which cause.
+      // Still diagnosable: which handler, which host, which cause. The tag is
+      // the caller's verbatim — the helper adds no prefix of its own.
       expect(caught.logged, startsWith('AuthForm.resetPassword: '));
       expect(caught.logged, contains('auth.neostation.app/login'));
       expect(caught.logged, contains('Connection refused'));

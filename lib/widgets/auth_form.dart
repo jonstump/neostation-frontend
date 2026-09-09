@@ -607,6 +607,9 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
   /// sentence goes in the message box by itself and the exception goes to the
   /// log, redacted. It used to be `'$sentence: $e'` on screen, unredacted, at
   /// all six sites — see [neoSyncCaughtException] for why that stopped.
+  ///
+  /// [where] is this form's handler name; the log tag it becomes is
+  /// `AuthForm.<where>`.
   void _showCaught(
     Object error, {
     required String localeKey,
@@ -616,7 +619,7 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
     final caught = neoSyncCaughtException(
       error,
       localeKey: localeKey,
-      where: where,
+      where: 'AuthForm.$where',
     );
     _log.e(caught.logged);
     if (!mounted) return;
