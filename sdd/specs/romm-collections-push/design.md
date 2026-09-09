@@ -73,4 +73,4 @@ One versioned migration: `romm_origin` column with backfill, outbox table. Versi
 ## Open Questions
 
 - Push `is_public`? Not exposed locally; default private.
-- ~~Should the favourites collection (SPEC-0013) appear as a pushed collection in the browser?~~ Resolved by construction (#217): the favourites collection is RomM's and favourites here are a flag on the ROM, so no local collection is the favourites collection; the only local row that can stand for it is a mirror, which the provenance rule already keeps off the push entry.
+- ~~Should the favourites collection (SPEC-0013) appear as a pushed collection in the browser?~~ Resolved by construction (#217): the favourites collection is RomM's, found by its `is_favorite` flag and never by name, and favourites here are a flag on the ROM, so no local collection is the favourites collection — not even one named "Favorites"; the only local row that can stand for it is a `romm`-origin mirror, which the provenance rule already keeps off the push entry.
