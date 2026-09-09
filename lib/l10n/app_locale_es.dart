@@ -1706,4 +1706,51 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.neoSyncPasswordResetEmailSent:
       'Correo de restablecimiento de contraseña enviado',
   AppLocale.neoSyncNotAuthenticated: 'Sesión no iniciada',
+  AppLocale.rommUploadMenuItem: 'Subir a RomM',
+  AppLocale.rommUploadTitle: 'Subir a RomM',
+  AppLocale.rommUploadSystemRowTitle: 'Subir juegos que faltan en RomM',
+  AppLocale.rommUploadSystemRowSubtitle:
+      'Enviar los juegos de este sistema que RomM no tiene',
+  AppLocale.rommUploadSystemRowRunning: 'Subiendo {name} ({current}/{total})',
+  AppLocale.rommUploadConfirmBody:
+      '{count} juegos ({size}) se subirán a RomM uno tras otro. Las listas de reproducción y las imágenes de disco se omiten.',
+  AppLocale.rommUploadConfirmAction: 'Subir',
+  AppLocale.rommUploadPreparing: 'Preparando la subida a RomM…',
+  AppLocale.rommUploadProgress: 'Subiendo {name} ({current}/{total})',
+  AppLocale.rommUploadNoPlatform:
+      'RomM no tiene una plataforma que coincida con {system}',
+  AppLocale.rommUploadNothingToUpload:
+      'Nada que subir: RomM ya tiene todos los juegos de {system}',
+  AppLocale.rommUploadAlreadyLinked: 'Este juego ya está vinculado a RomM',
+  AppLocale.rommUploadBusy: 'Ya hay una subida a RomM en curso',
+  AppLocale.rommUploadNotOffered: 'RomM no puede recibir subidas ahora mismo',
+  AppLocale.rommUploadSummary:
+      '{uploaded} subidos, {skipped} omitidos, {failed} fallidos',
+  AppLocale.rommUploadSummaryCancelled: 'Subida cancelada — {summary}',
+  AppLocale.rommUploadSummaryDisconnected:
+      'Subida detenida, RomM no está accesible — {summary}',
+  AppLocale.rommUploadScanRequested:
+      'Escaneo de biblioteca solicitado en el servidor',
+  AppLocale.rommUploadScanPending:
+      'Pendiente de un escaneo de biblioteca en el servidor',
+  AppLocale.rommUploadLinkNow: 'Vincular ahora',
+  AppLocale.rommUploadLinkNowResult: '{count} juegos vinculados',
+  AppLocale.rommUploadLinkNowNothing:
+      'Aún no se vinculó nada; puede que el servidor siga escaneando',
+  AppLocale.rommUploadSkippedLine: 'Omitido {name}: {reason}',
+  AppLocale.rommUploadFailedLine: 'Falló {name}: {reason}',
+  AppLocale.rommUploadMore: '+{count} más',
+  AppLocale.rommUploadSkipMultiFile: 'juego de varios archivos',
+  AppLocale.rommUploadSkipDiscContainer: 'imagen de disco',
+  AppLocale.rommUploadSkipMissing: 'archivo no encontrado',
+  AppLocale.rommUploadSkipEmpty: 'archivo vacío',
+  AppLocale.rommUploadSkipUnsendableName:
+      'el nombre del archivo tiene caracteres que el servidor no puede guardar',
+  AppLocale.rommUploadSkipAlreadyExists: 'ya está en el servidor',
+  AppLocale.rommUploadFailScopeDenied:
+      'esta cuenta de RomM no puede escribir ROMs',
+  AppLocale.rommUploadFailCancelled: 'cancelado',
+  AppLocale.rommUploadFailBusy: 'había otra subida en curso',
+  AppLocale.rommUploadFailGated: 'el servidor no puede recibir subidas',
+  AppLocale.rommUploadFailOther: 'la subida falló',
 };

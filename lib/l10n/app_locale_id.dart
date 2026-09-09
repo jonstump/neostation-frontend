@@ -1657,4 +1657,48 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.neoSyncPasswordResetEmailSent:
       'Email atur ulang kata sandi terkirim',
   AppLocale.neoSyncNotAuthenticated: 'Belum masuk',
+  AppLocale.rommUploadMenuItem: 'Unggah ke RomM',
+  AppLocale.rommUploadTitle: 'Unggah ke RomM',
+  AppLocale.rommUploadSystemRowTitle: 'Unggah game yang belum ada di RomM',
+  AppLocale.rommUploadSystemRowSubtitle:
+      'Kirim game sistem ini yang tidak dimiliki RomM',
+  AppLocale.rommUploadSystemRowRunning: 'Mengunggah {name} ({current}/{total})',
+  AppLocale.rommUploadConfirmBody:
+      '{count} game ({size}) akan diunggah ke RomM satu per satu. Playlist dan citra disk dilewati.',
+  AppLocale.rommUploadConfirmAction: 'Unggah',
+  AppLocale.rommUploadPreparing: 'Menyiapkan unggahan ke RomM…',
+  AppLocale.rommUploadProgress: 'Mengunggah {name} ({current}/{total})',
+  AppLocale.rommUploadNoPlatform:
+      'RomM tidak memiliki platform yang cocok dengan {system}',
+  AppLocale.rommUploadNothingToUpload:
+      'Tidak ada yang diunggah: RomM sudah memiliki semua game {system}',
+  AppLocale.rommUploadAlreadyLinked: 'Game ini sudah tertaut ke RomM',
+  AppLocale.rommUploadBusy: 'Unggahan ke RomM sedang berjalan',
+  AppLocale.rommUploadNotOffered: 'RomM tidak dapat menerima unggahan saat ini',
+  AppLocale.rommUploadSummary:
+      '{uploaded} diunggah, {skipped} dilewati, {failed} gagal',
+  AppLocale.rommUploadSummaryCancelled: 'Unggahan dibatalkan — {summary}',
+  AppLocale.rommUploadSummaryDisconnected:
+      'Unggahan dihentikan, RomM tidak dapat dijangkau — {summary}',
+  AppLocale.rommUploadScanRequested: 'Pemindaian pustaka diminta di server',
+  AppLocale.rommUploadScanPending: 'Menunggu pemindaian pustaka di server',
+  AppLocale.rommUploadLinkNow: 'Tautkan sekarang',
+  AppLocale.rommUploadLinkNowResult: '{count} game tertaut',
+  AppLocale.rommUploadLinkNowNothing:
+      'Belum ada yang tertaut; server mungkin masih memindai',
+  AppLocale.rommUploadSkippedLine: 'Dilewati {name}: {reason}',
+  AppLocale.rommUploadFailedLine: 'Gagal {name}: {reason}',
+  AppLocale.rommUploadMore: '+{count} lagi',
+  AppLocale.rommUploadSkipMultiFile: 'game multi-berkas',
+  AppLocale.rommUploadSkipDiscContainer: 'citra disk',
+  AppLocale.rommUploadSkipMissing: 'berkas tidak ditemukan',
+  AppLocale.rommUploadSkipEmpty: 'berkas kosong',
+  AppLocale.rommUploadSkipUnsendableName:
+      'nama berkas mengandung karakter yang tidak dapat disimpan server',
+  AppLocale.rommUploadSkipAlreadyExists: 'sudah ada di server',
+  AppLocale.rommUploadFailScopeDenied: 'login RomM ini tidak dapat menulis ROM',
+  AppLocale.rommUploadFailCancelled: 'dibatalkan',
+  AppLocale.rommUploadFailBusy: 'unggahan lain sedang berjalan',
+  AppLocale.rommUploadFailGated: 'server tidak dapat menerima unggahan',
+  AppLocale.rommUploadFailOther: 'unggahan gagal',
 };

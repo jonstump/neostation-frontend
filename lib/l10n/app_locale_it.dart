@@ -1705,4 +1705,53 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.neoSyncPasswordResetEmailSent:
       'E-mail di reimpostazione della password inviata',
   AppLocale.neoSyncNotAuthenticated: 'Accesso non effettuato',
+  AppLocale.rommUploadMenuItem: 'Carica su RomM',
+  AppLocale.rommUploadTitle: 'Carica su RomM',
+  AppLocale.rommUploadSystemRowTitle: 'Carica i giochi mancanti su RomM',
+  AppLocale.rommUploadSystemRowSubtitle:
+      'Invia i giochi di questo sistema che RomM non ha',
+  AppLocale.rommUploadSystemRowRunning:
+      'Caricamento di {name} ({current}/{total})',
+  AppLocale.rommUploadConfirmBody:
+      '{count} giochi ({size}) verranno caricati su RomM uno dopo l’altro. Playlist e immagini disco vengono saltate.',
+  AppLocale.rommUploadConfirmAction: 'Carica',
+  AppLocale.rommUploadPreparing: 'Preparazione del caricamento su RomM…',
+  AppLocale.rommUploadProgress: 'Caricamento di {name} ({current}/{total})',
+  AppLocale.rommUploadNoPlatform:
+      'RomM non ha una piattaforma corrispondente a {system}',
+  AppLocale.rommUploadNothingToUpload:
+      'Niente da caricare: RomM ha già tutti i giochi di {system}',
+  AppLocale.rommUploadAlreadyLinked: 'Questo gioco è già collegato a RomM',
+  AppLocale.rommUploadBusy: 'Un caricamento su RomM è già in corso',
+  AppLocale.rommUploadNotOffered:
+      'RomM non può ricevere caricamenti al momento',
+  AppLocale.rommUploadSummary:
+      '{uploaded} caricati, {skipped} saltati, {failed} falliti',
+  AppLocale.rommUploadSummaryCancelled: 'Caricamento annullato — {summary}',
+  AppLocale.rommUploadSummaryDisconnected:
+      'Caricamento interrotto, RomM non è raggiungibile — {summary}',
+  AppLocale.rommUploadScanRequested:
+      'Scansione della libreria richiesta sul server',
+  AppLocale.rommUploadScanPending:
+      'In attesa di una scansione della libreria sul server',
+  AppLocale.rommUploadLinkNow: 'Collega ora',
+  AppLocale.rommUploadLinkNowResult: '{count} giochi collegati',
+  AppLocale.rommUploadLinkNowNothing:
+      'Ancora nulla di collegato; il server potrebbe stare ancora scansionando',
+  AppLocale.rommUploadSkippedLine: 'Saltato {name}: {reason}',
+  AppLocale.rommUploadFailedLine: 'Fallito {name}: {reason}',
+  AppLocale.rommUploadMore: '+{count} altri',
+  AppLocale.rommUploadSkipMultiFile: 'gioco multi-file',
+  AppLocale.rommUploadSkipDiscContainer: 'immagine disco',
+  AppLocale.rommUploadSkipMissing: 'file non trovato',
+  AppLocale.rommUploadSkipEmpty: 'file vuoto',
+  AppLocale.rommUploadSkipUnsendableName:
+      'il nome del file contiene caratteri che il server non può salvare',
+  AppLocale.rommUploadSkipAlreadyExists: 'già sul server',
+  AppLocale.rommUploadFailScopeDenied:
+      'questo accesso RomM non può scrivere ROM',
+  AppLocale.rommUploadFailCancelled: 'annullato',
+  AppLocale.rommUploadFailBusy: 'era in corso un altro caricamento',
+  AppLocale.rommUploadFailGated: 'il server non può ricevere caricamenti',
+  AppLocale.rommUploadFailOther: 'caricamento fallito',
 };

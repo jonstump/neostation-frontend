@@ -174,6 +174,10 @@ class RomMSyncProvider extends ChangeNotifier
        _screenshots = screenshots ?? ScreenshotCollector() {
     _linker = linker ?? _buildLinker();
     _catalogRefresh = catalogRefresh ?? _buildCatalogRefresh();
+    // "Link now" on an upload's summary: the browse provider owns the
+    // surface, this provider owns the pass.
+    // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Scan And Link After Upload"
+    _browse.onLinkRequested = linkLibrary;
     if (!_autoSweep) return;
     // The browse provider knows when the server comes back; what to do about
     // it lives here.
@@ -202,6 +206,9 @@ class RomMSyncProvider extends ChangeNotifier
   @override
   void dispose() {
     _disposed = true;
+    if (identical(_browse.onLinkRequested, linkLibrary)) {
+      _browse.onLinkRequested = null;
+    }
     if (_autoSweep) {
       _browse.removeListener(_onBrowseChanged);
       _browse.onReconnected = null;

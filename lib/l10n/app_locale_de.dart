@@ -1723,4 +1723,52 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.neoSyncPasswordResetEmailSent:
       'E-Mail zum Zurücksetzen des Passworts gesendet',
   AppLocale.neoSyncNotAuthenticated: 'Nicht angemeldet',
+  AppLocale.rommUploadMenuItem: 'Zu RomM hochladen',
+  AppLocale.rommUploadTitle: 'Zu RomM hochladen',
+  AppLocale.rommUploadSystemRowTitle: 'In RomM fehlende Spiele hochladen',
+  AppLocale.rommUploadSystemRowSubtitle:
+      'Die Spiele dieses Systems senden, die RomM nicht hat',
+  AppLocale.rommUploadSystemRowRunning: 'Lade {name} hoch ({current}/{total})',
+  AppLocale.rommUploadConfirmBody:
+      '{count} Spiele ({size}) werden nacheinander zu RomM hochgeladen. Playlists und Disc-Images werden übersprungen.',
+  AppLocale.rommUploadConfirmAction: 'Hochladen',
+  AppLocale.rommUploadPreparing: 'Upload zu RomM wird vorbereitet…',
+  AppLocale.rommUploadProgress: 'Lade {name} hoch ({current}/{total})',
+  AppLocale.rommUploadNoPlatform:
+      'RomM hat keine zu {system} passende Plattform',
+  AppLocale.rommUploadNothingToUpload:
+      'Nichts hochzuladen: RomM hat bereits jedes Spiel von {system}',
+  AppLocale.rommUploadAlreadyLinked:
+      'Dieses Spiel ist bereits mit RomM verknüpft',
+  AppLocale.rommUploadBusy: 'Ein Upload zu RomM läuft bereits',
+  AppLocale.rommUploadNotOffered: 'RomM kann gerade keine Uploads annehmen',
+  AppLocale.rommUploadSummary:
+      '{uploaded} hochgeladen, {skipped} übersprungen, {failed} fehlgeschlagen',
+  AppLocale.rommUploadSummaryCancelled: 'Upload abgebrochen — {summary}',
+  AppLocale.rommUploadSummaryDisconnected:
+      'Upload gestoppt, RomM ist nicht erreichbar — {summary}',
+  AppLocale.rommUploadScanRequested:
+      'Bibliotheksscan auf dem Server angefordert',
+  AppLocale.rommUploadScanPending:
+      'Wartet auf einen Bibliotheksscan auf dem Server',
+  AppLocale.rommUploadLinkNow: 'Jetzt verknüpfen',
+  AppLocale.rommUploadLinkNowResult: '{count} Spiele verknüpft',
+  AppLocale.rommUploadLinkNowNothing:
+      'Noch nichts verknüpft; der Server scannt möglicherweise noch',
+  AppLocale.rommUploadSkippedLine: 'Übersprungen {name}: {reason}',
+  AppLocale.rommUploadFailedLine: 'Fehlgeschlagen {name}: {reason}',
+  AppLocale.rommUploadMore: '+{count} weitere',
+  AppLocale.rommUploadSkipMultiFile: 'Spiel aus mehreren Dateien',
+  AppLocale.rommUploadSkipDiscContainer: 'Disc-Image',
+  AppLocale.rommUploadSkipMissing: 'Datei nicht gefunden',
+  AppLocale.rommUploadSkipEmpty: 'leere Datei',
+  AppLocale.rommUploadSkipUnsendableName:
+      'der Dateiname enthält Zeichen, die der Server nicht speichern kann',
+  AppLocale.rommUploadSkipAlreadyExists: 'bereits auf dem Server',
+  AppLocale.rommUploadFailScopeDenied:
+      'dieses RomM-Login darf keine ROMs schreiben',
+  AppLocale.rommUploadFailCancelled: 'abgebrochen',
+  AppLocale.rommUploadFailBusy: 'ein anderer Upload lief bereits',
+  AppLocale.rommUploadFailGated: 'der Server kann keine Uploads annehmen',
+  AppLocale.rommUploadFailOther: 'Upload fehlgeschlagen',
 };

@@ -78,6 +78,42 @@ extension _ContextMenu on _SystemGamesListState {
       status: remoteStatus,
     );
 
+    // "Upload to RomM" for a local game the server does not have. The link
+    // map is read here, before the menu is built, for the same reason the
+    // memberships are: the row must not appear or vanish under the cursor.
+    // The folder falls back to the view's only when the view is one system;
+    // an aggregate's name would look the game up under the wrong folder.
+    // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Upload Surfaces"
+    VoidCallback? onUploadToRomm;
+    final uploadFolder =
+        game.systemFolderName ??
+        (SystemFolderNames.isAggregate(widget.system.folderName)
+            ? null
+            : widget.system.folderName);
+    if (!isRemote &&
+        uploadFolder != null &&
+        game.romPath != null &&
+        _rommProvider.canUploadRoms) {
+      final index = await RommSaveMapRepository.getRomIdIndex();
+      if (!mounted) return;
+      final linked =
+          index.lookup(uploadFileNameFor(game.romPath!), uploadFolder) !=
+              null ||
+          index.lookup(game.romname, uploadFolder) != null;
+      final gate = rommUploadGateFor(
+        game,
+        linked: linked,
+        serverAllows: _rommProvider.canUploadRoms,
+      );
+      if (gate == RommUploadGate.offered) {
+        onUploadToRomm = () => RommRomUploadRunner.uploadGame(
+          context,
+          game,
+          systemFolder: uploadFolder,
+        );
+      }
+    }
+
     final targets = <GameContextMenuTarget>[
       if (isRemote)
         ...[]
@@ -150,6 +186,8 @@ extension _ContextMenu on _SystemGamesListState {
       // card's registered action — and grid and carousel, which have no card to
       // register one, work off the same call.
       onScrape: canScrape && !isRemote ? _scrapeSelectedGame : null,
+      // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Upload Surfaces"
+      onUploadToRomm: onUploadToRomm,
       onViewMode: () =>
           GameViewModeDropdown.globalKey.currentState?.showDropdown(),
       // The same switch Select + X is, for a user without a pad.

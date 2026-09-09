@@ -4,6 +4,24 @@ import 'package:flutter/material.dart';
 /// Notification types supported by the global notification center.
 enum GlobalNotificationType { info, success, error }
 
+/// One thing the user can do from a notification besides dismiss it: cancel
+/// the upload it tracks, or link the files it just reported.
+///
+/// The bell renders [label] as a pill on the row; a tap on it, or A on the
+/// highlighted row, calls [onPressed] and leaves the notification in place —
+/// whoever owns the work updates the row with what the action did. The X
+/// still dismisses the row as before.
+// Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Upload Surfaces"
+class GlobalNotificationAction {
+  final String label;
+  final VoidCallback onPressed;
+
+  const GlobalNotificationAction({
+    required this.label,
+    required this.onPressed,
+  });
+}
+
 /// Immutable data holder for a global notification.
 class GlobalNotificationData {
   final String id;
@@ -24,6 +42,10 @@ class GlobalNotificationData {
   /// back and the completion message would never arrive.
   final bool ongoing;
 
+  /// An action offered on the row, or null for a plain notification. See
+  /// [GlobalNotificationAction].
+  final GlobalNotificationAction? action;
+
   const GlobalNotificationData({
     required this.id,
     required this.message,
@@ -33,6 +55,7 @@ class GlobalNotificationData {
     required this.type,
     this.progress,
     this.ongoing = false,
+    this.action,
   });
 }
 
@@ -68,6 +91,7 @@ class GlobalNotificationService {
     GlobalNotificationType type = GlobalNotificationType.info,
     double? progress,
     bool ongoing = false,
+    GlobalNotificationAction? action,
   }) {
     final current = notifier.value;
     final existingIndex = current.indexWhere((n) => n.id == id);
@@ -80,6 +104,7 @@ class GlobalNotificationService {
       type: type,
       progress: progress,
       ongoing: ongoing,
+      action: action,
     );
 
     if (existingIndex == -1) {
@@ -98,6 +123,9 @@ class GlobalNotificationService {
   /// value over: the last update of a run is the completion message, and those
   /// call sites are the ones that would forget to clear the flag. Progress
   /// updates opt back in, next to the [progress] value they already pass.
+  /// [action] follows the same rule: a Cancel that outlived the work it
+  /// cancels is the mistake this guards against, so every update names the
+  /// action it still offers, or offers none.
   void update({
     required String id,
     required String message,
@@ -107,6 +135,7 @@ class GlobalNotificationService {
     GlobalNotificationType? type,
     double? progress,
     bool ongoing = false,
+    GlobalNotificationAction? action,
   }) {
     final current = notifier.value;
     final index = current.indexWhere((n) => n.id == id);
@@ -125,6 +154,7 @@ class GlobalNotificationService {
         type: type ?? existing.type,
         progress: progress ?? existing.progress,
         ongoing: ongoing,
+        action: action,
       ),
       ...current.sublist(index + 1),
     ];

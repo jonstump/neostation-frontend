@@ -1664,4 +1664,51 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.neoSyncPasswordResetEmailSent:
       'Письмо для сброса пароля отправлено',
   AppLocale.neoSyncNotAuthenticated: 'Вход не выполнен',
+  AppLocale.rommUploadMenuItem: 'Загрузить в RomM',
+  AppLocale.rommUploadTitle: 'Загрузить в RomM',
+  AppLocale.rommUploadSystemRowTitle: 'Загрузить игры, которых нет в RomM',
+  AppLocale.rommUploadSystemRowSubtitle:
+      'Отправить игры этой системы, которых нет в RomM',
+  AppLocale.rommUploadSystemRowRunning: 'Загрузка {name} ({current}/{total})',
+  AppLocale.rommUploadConfirmBody:
+      '{count} игр ({size}) будут загружены в RomM по очереди. Плейлисты и образы дисков пропускаются.',
+  AppLocale.rommUploadConfirmAction: 'Загрузить',
+  AppLocale.rommUploadPreparing: 'Подготовка загрузки в RomM…',
+  AppLocale.rommUploadProgress: 'Загрузка {name} ({current}/{total})',
+  AppLocale.rommUploadNoPlatform:
+      'В RomM нет платформы, соответствующей {system}',
+  AppLocale.rommUploadNothingToUpload:
+      'Нечего загружать: в RomM уже есть все игры {system}',
+  AppLocale.rommUploadAlreadyLinked: 'Эта игра уже связана с RomM',
+  AppLocale.rommUploadBusy: 'Загрузка в RomM уже выполняется',
+  AppLocale.rommUploadNotOffered: 'RomM сейчас не может принимать загрузки',
+  AppLocale.rommUploadSummary:
+      '{uploaded} загружено, {skipped} пропущено, {failed} с ошибкой',
+  AppLocale.rommUploadSummaryCancelled: 'Загрузка отменена — {summary}',
+  AppLocale.rommUploadSummaryDisconnected:
+      'Загрузка остановлена, RomM недоступен — {summary}',
+  AppLocale.rommUploadScanRequested:
+      'Сканирование библиотеки запрошено на сервере',
+  AppLocale.rommUploadScanPending:
+      'Ожидается сканирование библиотеки на сервере',
+  AppLocale.rommUploadLinkNow: 'Связать сейчас',
+  AppLocale.rommUploadLinkNowResult: 'Связано игр: {count}',
+  AppLocale.rommUploadLinkNowNothing:
+      'Пока ничего не связано; сервер, возможно, ещё сканирует',
+  AppLocale.rommUploadSkippedLine: 'Пропущено {name}: {reason}',
+  AppLocale.rommUploadFailedLine: 'Ошибка {name}: {reason}',
+  AppLocale.rommUploadMore: '+{count} ещё',
+  AppLocale.rommUploadSkipMultiFile: 'игра из нескольких файлов',
+  AppLocale.rommUploadSkipDiscContainer: 'образ диска',
+  AppLocale.rommUploadSkipMissing: 'файл не найден',
+  AppLocale.rommUploadSkipEmpty: 'пустой файл',
+  AppLocale.rommUploadSkipUnsendableName:
+      'имя файла содержит символы, которые сервер не может сохранить',
+  AppLocale.rommUploadSkipAlreadyExists: 'уже есть на сервере',
+  AppLocale.rommUploadFailScopeDenied:
+      'этот аккаунт RomM не может записывать ROM',
+  AppLocale.rommUploadFailCancelled: 'отменено',
+  AppLocale.rommUploadFailBusy: 'выполнялась другая загрузка',
+  AppLocale.rommUploadFailGated: 'сервер не может принимать загрузки',
+  AppLocale.rommUploadFailOther: 'ошибка загрузки',
 };
