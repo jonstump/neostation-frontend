@@ -25,6 +25,12 @@ import 'package:neostation/services/romm/romm_metadata_fetch.dart';
 /// test is the terminal row, not the progress plumbing: the precondition test
 /// below pins that the running row really does carry a non-null bar for the
 /// terminal row to have to clear. Issue #226, related #224.
+///
+/// No assertion runs inside the injected `start`. `runDetached` awaits it
+/// inside a blanket `catch (e, st)`, which swallows the `TestFailure` an
+/// `expect` throws: a failing assertion in there is logged and the test
+/// still reports green. Observations are captured into locals and asserted
+/// after the run returns.
 void main() {
   const notificationId = 'romm_metadata_fetch_test';
 
@@ -72,18 +78,32 @@ void main() {
   );
 
   test('the running row carries a bar — the state being cleared', () async {
+    // Captured, not asserted, inside the closure: `runDetached` awaits it
+    // inside a blanket `catch (e, st)`, which swallows the `TestFailure` an
+    // `expect` throws and turns a red test green. Everything the pass observes
+    // has to come back out and be asserted after the run returns.
+    double? opening;
+    double? reported;
+
     await run((pass) async {
-      expect(
-        rowFor(notificationId).progress,
-        0,
-        reason:
-            "the runner's opening row is a zeroed bar, not a null one — "
-            'which is why `update(progress: null)` retained it',
-      );
+      opening = rowFor(notificationId).progress;
       reportProgress(0.75);
-      expect(rowFor(notificationId).progress, closeTo(0.75, 1e-9));
+      reported = rowFor(notificationId).progress;
       return const RommMetadataFetchSummary();
     });
+
+    expect(
+      opening,
+      0,
+      reason:
+          "the runner's opening row is a zeroed bar, not a null one — "
+          'which is why `update(progress: null)` retained anything at all',
+    );
+    expect(
+      reported,
+      closeTo(0.75, 1e-9),
+      reason: 'a running pass advances the bar the terminal row must clear',
+    );
   });
 
   test('a completed pass ends with no progress bar', () async {

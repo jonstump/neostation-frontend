@@ -286,7 +286,12 @@ class RommMetadataFetchRunner {
   /// Every other field the terminal row needs already matches what `update`
   /// produced here: this notification is shown without a title, icon or image,
   /// and `update` takes `ongoing` as a non-nullable `false` default rather
-  /// than carrying the running row's `true` forward. Only `progress` differed.
+  /// than carrying the running row's `true` forward. Only `progress` differed
+  /// among the fields; `show` also moves the row to the end of the list, where
+  /// `update` spliced in place, and appends the row if the id has since been
+  /// dismissed where `update` would no-op. Both match the upload runner.
+  ///
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
   static void _showTerminal(
     GlobalNotificationService notifications, {
     required String notificationId,
