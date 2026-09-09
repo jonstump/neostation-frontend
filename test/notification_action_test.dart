@@ -4,6 +4,7 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/services/global_notification_service.dart';
+import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/themes/corner_radii.dart';
 import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/widgets/notification_bell.dart';
@@ -20,6 +21,7 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   setUpAll(() async {
+    SfxService().setEnabled(false);
     SharedPreferences.setMockInitialValues({});
     await FlutterLocalization.instance.ensureInitialized();
     FlutterLocalization.instance.init(
