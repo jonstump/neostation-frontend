@@ -196,6 +196,62 @@ class RommProvider extends ChangeNotifier {
         RommCoverCache.forService(_service, shouldStop: () => !isConnected);
   }
 
+  // ── Unified library: lazy cover fill ────────────────────────────────────
+
+  /// Advances once each time the lazy fill has landed covers, coalesced so a
+  /// page of misses filling together costs the card surfaces one rebuild.
+  /// They `select` on it and read [RommCoverCache.pathFor] again.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+  int _coverRevision = 0;
+  int get coverRevision => _coverRevision;
+  Timer? _coverRevisionTimer;
+
+  /// Rom ids [warmCover] has taken on for the current connection, so a card
+  /// that rebuilds every frame asks once. A fill that failed stays here too:
+  /// it is retried when the server comes back, the catalog changes or the
+  /// connection does, not on the next frame.
+  final Set<int> _coverWarmsRequested = {};
+
+  /// Fills the cover for [rommRomId] when the cache misses on first render:
+  /// the catalog row is read here, [RommCoverCache.ensure] fetches through
+  /// the connection, and the answer arrives as one bump of [coverRevision].
+  /// Once per rom id and connection; a no-op offline, disconnected, or for a
+  /// rom the catalog no longer lists.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+  void warmCover(int rommRomId) {
+    if (_disposed || _serverUrl.isEmpty) return;
+    if (_reachability == RommReachability.offline) return;
+    if (!_coverWarmsRequested.add(rommRomId)) return;
+    unawaited(_warmCover(_serverUrl, rommRomId));
+  }
+
+  Future<void> _warmCover(String url, int rommRomId) async {
+    try {
+      final row = await RommCatalogRepository.rowForRomId(
+        serverUrl: url,
+        rommRomId: rommRomId,
+      );
+      if (row == null || _disposed || url != _serverUrl) return;
+      // A hit by now (a prefetch or another surface's fill landed first) is
+      // nothing to announce: only a fill this call brought in rebuilds.
+      if (coverCache.pathFor(url, rommRomId) != null) return;
+      final path = await coverCache.ensure(url, row);
+      if (path == null || _disposed || url != _serverUrl) return;
+      _scheduleCoverRevision();
+    } catch (e) {
+      _log.d('RomM cover fill failed: rom=$rommRomId cause=$e');
+    }
+  }
+
+  void _scheduleCoverRevision() {
+    _coverRevisionTimer ??= Timer(const Duration(milliseconds: 150), () {
+      _coverRevisionTimer = null;
+      if (_disposed) return;
+      _coverRevision++;
+      notifyListeners();
+    });
+  }
+
   // ── Unified library: catalog summary ────────────────────────────────────
 
   /// Catalogued ROMs per local system folder for the connected server, read
@@ -245,6 +301,8 @@ class RommProvider extends ChangeNotifier {
     _catalogSystemCounts = Map.unmodifiable(counts);
     _catalogAsOf = asOf;
     _catalogRevision++;
+    // New rows may carry covers a failed fill could not reach before.
+    _coverWarmsRequested.clear();
     notifyListeners();
   }
 
@@ -258,6 +316,7 @@ class RommProvider extends ChangeNotifier {
     if (url.isEmpty) return;
     await RommCatalogRepository.clear(url);
     await coverCache.clear(url);
+    _coverWarmsRequested.clear();
     _setCatalogSummary(const {}, null);
   }
 
@@ -864,6 +923,8 @@ class RommProvider extends ChangeNotifier {
     if (next == RommReachability.offline) {
       _scheduleReprobe(firstReprobeDelay);
     } else {
+      // Cover fills skipped or failed while unreachable get another turn.
+      _coverWarmsRequested.clear();
       _cancelReprobe();
     }
     notifyListeners();
@@ -1087,6 +1148,7 @@ class RommProvider extends ChangeNotifier {
     // that is already on disk. Idempotent and never throws.
     // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
     unawaited(coverCache.initialize());
+    _coverWarmsRequested.clear();
     if (previousServerUrl.isNotEmpty && previousServerUrl != _serverUrl) {
       // A different server: the old one's covers can never be drawn again,
       // and its catalog would list games this server cannot download.
@@ -1353,6 +1415,7 @@ class RommProvider extends ChangeNotifier {
       unawaited(coverCache.clear(_serverUrl));
       unawaited(RommCatalogRepository.clear(_serverUrl));
     }
+    _coverWarmsRequested.clear();
     _catalogSystemCounts = const {};
     _catalogAsOf = null;
     _catalogRevision++;
@@ -4034,6 +4097,7 @@ class RommProvider extends ChangeNotifier {
         ..onCapabilitiesChanged = null;
     }
     _settleTimer?.cancel();
+    _coverRevisionTimer?.cancel();
     _cancelReprobe();
     bulkSync
       ..cancel()

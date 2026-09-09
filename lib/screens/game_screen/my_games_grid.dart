@@ -200,6 +200,12 @@ class _GamesGridState extends State<GamesGrid> {
   final Map<int, Widget> _rowCache = {};
   String? _rowCacheSig;
 
+  /// [RommProvider.coverRevision] as of the last build: a cover the lazy fill
+  /// lands after the first paint rotates the row signature so the card that
+  /// drew the placeholder is rebuilt against the file.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+  int _coverRevision = 0;
+
   // Selection cursor. The border is a scroll-compensated overlay positioned from
   // the layout model (_cardRects[selectedIndex]) minus the live scroll offset,
   // rebuilt every scroll tick. An earlier CompositedTransformFollower/LayerLink
@@ -347,7 +353,9 @@ class _GamesGridState extends State<GamesGrid> {
 
   /// The cover a remote entry draws: the RomM cover cache's file for its rom
   /// id, or the empty string for the placeholder. A local game never comes
-  /// here — it draws its own scraped media, cache or no cache.
+  /// here — it draws its own scraped media, cache or no cache. A miss asks
+  /// the provider to fill it; the answer arrives as a [RommProvider.coverRevision]
+  /// bump, which [build] selects on.
   // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
   String _remoteCoverPath(GameModel game) {
     final RommProvider provider;
@@ -356,14 +364,17 @@ class _GamesGridState extends State<GamesGrid> {
     } on ProviderNotFoundException {
       return '';
     }
-    return rommCoverPathFor(
-          isLocal: false,
-          scrapedMediaPath: null,
-          serverUrl: provider.serverUrl,
-          rommRomId: game.rommRomId,
-          cache: provider.coverCache,
-        ) ??
-        '';
+    final path = rommCoverPathFor(
+      isLocal: false,
+      scrapedMediaPath: null,
+      serverUrl: provider.serverUrl,
+      rommRomId: game.rommRomId,
+      cache: provider.coverCache,
+    );
+    if (path != null) return path;
+    final romId = game.rommRomId;
+    if (romId != null) provider.warmCover(romId);
+    return '';
   }
 
   String _box2dPath(int index) {
@@ -1110,6 +1121,14 @@ class _GamesGridState extends State<GamesGrid> {
     _collections = SystemFolderNames.isCollection(widget.system.folderName)
         ? null
         : context.watch<CollectionsProvider>();
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+    try {
+      _coverRevision = context.select<RommProvider, int>(
+        (p) => p.coverRevision,
+      );
+    } on ProviderNotFoundException {
+      _coverRevision = 0;
+    }
 
     if (widget.games.isEmpty) {
       return Center(
@@ -1184,7 +1203,8 @@ class _GamesGridState extends State<GamesGrid> {
                   // change (reflow bumps _layoutGen, width change moves
                   // targetWidth, theme flips) rotates the signature and rebuilds.
                   final rowSig =
-                      '$_layoutGen|$targetWidth|${theme.brightness.index}';
+                      '$_layoutGen|$targetWidth|${theme.brightness.index}'
+                      '|$_coverRevision';
                   if (rowSig != _rowCacheSig) {
                     _rowCacheSig = rowSig;
                     _rowCache.clear();

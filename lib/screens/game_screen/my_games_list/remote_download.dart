@@ -11,6 +11,25 @@ part of '../my_games_list.dart';
 /// through the host [rebuild] bridge.
 // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Download From The Library"
 extension _RemoteDownload on _SystemGamesListState {
+  /// The cached RomM cover for remote [game], or null for the placeholder. A
+  /// miss asks the provider to fill it; the host's revision listener redraws
+  /// the background and re-pushes the secondary display when it lands.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+  String? _remoteCoverPathFor(GameModel game) {
+    final path = rommCoverPathFor(
+      isLocal: false,
+      scrapedMediaPath: null,
+      serverUrl: _rommProvider.serverUrl,
+      rommRomId: game.rommRomId,
+      cache: _rommProvider.coverCache,
+    );
+    if (path == null) {
+      final romId = game.rommRomId;
+      if (romId != null) _rommProvider.warmCover(romId);
+    }
+    return path;
+  }
+
   RemoteDownloadFlow _remoteDownloadFlow() => RemoteDownloadFlow(
     reachability: () => _rommProvider.reachability,
     lookupRom: _rommProvider.catalogRomFor,
@@ -195,10 +214,12 @@ extension _RemoteDownload on _SystemGamesListState {
     await _selectCurrentGame();
   }
 
-  /// The local game the download became, once the reload that follows the
-  /// settle has put it in the list. Matched by the name the scan indexed
-  /// (the .m3u for an unpacked multi-disc ROM), read back from the link row
-  /// the download wrote. A few short retries cover the reload racing this.
+  /// The local game the download became, once the settle has indexed it.
+  /// Matched by the name the scan indexed (the .m3u for an unpacked
+  /// multi-disc ROM), read back from the link row the download wrote. The
+  /// caller has already waited on the tracker's `indexed` future, so the row
+  /// exists; if the list on screen predates it, one reload — joining the one
+  /// the library revision already started, when there is one — brings it in.
   Future<GameModel?> _awaitIndexedGame(RommRom rom) async {
     final system = await _rommProvider.resolveSystem(rom);
     if (system == null) return null;
@@ -206,14 +227,22 @@ extension _RemoteDownload on _SystemGamesListState {
       rom.id,
       system.folderName,
     );
-    if (indexedName == null) return null;
-    for (var attempt = 0; attempt < 6; attempt++) {
-      if (!mounted) return null;
-      for (final game in _allGames) {
-        if (!game.isRemote && game.romname == indexedName) return game;
-      }
-      await _loadGames();
-      await Future<void>.delayed(const Duration(milliseconds: 400));
+    if (indexedName == null || !mounted) return null;
+    final found = _indexedGameNamed(indexedName);
+    if (found != null) return found;
+    await _loadGames();
+    // The load just joined may predate the settle; the revision listener
+    // then queues the reload that carries the row as it finishes. Wait for
+    // that one too rather than starting another.
+    final queued = _gamesLoad;
+    if (queued != null) await queued;
+    if (!mounted) return null;
+    return _indexedGameNamed(indexedName);
+  }
+
+  GameModel? _indexedGameNamed(String indexedName) {
+    for (final game in _allGames) {
+      if (!game.isRemote && game.romname == indexedName) return game;
     }
     return null;
   }

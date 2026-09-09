@@ -857,6 +857,8 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
   }
 
   /// The cached RomM cover for a remote entry, or null for the placeholder.
+  /// A miss asks the provider to fill it, and this card rebuilds on the
+  /// [RommProvider.coverRevision] bump that follows (selected in [build]).
   // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
   String? _remoteCoverPath(BuildContext context) {
     final RommProvider provider;
@@ -865,13 +867,18 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
     } on ProviderNotFoundException {
       return null;
     }
-    return rommCoverPathFor(
+    final path = rommCoverPathFor(
       isLocal: false,
       scrapedMediaPath: null,
       serverUrl: provider.serverUrl,
       rommRomId: _game.rommRomId,
       cache: provider.coverCache,
     );
+    if (path == null) {
+      final romId = _game.rommRomId;
+      if (romId != null) provider.warmCover(romId);
+    }
+    return path;
   }
 
   @override
@@ -881,6 +888,13 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
     // the box-art tab both draw its cached RomM cover (or the placeholder),
     // and no local path is built for it.
     // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+    if (_game.isRemote) {
+      try {
+        context.select<RommProvider, int>((p) => p.coverRevision);
+      } on ProviderNotFoundException {
+        // Hosted without a RomM provider: the placeholder stays.
+      }
+    }
     final String? remoteCoverPath = _game.isRemote
         ? _remoteCoverPath(context)
         : null;

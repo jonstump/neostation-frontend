@@ -176,6 +176,12 @@ class _GamesCarouselState extends State<GamesCarousel> {
   final Map<String, double> _letterWidthCache = {};
   final Map<String, bool> _fileExistsCache = {};
 
+  /// [RommProvider.coverRevision] as of the last build; when it moves the
+  /// background is resolved again, so a cover the lazy fill landed replaces
+  /// the system logo behind the settled remote entry.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+  int _lastCoverRevision = 0;
+
   /// Folder preview covers, keyed by "relPath|imageType" so box/fanart styles
   /// cache independently. Resolving walks the game list and stats the disk, so
   /// each folder card is computed once.
@@ -729,17 +735,20 @@ class _GamesCarouselState extends State<GamesCarousel> {
     final folder = _folderForGame(game);
 
     // A remote entry backs the view with its cached RomM cover, never with
-    // media paths that have nothing behind them.
+    // media paths that have nothing behind them. The cover is stat-ed
+    // directly rather than through [_fileExistsCache]: the cache only names a
+    // path once the file is written, and a negative memoized before the lazy
+    // fill landed would otherwise hide it for the rest of the visit.
     // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
     String imagePath = game.isRemote
         ? _remoteCoverPath(game)
         : game.getImagePath(folder, 'fanarts', widget.fileProvider);
-    bool exists =
-        imagePath.isNotEmpty &&
-        _fileExistsCache.putIfAbsent(
-          imagePath,
-          () => File(imagePath).existsSync(),
-        );
+    bool exists = game.isRemote
+        ? imagePath.isNotEmpty && File(imagePath).existsSync()
+        : _fileExistsCache.putIfAbsent(
+            imagePath,
+            () => File(imagePath).existsSync(),
+          );
 
     if (!exists && !game.isRemote) {
       imagePath = game.getScreenshotPath(folder, widget.fileProvider);
@@ -854,7 +863,9 @@ class _GamesCarouselState extends State<GamesCarousel> {
 
   /// The cover a remote entry draws: the RomM cover cache's file for its rom
   /// id, or the empty string for the placeholder. A local game never comes
-  /// here — it draws its own scraped media, cache or no cache.
+  /// here — it draws its own scraped media, cache or no cache. A miss asks
+  /// the provider to fill it; the answer arrives as a [RommProvider.coverRevision]
+  /// bump, which [build] selects on.
   // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
   String _remoteCoverPath(GameModel game) {
     final RommProvider provider;
@@ -863,14 +874,17 @@ class _GamesCarouselState extends State<GamesCarousel> {
     } on ProviderNotFoundException {
       return '';
     }
-    return rommCoverPathFor(
-          isLocal: false,
-          scrapedMediaPath: null,
-          serverUrl: provider.serverUrl,
-          rommRomId: game.rommRomId,
-          cache: provider.coverCache,
-        ) ??
-        '';
+    final path = rommCoverPathFor(
+      isLocal: false,
+      scrapedMediaPath: null,
+      serverUrl: provider.serverUrl,
+      rommRomId: game.rommRomId,
+      cache: provider.coverCache,
+    );
+    if (path != null) return path;
+    final romId = game.rommRomId;
+    if (romId != null) provider.warmCover(romId);
+    return '';
   }
 
   String _resolveImagePath(GameModel game, String imageType) {
@@ -1463,6 +1477,20 @@ class _GamesCarouselState extends State<GamesCarousel> {
     final config = context.watch<SqliteConfigProvider>().config;
     final isFanart = config.gameCarouselCardStyle != 'box';
     _showAchievementsBadge = config.showAchievementsBadge;
+    // A cover the lazy fill landed: the cards re-read the cache in this
+    // build, and the background behind the settled entry is resolved again.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+    int coverRevision = 0;
+    try {
+      coverRevision = context.select<RommProvider, int>((p) => p.coverRevision);
+    } on ProviderNotFoundException {
+      // Hosted without a RomM provider: nothing remote to draw.
+    }
+    if (coverRevision != _lastCoverRevision) {
+      _lastCoverRevision = coverRevision;
+      _lastBgIndex = -1;
+      WidgetsBinding.instance.addPostFrameCallback((_) => _updateBackground());
+    }
     _collections = SystemFolderNames.isCollection(widget.system.folderName)
         ? null
         : context.watch<CollectionsProvider>();

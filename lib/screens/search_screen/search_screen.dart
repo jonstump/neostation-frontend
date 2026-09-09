@@ -1061,6 +1061,19 @@ class _SearchScreenState extends State<SearchScreen> {
     final provider = context.read<RommProvider>();
     final romFolders = context.read<SqliteConfigProvider>().config.romFolders;
 
+    // The same rule the game list applies: an unreachable server answers
+    // with the notice and sends nothing, instead of a request that ends in
+    // "Download failed".
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Download From The Library"
+    if (provider.reachability == RommReachability.offline) {
+      AppNotification.showNotification(
+        context,
+        AppLocale.rommRemoteOfflineNotice.getString(context),
+        type: NotificationType.info,
+      );
+      return;
+    }
+
     if (_remoteDownloaded[rom.id] ?? false) {
       AppNotification.showNotification(
         context,

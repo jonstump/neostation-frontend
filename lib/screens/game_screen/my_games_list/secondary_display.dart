@@ -127,13 +127,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
 
     final push = remoteEntrySecondaryStateFor(
       game,
-      cachedCoverPath: rommCoverPathFor(
-        isLocal: false,
-        scrapedMediaPath: null,
-        serverUrl: _rommProvider.serverUrl,
-        rommRomId: game.rommRomId,
-        cache: _rommProvider.coverCache,
-      ),
+      cachedCoverPath: _remoteCoverPathFor(game),
       exists: (path) => File(path).existsSync(),
     );
     if (push == null) return;
@@ -428,14 +422,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
     // local media paths are never built.
     // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
     String imagePath = game.isRemote
-        ? (rommCoverPathFor(
-                isLocal: false,
-                scrapedMediaPath: null,
-                serverUrl: _rommProvider.serverUrl,
-                rommRomId: game.rommRomId,
-                cache: _rommProvider.coverCache,
-              ) ??
-              '')
+        ? (_remoteCoverPathFor(game) ?? '')
         : game.getImagePath(systemFolderName, 'fanarts', _fileProvider);
     bool exists = imagePath.isNotEmpty && File(imagePath).existsSync();
 

@@ -44,6 +44,7 @@ import '../../widgets/remote_entry_badge.dart';
 import '../../services/romm/romm_cover_cache.dart';
 import '../../utils/remote_entry_secondary_state.dart';
 import 'my_games_list/remote_download_flow.dart';
+import 'my_games_list/selection_retention.dart';
 import '../../widgets/library_scope_pill.dart';
 import '../../utils/rom_tree.dart';
 import 'game_details_card/game_details_card_list.dart';
@@ -243,6 +244,16 @@ class _SystemGamesListState extends State<SystemGamesList> {
   // Navigation & State orchestration.
   bool _isLoading = true;
   bool _isLoadingGames = false; // Prevents redundant reload triggers.
+
+  /// The load in flight, so a caller that must see its result (the Play-now
+  /// offer after a download) joins it instead of being turned away.
+  Future<void>? _gamesLoad;
+
+  /// A catalog or library revision that moved while a load was in flight:
+  /// the rows behind it may postdate that load, so the reload runs once it
+  /// finishes rather than being consumed and lost.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entry Presentation"
+  bool _reloadPending = false;
   int _selectedGameIndex = 0;
   late GamepadNavigation
   _gamepadNav; // Unified controller/keyboard input handler.
@@ -379,6 +390,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
   late RommProvider _rommProvider;
   int _lastCatalogRevision = 0;
   int _lastLibraryRevision = 0;
+  int _lastCoverRevision = 0;
 
   @override
   void initState() {
@@ -420,6 +432,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
     _rommProvider = context.read<RommProvider>();
     _lastCatalogRevision = _rommProvider.catalogRevision;
     _lastLibraryRevision = _rommProvider.libraryRevision;
+    _lastCoverRevision = _rommProvider.coverRevision;
     _rommProvider.addListener(_onCatalogRevisionChanged);
     _artworkVersion = _lastArtworkRevision;
     _invalidateArtworkCaches();
@@ -548,18 +561,43 @@ class _SystemGamesListState extends State<SystemGamesList> {
   // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
   // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entry Presentation"
   void _onCatalogRevisionChanged() {
+    if (!mounted) return;
+    _onCoverRevisionChanged();
     final catalog = _rommProvider.catalogRevision;
     final library = _rommProvider.libraryRevision;
-    if (!mounted) return;
     final moved =
         catalog != _lastCatalogRevision || library != _lastLibraryRevision;
     if (!moved) return;
-    _lastCatalogRevision = catalog;
-    _lastLibraryRevision = library;
-    if (!_libraryScopeAvailable || _isLoadingGames || _isNavigatingBack) {
+    if (!_libraryScopeAvailable || _isNavigatingBack) {
+      _lastCatalogRevision = catalog;
+      _lastLibraryRevision = library;
       return;
     }
+    if (_isLoadingGames) {
+      // Left unconsumed on purpose: the load in flight may have read the
+      // library before the settle wrote it. [_loadGames] comes back here
+      // when it finishes, sees the revisions still moved, and reloads.
+      _reloadPending = true;
+      return;
+    }
+    _lastCatalogRevision = catalog;
+    _lastLibraryRevision = library;
     _loadGames();
+  }
+
+  /// A cover the lazy fill landed for the selected remote entry: the system
+  /// background and the secondary display took their answer at selection
+  /// time, so both are asked again. The cards and the details card select
+  /// on the revision themselves.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+  void _onCoverRevisionChanged() {
+    final cover = _rommProvider.coverRevision;
+    if (cover == _lastCoverRevision) return;
+    _lastCoverRevision = cover;
+    final game = _selectedGame;
+    if (game == null || !game.isRemote) return;
+    _updateBackground(game);
+    unawaited(_pushRemoteEntryToSecondaryDisplay(game));
   }
 
   void _invalidateArtworkCaches() {
@@ -1669,11 +1707,14 @@ class _SystemGamesListState extends State<SystemGamesList> {
     final imageSystemFolder =
         game.systemFolderName ?? widget.system.primaryFolderName;
 
-    final fanartPath = game.getImagePath(
-      imageSystemFolder,
-      'fanarts',
-      _fileProvider,
-    );
+    // A remote entry has no fanart on this device, and its small cached
+    // cover is not one (stretched over the screen it would read as a
+    // smear): the ambient layer stays empty, and no local path is built or
+    // stat-ed for it.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entry Presentation"
+    final fanartPath = game.isRemote
+        ? ''
+        : game.getImagePath(imageSystemFolder, 'fanarts', _fileProvider);
 
     return AnimatedSwitcher(
       duration: const Duration(milliseconds: 512),
@@ -1702,6 +1743,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
           'list_fanart_${game.romPath ?? game.romname}_v$artworkVersion',
         ),
         builder: (context) {
+          if (fanartPath.isEmpty) return const SizedBox.shrink();
           final file = File(fanartPath);
           if (file.existsSync()) {
             return Image.file(
