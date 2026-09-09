@@ -34,11 +34,11 @@ On Android the ROM is a `content://` document; the app's asset uploads use `http
 Chosen option: "Chunked upload session with a range-reading source, platform mapping, and a best-effort scan followed by the link pass", because it is the only upload RomM offers today, the range reader already exists, and the scan and link steps reuse what ADR-0001 and ADR-0013 built. Concretely:
 
 1. **Source abstraction.** `RomUploadSource` yields chunk `i` of a file by `(offset, length)`: `dart:io` random access on desktop, `SafDirectoryService.readRange` on Android, both driven from a background isolate that holds the root isolate token. Total size comes from `stat` or `getFileSize`.
-2. **Session client.** `RommService.uploadRom(source, platformId, fileName, {onProgress, shouldCancel})`: chunks of 10 MiB (`ceil(total / 10 MiB)` chunks; last chunk the remainder), sequential PUTs with three retries and exponential backoff per chunk, `cancel` on give-up or user cancel, `complete` with a long timeout. Name collision (400 "already exists") surfaces as a distinct error kind. Gated by `romUpload` (RomM 4.8.0) and the `romsWrite` group.
+2. **Session client.** `Future<bool> RommService.uploadRom(source, {platformId, fileName, onProgress, shouldCancel})`: chunks of 10 MiB (`ceil(total / 10 MiB)` chunks; last chunk the remainder), sequential PUTs with three retries and exponential backoff per chunk, `cancel` on give-up, user cancel, or a disconnect/reconfigure of the service mid-session (a connection generation counter), `complete` with a long timeout. Name collision (400/409 whose detail says "already exists"; the phrase alone, so `complete`'s other 400s stay `uploadFailed`) surfaces as a distinct error kind. Gated by `romUpload` (RomM 4.8.0, verified against the release trees) and the `romsWrite` group: gated returns `false` with nothing sent, success returns `true`. A second call while a session is open throws `uploadBusy` rather than queueing. A name outside printable ASCII (0x20–0x7E) is refused before any request as `unsendableName`: `dart:io` cannot put it in a header and RomM 4.8.0 does not decode `x-upload-filename`, so encoding would store a mangled name the link pass would never match.
 3. **Platform mapping.** `RommProvider.platformForSystem(system)` inverts the platform-to-system resolution over the server's platform list; when no platform resolves, the action reports "no matching platform on the server" and does not start.
-4. **Indexing.** After `complete`, if the `tasksRun` group is granted, `POST /api/tasks/run/scan_library` is requested once per upload batch; otherwise the outcome says "uploaded, pending scan on the server". In both cases the connect-time link pass (ADR-0001) links the file once RomM has indexed it; a "Link now" retry runs the pass on demand.
-5. **Surfaces.** "Upload to RomM" in the game context menu for unlinked games while connected, and "Upload games missing from RomM" in the system settings dialog, which enumerates the system's unlinked games and uploads them in sequence with per-file progress in the global notification and a summary.
-6. **Not in this version.** Uploading into an existing ROM's folder (unreleased in RomM), archives-as-folders, and multi-file ROMs; a multi-file game is skipped with a reason.
+4. **Indexing.** At the end of a batch in which anything landed, `POST /api/tasks/run/scan_library` is requested once, with the `tasksRun` group read at that moment (not at batch start); when nothing landed no scan is requested. The outcome says "scan requested" when the task was queued and "uploaded, pending scan on the server" for every other answer (group missing, gated, RomM already scanning, any failure) — never "failed", since the files are on the server either way. In both cases the connect-time link pass (ADR-0001) links the file once RomM has indexed it; a "Link now" action on the summary notification runs the pass on demand.
+5. **Surfaces.** "Upload to RomM" in the game context menu for local, unlinked, single-file games while the gate allows, and "Upload games missing from RomM" in the system settings dialog (offered from the gate's value at dialog open), which enumerates the system's games minus hidden and linked ones, confirms count and size, and uploads them in sequence. Progress, Cancel, the summary, and "Link now" all live on the global notification, which gains an action pill for the purpose; there is no dialog after the confirmation.
+6. **Not in this version.** Uploading into an existing ROM's folder (unreleased in RomM), archives-as-folders, and multi-file ROMs. A directory, a SAF tree URI, or an `.m3u` is multi-file; everything on `isDiscContainer`'s list (`.cue`, `.chd`, `.gdi`, …) is a disc container; both are skipped with a reason, as are a missing file, an empty file, and an unsendable name.
 
 ### Consequences
 
@@ -46,6 +46,7 @@ Chosen option: "Chunked upload session with a range-reading source, platform map
 * Good, because SAF is handled by the range reader that already ships, with no new Kotlin.
 * Bad, because a large upload is many sequential requests; progress and cancel make it tolerable, parallel chunks are a later option.
 * Bad, because indexing is out of the client's hands: without `tasks.run` the user waits for RomM's scheduled or watcher scan.
+* Bad, because a file whose name has any character outside printable ASCII cannot be uploaded from this client while RomM stores `x-upload-filename` undecoded; it is listed as skipped with the reason, and the web UI remains the way to upload it.
 * Neutral, because the scan is library-wide (RomM has no REST per-platform quick scan); it is one request and RomM rejects a second while one runs.
 
 ### Confirmation
@@ -85,7 +86,8 @@ sequenceDiagram
 
     UI->>P: uploadToRomm(game)
     P->>P: platformForSystem(system) → platformId | none
-    P->>S: uploadRom(source, platformId, fileName)
+    P->>S: uploadRom(source, platformId, fileName) → bool
+    S->>S: validateUploadName (printable ASCII) · gates → false
     S->>R: POST /api/roms/upload/start (x-upload-* headers)
     R-->>S: upload_id
     loop chunk i of n (10 MiB)
@@ -95,13 +97,15 @@ sequenceDiagram
         R-->>S: received/total (retry ×3 on failure)
     end
     S->>R: POST /api/roms/upload/{id}/complete
-    P->>S: runTask(scan_library) if tasksRun granted
-    P-->>UI: uploaded (+ scan requested | pending scan)
+    S-->>P: true
+    P->>S: runTask(scan_library) once per batch, if anything landed and tasksRun granted now
+    P-->>UI: summary on the notification (+ scan requested | pending scan) with "Link now"
     Note over P: link pass (ADR-0001) links the file once indexed
 ```
 
 ## More Information
 
 * RomM: `backend/endpoints/roms/upload.py` (4.8.0), `frontend/src/services/api/rom.ts` (10 MiB, 3 retries), `tasks/registry.py` (`scan_library`), Socket.IO `scan` handler requires `tasks.run` since 5.0.0.
+* Threshold verification (SPEC-0010's rule): `backend/endpoints/roms/upload.py` does not exist at the 4.7.0 tag, whose `backend/endpoints/rom.py` carries only the older single-shot `POST /api/roms` (no `/upload/` route, no `x-upload-total-chunks`); at the 4.8.0 tag it declares all four session routes under `Scope.ROMS_WRITE`, with `start` answering 201 `{"upload_id"}`, `complete` a bare 201, `cancel` 204, and a name collision 400 `File {filename} already exists`. The header is not decoded at 4.8.0; the web client sends `file.name` raw.
 * NeoStation: `SafDirectoryService.readRange` (`lib/services/saf_directory_service.dart:275`), `RomFingerprintService.computeInBackground` isolate pattern, `RommService._uploadAsset` for the multipart precedent.
 * Spec: SPEC-0014.
