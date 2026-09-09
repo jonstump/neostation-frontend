@@ -284,6 +284,59 @@ void main() {
     });
   });
 
+  group('upload names', () {
+    // dart:io's HttpHeaders accepts only printable ASCII (0x20–0x7E) in a
+    // header value, and RomM does not decode the name, so anything else is
+    // refused rather than sent mangled.
+    RomUploadRefusal? refusalOf(String name) {
+      try {
+        RomUploadSource.validateUploadName(
+          name,
+          romPath: '/roms/gba/$name',
+          systemFolder: 'gba',
+        );
+      } on RomUploadRefusedException catch (e) {
+        expect(e.romPath, '/roms/gba/$name');
+        expect(e.systemFolder, 'gba');
+        return e.reason;
+      }
+      return null;
+    }
+
+    test('a plain ASCII name is sendable', () {
+      expect(RomUploadSource.isSendableName('Game (USA).gba'), isTrue);
+      expect(RomUploadSource.isSendableName("Kirby's Dream Land.gb"), isTrue);
+      expect(
+        RomUploadSource.isSendableName('~!@#\$%^&*()_+-=[]{};,.gba'),
+        isTrue,
+      );
+      expect(refusalOf('Game (USA).gba'), isNull);
+    });
+
+    test('an accented Latin-1 name is refused', () {
+      expect(RomUploadSource.isSendableName('Pokémon.gba'), isFalse);
+      expect(refusalOf('Pokémon.gba'), RomUploadRefusal.unsendableName);
+      expect(refusalOf('Astérix.sfc'), RomUploadRefusal.unsendableName);
+      expect(refusalOf('Über.nes'), RomUploadRefusal.unsendableName);
+    });
+
+    test('a name beyond Latin-1 is refused', () {
+      expect(refusalOf('ゲーム.sfc'), RomUploadRefusal.unsendableName);
+    });
+
+    test('a control character is refused', () {
+      expect(refusalOf('Game\t.gba'), RomUploadRefusal.unsendableName);
+      expect(refusalOf('Game\n.gba'), RomUploadRefusal.unsendableName);
+      expect(refusalOf('Game\x7f.gba'), RomUploadRefusal.unsendableName);
+    });
+
+    test('the space and tilde bounds are inclusive', () {
+      expect(RomUploadSource.isSendableName(' ~'), isTrue);
+      expect(RomUploadSource.isSendableName('\x1f'), isFalse);
+      expect(RomUploadSource.isSendableName('\x7f'), isFalse);
+    });
+  });
+
   group('the dart:io backing', () {
     late Directory tempDir;
 

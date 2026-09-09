@@ -227,18 +227,73 @@ void main() {
       expect(puts().map((r) => r.bodyBytes.length), [10 * mib, 10 * mib]);
     });
 
-    test('a non-Latin-1 name is percent-encoded for the header', () async {
+    test('a plain ASCII name goes in the header verbatim', () async {
       serve(server());
 
       await service().uploadRom(
         await source(size: 1),
         platformId: 7,
-        fileName: 'ゲーム.sfc',
+        fileName: 'Game (USA) [!].sfc',
       );
 
+      expect(calls().first.headers['x-upload-filename'], 'Game (USA) [!].sfc');
+    });
+
+    Matcher refusedAsUnsendable(String path) => throwsA(
+      isA<RomUploadRefusedException>()
+          .having((e) => e.reason, 'reason', RomUploadRefusal.unsendableName)
+          .having((e) => e.romPath, 'romPath', path),
+    );
+
+    test('an accented name is refused before any request', () async {
+      // dart:io's HttpHeaders accepts only printable ASCII in a value, so
+      // `Pokémon.gba` would throw a FormatException on `start` through the
+      // real IOClient; the fake client here never validates, which is why
+      // the refusal has to be checked as a refusal and not as a failure.
+      serve(server());
+      final src = await source(size: 1);
+
+      await expectLater(
+        service().uploadRom(src, platformId: 7, fileName: 'Pokémon.gba'),
+        refusedAsUnsendable(src.path),
+      );
+
+      expect(requests, isEmpty);
+    });
+
+    test('a name beyond Latin-1 is refused the same way', () async {
+      serve(server());
+      final src = await source(size: 1);
+
+      await expectLater(
+        service().uploadRom(src, platformId: 7, fileName: 'ゲーム.sfc'),
+        refusedAsUnsendable(src.path),
+      );
+
+      expect(requests, isEmpty);
+    });
+
+    test('a refused name releases the single-instance guard', () async {
+      serve(server());
+      final svc = service();
+
+      await expectLater(
+        svc.uploadRom(
+          await source(size: 1),
+          platformId: 7,
+          fileName: 'Pokémon.gba',
+        ),
+        throwsA(isA<RomUploadRefusedException>()),
+      );
+
+      expect(svc.uploadInProgress, isFalse);
       expect(
-        calls().first.headers['x-upload-filename'],
-        Uri.encodeComponent('ゲーム.sfc'),
+        await svc.uploadRom(
+          await source(size: 1),
+          platformId: 7,
+          fileName: 'Pokemon.gba',
+        ),
+        isTrue,
       );
     });
 
@@ -459,6 +514,73 @@ void main() {
         failsWith(RommErrorKind.uploadFailed, status: 400),
       );
     });
+
+    test(
+      'a size mismatch on complete is a plain failure, then cancel',
+      () async {
+        // RomM's `complete` answers 400 for an assembled file whose size is
+        // not the one `start` was told; that is not a collision, whatever
+        // else the detail says.
+        serve(
+          server(
+            onComplete: () => json(400, {
+              'detail':
+                  'Assembled file size mismatch: expected 1048576, got 1048575',
+            }),
+          ),
+        );
+
+        await expectLater(
+          service().uploadRom(
+            await source(size: mib),
+            platformId: 7,
+            fileName: 'Game.sfc',
+          ),
+          failsWith(RommErrorKind.uploadFailed, status: 400),
+        );
+        expect(sent('POST', '/api/roms/upload/u-1/cancel'), isTrue);
+      },
+    );
+
+    test('a 400 that merely names the file is not the collision', () async {
+      // The collection route reads a whole-word name as the duplicate; the
+      // upload route requires the phrase, because `complete` also answers
+      // 400 with path-validation text that can carry the name.
+      serve(
+        server(
+          onComplete: () =>
+              json(400, {'detail': 'Invalid file path: roms/snes/Game.sfc'}),
+        ),
+      );
+
+      await expectLater(
+        service().uploadRom(
+          await source(size: 1),
+          platformId: 7,
+          fileName: 'Game.sfc',
+        ),
+        failsWith(RommErrorKind.uploadFailed, status: 400),
+      );
+      expect(sent('POST', '/api/roms/upload/u-1/cancel'), isTrue);
+    });
+
+    test(
+      'the phrase alone, without the name, is still the collision',
+      () async {
+        serve(
+          server(onStart: () => json(409, {'detail': 'File already exists'})),
+        );
+
+        await expectLater(
+          service().uploadRom(
+            await source(),
+            platformId: 7,
+            fileName: 'Game.sfc',
+          ),
+          failsWith(RommErrorKind.alreadyExists, status: 409),
+        );
+      },
+    );
   });
 
   group('gates', () {

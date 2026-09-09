@@ -3369,7 +3369,11 @@ class RommService {
   /// reconfigure of this service while the session is open — sends
   /// `POST .../cancel` and throws [RommErrorKind.uploadCancelled].
   ///
-  /// Returns true when the server confirmed `complete`. Returns false without
+  /// Throws [RomUploadRefusedException] ([RomUploadRefusal.unsendableName])
+  /// before anything is sent when [fileName] has a character outside
+  /// printable ASCII — `dart:io` will not put it in a header and RomM does not
+  /// decode one, see [RomUploadSource.validateUploadName]. Returns true when
+  /// the server confirmed `complete`. Returns false without
   /// sending anything when the server predates the session
   /// ([RommFeature.romUpload], RomM 4.8.0) or this connection is known not to
   /// hold [RommScopeGroup.romsWrite]; both are logged once per connection.
@@ -3391,7 +3395,17 @@ class RommService {
     void Function(int sent, int total)? onProgress,
     bool Function()? shouldCancel,
   }) async {
-    // The gates come first: a gated call sends nothing, whatever else is
+    // The name check is a property of the file alone, so it comes before
+    // even the gates: a name the SDK cannot send is a skip with a reason,
+    // whatever the server. Nothing has been sent by this point.
+    // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Upload Source"
+    RomUploadSource.validateUploadName(
+      fileName,
+      romPath: source.path,
+      systemFolder: source.systemFolder,
+    );
+
+    // Then the gates: a gated call sends nothing, whatever else is
     // running, and says so once per connection like every other gate.
     // Governing: ADR-0010, SPEC-0010 REQ "Gated Call Sites"
     if (supports(RommFeature.romUpload) == RommFeatureSupport.unsupported) {
@@ -3440,14 +3454,6 @@ class RommService {
     final generation = _connectionGeneration;
     final watch = Stopwatch()..start();
 
-    final headerName = _headerSafeFileName(fileName);
-    if (headerName != fileName) {
-      _log.i(
-        'RomM upload filename encoded: name="$fileName" '
-        'reason=non_latin1_header',
-      );
-    }
-
     final http.Response startResp;
     try {
       startResp = await _sendWithAuthRetry<http.Response>(
@@ -3457,7 +3463,7 @@ class RommService {
               headers: {
                 ..._authHeaders,
                 'x-upload-platform': '$platformId',
-                'x-upload-filename': headerName,
+                'x-upload-filename': fileName,
                 'x-upload-total-size': '$total',
                 'x-upload-total-chunks': '$chunks',
               },
@@ -3471,11 +3477,7 @@ class RommService {
       throw _asUploadFailure(e, fileName);
     }
     if (startResp.statusCode < 200 || startResp.statusCode >= 300) {
-      final kind = _uploadFailureKind(
-        startResp.statusCode,
-        startResp.body,
-        fileName,
-      );
+      final kind = _uploadFailureKind(startResp.statusCode, startResp.body);
       _log.w(
         'RomM upload start failed: name="$fileName" platform=$platformId '
         'status=${startResp.statusCode} kind=${kind.name} '
@@ -3548,7 +3550,6 @@ class RommService {
         final kind = _uploadFailureKind(
           completeResp.statusCode,
           completeResp.body,
-          fileName,
         );
         _log.w(
           'RomM upload complete failed: name="$fileName" '
@@ -3754,19 +3755,41 @@ class RommService {
   }
 
   /// The kind for a failed `start` or `complete`: a 403 settles the group
-  /// as denied, a 400 or 409 naming the file is the collision, the rest is
-  /// [RommErrorKind.uploadFailed].
+  /// as denied, a 400 or 409 whose detail says the file already exists is
+  /// the collision, the rest is [RommErrorKind.uploadFailed].
   // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Chunked Upload Session"
-  RommErrorKind _uploadFailureKind(int status, String body, String fileName) {
+  RommErrorKind _uploadFailureKind(int status, String body) {
     if (status == 403) {
       _noteScopeDenial(RommScopeGroup.romsWrite, status);
       return RommErrorKind.scopeDenied;
     }
-    if ((status == 400 || status == 409) &&
-        _saysAlreadyExists(body, fileName)) {
+    if ((status == 400 || status == 409) && _saysFileAlreadyExists(body)) {
       return RommErrorKind.alreadyExists;
     }
     return RommErrorKind.uploadFailed;
+  }
+
+  /// Whether an upload `start` or `complete` failure body is the collision.
+  ///
+  /// RomM 4.8.0 answers a name already on the platform with exactly
+  /// `File {filename} already exists`, so the phrase is the signal. The
+  /// whole-word name fallback [_saysAlreadyExists] keeps for the collection
+  /// route is deliberately not used here: `complete` also answers 400 with a
+  /// path-validation detail and with `Assembled file size mismatch: expected
+  /// X, got Y`, and a detail that happens to name the file must stay
+  /// [RommErrorKind.uploadFailed], not tell the user to pick another name.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Chunked Upload Session"
+  static bool _saysFileAlreadyExists(String body) {
+    String? detail;
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map) {
+        detail = (decoded['detail'] ?? decoded['message'])?.toString();
+      }
+    } catch (_) {
+      detail = null;
+    }
+    return (detail ?? body).toLowerCase().contains('already exists');
   }
 
   /// [error] as the [RommException] the caller sees. One that already
@@ -3801,18 +3824,6 @@ class RommService {
     } catch (_) {
       return null;
     }
-  }
-
-  /// [name] as it can travel in an HTTP header. `dart:io` refuses a header
-  /// value outside Latin-1, and RomM's web client sends the name raw (the
-  /// server neither decodes nor sanitises it), so the ASCII names nearly
-  /// every ROM has go through untouched and only a name that cannot be sent
-  /// as-is is percent-encoded — which is then the name the server stores.
-  static String _headerSafeFileName(String name) {
-    for (final unit in name.codeUnits) {
-      if (unit > 0xFF) return Uri.encodeComponent(name);
-    }
-    return name;
   }
 
   // ── Play sessions (playtime sync) ─────────────────────────────────────────
@@ -4280,11 +4291,10 @@ class RommService {
     );
   }
 
-  /// Whether a failure body says [name] already exists on the server. Shared
-  /// by the collection create (a 500) and the ROM upload session (a 400 or
-  /// 409 on `start` or `complete`, "File {name} already exists"): the wording
-  /// is RomM's, the status differs per route, so the caller decides which
-  /// statuses are worth asking about.
+  /// Whether a collection create's failure body says [name] already exists
+  /// on the server. The ROM upload route has its own, narrower check
+  /// ([_saysFileAlreadyExists]): this one's whole-word name fallback is right
+  /// for a collection 500 and wrong for an upload 400.
   ///
   /// For a create's 500 body this is the duplicate-name check. RomM answers a
   /// `CollectionAlreadyExistsException` with a 500 whose `detail` names the

@@ -29,6 +29,11 @@ enum RomUploadRefusal {
   /// whose provider answered nothing). A zero-chunk session is not something
   /// the server accepts.
   empty,
+
+  /// The upload name has a character `dart:io` cannot put in an HTTP header
+  /// (anything outside printable ASCII, 0x20–0x7E). See
+  /// [RomUploadSource.validateUploadName].
+  unsendableName,
 }
 
 /// Raised by [RomUploadSource.open] for a path it will not upload.
@@ -186,6 +191,41 @@ class RomUploadSource {
   static bool isPlaylist(String romPath) =>
       romPath.toLowerCase().endsWith('.m3u');
 
+  /// Whether [fileName] can travel in the `x-upload-filename` header as-is:
+  /// every code unit printable ASCII (0x20–0x7E).
+  ///
+  /// That is `dart:io`'s rule, not Latin-1's: `HttpHeaders.set` validates
+  /// each value byte as `> 31 && < 128` (or HT), and `IOClient` routes every
+  /// request header through it, so `Pokémon.gba` throws a `FormatException`
+  /// before a request is made. RomM 4.8.0 does not decode the header (a
+  /// browser sends the raw Latin-1 bytes, which `dart:io` will not), so a
+  /// percent-encoded name would be stored mangled and never matched by the
+  /// name-based link pass. Such a name is refused instead.
+  static bool isSendableName(String fileName) {
+    for (final unit in fileName.codeUnits) {
+      if (unit < 0x20 || unit > 0x7E) return false;
+    }
+    return true;
+  }
+
+  /// Throws [RomUploadRefusedException] with [RomUploadRefusal.unsendableName]
+  /// when [fileName] fails [isSendableName]. The session client calls this
+  /// before `start`, so the file is listed as skipped with a reason rather
+  /// than failing on a header the SDK refuses to send.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Upload Source"
+  static void validateUploadName(
+    String fileName, {
+    required String romPath,
+    String? systemFolder,
+  }) {
+    if (isSendableName(fileName)) return;
+    throw RomUploadRefusedException(
+      romPath,
+      RomUploadRefusal.unsendableName,
+      systemFolder: systemFolder,
+    );
+  }
+
   /// How many chunks of [chunkSize] the session needs: `ceil(size / chunkSize)`,
   /// the value the `x-upload-total-chunks` header carries.
   int get chunkCount => (size + chunkSize - 1) ~/ chunkSize;
@@ -284,7 +324,12 @@ class RomUploadSource {
     if (_isSafUri(path)) {
       // A SAF *tree* URI names a folder; a document URI names a file. The
       // ROM scan only ever records document URIs for games, so this is a
-      // guard against a caller handing over a folder, not a stat.
+      // guard against a caller handing over a folder, not a stat. It is not
+      // exact: a folder's own document URI built under a tree
+      // (`…/tree/<id>/document/<folder>`) also contains `/document/`, passes
+      // here, and is then refused as `empty` by `open` because
+      // `getFileSize` answers 0 for a directory — the right outcome under
+      // the wrong reason. Do not trust this probe for folders.
       return !path.contains('/document/');
     }
     return FileSystemEntity.isDirectory(path);
