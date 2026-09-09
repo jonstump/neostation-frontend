@@ -232,6 +232,13 @@ class SecondaryDisplayStateData {
   /// would let the first shared-state snapshot overwrite that seed with a guess.
   final bool? use12HourClock;
 
+  /// Whether the selected game is a remote entry of the unified library: on
+  /// the RomM server, not on this device. The secondary display then shows
+  /// the cached cover pushed as [gameScreenshot] and a localized "not
+  /// downloaded" line, and never looks for local media of its own.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Secondary Display And Search"
+  final bool isRemoteGame;
+
   SecondaryDisplayStateData({
     required this.systemName,
     this.gameFanart,
@@ -302,6 +309,7 @@ class SecondaryDisplayStateData {
     this.sfxEnabled = true,
     this.sfxVolume = 0.75,
     this.use12HourClock,
+    this.isRemoteGame = false,
   });
 
   /// Returns a new instance with the specified properties updated.
@@ -383,6 +391,7 @@ class SecondaryDisplayStateData {
     bool? sfxEnabled,
     double? sfxVolume,
     bool? use12HourClock,
+    bool? isRemoteGame,
   }) {
     return SecondaryDisplayStateData(
       systemName: systemName ?? this.systemName,
@@ -465,6 +474,7 @@ class SecondaryDisplayStateData {
       sfxEnabled: sfxEnabled ?? this.sfxEnabled,
       sfxVolume: sfxVolume ?? this.sfxVolume,
       use12HourClock: use12HourClock ?? this.use12HourClock,
+      isRemoteGame: isRemoteGame ?? this.isRemoteGame,
     );
   }
 
@@ -549,6 +559,7 @@ class SecondaryDisplayStateData {
       sfxEnabled: json['sfxEnabled'] as bool? ?? true,
       sfxVolume: (json['sfxVolume'] as num?)?.toDouble() ?? 0.75,
       use12HourClock: json['use12HourClock'] as bool?,
+      isRemoteGame: json['isRemoteGame'] as bool? ?? false,
     );
   }
 
@@ -616,6 +627,7 @@ class SecondaryDisplayStateData {
       'sfxEnabled': sfxEnabled,
       'sfxVolume': sfxVolume,
       'use12HourClock': use12HourClock,
+      'isRemoteGame': isRemoteGame,
     };
   }
 }
@@ -733,6 +745,7 @@ class SecondaryDisplayState extends SharedState<SecondaryDisplayStateData> {
     bool? sfxEnabled,
     double? sfxVolume,
     bool? use12HourClock,
+    bool? isRemoteGame,
   }) async {
     if (!Platform.isAndroid) return;
 
@@ -819,6 +832,7 @@ class SecondaryDisplayState extends SharedState<SecondaryDisplayStateData> {
           sfxEnabled: sfxEnabled,
           sfxVolume: sfxVolume,
           use12HourClock: use12HourClock,
+          isRemoteGame: isRemoteGame,
         ),
       );
     } catch (e) {

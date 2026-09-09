@@ -58,8 +58,26 @@ extension _DataLoading on _SystemGamesListState {
     }
   }
 
-  Future<void> _loadGames() async {
-    if (!mounted || _isLoadingGames) return;
+  /// Reloads the list. A load already in flight answers for a second call —
+  /// the caller gets that load's future, so awaiting it means "the list has
+  /// been read since I asked" either way. A revision that moved while it ran
+  /// ([_reloadPending]) is picked up as soon as it finishes.
+  Future<void> _loadGames() {
+    if (!mounted) return Future<void>.value();
+    final inFlight = _gamesLoad;
+    if (inFlight != null) return inFlight;
+    final load = _loadGamesNow();
+    _gamesLoad = load;
+    return load.whenComplete(() {
+      if (identical(_gamesLoad, load)) _gamesLoad = null;
+      if (mounted && _reloadPending) {
+        _reloadPending = false;
+        _onCatalogRevisionChanged();
+      }
+    });
+  }
+
+  Future<void> _loadGamesNow() async {
     _isLoadingGames = true;
 
     final isInitialLoad = _games.isEmpty;
@@ -120,6 +138,22 @@ extension _DataLoading on _SystemGamesListState {
           }
         }
       }
+
+      // A remote selection the settle just flipped to a local game keeps its
+      // place by the name the scan indexed, read from the link row the
+      // download wrote: a single-file ROM matches by romname already, an
+      // unpacked multi-disc .m3u or an appended .zip does not.
+      // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Download From The Library"
+      final previous = _selectedGame;
+      final previousRomId = previous?.rommRomId;
+      final String? previousIndexedName =
+          previous != null && previous.isRemote && previousRomId != null
+          ? await RommSaveMapRepository.getIndexedNameForRomId(
+              previousRomId,
+              previous.systemFolderName ?? widget.system.folderName,
+            )
+          : null;
+      if (!mounted) return;
 
       _SystemGamesListState._log.i(
         'SystemGamesList: Loaded ${games.length} games for ${widget.system.folderName}',
@@ -183,8 +217,12 @@ extension _DataLoading on _SystemGamesListState {
         } else if (_selectedGame != null &&
             widget.system.folderName != 'music') {
           // Persistent Selection Logic: Retain current index if the game still exists post-reload.
-          final selectedIndex = _games.indexWhere(
-            (game) => game.romname == _selectedGame!.romname,
+          final selectedIndex = retainedSelectionIndex(
+            _games,
+            _selectedGame!,
+            indexedName: identical(previous, _selectedGame)
+                ? previousIndexedName
+                : null,
           );
           if (selectedIndex != -1) {
             _selectedGameIndex = selectedIndex;

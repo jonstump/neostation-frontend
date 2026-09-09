@@ -1709,6 +1709,34 @@ mixin AppLocale {
       'romm_catalog_never_refreshed';
   static const String rommRemoteNotDownloaded = 'romm_remote_not_downloaded';
 
+  // Remote entry cards, in-place download, launch interception, secondary
+  // display (#108).
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entry Presentation"
+  static const String rommRemoteBadge = 'romm_remote_badge';
+  static const String rommRemoteRetryBadge = 'romm_remote_retry_badge';
+  static const String rommRemoteDownloadingBadge =
+      'romm_remote_downloading_badge';
+  static const String rommRemoteDownloadingIndeterminate =
+      'romm_remote_downloading_indeterminate';
+  static const String rommRemoteCancelDownload = 'romm_remote_cancel_download';
+  static const String rommRemoteDownloadConfirmTitle =
+      'romm_remote_download_confirm_title';
+  static const String rommRemoteDownloadConfirmBody =
+      'romm_remote_download_confirm_body';
+  static const String rommRemoteSizeUnknown = 'romm_remote_size_unknown';
+  static const String rommRemoteCancelConfirmTitle =
+      'romm_remote_cancel_confirm_title';
+  static const String rommRemoteCancelConfirmBody =
+      'romm_remote_cancel_confirm_body';
+  static const String rommRemoteOfflineNotice = 'romm_remote_offline_notice';
+  static const String rommRemotePlayNow = 'romm_remote_play_now';
+  static const String rommRemotePlayLater = 'romm_remote_play_later';
+  static const String rommRemoteDownloadReadyTitle =
+      'romm_remote_download_ready_title';
+  static const String rommRemoteDownloadReadyBody =
+      'romm_remote_download_ready_body';
+  static const String rommRemoteSecondaryState = 'romm_remote_secondary_state';
+
   // ==========================================================================
   // Localization Maps
   // ==========================================================================

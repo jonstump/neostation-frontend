@@ -10,6 +10,7 @@ import '../../../models/game_model.dart';
 import '../../../models/library_scope.dart';
 import '../../../providers/file_provider.dart';
 import '../../../providers/romm_provider.dart';
+import '../../../services/romm/romm_cover_cache.dart';
 import '../../../providers/retro_achievements_provider.dart';
 import '../../../sync/i_sync_provider.dart';
 import '../../../models/retro_achievements_game_info.dart';
@@ -855,14 +856,55 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
     await _applyVideoMuteState();
   }
 
+  /// The cached RomM cover for a remote entry, or null for the placeholder.
+  /// A miss asks the provider to fill it, and this card rebuilds on the
+  /// [RommProvider.coverRevision] bump that follows (selected in [build]).
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+  String? _remoteCoverPath(BuildContext context) {
+    final RommProvider provider;
+    try {
+      provider = context.read<RommProvider>();
+    } on ProviderNotFoundException {
+      return null;
+    }
+    final path = rommCoverPathFor(
+      isLocal: false,
+      scrapedMediaPath: null,
+      serverUrl: provider.serverUrl,
+      rommRomId: _game.rommRomId,
+      cache: provider.coverCache,
+    );
+    if (path == null) {
+      final romId = _game.rommRomId;
+      if (romId != null) provider.warmCover(romId);
+    }
+    return path;
+  }
+
   @override
   Widget build(BuildContext context) {
     final imageSystemFolder = _effectiveSystem.primaryFolderName;
-    final screenshotPath = _game.getImagePath(
-      imageSystemFolder,
-      'screenshots',
-      widget.fileProvider,
-    );
+    // A remote entry has no scraped media on this device: the media tab and
+    // the box-art tab both draw its cached RomM cover (or the placeholder),
+    // and no local path is built for it.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+    if (_game.isRemote) {
+      try {
+        context.select<RommProvider, int>((p) => p.coverRevision);
+      } on ProviderNotFoundException {
+        // Hosted without a RomM provider: the placeholder stays.
+      }
+    }
+    final String? remoteCoverPath = _game.isRemote
+        ? _remoteCoverPath(context)
+        : null;
+    final screenshotPath = _game.isRemote
+        ? (remoteCoverPath ?? '')
+        : _game.getImagePath(
+            imageSystemFolder,
+            'screenshots',
+            widget.fileProvider,
+          );
 
     // The tab panels stop where the footer starts. That is not a constant: a
     // game with no achievements pill loses the footer's whole action row, and
@@ -951,6 +993,7 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
                         game: _game,
                         fileProvider: widget.fileProvider,
                         imageVersion: _artworkImageVersion,
+                        remoteCoverPath: remoteCoverPath,
                       ),
                     ),
                   // The media tab stays mounted whatever the current tab

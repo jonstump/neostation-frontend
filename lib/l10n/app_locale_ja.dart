@@ -1461,4 +1461,22 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommCatalogAsOf: 'ライブラリの更新日時 {time}',
   AppLocale.rommCatalogNeverRefreshed: 'ライブラリはまだ更新されていません',
   AppLocale.rommRemoteNotDownloaded: '未ダウンロード',
+  AppLocale.rommRemoteBadge: 'RomM サーバー上、未ダウンロード',
+  AppLocale.rommRemoteRetryBadge: 'ダウンロードに失敗しました。A を押して再試行',
+  AppLocale.rommRemoteDownloadingBadge: 'ダウンロード中 {percent}%',
+  AppLocale.rommRemoteDownloadingIndeterminate: 'ダウンロード中…',
+  AppLocale.rommRemoteCancelDownload: 'ダウンロードをキャンセル',
+  AppLocale.rommRemoteDownloadConfirmTitle: 'RomM からダウンロード',
+  AppLocale.rommRemoteDownloadConfirmBody:
+      '{name}（{size}）を {folder} にダウンロードしますか？',
+  AppLocale.rommRemoteSizeUnknown: 'サイズ不明',
+  AppLocale.rommRemoteCancelConfirmTitle: 'ダウンロードをキャンセル',
+  AppLocale.rommRemoteCancelConfirmBody:
+      '{name} のダウンロードを中止しますか？途中のファイルは破棄されます。',
+  AppLocale.rommRemoteOfflineNotice: 'オフラインでは利用できません：RomM サーバーに接続できません',
+  AppLocale.rommRemotePlayNow: '今すぐプレイ',
+  AppLocale.rommRemotePlayLater: '後で',
+  AppLocale.rommRemoteDownloadReadyTitle: 'ダウンロード完了',
+  AppLocale.rommRemoteDownloadReadyBody: '{name} をプレイできます。',
+  AppLocale.rommRemoteSecondaryState: 'RomM サーバー上、未ダウンロード',
 };

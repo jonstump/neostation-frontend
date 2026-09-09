@@ -18,6 +18,7 @@ import 'package:neostation/utils/ra_coverage.dart';
 import 'package:neostation/themes/app_themes.dart';
 import 'package:neostation/utils/game_utils.dart';
 import 'package:neostation/widgets/marquee_text.dart';
+import 'package:neostation/widgets/remote_entry_badge.dart';
 import 'package:neostation/themes/chrome_surface.dart';
 import '../../themes/corner_radii.dart';
 
@@ -123,8 +124,15 @@ class GameViewFooter extends StatelessWidget {
                 // no subtitle; without this reservation the shorter column
                 // re-centers the rating/RA pill + PLAY row upward. The empty
                 // string still lays out a full line box via the forced strut.
+                // A remote entry's size rides on the same line, after the
+                // filename when that is shown: it is the one fact about the
+                // entry the catalog has that a card cannot draw.
+                // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entry Presentation"
                 Text(
-                  game.showRomFileNameSubtitle ? game.romname : '',
+                  [
+                    if (game.showRomFileNameSubtitle) game.romname,
+                    ?remoteEntrySizeLabel(game),
+                  ].join('  \u2022  '),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   strutStyle: StrutStyle(
@@ -239,6 +247,16 @@ class GameViewFooter extends StatelessWidget {
         final radii =
             Theme.of(context).extension<CornerRadii>() ?? CornerRadii.m();
         final isFocused = Focus.of(context).hasFocus;
+        // A remote entry's button says what A does to it right now —
+        // Download, Cancel while it transfers, Retry after a failure — and
+        // reads the tracker itself, so the views' memoized footer instance
+        // never has to be rebuilt for a download that starts or ends.
+        // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entry Presentation"
+        final downloadStatus = watchRemoteDownloadStatus(context, game);
+        final action = remoteEntryActionFor(
+          remoteEntryStateFor(game, downloadStatus),
+          status: downloadStatus,
+        );
         return AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           height: 32.r,
@@ -289,7 +307,7 @@ class GameViewFooter extends StatelessWidget {
                           // Same word the systems view uses for descending into
                           // a container; upper-cased to match PLAY beside it.
                           ? AppLocale.enter.getString(context).toUpperCase()
-                          : AppLocale.playButton.getString(context),
+                          : remoteEntryActionLabel(context, action),
                       style: TextStyle(
                         color: Theme.of(context).colorScheme.onPrimary,
                         fontWeight: FontWeight.w900,

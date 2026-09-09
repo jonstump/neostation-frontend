@@ -105,6 +105,7 @@ extension _SecondaryDisplay on _SystemGamesListState {
     // ignore: unawaited_futures
     state.updateState(
       isGameSelected: false,
+      isRemoteGame: false,
       clearGameId: true,
       clearVideo: true,
       clearFanart: true,
@@ -112,6 +113,58 @@ extension _SecondaryDisplay on _SystemGamesListState {
       clearWheel: true,
       clearImageBytes: true,
     );
+  }
+
+  /// Pushes a remote entry to the secondary display: its cached RomM cover in
+  /// the screenshot slot (the placeholder when the cache has none) and the
+  /// flag the second screen renders its "not downloaded" line from. None of
+  /// the entry's local media or video paths are built or probed — it has no
+  /// file on this device for them to belong to.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Secondary Display And Search"
+  Future<void> _pushRemoteEntryToSecondaryDisplay(GameModel game) async {
+    final state = _secondaryDisplayState;
+    if (state == null || _isNavigatingBack) return;
+
+    final push = remoteEntrySecondaryStateFor(
+      game,
+      cachedCoverPath: _remoteCoverPathFor(game),
+      exists: (path) => File(path).existsSync(),
+    );
+    if (push == null) return;
+
+    final isVideoMuted = !_configProvider.config.videoSound;
+    final current = state.value;
+    final unchanged =
+        current != null &&
+        current.isRemoteGame &&
+        current.isGameSelected &&
+        current.systemName == widget.system.realName &&
+        current.gameId == push.gameId &&
+        current.gameScreenshot == push.coverPath &&
+        current.isVideoMuted == isVideoMuted &&
+        !current.isGameLaunching;
+    if (unchanged) return;
+
+    // ignore: unawaited_futures
+    state.updateState(
+      systemName: widget.system.realName,
+      gameScreenshot: push.coverPath,
+      clearScreenshot: push.coverPath == null,
+      clearFanart: true,
+      clearWheel: true,
+      clearVideo: true,
+      clearImageBytes: true,
+      isGameSelected: true,
+      isRemoteGame: true,
+      isVideoMuted: isVideoMuted,
+      backgroundColor: mounted
+          ? Theme.of(context).scaffoldBackgroundColor.toARGB32()
+          : null,
+      isGameLaunching: false,
+      gameId: push.gameId,
+      showAchievementPanel: false,
+    );
+    _updateMusicDucking();
   }
 
   /// Synchronizes selection metadata and assets with secondary hardware displays.
@@ -131,6 +184,14 @@ extension _SecondaryDisplay on _SystemGamesListState {
     // the second screen would show the stale art of the last hovered game.
     if (_isFolderEntry(game)) {
       _clearSecondaryDisplayForFolder();
+      return;
+    }
+
+    // A remote entry takes its own path: cached cover, "not downloaded" line,
+    // and no local media or video resolution at all.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Secondary Display And Search"
+    if (game.isRemote) {
+      await _pushRemoteEntryToSecondaryDisplay(game);
       return;
     }
 
@@ -198,7 +259,8 @@ extension _SecondaryDisplay on _SystemGamesListState {
                 ? null
                 : (File(wheelPath).existsSync() ? wheelPath : null)) ||
         currentState.isVideoMuted != isVideoMuted ||
-        currentState.isGameLaunching != _isGameLaunching;
+        currentState.isGameLaunching != _isGameLaunching ||
+        currentState.isRemoteGame;
 
     if (shouldUpdate && !_isNavigatingBack) {
       final bool hasFanart = !isMusicSystem && File(fanartPath).existsSync();
@@ -222,6 +284,8 @@ extension _SecondaryDisplay on _SystemGamesListState {
             ? (MusicPlayerService().activeTrack == null)
             : true,
         isGameSelected: true,
+        // A local game: the remote line, if the last push carried it, goes.
+        isRemoteGame: false,
         isVideoMuted: isVideoMuted,
         backgroundColor: mounted
             ? Theme.of(context).scaffoldBackgroundColor.toARGB32()
@@ -300,7 +364,10 @@ extension _SecondaryDisplay on _SystemGamesListState {
   Future<void> _updateSecondaryDisplayVideo(GameModel game) async {
     if (_secondaryDisplayState == null ||
         _isNavigatingBack ||
-        _selectedGame != game) {
+        _selectedGame != game ||
+        // No video path is built for a remote entry.
+        // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Secondary Display And Search"
+        game.isRemote) {
       return;
     }
 
@@ -351,14 +418,15 @@ extension _SecondaryDisplay on _SystemGamesListState {
     final systemFolderName = widget.system.primaryFolderName;
 
     // Resolve game background: Prioritize high-resolution fanart, fallback to screenshot, then system default.
-    String imagePath = game.getImagePath(
-      systemFolderName,
-      'fanarts',
-      _fileProvider,
-    );
-    bool exists = File(imagePath).existsSync();
+    // A remote entry backs the view with its cached RomM cover instead; its
+    // local media paths are never built.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
+    String imagePath = game.isRemote
+        ? (_remoteCoverPathFor(game) ?? '')
+        : game.getImagePath(systemFolderName, 'fanarts', _fileProvider);
+    bool exists = imagePath.isNotEmpty && File(imagePath).existsSync();
 
-    if (!exists) {
+    if (!exists && !game.isRemote) {
       imagePath = game.getScreenshotPath(systemFolderName, _fileProvider);
       exists = File(imagePath).existsSync();
     }
@@ -414,7 +482,9 @@ extension _SecondaryDisplay on _SystemGamesListState {
     if (!mounted ||
         _selectedGame == null ||
         _selectedGame != game ||
-        _isVideoLoading) {
+        _isVideoLoading ||
+        // A remote entry has no preview video to look for.
+        game.isRemote) {
       return;
     }
 

@@ -16,6 +16,8 @@ import 'package:neostation/models/game_model.dart';
 import 'package:neostation/models/secondary_display_state.dart';
 import 'package:neostation/data/datasources/sqlite_service.dart';
 import 'package:neostation/repositories/game_repository.dart';
+import 'package:neostation/repositories/romm_catalog_repository.dart';
+import 'package:neostation/screens/search_screen/remote_search_source.dart';
 import 'package:neostation/screens/search_screen/search_filter.dart';
 import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/providers/retro_achievements_provider.dart';
@@ -483,6 +485,15 @@ class _SearchScreenState extends State<SearchScreen> {
       _rebuildRows();
     });
 
+    // While the server is unreachable the catalog answers instead of the
+    // network: the same rows the game lists show offline, name-matched here.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Secondary Display And Search"
+    if (remoteSearchSourceFor(provider.reachability) ==
+        RemoteSearchSource.catalog) {
+      await _runCatalogSearch(provider, term, seq);
+      return;
+    }
+
     try {
       // Platform, genre and developer are matched by RomM across the whole
       // library; only year is left for the rows to be filtered on afterwards.
@@ -536,6 +547,61 @@ class _SearchScreenState extends State<SearchScreen> {
         _rebuildRows();
       });
     }
+  }
+
+  /// One page of RomM rows from the persisted catalog, for [term], while the
+  /// server is unreachable.
+  ///
+  /// The platform chip names a local system; the catalog files rows by system
+  /// folder, so the chip resolves through the system list rather than through
+  /// RomM's platform ids (which need the server). Genre is matched on the
+  /// catalog's genre column; the developer chip cannot be honoured offline
+  /// (the catalog keeps no companies) and is ignored rather than emptying the
+  /// section. Downloads stay disabled by the offline check on the action.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Secondary Display And Search"
+  Future<void> _runCatalogSearch(
+    RommProvider provider,
+    String term,
+    int seq,
+  ) async {
+    String? systemFolder;
+    if (_platform != null) {
+      final systems = context.read<SqliteConfigProvider>().availableSystems;
+      final match = systems.where((s) => s.realName == _platform).firstOrNull;
+      if (match == null) {
+        setState(() {
+          _remote = [];
+          _remoteTotal = 0;
+          _remoteHasMore = false;
+          _remoteLoading = false;
+          _rebuildRows();
+        });
+        return;
+      }
+      systemFolder = match.folderName;
+    }
+
+    final page = await RommCatalogRepository.searchRows(
+      serverUrl: provider.serverUrl,
+      term: term,
+      systemFolder: systemFolder,
+      genre: _genre,
+      limit: _remotePageSize,
+      offset: _remoteOffset,
+    );
+    if (!mounted || seq != _remoteSeq) return;
+
+    final items = [for (final row in page.rows) row.toRommRom()];
+    setState(() {
+      _remote = [..._remote, ...items];
+      _remoteOffset += items.length;
+      _remoteHasMore = _remoteOffset < page.total;
+      _remoteTotal = page.total;
+      _remoteLoading = false;
+      _rebuildRows();
+    });
+
+    await _resolveDownloadedFlags(items, seq);
   }
 
   /// Fills in the "already on this device" badge for a freshly fetched page.
@@ -994,6 +1060,19 @@ class _SearchScreenState extends State<SearchScreen> {
   Future<void> _downloadRemote(RommRom rom) async {
     final provider = context.read<RommProvider>();
     final romFolders = context.read<SqliteConfigProvider>().config.romFolders;
+
+    // The same rule the game list applies: an unreachable server answers
+    // with the notice and sends nothing, instead of a request that ends in
+    // "Download failed".
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Download From The Library"
+    if (provider.reachability == RommReachability.offline) {
+      AppNotification.showNotification(
+        context,
+        AppLocale.rommRemoteOfflineNotice.getString(context),
+        type: NotificationType.info,
+      );
+      return;
+    }
 
     if (_remoteDownloaded[rom.id] ?? false) {
       AppNotification.showNotification(

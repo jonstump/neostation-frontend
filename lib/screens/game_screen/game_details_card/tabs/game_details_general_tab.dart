@@ -33,12 +33,14 @@ class GameDetailsGeneralTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final imageSystemFolder = system.primaryFolderName;
-    final wheelPath = game.getImagePath(
-      imageSystemFolder,
-      'wheels',
-      fileProvider,
-    );
-    final wheelExists = File(wheelPath).existsSync();
+    // A remote entry has no wheel on this device: no path is built or
+    // stat-ed for it, and the tab shows the same empty slot as an unscraped
+    // local game.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entry Presentation"
+    final wheelPath = game.isRemote
+        ? ''
+        : game.getImagePath(imageSystemFolder, 'wheels', fileProvider);
+    final wheelExists = wheelPath.isNotEmpty && File(wheelPath).existsSync();
 
     return Positioned.fill(
       left: 10.r,

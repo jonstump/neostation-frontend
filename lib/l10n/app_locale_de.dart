@@ -1675,4 +1675,25 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.rommCatalogAsOf: 'Bibliothek, Stand {time}',
   AppLocale.rommCatalogNeverRefreshed: 'Bibliothek noch nicht aktualisiert',
   AppLocale.rommRemoteNotDownloaded: 'Nicht heruntergeladen',
+  AppLocale.rommRemoteBadge: 'Auf dem RomM-Server, nicht heruntergeladen',
+  AppLocale.rommRemoteRetryBadge:
+      'Download fehlgeschlagen, A drücken zum Wiederholen',
+  AppLocale.rommRemoteDownloadingBadge: 'Wird heruntergeladen {percent}%',
+  AppLocale.rommRemoteDownloadingIndeterminate: 'Wird heruntergeladen…',
+  AppLocale.rommRemoteCancelDownload: 'Download abbrechen',
+  AppLocale.rommRemoteDownloadConfirmTitle: 'Von RomM herunterladen',
+  AppLocale.rommRemoteDownloadConfirmBody:
+      '{name} ({size}) nach {folder} herunterladen?',
+  AppLocale.rommRemoteSizeUnknown: 'Größe unbekannt',
+  AppLocale.rommRemoteCancelConfirmTitle: 'Download abbrechen',
+  AppLocale.rommRemoteCancelConfirmBody:
+      'Download von {name} abbrechen? Die unvollständige Datei wird verworfen.',
+  AppLocale.rommRemoteOfflineNotice:
+      'Offline nicht verfügbar: der RomM-Server ist nicht erreichbar',
+  AppLocale.rommRemotePlayNow: 'Jetzt spielen',
+  AppLocale.rommRemotePlayLater: 'Später',
+  AppLocale.rommRemoteDownloadReadyTitle: 'Download abgeschlossen',
+  AppLocale.rommRemoteDownloadReadyBody: '{name} ist spielbereit.',
+  AppLocale.rommRemoteSecondaryState:
+      'Auf dem RomM-Server, nicht heruntergeladen',
 };

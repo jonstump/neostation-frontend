@@ -168,11 +168,12 @@ extension _LaunchFlow on _SystemGamesListState {
       return;
     }
 
-    // A remote entry has no file to launch. The download confirmation that
-    // will sit here is the next story's; for now the press is answered.
-    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entries In The Game Model"
+    // A remote entry has no file to launch: the press downloads it instead
+    // (offline it answers with a notice; while a download runs it offers to
+    // cancel; after a failure it retries).
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Download From The Library"
     if (_selectedGame!.isRemote) {
-      _notifyRemoteNotDownloaded();
+      await _handleRemoteEntryPress(_selectedGame!);
       return;
     }
 
@@ -527,7 +528,15 @@ extension _LaunchFlow on _SystemGamesListState {
 
   /// Presents a 'Random Game' picker to the user.
   void _showRandomGameDialog() {
-    if (_games.isEmpty) {
+    // The picker lands on a game it can launch; a remote entry has no file to
+    // play and no local media for the dialog to probe, so it sits this out.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entry Presentation"
+    final candidates = _games
+        .where(
+          (g) => !g.isRemote && !(_subfolderViewEnabled && _isFolderEntry(g)),
+        )
+        .toList();
+    if (candidates.isEmpty) {
       return;
     }
 
@@ -545,9 +554,7 @@ extension _LaunchFlow on _SystemGamesListState {
       barrierDismissible: false,
       builder: (BuildContext context) {
         return RandomGameDialog(
-          games: _subfolderViewEnabled
-              ? _games.where((g) => !_isFolderEntry(g)).toList()
-              : _games,
+          games: candidates,
           systemFolderName: widget.system.primaryFolderName,
           systemRealName: widget.system.realName,
           fileProvider: _fileProvider,

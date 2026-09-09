@@ -43,6 +43,8 @@ const String _scrapeId = 'scrape';
 const String _viewModeId = 'view_mode';
 const String _randomId = 'random';
 const String _libraryScopeId = 'library_scope';
+const String _downloadId = 'download';
+const String _cancelDownloadId = 'cancel_download';
 const String _togglePrefix = 'toggle:';
 
 /// Opens the per-game Y menu anchored to [anchorKey]'s widget.
@@ -82,7 +84,14 @@ const String _togglePrefix = 'toggle:';
 /// does on the pad. Omitted when the feature is off. [onSettings] is null for
 /// an entry that has no per-game settings to open — a remote entry, which
 /// has no local row for them to be keyed to.
+///
+/// [onDownload] and [onCancelDownload] are a remote entry's own actions, at
+/// the top where Settings sits for a local game: the host binds the first
+/// while the entry is downloadable (labelled by [downloadLabel] — Download,
+/// or Retry after a failure) and the second while its download runs, never
+/// both.
 // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
+// Governing: ADR-0020 (unified library), SPEC-0019 REQ "Download From The Library"
 Future<void> showGameContextMenu({
   required BuildContext context,
   required List<GameContextMenuTarget> targets,
@@ -94,6 +103,9 @@ Future<void> showGameContextMenu({
   VoidCallback? onViewMode,
   VoidCallback? onRandom,
   VoidCallback? onToggleLibraryScope,
+  VoidCallback? onDownload,
+  String? downloadLabel,
+  VoidCallback? onCancelDownload,
 }) async {
   assert(
     onCreateTarget == null || createTargetLabel != null,
@@ -119,6 +131,19 @@ Future<void> showGameContextMenu({
   ];
 
   final items = <ContextMenuItem>[
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Download From The Library"
+    if (onDownload != null)
+      ContextMenuItem(
+        id: _downloadId,
+        label: downloadLabel ?? AppLocale.download.getString(context),
+        icon: Symbols.cloud_download_rounded,
+      ),
+    if (onCancelDownload != null)
+      ContextMenuItem(
+        id: _cancelDownloadId,
+        label: AppLocale.rommRemoteCancelDownload.getString(context),
+        icon: Symbols.cancel_rounded,
+      ),
     if (onSettings != null)
       ContextMenuItem(
         id: _settingsId,
@@ -187,6 +212,14 @@ Future<void> showGameContextMenu({
 
   if (result == _settingsId) {
     onSettings?.call();
+    return;
+  }
+  if (result == _downloadId) {
+    onDownload?.call();
+    return;
+  }
+  if (result == _cancelDownloadId) {
+    onCancelDownload?.call();
     return;
   }
   if (result == _libraryScopeId) {
