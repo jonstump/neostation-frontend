@@ -32,10 +32,10 @@ ADR-0009 mirrors a synced RomM collection into a local one, with provenance colu
 Chosen option: "Explicit push with a recorded origin", because it keeps each collection under exactly one writer, reuses the provenance the mirror already stores, and turns the mirror's one-way street into two one-way streets that cannot collide. Concretely:
 
 1. **Origin column.** A versioned migration adds `user_collections.romm_origin TEXT` (`'romm'` set by the mirror, `'local'` set by a push, null otherwise). `isRommMirror` stays as is; `isPushedToRomm` is `romm_origin == 'local'`.
-2. **Push action.** "Push to RomM" in the collection menu for collections with no provenance: `POST /api/collections` with the name (and the local image as `artwork` when present), then membership set from the linked members (`PUT` with `rom_ids` on 4.4–4.8, `POST .../roms` on 4.9.0+), provenance recorded with origin `local`. Unlinked members are counted in the outcome.
-3. **Follow-up pushes.** On a local-origin collection: add/remove member → `POST|DELETE .../roms` (or a full `PUT rom_ids` below 4.9.0); rename → `PUT name`; image change → `PUT artwork`; delete → ask "also delete on RomM?" and `DELETE /api/collections/{id}` when confirmed. Pushes go through a small outbox so offline edits flush later, coalesced per collection to one membership replacement.
-4. **RomM-origin collections unchanged.** Mirrors keep pulling per ADR-0009; edits to their membership still get overwritten on the next sync; the unlink action clears both provenance and origin.
-5. **Gates.** `collections.write` group granted; add/remove endpoints gated on `collectionRomsAddRemove` (4.9.0), the `PUT rom_ids` fallback below.
+2. **Push action.** "Push to RomM" in the collection menu for collections with no provenance: `POST /api/collections` with the name (and the local image as `artwork` when present), then provenance recorded with origin `local`, then membership set from the linked members (`PUT` with `rom_ids` on 4.4–4.8, `POST .../roms` on 4.9.0+), then the pushed set recorded as the outbox baseline. Unlinked members are counted in the outcome. (Amended with #217: provenance is written before the membership call, so a failed membership call leaves a linked collection whose members are queued, not an orphan on the server that the next push answers "already exists" for.)
+3. **Follow-up pushes.** On a local-origin collection every edit goes through a small outbox so offline edits flush later, one row per collection. `PUT /api/collections/{id}` requires `rom_ids` on every RomM version, so the flush sends one `PUT` per dirty collection carrying the dirty name and/or artwork (`remove_cover` for a cleared image) and always `rom_ids` — the resolved members when membership is dirty, else the last pushed set the row holds; a members-only change on 4.9.0+ with a baseline goes out as the `POST|DELETE .../roms` diff instead. Delete → ask "also delete on RomM?" and `DELETE /api/collections/{id}` through the same outbox when confirmed. (Amended with #216: the original "rename → `PUT name`; image change → `PUT artwork`" described requests RomM answers 422 or 500; re-sending the baseline on a rename overwrites a RomM-side membership edit since the last push, which is the consequence below.)
+4. **RomM-origin collections unchanged.** Mirrors keep pulling per ADR-0009; edits to their membership still get overwritten on the next sync; the unlink action clears both provenance and origin. The mirror declines to adopt a `local`-origin collection and reports the skip, so syncing a pushed collection from the RomM tab cannot flip its writer (#216).
+5. **Gates.** `collections.write` group not `denied` (`unknown` allowed, since a restored token or an old server leaves it unknown and a 403 settles it; the group carries no version gate, see ADR-0013); add/remove endpoints gated on `collectionRomsAddRemove` (4.9.0), the `GET` + `PUT rom_ids` fallback below. A scope-denied outbox row is kept until a connection can carry it, unlike ADR-0013's play-state rows, because the edit is the user's own work on a collection this device created.
 
 ### Consequences
 
@@ -82,13 +82,14 @@ flowchart TD
     O -- "'local' (this ADR)" --> Push["outbox pushes name/artwork/membership"]
     O -- "null" --> Menu["menu: Push to RomM"]
     Menu --> Create["POST /api/collections (+artwork)"]
-    Create --> Members["PUT rom_ids | POST/DELETE /roms"]
-    Members --> Set["set provenance + origin local"]
+    Create --> Set["set provenance + origin local"]
+    Set --> Members["PUT rom_ids | POST/DELETE /roms"]
+    Members --> Base["record pushed set (outbox baseline)"]
     Push --> API["RomM collections API"]
 ```
 
 ## More Information
 
-* RomM: `backend/endpoints/collections.py`; duplicate name per user answers 500; owner mismatch 403.
+* RomM: `backend/endpoints/collections.py`; duplicate name per user answers 500 (mapped to `alreadyExists` only when the body reads as a duplicate); owner mismatch 403; `update_collection` declares `rom_ids` a required form field on every version (4.8.0 lines 375-408, master 431-464; `data["rom_ids"]` read unguarded on 4.4.0 and 3.10.0).
 * NeoStation: `CollectionRepository` (provenance, `replaceMembers`), `CollectionsService` (`addGame`, `removeGame`, `renameCollection`, `setCollectionImage`), `RommSaveMapRepository.getRomIdIndex` for member resolution.
 * Spec: SPEC-0015.

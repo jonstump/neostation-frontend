@@ -86,7 +86,7 @@ After a collection sync's mirror run has resolved its members, the system SHALL 
 
 ### Requirement: Sync Dialog And Outcome
 
-The sync confirmation dialog for a collection SHALL include a localized line saying the collection will be created or updated in NeoStation, and the sync outcome notification SHALL include how many games the local collection holds.
+The sync confirmation dialog for a collection SHALL include a localized line saying the collection will be created or updated in NeoStation, and the sync outcome notification SHALL include how many games the local collection holds. When the mirror skipped the collection because this device pushed it (`skippedLocalOrigin`, SPEC-0015 REQ "Origin Column"), the outcome MUST instead say the collection is managed from this device and was not updated from RomM (#217).
 
 #### Scenario: Confirmation line
 

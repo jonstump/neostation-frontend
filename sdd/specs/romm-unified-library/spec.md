@@ -121,7 +121,7 @@ The game views SHALL hold a scope, `all` or `downloaded`, initialized from the s
 
 ### Requirement: Remote Entry Presentation
 
-In the list, grid, and carousel a remote entry SHALL show a cloud-download badge in the favourite/collection badge family, its size in the subtitle (`{size}` formatted with the existing byte formatter), and the footer's primary action label "Download" instead of "Play". While a download tracker exists for its rom id the card MUST show progress (percent from the tracker, indeterminate when total unknown) and the footer MUST offer "Cancel"; a failed tracker MUST show a retry badge and "Retry" in the footer. When the settle rescan indexes the file the entry MUST become the local game without a manual reload.
+In the list, grid, and carousel a remote entry SHALL show a cloud-download badge in the favourite/collection badge family, its size in the subtitle (`{size}` formatted with the existing byte formatter), and the footer's primary action label "Download" instead of "Play". While a download tracker exists for its rom id the card MUST show progress (percent from the tracker, indeterminate when total unknown) and the footer MUST offer "Cancel"; a failed tracker MUST show a retry badge and "Retry" in the footer; a tracker that has completed but whose file the settle rescan has not indexed yet MUST show a fifth label, "Downloading…", with no action behind it (nothing to cancel, nothing to launch yet — the pure state machine `remoteEntryStateFor` → `remoteEntryActionFor` in #215 owns the five states). When the settle rescan indexes the file the entry MUST become the local game without a manual reload, and the list SHOULD retain the selection across that flip (by `romname`, then `rommRomId`, then the name the link row says the download was indexed under, so an unpacked multi-disc `.m3u` or an appended `.zip` does not drop the selection to row 0). A remote entry's cover comes from the cover cache (REQ "Cover Cache"); no other local media of a remote entry MUST be built or probed on the main display either — the list's fanart background stays empty for it (a small cover stretched over the screen would read as a smear), the details card builds no wheel path, and the random picker (Select + Y) MUST skip remote entries outright, so `RandomGameDialog` has nothing remote to probe (added after the #215 review; the original clause mandated no probing on the secondary display only).
 
 #### Scenario: Downloading
 
@@ -133,9 +133,14 @@ In the list, grid, and carousel a remote entry SHALL show a cloud-download badge
 - **WHEN** the settle rescan finishes for the system
 - **THEN** the entry renders as a local game with Play
 
+#### Scenario: Completed but not indexed
+
+- **WHEN** the transfer has reached 100 percent and the settle rescan has not run yet
+- **THEN** the footer reads "Downloading…" and offers neither Cancel nor Play
+
 ### Requirement: Download From The Library
 
-Confirming a remote entry SHALL, when reachability is not `offline`, open a confirmation with name, size, and destination folder, then start `RommProvider.downloadRom` for it; a multi-disc ROM follows the existing unpack rule. When `offline` it MUST show a localized "not available offline" notice and start nothing. The context menu SHALL offer "Download" on remote entries and "Cancel download" while one runs. After completion a toast SHALL offer "Play now" once.
+Confirming a remote entry SHALL, when reachability is not `offline`, open a confirmation with name, size, and destination folder, then start `RommProvider.downloadRom` for it; a multi-disc ROM follows the existing unpack rule. When `offline` it MUST show a localized "not available offline" notice and start nothing — on the search screen's download action as well as in the lists. The context menu SHALL offer "Download" on remote entries (labelled "Retry" after a failure) and "Cancel download" while one runs. A confirm press on an entry whose download is running MUST ask before cancelling it (a `ConfirmActionDialog`, D-pad reachable: B keeps the download, A cancels) rather than cancel on the press, because a slipped A on a handheld should not throw away a multi-gigabyte transfer (accepted at the #215 review). After the settle rescan has indexed the file the flow SHALL offer "Play now" once, as a one-time `ConfirmActionDialog` with Play now / Later; the original wording said "a toast", but the notification tray has no action affordance, so the dialog is the accepted form (#215). The offer hangs off the download future, never off a list reload, which is what makes it fire once.
 
 #### Scenario: Confirm and download
 
@@ -147,9 +152,19 @@ Confirming a remote entry SHALL, when reachability is not `offline`, open a conf
 - **WHEN** the user confirms a remote entry offline
 - **THEN** the notice shows and no request is sent
 
+#### Scenario: Press during a transfer
+
+- **WHEN** the user presses A on a remote entry whose download is at 40 percent
+- **THEN** the cancel confirmation appears; B keeps the transfer running and A cancels it, returning the entry to Download
+
+#### Scenario: Play now
+
+- **WHEN** a download completes and the settle rescan indexes the file
+- **THEN** one Play now / Later prompt appears; Play now selects and launches the game, Later leaves the list where it is, and no second prompt follows a later reload
+
 ### Requirement: Cover Cache
 
-`RommCoverCache` SHALL store small covers under `<mediaCache>/romm_covers/<serverHash>/<romId>.<ext>`, filling a missing entry on first render (through the existing cover URL candidates and auth headers) and prefetching covers for rows upserted by a refresh, bounded to 300 per refresh with concurrency 3, after the refresh completes. The cache MUST evict least-recently-used files above `romm_cover_cache_mb` (default 200) and MUST expose `pathFor(serverUrl, romId)` for build-time use. Cards MUST prefer a local game's scraped media over the cache and MUST decode with the SPEC-0008 width rule. The cache serves remote entries only: a local game without scraped media MUST show the placeholder, not the RomM cover of its linked ROM (the precedence helper `rommCoverPathFor` implements this literally, per #206; the fallback was considered and not taken). The cache MUST be cleared for a server on disconnect and on a change of server URL — the cover-cache half of REQ "Settings And Actions", delivered by #206; the catalog half of that clear belongs to the lists, scope, and settings story (#107).
+`RommCoverCache` SHALL store small covers under `<mediaCache>/romm_covers/<serverHash>/<romId>.<ext>`, filling a missing entry on first render (through the existing cover URL candidates and auth headers — delivered by #215 as `RommProvider.warmCover(rommRomId)`: a card whose `pathFor` answers null asks the provider, which calls `ensure` once per rom id and connection and announces the answer as one coalesced bump of `RommProvider.coverRevision` that the grid, carousel, details card, and list host select on; a hit at the time the row is read announces nothing) and prefetching covers for rows upserted by a refresh, bounded to 300 per refresh with concurrency 3, after the refresh completes. The cache MUST evict least-recently-used files above `romm_cover_cache_mb` (default 200) and MUST expose `pathFor(serverUrl, romId)` for build-time use. Cards MUST prefer a local game's scraped media over the cache and MUST decode with the SPEC-0008 width rule. The cache serves remote entries only: a local game without scraped media MUST show the placeholder, not the RomM cover of its linked ROM (the precedence helper `rommCoverPathFor` implements this literally, per #206; the fallback was considered and not taken). The cache MUST be cleared for a server on disconnect and on a change of server URL — the cover-cache half of REQ "Settings And Actions", delivered by #206; the catalog half of that clear belongs to the lists, scope, and settings story (#107).
 
 #### Scenario: Offline render
 
@@ -163,28 +178,33 @@ Confirming a remote entry SHALL, when reachability is not `offline`, open a conf
 
 ### Requirement: Secondary Display And Search
 
-Selecting a remote entry SHALL push its cached cover and a localized "not downloaded" state to the secondary display and MUST NOT attempt local media or video paths. The search screen SHOULD use the catalog for its remote rows when reachability is `offline`.
+Selecting a remote entry SHALL push its cached cover and a localized "not downloaded" state to the secondary display and MUST NOT attempt local media or video paths. The push carries a `romm:<id>` game id and an `isRemoteGame` flag on the shared state; the second engine renders the state line from the flag in its own localizations, since it shares nothing in memory, and a local push clears the flag. The search screen SHOULD use the catalog for its remote rows when reachability is `offline`: `remoteSearchSourceFor(reachability)` picks the persisted catalog, `RommCatalogRepository.searchRows` answers name, system, and genre with a total, and the rows go through the same downloaded-flag resolution as the online ones. The developer chip cannot be honoured from the catalog (it keeps no companies), so while the source is the catalog the chip MUST be ignored rather than emptying the section.
 
 #### Scenario: Secondary display
 
 - **WHEN** a remote entry is selected on a dual-screen device
 - **THEN** the second screen shows the cached cover and the state line
 
+#### Scenario: Offline search
+
+- **WHEN** the device is offline and the user searches for a name that exists on the server
+- **THEN** the RomM section lists catalog rows with the cloud glyph, a platform chip narrows by system, and the developer chip changes nothing
+
 ### Requirement: Settings And Actions
 
 General settings SHALL offer "Show RomM library in my systems" (`romm_show_library`, default off), "Default library scope" (`romm_library_default_scope`), and "RomM cover cache size" (`romm_cover_cache_mb`); the RomM connected settings SHALL offer "Refresh RomM library now" (a manual refresh that bypasses the hourly guard, reporting start and outcome through the notification tray), "Clear cached RomM library" (catalog rows and the cover cache), and an "as of {time}" line from the newest `refreshed_at`. Turning the toggle off MUST hide remote entries immediately without deleting the catalog; disconnecting or changing server MUST clear the catalog and cover cache for that server (the cover-cache clear shipped with #206 under REQ "Cover Cache"; the catalog clear is this requirement's, in #107).
 
-Until the download flow lands (REQ "Remote Entry Presentation", REQ "Download From The Library", and REQ "Secondary Display And Search" are #108's), a remote entry MUST be inert on every per-game action: a launch, favourite, per-game settings, or scrape press — from the footer, the context menu, or a chord such as Select + A — MUST answer with a localized "Not downloaded" notice and MUST NOT write rows keyed to a file that is not on the device; the context menu MUST drop favourite, collections, settings, and scrape for a remote entry while keeping the view-level items (view mode, sort, library scope).
+A remote entry answers exactly one per-game action, the download: a launch press (A, the footer's primary button, or the context menu's "Download") goes through REQ "Download From The Library". Every other per-game action stays inert: a favourite, per-game settings, or scrape press — from the footer, the context menu, or a chord such as Select + A — MUST answer with a localized "Not downloaded" notice and MUST NOT write rows keyed to a file that is not on the device; the context menu MUST drop favourite, collections, settings, and scrape for a remote entry while keeping the download items and the view-level items (view mode, sort, library scope). (Before #108 the launch press was inert too; that paragraph is superseded.)
 
 #### Scenario: Toggle off
 
 - **WHEN** the toggle is turned off
 - **THEN** lists rebuild without remote entries and the catalog rows remain
 
-#### Scenario: Press on a remote entry before #108
+#### Scenario: Non-download press on a remote entry
 
-- **WHEN** the user presses A, the favourite button, or Select + A on a remote entry
-- **THEN** the "Not downloaded" notice shows and no launch, favourite row, or scrape happens
+- **WHEN** the user presses the favourite button, opens per-game settings, or presses Select + A on a remote entry
+- **THEN** the "Not downloaded" notice shows and no favourite row, settings row, or scrape happens; pressing A instead opens the download confirmation
 
 ### Requirement: Localized User-Facing Text
 
