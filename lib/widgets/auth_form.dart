@@ -468,9 +468,11 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
           });
         } else {
           setState(() {
+            // Interpolated, so this one must not be the nullable form: a
+            // result with no wording would print "null" here. Issue #221.
             _message =
                 '${AppLocale.emailVerifiedLoginFailed.getString(context)}: '
-                '${neoSyncResultMessage(context, loginResult)}';
+                '${neoSyncResultMessageOrFallback(context, loginResult)}';
             _showEmailVerification = false;
           });
         }

@@ -138,3 +138,15 @@ String? neoSyncResultMessage(
   }
   return result['message'] as String?;
 }
+
+/// [neoSyncResultMessage], never null. A result map that carries neither a
+/// localized sentence nor a `message` — an empty map, a shape nobody has
+/// worded yet — renders the translated [fallbackKey] instead. The `String?`
+/// is fine to park in a nullable field that hides the box when empty; it is
+/// not fine to interpolate, where it prints the literal word `null` on the
+/// sign-in screen (issue #221).
+String neoSyncResultMessageOrFallback(
+  BuildContext context,
+  Map<String, dynamic> result, {
+  String fallbackKey = AppLocale.anErrorOccurred,
+}) => neoSyncResultMessage(context, result) ?? fallbackKey.getString(context);
