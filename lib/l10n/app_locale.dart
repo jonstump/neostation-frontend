@@ -1771,6 +1771,54 @@ mixin AppLocale {
 
   // ==========================================================================
   // Localization Maps
+  // RomM ROM upload: the context-menu and system-settings surfaces, the
+  // confirmation, progress, the summary and its per-file reasons (SPEC-0014).
+  static const String rommUploadMenuItem = 'romm_upload_menu_item';
+  static const String rommUploadTitle = 'romm_upload_title';
+  static const String rommUploadSystemRowTitle = 'romm_upload_system_row_title';
+  static const String rommUploadSystemRowSubtitle =
+      'romm_upload_system_row_subtitle';
+  static const String rommUploadSystemRowRunning =
+      'romm_upload_system_row_running';
+  static const String rommUploadConfirmBody = 'romm_upload_confirm_body';
+  static const String rommUploadConfirmAction = 'romm_upload_confirm_action';
+  static const String rommUploadPreparing = 'romm_upload_preparing';
+  static const String rommUploadProgress = 'romm_upload_progress';
+  static const String rommUploadNoPlatform = 'romm_upload_no_platform';
+  static const String rommUploadNothingToUpload =
+      'romm_upload_nothing_to_upload';
+  static const String rommUploadAlreadyLinked = 'romm_upload_already_linked';
+  static const String rommUploadBusy = 'romm_upload_busy';
+  static const String rommUploadNotOffered = 'romm_upload_not_offered';
+  static const String rommUploadSummary = 'romm_upload_summary';
+  static const String rommUploadSummaryCancelled =
+      'romm_upload_summary_cancelled';
+  static const String rommUploadSummaryDisconnected =
+      'romm_upload_summary_disconnected';
+  static const String rommUploadScanRequested = 'romm_upload_scan_requested';
+  static const String rommUploadScanPending = 'romm_upload_scan_pending';
+  static const String rommUploadLinkNow = 'romm_upload_link_now';
+  static const String rommUploadLinkNowResult = 'romm_upload_link_now_result';
+  static const String rommUploadLinkNowNothing = 'romm_upload_link_now_nothing';
+  static const String rommUploadSkippedLine = 'romm_upload_skipped_line';
+  static const String rommUploadFailedLine = 'romm_upload_failed_line';
+  static const String rommUploadMore = 'romm_upload_more';
+  static const String rommUploadSkipMultiFile = 'romm_upload_skip_multi_file';
+  static const String rommUploadSkipDiscContainer =
+      'romm_upload_skip_disc_container';
+  static const String rommUploadSkipMissing = 'romm_upload_skip_missing';
+  static const String rommUploadSkipEmpty = 'romm_upload_skip_empty';
+  static const String rommUploadSkipUnsendableName =
+      'romm_upload_skip_unsendable_name';
+  static const String rommUploadSkipAlreadyExists =
+      'romm_upload_skip_already_exists';
+  static const String rommUploadFailScopeDenied =
+      'romm_upload_fail_scope_denied';
+  static const String rommUploadFailCancelled = 'romm_upload_fail_cancelled';
+  static const String rommUploadFailBusy = 'romm_upload_fail_busy';
+  static const String rommUploadFailGated = 'romm_upload_fail_gated';
+  static const String rommUploadFailOther = 'romm_upload_fail_other';
+
   // ==========================================================================
   static const Map<String, dynamic> en = appLocaleEn;
   static const Map<String, dynamic> es = appLocaleEs;

@@ -361,6 +361,12 @@ class _NotificationsDropdownMenuState
   }
 
   /// A on the highlighted entry: the same action its on-screen control offers.
+  ///
+  /// A row carrying a [GlobalNotificationAction] — Cancel on a running upload,
+  /// Link now on its summary — runs that action and stays listed: the owner
+  /// of the work rewrites the row with the result. Every other row is
+  /// dismissed, as the X does.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Upload Surfaces"
   void _activateSelected() {
     final service = GlobalNotificationService();
     final entries = _entriesFor(service.notifier.value);
@@ -371,6 +377,11 @@ class _NotificationsDropdownMenuState
     if (entry.isClearAll) {
       service.dismiss();
     } else {
+      final action = _actionOf(service.notifier.value, entry.notificationId!);
+      if (action != null) {
+        action.onPressed();
+        return;
+      }
       service.dismiss(entry.notificationId);
     }
 
@@ -384,6 +395,17 @@ class _NotificationsDropdownMenuState
         _entriesFor(service.notifier.value).length,
       );
     });
+  }
+
+  /// The action the notification with [id] offers, or null.
+  static GlobalNotificationAction? _actionOf(
+    List<GlobalNotificationData> notifications,
+    String id,
+  ) {
+    for (final n in notifications) {
+      if (n.id == id) return n.action;
+    }
+    return null;
   }
 
   @override
@@ -618,6 +640,41 @@ class _NotificationDropdownItem extends StatelessWidget {
                       color: iconColor,
                       backgroundColor: iconColor.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(2.r),
+                    ),
+                  ],
+                  // The row's action, as a pill: a pointer taps it, and A on
+                  // the highlighted row does the same (see
+                  // [_NotificationsDropdownMenuState._activateSelected]).
+                  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Upload Surfaces"
+                  if (data.action case final action?) ...[
+                    SizedBox(height: 6.r),
+                    GestureDetector(
+                      onTap: () {
+                        SfxService().playEnterSound();
+                        action.onPressed();
+                      },
+                      child: Container(
+                        padding: EdgeInsets.symmetric(
+                          horizontal: 8.r,
+                          vertical: 3.r,
+                        ),
+                        decoration: BoxDecoration(
+                          color: iconColor.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4.r),
+                          border: Border.all(
+                            color: iconColor.withValues(alpha: 0.4),
+                            width: 1.r,
+                          ),
+                        ),
+                        child: Text(
+                          action.label,
+                          style: TextStyle(
+                            fontSize: 9.r,
+                            fontWeight: FontWeight.w600,
+                            color: iconColor,
+                          ),
+                        ),
+                      ),
                     ),
                   ],
                 ],

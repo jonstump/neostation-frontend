@@ -33,7 +33,9 @@ import '../services/romm/romm_collection_mirror.dart';
 import '../services/romm/romm_collection_outbox_service.dart';
 import '../services/romm/romm_cover_cache.dart';
 import '../services/romm/romm_metadata_fetch.dart';
+import '../services/romm/romm_library_linker.dart';
 import '../services/romm/romm_props_outbox_service.dart';
+import '../services/romm/rom_upload_source.dart';
 import '../services/romm_playtime_service.dart';
 import '../services/romm_service.dart';
 import '../services/storage_space_service.dart';
@@ -43,6 +45,7 @@ import '../utils/romm_local_matcher.dart';
 import '../utils/romm_pair_error_message.dart';
 import 'file_provider.dart';
 import 'romm_bulk_sync.dart';
+import 'romm_rom_upload.dart';
 
 /// High-level connection state for the RomM integration.
 enum RommConnectionStatus { disconnected, connecting, connected, error }
@@ -1407,6 +1410,10 @@ class RommProvider extends ChangeNotifier {
     // Stop a bulk sync before the credentials go: its remaining transfers would
     // otherwise keep running (and failing) against a server we just forgot.
     bulkSync.cancel();
+    // Likewise an upload batch: the service cancels the session in flight on
+    // its own generation counter; this stops the next file from starting.
+    // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Concurrency Safety"
+    romUpload.cancel();
     await RommRepository.clearConfig();
     if (_serverUrl.isNotEmpty) {
       // The covers and the catalog belong to the connection that is going
@@ -1650,7 +1657,7 @@ class RommProvider extends ChangeNotifier {
   // ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
   bool get canRunServerTasks =>
       isConnected &&
-      _service.hasScope(RommScopeGroup.tasksRun) == RommScopeState.granted;
+      service.hasScope(RommScopeGroup.tasksRun) == RommScopeState.granted;
 
   /// Asks the server for one ROM out of the open platform or collection, and
   /// locates it in the loaded list.
@@ -1766,9 +1773,213 @@ class RommProvider extends ChangeNotifier {
   // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
   // SPEC-0018 REQ "Maintenance Tasks"
   Future<String?> runServerTask(String name) async {
-    final id = await _service.runTask(name);
+    final id = await service.runTask(name);
     await _persistRefreshedTokens();
     return id;
+  }
+
+  // ── ROM upload ─────────────────────────────────────────────────────────────
+
+  /// The upload batch in progress, if any: progress for a settings row still
+  /// on screen, and the cancel the notification's action calls.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Concurrency Safety"
+  final RommRomUpload romUpload = RommRomUpload();
+
+  /// Whether the upload surfaces are offered: connected, the server not
+  /// known to be unreachable, not known to predate the upload session
+  /// (RomM 4.8.0) and this login not known to lack `roms.write`.
+  ///
+  /// Unknown counts as offered, like [canPushCollections]: the upload is the
+  /// user's own action, and a 403 settles the group with a clear message
+  /// where hiding the row would leave no way in.
+  ///
+  /// Reads the server through [service], the seam the provider tests
+  /// substitute, as the batch below does.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Upload Surfaces",
+  // ADR-0013 (push play state to RomM), SPEC-0013 REQ "Optional Scope Groups"
+  bool get canUploadRoms =>
+      isConnected &&
+      _reachability != RommReachability.offline &&
+      service.supports(RommFeature.romUpload) !=
+          RommFeatureSupport.unsupported &&
+      service.hasScope(RommScopeGroup.romsWrite) != RommScopeState.denied;
+
+  /// Runs the connect-time link pass on demand. Installed by the sync
+  /// provider, which owns the pass; this provider only knows that a user
+  /// asked for it (the "Link now" action on an upload's summary).
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Scan And Link After Upload"
+  Future<RommLinkPassSummary?> Function()? onLinkRequested;
+
+  /// "Link now": the link pass, once, if the sync provider is wired up and
+  /// the connection is still there. Null when it did not run.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Scan And Link After Upload",
+  // ADR-0001 (filename linking), SPEC-0001 REQ "Pass Scheduling and Guards"
+  Future<RommLinkPassSummary?> linkNow() async {
+    final hook = onLinkRequested;
+    if (hook == null || !isConnected) return null;
+    return hook();
+  }
+
+  /// Uploads one local game to its system's RomM platform.
+  ///
+  /// [systemFolder] names the game's system when the row does not (a
+  /// caller that knows the view it came from); the game's own wins.
+  ///
+  /// Ends early, without sending anything, as [RommUploadEnd.notOffered]
+  /// when [canUploadRoms] is false, [RommUploadEnd.noPlatform] when the
+  /// game's system resolves to no single platform, and
+  /// [RommUploadEnd.nothingToUpload] when the game has no path or is already
+  /// linked. Otherwise a one-file batch through [romUpload]; throws
+  /// [RommUploadBusyException] while another batch runs.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Upload Surfaces",
+  // REQ "Platform Mapping"
+  Future<RommUploadSummary> uploadToRomm(
+    GameModel game, {
+    String? systemFolder,
+    RommUploadConfirm? confirm,
+    RommUploadProgressCallback? onProgress,
+  }) async {
+    if (!canUploadRoms) {
+      return const RommUploadSummary.ended(RommUploadEnd.notOffered);
+    }
+    final romPath = game.romPath;
+    final folder = systemFolder ?? game.systemFolderName;
+    if (romPath == null ||
+        romPath.isEmpty ||
+        folder == null ||
+        folder.isEmpty) {
+      return const RommUploadSummary.ended(RommUploadEnd.nothingToUpload);
+    }
+    final system = await SystemRepository.getSystemByFolderName(folder);
+    if (system == null) {
+      _log.w('RomM upload refused: system=$folder reason=no_local_system');
+      return const RommUploadSummary.ended(RommUploadEnd.noPlatform);
+    }
+    final platform = await platformForSystem(system);
+    if (platform == null) {
+      _log.w('RomM upload refused: system=$folder reason=no_platform');
+      return const RommUploadSummary.ended(RommUploadEnd.noPlatform);
+    }
+    final fileName = uploadFileNameFor(romPath);
+    final index = await RommSaveMapRepository.getRomIdIndex();
+    if (index.lookup(fileName, folder) != null ||
+        index.lookup(game.romname, folder) != null) {
+      return const RommUploadSummary.ended(RommUploadEnd.nothingToUpload);
+    }
+    return _runUploadBatch(
+      [
+        RommUploadCandidate(
+          fileName: fileName,
+          romPath: romPath,
+          systemFolder: folder,
+        ),
+      ],
+      platformId: platform.id,
+      confirm: confirm,
+      onProgress: onProgress,
+    );
+  }
+
+  /// Uploads every game of [system] that is not linked to a RomM ROM.
+  ///
+  /// Enumerates the system's games from the library and drops the linked
+  /// (by the ROM map, either spelling of the name) and the hidden; playlists
+  /// and disc images are left in so the batch lists them as skipped with
+  /// the reason, which is what the summary owes the user. [confirm] sees the
+  /// count and byte total of what will actually be sent. Same early ends as
+  /// [uploadToRomm], plus [RommUploadEnd.nothingToUpload] for a system with
+  /// nothing unlinked.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Upload Surfaces",
+  // REQ "Platform Mapping"
+  Future<RommUploadSummary> uploadMissingForSystem(
+    SystemModel system, {
+    RommUploadConfirm? confirm,
+    RommUploadProgressCallback? onProgress,
+  }) async {
+    if (!canUploadRoms) {
+      return const RommUploadSummary.ended(RommUploadEnd.notOffered);
+    }
+    final platform = await platformForSystem(system);
+    if (platform == null) {
+      _log.w(
+        'RomM upload refused: system=${system.folderName} reason=no_platform',
+      );
+      return const RommUploadSummary.ended(RommUploadEnd.noPlatform);
+    }
+    final games = await GameRepository.loadGamesForSystem(system.folderName);
+    final index = await RommSaveMapRepository.getRomIdIndex();
+    final candidates = <RommUploadCandidate>[
+      for (final game in games)
+        if (!game.isHidden &&
+            game.romPath.isNotEmpty &&
+            RommMetadataFetch.lookupRomId(index, game, system) == null)
+          RommUploadCandidate(
+            fileName: game.filename,
+            romPath: game.romPath,
+            systemFolder: system.folderName,
+          ),
+    ];
+    if (candidates.isEmpty) {
+      return const RommUploadSummary.ended(RommUploadEnd.nothingToUpload);
+    }
+    return _runUploadBatch(
+      candidates,
+      platformId: platform.id,
+      confirm: confirm,
+      onProgress: onProgress,
+    );
+  }
+
+  /// Binds the batch engine to this connection: the real source opener, the
+  /// service's session client, the scan request when this login may make
+  /// it, and the disconnect check.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Scan And Link After Upload",
+  // REQ "Concurrency Safety"
+  Future<RommUploadSummary> _runUploadBatch(
+    List<RommUploadCandidate> candidates, {
+    required int platformId,
+    RommUploadConfirm? confirm,
+    RommUploadProgressCallback? onProgress,
+  }) {
+    return romUpload.run(
+      candidates: candidates,
+      platformId: platformId,
+      open: (romPath, {systemFolder}) =>
+          RomUploadSource.open(romPath, systemFolder: systemFolder),
+      upload:
+          (
+            source, {
+            required platformId,
+            required fileName,
+            onProgress,
+            shouldCancel,
+          }) async {
+            final sent = await service.uploadRom(
+              source,
+              platformId: platformId,
+              fileName: fileName,
+              onProgress: onProgress,
+              shouldCancel: shouldCancel,
+            );
+            await _persistRefreshedTokens();
+            return sent;
+          },
+      // The scope is read when the scan is asked for, at the end of the
+      // batch, not when it is bound: a group learned while the files were
+      // going up counts. Null from here is the gated answer the engine
+      // reports as pending.
+      // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Optional Scope Groups",
+      // ADR-0019 (expose RomM library filters, search and maintenance),
+      // SPEC-0018 REQ "Maintenance Tasks"
+      requestScan: () async {
+        if (!canRunServerTasks) return null;
+        return runServerTask(RommRomUpload.scanTaskName);
+      },
+      shouldStop: () =>
+          !isConnected || _reachability == RommReachability.offline,
+      confirm: confirm,
+      onProgress: onProgress,
+    );
   }
 
   /// Finds a RomM title with the exact RetroAchievements game id.
@@ -2106,6 +2317,37 @@ class RommProvider extends ChangeNotifier {
       (index[system.realName] ??= <int>[]).add(platform.id);
     }
     return index;
+  }
+
+  /// The one RomM platform whose ROMs belong to [system], for an upload.
+  ///
+  /// The inverse of [systemForPlatform] over the loaded platform list, by
+  /// the same slug and alias candidates the link pass resolves with
+  /// (SPEC-0001's rule). Null when no platform resolves to the system.
+  /// Several can — the alias table folds `ps`, `psx` and `playstation` onto
+  /// one folder — and then this returns null too, with a warning naming the
+  /// candidates: a wrong platform folder is worse than a refusal, and
+  /// picking the first would be picking at random.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Platform Mapping",
+  // ADR-0001 (filename linking), SPEC-0001 REQ "Filename Equivalence Rule"
+  Future<RommPlatform?> platformForSystem(SystemModel system) async {
+    await loadPlatforms();
+    await platformsLoaded;
+    final matches = <RommPlatform>[];
+    for (final platform in _platforms) {
+      final resolved = await systemForPlatform(platform);
+      if (resolved != null && resolved.folderName == system.folderName) {
+        matches.add(platform);
+      }
+    }
+    if (matches.length == 1) return matches.first;
+    if (matches.length > 1) {
+      _log.w(
+        'RomM platform mapping ambiguous: system=${system.folderName} '
+        'platforms=${matches.map((p) => '${p.id}:${p.slug}').join(',')}',
+      );
+    }
+    return null;
   }
 
   /// Local system for a RomM platform, for callers that have a platform and

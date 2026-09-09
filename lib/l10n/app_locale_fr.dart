@@ -1725,4 +1725,52 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.neoSyncPasswordResetEmailSent:
       'E-mail de réinitialisation du mot de passe envoyé',
   AppLocale.neoSyncNotAuthenticated: 'Non connecté',
+  AppLocale.rommUploadMenuItem: 'Envoyer vers RomM',
+  AppLocale.rommUploadTitle: 'Envoyer vers RomM',
+  AppLocale.rommUploadSystemRowTitle: 'Envoyer les jeux absents de RomM',
+  AppLocale.rommUploadSystemRowSubtitle:
+      'Envoyer les jeux de ce système que RomM ne possède pas',
+  AppLocale.rommUploadSystemRowRunning: 'Envoi de {name} ({current}/{total})',
+  AppLocale.rommUploadConfirmBody:
+      '{count} jeux ({size}) seront envoyés vers RomM les uns après les autres. Les playlists et les images de disque sont ignorées.',
+  AppLocale.rommUploadConfirmAction: 'Envoyer',
+  AppLocale.rommUploadPreparing: 'Préparation de l’envoi vers RomM…',
+  AppLocale.rommUploadProgress: 'Envoi de {name} ({current}/{total})',
+  AppLocale.rommUploadNoPlatform:
+      'RomM n’a aucune plateforme correspondant à {system}',
+  AppLocale.rommUploadNothingToUpload:
+      'Rien à envoyer : RomM possède déjà tous les jeux de {system}',
+  AppLocale.rommUploadAlreadyLinked: 'Ce jeu est déjà lié à RomM',
+  AppLocale.rommUploadBusy: 'Un envoi vers RomM est déjà en cours',
+  AppLocale.rommUploadNotOffered:
+      'RomM ne peut pas recevoir d’envois pour le moment',
+  AppLocale.rommUploadSummary:
+      '{uploaded} envoyés, {skipped} ignorés, {failed} échoués',
+  AppLocale.rommUploadSummaryCancelled: 'Envoi annulé — {summary}',
+  AppLocale.rommUploadSummaryDisconnected:
+      'Envoi interrompu, RomM est injoignable — {summary}',
+  AppLocale.rommUploadScanRequested:
+      'Analyse de la bibliothèque demandée sur le serveur',
+  AppLocale.rommUploadScanPending:
+      'En attente d’une analyse de la bibliothèque sur le serveur',
+  AppLocale.rommUploadLinkNow: 'Lier maintenant',
+  AppLocale.rommUploadLinkNowResult: '{count} jeux liés',
+  AppLocale.rommUploadLinkNowNothing:
+      'Rien de lié pour l’instant ; le serveur analyse peut-être encore',
+  AppLocale.rommUploadSkippedLine: 'Ignoré {name} : {reason}',
+  AppLocale.rommUploadFailedLine: 'Échec {name} : {reason}',
+  AppLocale.rommUploadMore: '+{count} de plus',
+  AppLocale.rommUploadSkipMultiFile: 'jeu multi-fichiers',
+  AppLocale.rommUploadSkipDiscContainer: 'image de disque',
+  AppLocale.rommUploadSkipMissing: 'fichier introuvable',
+  AppLocale.rommUploadSkipEmpty: 'fichier vide',
+  AppLocale.rommUploadSkipUnsendableName:
+      'le nom du fichier contient des caractères que le serveur ne peut pas stocker',
+  AppLocale.rommUploadSkipAlreadyExists: 'déjà sur le serveur',
+  AppLocale.rommUploadFailScopeDenied:
+      'cet identifiant RomM ne peut pas écrire de ROMs',
+  AppLocale.rommUploadFailCancelled: 'annulé',
+  AppLocale.rommUploadFailBusy: 'un autre envoi était en cours',
+  AppLocale.rommUploadFailGated: 'le serveur ne peut pas recevoir d’envois',
+  AppLocale.rommUploadFailOther: 'l’envoi a échoué',
 };

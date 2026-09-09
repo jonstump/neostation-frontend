@@ -45,6 +45,7 @@ const String _randomId = 'random';
 const String _libraryScopeId = 'library_scope';
 const String _downloadId = 'download';
 const String _cancelDownloadId = 'cancel_download';
+const String _uploadToRommId = 'upload_to_romm';
 const String _togglePrefix = 'toggle:';
 
 /// Opens the per-game Y menu anchored to [anchorKey]'s widget.
@@ -90,8 +91,14 @@ const String _togglePrefix = 'toggle:';
 /// while the entry is downloadable (labelled by [downloadLabel] — Download,
 /// or Retry after a failure) and the second while its download runs, never
 /// both.
+///
+/// [onUploadToRomm] is the mirror image for a local game the server does not
+/// have: it sits with Scrape, below Settings, and the host binds it only for
+/// an unlinked single-file game while the RomM gate allows (see
+/// `rommUploadGateFor`), so the row is absent rather than present and inert.
 // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
 // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Download From The Library"
+// Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Upload Surfaces"
 Future<void> showGameContextMenu({
   required BuildContext context,
   required List<GameContextMenuTarget> targets,
@@ -106,6 +113,7 @@ Future<void> showGameContextMenu({
   VoidCallback? onDownload,
   String? downloadLabel,
   VoidCallback? onCancelDownload,
+  VoidCallback? onUploadToRomm,
 }) async {
   assert(
     onCreateTarget == null || createTargetLabel != null,
@@ -155,6 +163,13 @@ Future<void> showGameContextMenu({
         id: _scrapeId,
         label: AppLocale.hintScrape.getString(context),
         icon: Symbols.cloud_download_rounded,
+      ),
+    // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Upload Surfaces"
+    if (onUploadToRomm != null)
+      ContextMenuItem(
+        id: _uploadToRommId,
+        label: AppLocale.rommUploadMenuItem.getString(context),
+        icon: Symbols.cloud_upload_rounded,
       ),
     if (membershipChildren.isNotEmpty)
       ContextMenuItem(
@@ -228,6 +243,10 @@ Future<void> showGameContextMenu({
   }
   if (result == _scrapeId) {
     onScrape?.call();
+    return;
+  }
+  if (result == _uploadToRommId) {
+    onUploadToRomm?.call();
     return;
   }
   if (result == _createId) {

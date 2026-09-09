@@ -548,6 +548,14 @@ extension _Tabs on _SystemEmulatorSettingsDialogState {
             key: _generalItemKeys[_rommFirmwareIndex],
           ),
         ],
+        // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Upload Surfaces"
+        if (_offersRommUpload) ...[
+          SizedBox(height: 4.r),
+          _buildRommUploadItem(
+            index: _rommUploadIndex,
+            key: _generalItemKeys[_rommUploadIndex],
+          ),
+        ],
       ],
     );
   }

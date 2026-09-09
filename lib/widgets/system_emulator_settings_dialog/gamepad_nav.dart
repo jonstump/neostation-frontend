@@ -213,6 +213,9 @@ extension _GamepadNav on _SystemEmulatorSettingsDialogState {
       } else if (_offersRommFirmware && _generalIndex == _rommFirmwareIndex) {
         // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "Firmware Panel"
         _activateRommFirmware();
+      } else if (_offersRommUpload && _generalIndex == _rommUploadIndex) {
+        // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Upload Surfaces"
+        _activateRommUpload();
       }
     } else if (_currentTab == 2) {
       if (_appearanceIndex == 0) {

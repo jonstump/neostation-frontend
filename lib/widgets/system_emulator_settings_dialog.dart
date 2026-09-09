@@ -42,6 +42,7 @@ import '../widgets/tv_directory_picker.dart';
 import 'romm_firmware_panel.dart';
 import 'romm_system_fetch_mode_dialog.dart';
 import '../screens/romm_screen/romm_metadata_fetch_runner.dart';
+import '../screens/romm_screen/romm_rom_upload_runner.dart';
 
 part 'system_emulator_settings_dialog/gamepad_nav.dart';
 part 'system_emulator_settings_dialog/row_builders.dart';
@@ -49,6 +50,7 @@ part 'system_emulator_settings_dialog/chrome.dart';
 part 'system_emulator_settings_dialog/tabs.dart';
 part 'system_emulator_settings_dialog/romm_fetch.dart';
 part 'system_emulator_settings_dialog/romm_firmware.dart';
+part 'system_emulator_settings_dialog/romm_upload.dart';
 
 /// Steam-style dialog to configure emulators/cores for a system
 class SystemEmulatorSettingsDialog extends StatefulWidget {
@@ -99,6 +101,12 @@ class _SystemEmulatorSettingsDialogState
   /// Non-null is what puts the BIOS row on the General tab.
   // Governing: ADR-0012 (download BIOS firmware from RomM), SPEC-0012 REQ "Firmware Panel"
   int? _rommFirmwarePlatformId;
+
+  /// Whether the "Upload games missing from RomM" row is on the General tab:
+  /// decided once when the dialog opens, from the provider's gate, so the
+  /// row count is settled before the keys are allocated.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Upload Surfaces"
+  bool _offersRommUpload = false;
   late List<GlobalKey> _generalItemKeys;
   late List<GlobalKey> _appearanceItemKeys;
 
@@ -137,11 +145,13 @@ class _SystemEmulatorSettingsDialogState
     // 'favorites', 'collections', a single collection) own none, and a
     // collection's id has no `app_systems` row for the setting to be written
     // against at all.
+    _offersRommUpload = _offersRommFetch && _rommUploadGateOpen();
     _totalGeneralItems =
         4 +
         (_offersRecursiveScan ? 1 : 0) +
         (_offersSubfolderView ? 1 : 0) +
-        (_offersRommFetch ? 1 : 0);
+        (_offersRommFetch ? 1 : 0) +
+        (_offersRommUpload ? 1 : 0);
 
     _generalScrollController = ScrollController();
     _hiddenScrollController = ScrollController();
@@ -409,6 +419,13 @@ class _SystemEmulatorSettingsDialogState
   /// General-tab index of the BIOS row: after the RomM fetch row, so the rows
   /// above it keep the indices they had before the lookup answered.
   int get _rommFirmwareIndex => _rommFetchIndex + (_offersRommFetch ? 1 : 0);
+
+  /// General-tab index of the upload row: last, after the BIOS row when that
+  /// one has appeared, so it moves down by one when the platform lookup
+  /// answers and every row above it keeps its index.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Upload Surfaces"
+  int get _rommUploadIndex =>
+      _rommFirmwareIndex + (_offersRommFirmware ? 1 : 0);
 
   // ── Hidden games ──────────────────────────────────────────────────────────
 
