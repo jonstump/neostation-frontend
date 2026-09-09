@@ -595,6 +595,136 @@ void main() {
       }
     });
   });
+
+  group('redactSecrets — the #205 review findings', () {
+    // 1. The surviving mutation. Dropping `sawSpace` from `_isSentenceColon`
+    // failed no test, and it is not an equivalent mutant: under it every one
+    // of these leaks, because the value is one `_looksLikeSecret` hands back.
+    // The same value after a spaced colon IS spared, so what these pin is the
+    // space, not the value.
+    const noSpaceColon = <String, String>{
+      'pass:1234': 'pass:$redactedPlaceholder',
+      'key:opensesame': 'key:$redactedPlaceholder',
+      'token:correcthorse': 'token:$redactedPlaceholder',
+      'session:restored': 'session:$redactedPlaceholder',
+    };
+
+    noSpaceColon.forEach((line, expected) {
+      test('"$line" — a colon with no space is assignment, not prose', () {
+        expect(redactSecrets(line), expected);
+        // Sanity: only the missing space separates this from a spared line.
+        final spaced = line.replaceFirst(':', ': ');
+        expect(redactSecrets(spaced), spaced, reason: 'sanity: $spaced');
+      });
+    });
+
+    // 3. The `Token` boundary, pinned on both sides of eleven. The risk runs
+    // towards over-redaction — a twelve-letter word after `Token` is scrubbed
+    // — so a future edit that moves the ceiling has to move these too.
+    test('a bare Token keeps an alphabetic word of eleven characters', () {
+      expect('unavailable'.length, 11, reason: 'sanity');
+      expect('abcdefghijk'.length, 11, reason: 'sanity');
+      expect(redactSecrets('Token unavailable'), 'Token unavailable');
+      expect(redactSecrets('Token unavailable.'), 'Token unavailable.');
+      expect(redactSecrets('Token abcdefghijk'), 'Token abcdefghijk');
+    });
+
+    test('a bare Token redacts an alphabetic word of twelve characters', () {
+      expect('unrecognized'.length, 12, reason: 'sanity');
+      expect('abcdefghijkl'.length, 12, reason: 'sanity');
+      expect(redactSecrets('Token unrecognized'), 'Token $redactedPlaceholder');
+      expect(redactSecrets('Token abcdefghijkl'), 'Token $redactedPlaceholder');
+    });
+
+    test('the #205 shapes stay idempotent', () {
+      for (final line in [
+        ...noSpaceColon.keys,
+        'Token unavailable',
+        'Token unrecognized',
+      ]) {
+        final once = redactSecrets(line);
+        expect(redactSecrets(once), once, reason: line);
+      }
+    });
+  });
+
+  group('redactSecrets — the documented residue, pinned', () {
+    // 2. The library doc of `log_redaction.dart` names three residue classes.
+    // Before #205 it described classes 1 and 3 more narrowly than the code
+    // behaves — "a dictionary word or short number", "a bare word neighbour"
+    // — and a residue documented narrower than it is misleads the next
+    // reader worse than one left undocumented. Each line here is a measured
+    // instance of the actual predicate, asserted to survive byte for byte.
+    //
+    // These pin the doc, not the leak: if a change closes one of them, that
+    // is an improvement — update the library doc's class list and move the
+    // line into `mustRedact` above. What must not happen is the doc and the
+    // code drifting apart again.
+    const residue = <String>[
+      // Class 1 — everything `_looksLikeSecret` declines, under one of the
+      // four prose-colliding names, after a sentence colon, in prose.
+      'Login for user bob session: correcthorse', // dictionary word
+      'Login for user bob key: 1234', // <= 4 digits
+      'Login for user bob pass: OpenSesame', // CamelCase
+      'Login for user bob token: /wEPDwUKLTcyMzY2MTA1MQ', // `/`-leading base64
+      'Login for user bob session: ~aB3xK9zQ7mR2pL5v', // `~`-leading
+      // `$` is outside the credential alphabet, so a bcrypt hash reads as
+      // prose.
+      r'Login for user bob pass: $2y$10$N9qo8uLOickgx2ZMRZoMye',
+      // A secret in a URL path, not its query; the query pattern never sees it.
+      'Login for user bob token: https://neosync.app/redeem/aB3xK9zQ7mR2pL5v',
+      r'Login for user bob key: C:\Users\bob\aB3xK9zQ7mR2pL5v', // Windows path
+      'Login for user bob key: ./aB3xK9zQ7mR2pL5v', // relative path
+      // Class 3 — the immediate left neighbour carries no `:` or `=`, so the
+      // position reads as prose whatever the neighbour is.
+      'user: bob pass: 1234', // a bare word
+      '[NeoSync] token: /wEPDwUKLTcyMzY2MTA1MQ', // a `[Tag]` prefix
+      '[NeoSync] token: correcthorse',
+      'application/json pass: 1234', // a MIME type
+      '/data/user/0/app key: opensesame', // a path
+    ];
+
+    for (final line in residue) {
+      test('"$line" is documented residue and survives', () {
+        expect(
+          redactSecrets(line),
+          line,
+          reason:
+              'This line is a documented residue class in '
+              'lib/utils/log_redaction.dart. If you closed it, update that '
+              'doc and move the line into the mustRedact fixtures.',
+        );
+      });
+    }
+
+    // The edge of each class, so the residue is pinned as a boundary and not
+    // as a blanket. Class 3 only opens the door: the value still has to be
+    // one class 1 hands back, and a neighbour carrying `=` or `:` — or ending
+    // in a container opener — closes it again.
+    const residueEdge = <String, String>{
+      'Login for user bob key: aB3xK9zQ7mR2pL5v':
+          'Login for user bob key: $redactedPlaceholder',
+      '[NeoSync] token: aB3xK9zQ7mR2pL5v':
+          '[NeoSync] token: $redactedPlaceholder',
+      'x=1] token: correcthorse': 'x=1] token: $redactedPlaceholder',
+      '[NeoSync] {token: correcthorse}':
+          '[NeoSync] {token: $redactedPlaceholder}',
+      '[NeoSync] token=correcthorse': '[NeoSync] token=$redactedPlaceholder',
+    };
+
+    residueEdge.forEach((line, expected) {
+      test('"$line" sits just outside the residue', () {
+        expect(redactSecrets(line), expected);
+      });
+    });
+
+    test('the residue fixtures stay idempotent', () {
+      for (final line in [...residue, ...residueEdge.keys]) {
+        final once = redactSecrets(line);
+        expect(redactSecrets(once), once, reason: line);
+      }
+    });
+  });
 }
 
 /// The lines #199 restored, reused by the idempotence check above.

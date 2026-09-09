@@ -29,23 +29,44 @@
 ///    ([_looksLikeSecret]).
 ///
 /// What survives that, stated as classes rather than as one example, because a
-/// future reader needs the shape and not the instance:
+/// future reader needs the shape and not the instance. Each class is measured
+/// and pinned by a fixture in `test/log_redaction_test.dart` ("the documented
+/// residue, pinned"), so closing one means updating both the doc and the test:
 ///
-///  1. **A dictionary-word or short-numeric credential in a hand-written
-///     sentence**, under one of the four names — `Login for user bob session:
-///     correcthorse`, `... key: 1234`. Indistinguishable from `Session:
-///     restored` and `first_pass: 3 folders` by any test this file can apply;
-///     the two shapes are the same characters in the same place.
+///  1. **Any value [_looksLikeSecret] declines, in a hand-written sentence
+///     under one of the four names** — `Login for user bob session:
+///     correcthorse`, `... key: 1234`. That is broader than a dictionary word
+///     or a short number: the test hands back every shape it can name as
+///     impossible for a credential, so a CamelCase value (`pass: OpenSesame`),
+///     a `/`- or `~`-leading base64 blob (`token: /wEPDwUKLTcy`), a `$`-bearing
+///     bcrypt hash (`pass: $2y$10$N9qo` — `$` is outside
+///     [_credentialAlphabet]), a drive-letter or `./` path and a URL with the
+///     secret in its *path* rather than its query (`token:
+///     https://host/redeem/aB3x`) all survive here too. Each is also the shape
+///     of a path, an exception or a word the corpus logs, and is
+///     indistinguishable from `Session: restored` and `first_pass: 3 folders`
+///     by any test this file can apply: the two shapes are the same characters
+///     in the same place. A value the test accepts — `key: aB3xK9zQ7mR2pL5v` —
+///     is redacted in the same sentence.
 ///  2. **The same, spelled with a bare `Token` scheme** — `Token opensesame`
 ///     is kept because `Token preserved.` and `Token invalid or expired` are
 ///     real log lines. [_authSchemeWord] caps that at eleven alphabetic
 ///     characters, above the longest word the corpus actually uses (nine) and
 ///     below every credential shape measured, and it does not apply at all
-///     after an `Authorization` header name or inside a container.
-///  3. **A `k: v` pair whose immediate left neighbour is a bare word** —
-///     `user: bob pass: 1234`. [_isStructuredPosition] looks one token back,
-///     and `bob` is not dump syntax. `user=bob pass: 1234` and
-///     `headers: pass: 1234` are both caught, because their neighbour is.
+///     after an `Authorization` header name or inside a container. The
+///     boundary is pinned on both sides: `Token unavailable` (eleven) is kept,
+///     `Token unrecognized` (twelve) is redacted.
+///  3. **A `k: v` pair whose immediate left neighbour carries no `:` or `=`**.
+///     [_isStructuredPosition] looks one whitespace-delimited token back and
+///     asks only whether it ends in a container opener or is `k=v` / `label:`
+///     syntax ([_isPairToken]). Everything else reads as prose: a bare word
+///     (`user: bob pass: 1234`), a `[Tag]` prefix — this codebase's dominant
+///     log-line shape, so `[NeoSync] token: /wEPDwUKLTcy` survives — a MIME
+///     type (`application/json pass: 1234`) and a path (`/data/user/0/app
+///     key: opensesame`). `user=bob pass: 1234`, `headers: pass: 1234` and
+///     `x=1] token: correcthorse` are all caught, because their neighbour is.
+///     This class only opens the door; the value still has to be one class 1
+///     hands back, so `[NeoSync] token: aB3xK9zQ7mR2pL5v` is redacted.
 ///
 /// Everything structured is redacted: `{pass: 1234}`, `{key:
 /// CorrectHorseBattery}`, `{"session": "deadbeefcafebabe"}`, `{token:
@@ -275,6 +296,10 @@ bool _isPairToken(String token) {
 /// `Failed to POST /login with password=correcthorse` reads as prose but the
 /// `=` is still field syntax, so only the spaced colon is allowed to stand a
 /// name down mid-sentence. Every over-redacted line #199 measured uses `: `.
+///
+/// The space is load-bearing, not cosmetic: without it `pass:1234` is spared
+/// as a sentence, and nothing else in this file would catch it. Pinned by the
+/// #205 fixtures.
 bool _isSentenceColon(String prefix) {
   var i = prefix.length;
   var sawSpace = false;
