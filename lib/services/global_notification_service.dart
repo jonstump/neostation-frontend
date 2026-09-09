@@ -119,13 +119,25 @@ class GlobalNotificationService {
 
   /// Updates an active notification only if its [id] exists.
   ///
-  /// [ongoing] deliberately defaults to false rather than carrying the current
+  /// [ongoing], [progress] and [action] deliberately do not carry the current
   /// value over: the last update of a run is the completion message, and those
-  /// call sites are the ones that would forget to clear the flag. Progress
-  /// updates opt back in, next to the [progress] value they already pass.
-  /// [action] follows the same rule: a Cancel that outlived the work it
-  /// cancels is the mistake this guards against, so every update names the
-  /// action it still offers, or offers none.
+  /// call sites are the ones that would forget to clear a flag, a bar or a
+  /// Cancel that outlived the work it cancels. Every update names the state it
+  /// still wants — a running pass passes its fraction and `ongoing: true`
+  /// together — and anything left unsaid is cleared.
+  ///
+  /// [progress] joined that rule late. It read `progress ?? existing.progress`,
+  /// which made `progress: null` mean "keep the bar" rather than "clear it",
+  /// so a summary row sat under a bar left full by a completed pass or frozen
+  /// part-way by a cancel. Three runners were fixed one at a time (#224, #226,
+  /// #227) by routing their terminal rows through [show] before the shape was
+  /// recognised as the default being backwards: 32 of the 43 update call sites
+  /// in `lib/` wanted the bar gone, and 11 pass a real fraction and are
+  /// unaffected either way. Issue #228.
+  ///
+  /// [title], [imageBytes] and [icon] still fall back, and stay that way: they
+  /// are identity rather than state, an update is not expected to restate who
+  /// the row belongs to, and none of them can imply work is still running.
   void update({
     required String id,
     required String message,
@@ -152,7 +164,8 @@ class GlobalNotificationService {
         imageBytes: imageBytes ?? existing.imageBytes,
         icon: icon ?? existing.icon,
         type: type ?? existing.type,
-        progress: progress ?? existing.progress,
+        // Not `?? existing.progress` — see the doc comment. Issue #228.
+        progress: progress,
         ongoing: ongoing,
         action: action,
       ),
