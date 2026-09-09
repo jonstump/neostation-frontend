@@ -169,8 +169,16 @@ void main() {
       // Governing: SPEC-0010 REQ "Feature Threshold Table"
       expect(
         RommFeature.values,
-        hasLength(7),
+        hasLength(8),
         reason: 'a new entry needs a pin',
+      );
+      expect(
+        // backend/endpoints/roms/upload.py is absent at 4.7.0 (whose rom.py
+        // has only the single-shot POST /api/roms) and declares the four
+        // session routes at 4.8.0.
+        // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Chunked Upload Session"
+        RommFeature.romUpload.minVersion,
+        const RommServerVersion(4, 8, 0),
       );
       expect(
         RommFeature.playSessions.minVersion,

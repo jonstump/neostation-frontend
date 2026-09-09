@@ -22,6 +22,7 @@ import '../models/romm_server_capabilities.dart';
 import '../models/romm_screenshot.dart';
 import '../utils/log_redaction.dart';
 import 'logger_service.dart';
+import 'romm/rom_upload_source.dart';
 
 /// Failure modes a caller needs to tell apart programmatically (the connect
 /// screen picks a localized message per kind). [other] covers everything that
@@ -91,7 +92,34 @@ enum RommErrorKind {
   /// database outage is a 500 too. Distinct because the fix is the user's —
   /// pick another name — not a retry.
   // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Collection Write Calls"
+  ///
+  /// Also the kind of a chunked ROM upload whose `start` or `complete`
+  /// answered 400 or 409 naming a file already in the platform folder: RomM
+  /// refuses to overwrite, and so does this client.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Chunked Upload Session"
   alreadyExists,
+
+  /// A chunked ROM upload was abandoned before `complete`: the caller's
+  /// `shouldCancel` answered true, or the connection was dropped while the
+  /// session was open. `cancel` was sent (best effort) so the server frees
+  /// the partial upload. Distinct from [uploadFailed] because nothing went
+  /// wrong — the summary lists it as cancelled, not as a failure.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Chunked Upload Session"
+  uploadCancelled,
+
+  /// A chunked ROM upload failed: a chunk exhausted its retries, the source
+  /// could not be read, or `start` or `complete` answered a status that is
+  /// neither a collision nor a scope denial. `cancel` was sent (best effort).
+  /// The message carries the file, the chunk index and the status.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Error Handling Standards"
+  uploadFailed,
+
+  /// A ROM upload was asked for while another is in flight on this service.
+  /// One session runs at a time — the second call throws rather than queues,
+  /// since the caller that batches files already runs them in sequence and a
+  /// second surface starting a batch is what this refuses.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Concurrency Safety"
+  uploadBusy,
 }
 
 /// One *optional* bundle of RomM OAuth scopes, negotiated at login.
@@ -398,6 +426,14 @@ class RommService {
   // SPEC-0013 REQ "Optional Scope Groups", ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
   bool _apiKeyVerified = false;
 
+  /// Bumped whenever this service stops representing the connection it did —
+  /// a reconfigure, a disconnect, a move to another server. A long-running
+  /// operation captures it when it starts and stops itself when it moves, so
+  /// an upload session opened against one connection never keeps sending
+  /// after the user disconnected or switched servers underneath it.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Concurrency Safety"
+  int _connectionGeneration = 0;
+
   /// How many API-key verifications this connection has spent *in a row* on a
   /// failure that was not a rejection and not a transport fault: a server that
   /// answered badly (a 5xx, a 429, any non-2xx that is not 401/403), or a
@@ -616,6 +652,7 @@ class RommService {
       _scopeStates[group] = RommScopeState.unknown;
     }
     _scopeGatesLogged.clear();
+    _connectionGeneration++;
     _apiKeyVerified = false;
     _apiKeyVerifyFailures = 0;
     _apiKeyVerifyFailuresTotal = 0;
@@ -674,6 +711,7 @@ class RommService {
       _scopeStates[group] = RommScopeState.unknown;
     }
     _scopeGatesLogged.clear();
+    _connectionGeneration++;
     _apiKeyVerified = false;
     _apiKeyVerifyFailures = 0;
     _apiKeyVerifyFailuresTotal = 0;
@@ -3269,6 +3307,525 @@ class RommService {
     );
   }
 
+  // ── ROM upload (chunked session) ──────────────────────────────────────────
+
+  /// Whole-call budget for `POST /api/roms/upload/{id}/complete`. The server
+  /// assembles the chunks into the platform folder inside this call, which
+  /// for a multi-gigabyte image on a slow disk is a long copy; SPEC-0014 puts
+  /// the floor at 600 s.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Chunked Upload Session"
+  static const Duration uploadCompleteTimeout = Duration(seconds: 600);
+
+  /// Budget for one chunk PUT, body transmission included. 10 MiB at the
+  /// worst Wi-Fi a handheld sees fits with room to spare; a chunk that takes
+  /// longer than this is one the retry should re-send rather than wait on.
+  static const Duration uploadChunkTimeout = Duration(minutes: 5);
+
+  /// Retries per chunk after its first failure — RomM's web client's figure,
+  /// which the server has been tuned against.
+  static const int uploadChunkRetries = 3;
+
+  /// Pause before retry [attempt] (0-based): 1 s × 2^attempt, so 1 s, 2 s,
+  /// 4 s across the three retries.
+  static Duration uploadRetryBackoff(int attempt) =>
+      Duration(seconds: 1 << attempt);
+
+  static Future<void> _defaultSleep(Duration d) => Future<void>.delayed(d);
+
+  /// The pause between chunk retries. Process-wide, like the HTTP client seam.
+  static Future<void> Function(Duration) _sleep = _defaultSleep;
+
+  /// Routes the retry backoff through [sleeper] so a test can observe the
+  /// delays instead of waiting them out; null restores the real delay.
+  @visibleForTesting
+  static void debugUseSleeper(Future<void> Function(Duration)? sleeper) {
+    _sleep = sleeper ?? _defaultSleep;
+  }
+
+  bool _uploadInFlight = false;
+
+  /// Whether an [uploadRom] session is open on this service right now.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Concurrency Safety"
+  bool get uploadInProgress => _uploadInFlight;
+
+  /// Uploads [source] into RomM's folder for [platformId] as [fileName]
+  /// through the chunked upload session (`/api/roms/upload/*`).
+  ///
+  /// The session is RomM's own: `POST .../start` with the four `x-upload-*`
+  /// headers (total chunks = `ceil(size / 10 MiB)`, which is
+  /// [RomUploadSource.chunkCount]); then one `PUT .../{id}` per chunk, in
+  /// order, with `x-chunk-index` and the raw bytes — every chunk but the last
+  /// exactly [RomUploadSource.chunkSize] long, because the server recomputes
+  /// the size from the headers and rejects a chunk that differs; then
+  /// `POST .../complete`, capped at [uploadCompleteTimeout]. A chunk that
+  /// fails on transport or a 5xx is re-sent up to [uploadChunkRetries] times
+  /// after [uploadRetryBackoff]; a 4xx is not retried. Chunk bytes are read
+  /// one at a time from [source], which reads them off the main isolate, so
+  /// the file is never in memory as a whole.
+  ///
+  /// [onProgress] is called with `(sent, total)` after `start` (sent 0) and
+  /// after every chunk the server accepted. [shouldCancel] is polled before
+  /// every chunk and before `complete`; a true answer — or a disconnect or
+  /// reconfigure of this service while the session is open — sends
+  /// `POST .../cancel` and throws [RommErrorKind.uploadCancelled].
+  ///
+  /// Throws [RomUploadRefusedException] ([RomUploadRefusal.unsendableName])
+  /// before anything is sent when [fileName] has a character outside
+  /// printable ASCII — `dart:io` will not put it in a header and RomM does not
+  /// decode one, see [RomUploadSource.validateUploadName]. Returns true when
+  /// the server confirmed `complete`. Returns false without
+  /// sending anything when the server predates the session
+  /// ([RommFeature.romUpload], RomM 4.8.0) or this connection is known not to
+  /// hold [RommScopeGroup.romsWrite]; both are logged once per connection.
+  /// Throws [RommException] otherwise, with the file (and the chunk index and
+  /// status where there is one) in the message: [RommErrorKind.alreadyExists]
+  /// for a 400 or 409 on `start` or `complete` naming an existing file,
+  /// [RommErrorKind.scopeDenied] for a 403 (which also settles the group as
+  /// denied), [RommErrorKind.uploadCancelled] as above,
+  /// [RommErrorKind.uploadBusy] when another session is open on this service
+  /// — one at a time, and the second call throws rather than waits — and
+  /// [RommErrorKind.uploadFailed] for everything else, `cancel` having been
+  /// sent first. Every request runs through the shared auth-retry policy.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Chunked Upload Session",
+  // REQ "Error Handling Standards", REQ "Concurrency Safety"
+  Future<bool> uploadRom(
+    RomUploadSource source, {
+    required int platformId,
+    required String fileName,
+    void Function(int sent, int total)? onProgress,
+    bool Function()? shouldCancel,
+  }) async {
+    // The name check is a property of the file alone, so it comes before
+    // even the gates: a name the SDK cannot send is a skip with a reason,
+    // whatever the server. Nothing has been sent by this point.
+    // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Upload Source"
+    RomUploadSource.validateUploadName(
+      fileName,
+      romPath: source.path,
+      systemFolder: source.systemFolder,
+    );
+
+    // Then the gates: a gated call sends nothing, whatever else is
+    // running, and says so once per connection like every other gate.
+    // Governing: ADR-0010, SPEC-0010 REQ "Gated Call Sites"
+    if (supports(RommFeature.romUpload) == RommFeatureSupport.unsupported) {
+      _logGateOnce(RommFeature.romUpload);
+      return false;
+    }
+    if (_scopeGated(RommScopeGroup.romsWrite)) return false;
+
+    // Single-instance guard. The batch surface runs its files in sequence,
+    // so a second session here is a second surface starting on top of the
+    // first; refusing it is cheaper and clearer than queueing behind an
+    // upload that may take many minutes.
+    // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Concurrency Safety"
+    if (_uploadInFlight) {
+      throw RommException(
+        'RomM upload refused: file=$fileName reason=upload_in_progress',
+        kind: RommErrorKind.uploadBusy,
+      );
+    }
+    _uploadInFlight = true;
+    try {
+      await _runUploadSession(
+        source,
+        platformId: platformId,
+        fileName: fileName,
+        onProgress: onProgress,
+        shouldCancel: shouldCancel,
+      );
+      return true;
+    } finally {
+      _uploadInFlight = false;
+    }
+  }
+
+  /// One session from `start` to `complete`, or to `cancel` and a throw.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Chunked Upload Session"
+  Future<void> _runUploadSession(
+    RomUploadSource source, {
+    required int platformId,
+    required String fileName,
+    void Function(int sent, int total)? onProgress,
+    bool Function()? shouldCancel,
+  }) async {
+    final total = source.size;
+    final chunks = source.chunkCount;
+    final generation = _connectionGeneration;
+    final watch = Stopwatch()..start();
+
+    final http.Response startResp;
+    try {
+      startResp = await _sendWithAuthRetry<http.Response>(
+        () => _httpClient
+            .post(
+              _uri('/api/roms/upload/start'),
+              headers: {
+                ..._authHeaders,
+                'x-upload-platform': '$platformId',
+                'x-upload-filename': fileName,
+                'x-upload-total-size': '$total',
+                'x-upload-total-chunks': '$chunks',
+              },
+            )
+            .timeout(_requestTimeout),
+        statusOf: (r) => r.statusCode,
+      );
+    } catch (e) {
+      // No session exists yet, so there is nothing to cancel — but the
+      // failure is still this file's, and is logged once as such.
+      throw _asUploadFailure(e, fileName);
+    }
+    if (startResp.statusCode < 200 || startResp.statusCode >= 300) {
+      final kind = _uploadFailureKind(startResp.statusCode, startResp.body);
+      _log.w(
+        'RomM upload start failed: name="$fileName" platform=$platformId '
+        'status=${startResp.statusCode} kind=${kind.name} '
+        'body=${_briefBody(startResp.body)}',
+      );
+      throw RommException(
+        'RomM upload start failed: file=$fileName '
+        'status=${startResp.statusCode}',
+        statusCode: startResp.statusCode,
+        kind: kind,
+      );
+    }
+    final uploadId = _uploadIdOf(startResp.body);
+    if (uploadId == null) {
+      _log.w(
+        'RomM upload start failed: name="$fileName" platform=$platformId '
+        'status=${startResp.statusCode} reason=no_upload_id '
+        'body=${_briefBody(startResp.body)}',
+      );
+      throw RommException(
+        'RomM upload start returned no upload id: file=$fileName',
+        statusCode: startResp.statusCode,
+        kind: RommErrorKind.uploadFailed,
+      );
+    }
+    _log.i(
+      'RomM upload started: platform=$platformId name="$fileName" '
+      'size=$total chunks=$chunks upload_id=$uploadId',
+    );
+    onProgress?.call(0, total);
+
+    var sent = 0;
+    RommException? failure;
+    try {
+      for (var index = 0; index < chunks; index++) {
+        _checkUploadStillWanted(
+          fileName,
+          chunk: index,
+          generation: generation,
+          shouldCancel: shouldCancel,
+        );
+        final bytes = await source.readChunk(index);
+        await _putChunk(
+          uploadId,
+          index,
+          bytes,
+          fileName: fileName,
+          shouldCancel: shouldCancel,
+        );
+        sent += bytes.length;
+        onProgress?.call(sent, total);
+      }
+      _checkUploadStillWanted(
+        fileName,
+        chunk: chunks,
+        generation: generation,
+        shouldCancel: shouldCancel,
+      );
+
+      final completeResp = await _sendWithAuthRetry<http.Response>(
+        () => _httpClient
+            .post(
+              _uri('/api/roms/upload/$uploadId/complete'),
+              headers: _authHeaders,
+            )
+            .timeout(uploadCompleteTimeout),
+        statusOf: (r) => r.statusCode,
+      );
+      if (completeResp.statusCode < 200 || completeResp.statusCode >= 300) {
+        final kind = _uploadFailureKind(
+          completeResp.statusCode,
+          completeResp.body,
+        );
+        _log.w(
+          'RomM upload complete failed: name="$fileName" '
+          'status=${completeResp.statusCode} kind=${kind.name} '
+          'body=${_briefBody(completeResp.body)}',
+        );
+        throw RommException(
+          'RomM upload complete failed: file=$fileName '
+          'status=${completeResp.statusCode}',
+          statusCode: completeResp.statusCode,
+          kind: kind,
+        );
+      }
+    } catch (e) {
+      failure = _asUploadFailure(e, fileName);
+    }
+    watch.stop();
+
+    if (failure == null) {
+      _log.i(
+        'RomM upload finished: name="$fileName" outcome=uploaded '
+        'sent=$sent total=$total chunks=$chunks '
+        'elapsed_ms=${watch.elapsedMilliseconds}',
+      );
+      return;
+    }
+    final outcome = failure.kind == RommErrorKind.uploadCancelled
+        ? 'cancelled'
+        : 'failed';
+    await _cancelUploadSession(uploadId, fileName: fileName, reason: outcome);
+    _log.i(
+      'RomM upload finished: name="$fileName" outcome=$outcome '
+      'kind=${failure.kind.name} status=${failure.statusCode} '
+      'sent=$sent total=$total chunks=$chunks '
+      'elapsed_ms=${watch.elapsedMilliseconds}',
+    );
+    throw failure;
+  }
+
+  /// Throws [RommErrorKind.uploadCancelled] when the caller no longer wants
+  /// the session or this service no longer represents the connection it was
+  /// opened on. Called before every chunk and before `complete`.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Concurrency Safety"
+  void _checkUploadStillWanted(
+    String fileName, {
+    required int chunk,
+    required int generation,
+    bool Function()? shouldCancel,
+  }) {
+    if (shouldCancel?.call() ?? false) {
+      throw RommException(
+        'RomM upload cancelled: file=$fileName chunk=$chunk reason=user',
+        kind: RommErrorKind.uploadCancelled,
+      );
+    }
+    if (generation != _connectionGeneration) {
+      throw RommException(
+        'RomM upload cancelled: file=$fileName chunk=$chunk '
+        'reason=disconnected',
+        kind: RommErrorKind.uploadCancelled,
+      );
+    }
+  }
+
+  /// Sends chunk [index], re-sending a retryable failure up to
+  /// [uploadChunkRetries] times with [uploadRetryBackoff] between attempts
+  /// (one log line per retry). Throws after the last attempt with one
+  /// warning naming the file and the chunk.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Chunked Upload Session",
+  // REQ "Error Handling Standards"
+  Future<void> _putChunk(
+    String uploadId,
+    int index,
+    Uint8List bytes, {
+    required String fileName,
+    bool Function()? shouldCancel,
+  }) async {
+    for (var attempt = 0; ; attempt++) {
+      final failure = await _tryPutChunk(uploadId, index, bytes);
+      if (failure == null) return;
+      final attempts = attempt + 1;
+      if (failure.retryable && attempt < uploadChunkRetries) {
+        final backoff = uploadRetryBackoff(attempt);
+        _log.w(
+          'RomM upload chunk retry: name="$fileName" chunk=$index '
+          'attempt=$attempts status=${failure.status} '
+          'cause=${failure.cause} backoff_ms=${backoff.inMilliseconds}',
+        );
+        await _sleep(backoff);
+        if (shouldCancel?.call() ?? false) {
+          throw RommException(
+            'RomM upload cancelled: file=$fileName chunk=$index reason=user',
+            kind: RommErrorKind.uploadCancelled,
+          );
+        }
+        continue;
+      }
+      _log.w(
+        'RomM upload chunk failed: name="$fileName" chunk=$index '
+        'attempts=$attempts status=${failure.status} cause=${failure.cause}',
+      );
+      throw RommException(
+        'RomM upload failed: file=$fileName chunk=$index '
+        'status=${failure.status} cause=${failure.cause}',
+        statusCode: failure.status,
+        kind: failure.status == 403
+            ? RommErrorKind.scopeDenied
+            : RommErrorKind.uploadFailed,
+      );
+    }
+  }
+
+  /// One `PUT /api/roms/upload/{id}` attempt. Null on a 2xx; otherwise what
+  /// went wrong and whether a re-send could come out differently — a request
+  /// that never got an answer or a 5xx can, a 4xx cannot.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Chunked Upload Session"
+  Future<({bool retryable, int? status, String cause})?> _tryPutChunk(
+    String uploadId,
+    int index,
+    Uint8List bytes,
+  ) async {
+    final uri = _uri('/api/roms/upload/$uploadId');
+    // Built fresh per attempt so the shared retry policy's re-auth picks up
+    // the new token.
+    http.Request build() => http.Request('PUT', uri)
+      ..headers.addAll(_authHeaders)
+      ..headers['x-chunk-index'] = '$index'
+      ..headers['content-type'] = 'application/octet-stream'
+      ..bodyBytes = bytes;
+
+    final http.StreamedResponse resp;
+    try {
+      resp = await _sendWithAuthRetry<http.StreamedResponse>(
+        () => _httpClient.send(build()).timeout(uploadChunkTimeout),
+        statusOf: (r) => r.statusCode,
+      );
+    } on RommAuthException {
+      // The credential itself was refused; no re-send fixes that.
+      rethrow;
+    } on RommException catch (e) {
+      // The shared policy has already turned a socket error or a timeout
+      // into one of these; a status-less one is a request the server never
+      // answered, which is exactly what a retry is for.
+      if (e.statusCode != null) rethrow;
+      return (retryable: true, status: null, cause: e.message);
+    } on http.ClientException catch (e) {
+      return (retryable: true, status: null, cause: e.message);
+    }
+
+    final String body;
+    try {
+      body = await resp.stream.bytesToString().timeout(_requestTimeout);
+    } catch (e) {
+      return (
+        retryable: true,
+        status: resp.statusCode,
+        cause: 'response body unreadable: $e',
+      );
+    }
+    final status = resp.statusCode;
+    if (status >= 200 && status < 300) return null;
+    if (status == 403) {
+      _noteScopeDenial(RommScopeGroup.romsWrite, status);
+    }
+    return (retryable: status >= 500, status: status, cause: _briefBody(body));
+  }
+
+  /// `POST /api/roms/upload/{id}/cancel`, best effort: the session is being
+  /// abandoned either way, so a failure here is logged, never thrown — the
+  /// server's 24 h TTL reclaims what a lost cancel leaves behind.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Chunked Upload Session"
+  Future<void> _cancelUploadSession(
+    String uploadId, {
+    required String fileName,
+    required String reason,
+  }) async {
+    try {
+      final resp = await _sendWithAuthRetry<http.Response>(
+        () => _httpClient
+            .post(
+              _uri('/api/roms/upload/$uploadId/cancel'),
+              headers: _authHeaders,
+            )
+            .timeout(_requestTimeout),
+        statusOf: (r) => r.statusCode,
+      );
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        _log.i(
+          'RomM upload cancel sent: name="$fileName" reason=$reason '
+          'status=${resp.statusCode}',
+        );
+      } else {
+        _log.w(
+          'RomM upload cancel failed: name="$fileName" reason=$reason '
+          'status=${resp.statusCode} body=${_briefBody(resp.body)}',
+        );
+      }
+    } catch (e) {
+      _log.w(
+        'RomM upload cancel failed: name="$fileName" reason=$reason cause=$e',
+      );
+    }
+  }
+
+  /// The kind for a failed `start` or `complete`: a 403 settles the group
+  /// as denied, a 400 or 409 whose detail says the file already exists is
+  /// the collision, the rest is [RommErrorKind.uploadFailed].
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Chunked Upload Session"
+  RommErrorKind _uploadFailureKind(int status, String body) {
+    if (status == 403) {
+      _noteScopeDenial(RommScopeGroup.romsWrite, status);
+      return RommErrorKind.scopeDenied;
+    }
+    if ((status == 400 || status == 409) && _saysFileAlreadyExists(body)) {
+      return RommErrorKind.alreadyExists;
+    }
+    return RommErrorKind.uploadFailed;
+  }
+
+  /// Whether an upload `start` or `complete` failure body is the collision.
+  ///
+  /// RomM 4.8.0 answers a name already on the platform with exactly
+  /// `File {filename} already exists`, so the phrase is the signal. The
+  /// whole-word name fallback [_saysAlreadyExists] keeps for the collection
+  /// route is deliberately not used here: `complete` also answers 400 with a
+  /// path-validation detail and with `Assembled file size mismatch: expected
+  /// X, got Y`, and a detail that happens to name the file must stay
+  /// [RommErrorKind.uploadFailed], not tell the user to pick another name.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Chunked Upload Session"
+  static bool _saysFileAlreadyExists(String body) {
+    String? detail;
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is Map) {
+        detail = (decoded['detail'] ?? decoded['message'])?.toString();
+      }
+    } catch (_) {
+      detail = null;
+    }
+    return (detail ?? body).toLowerCase().contains('already exists');
+  }
+
+  /// [error] as the [RommException] the caller sees. One that already
+  /// carries a kind (or is a refused credential) passes through; anything
+  /// else — a source read that came up short, a status-less transport
+  /// failure on `complete` — is logged once with its cause and wrapped as
+  /// [RommErrorKind.uploadFailed].
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Error Handling Standards"
+  RommException _asUploadFailure(Object error, String fileName) {
+    if (error is RommAuthException) return error;
+    if (error is RommException && error.kind != RommErrorKind.other) {
+      return error;
+    }
+    final cause = error is RommException ? error.message : '$error';
+    final status = error is RommException ? error.statusCode : null;
+    _log.w('RomM upload failed: name="$fileName" status=$status cause=$cause');
+    return RommException(
+      'RomM upload failed: file=$fileName status=$status cause=$cause',
+      statusCode: status,
+      kind: RommErrorKind.uploadFailed,
+    );
+  }
+
+  /// The `upload_id` of a `start` response, or null for any other shape.
+  static String? _uploadIdOf(String body) {
+    try {
+      final decoded = jsonDecode(body);
+      if (decoded is! Map) return null;
+      final id = decoded['upload_id'] ?? decoded['uploadId'] ?? decoded['id'];
+      final text = id?.toString().trim();
+      return text == null || text.isEmpty ? null : text;
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ── Play sessions (playtime sync) ─────────────────────────────────────────
 
   /// Uploads finished play sessions (`POST /api/play-sessions`).
@@ -3727,14 +4284,19 @@ class RommService {
       statusCode: resp.statusCode,
       kind: switch (resp.statusCode) {
         403 => RommErrorKind.scopeDenied,
-        500 when _isDuplicateCollectionBody(body, trimmed) =>
+        500 when _saysAlreadyExists(body, trimmed) =>
           RommErrorKind.alreadyExists,
         _ => RommErrorKind.other,
       },
     );
   }
 
-  /// Whether a create's 500 body is the duplicate-name one. RomM answers a
+  /// Whether a collection create's failure body says [name] already exists
+  /// on the server. The ROM upload route has its own, narrower check
+  /// ([_saysFileAlreadyExists]): this one's whole-word name fallback is right
+  /// for a collection 500 and wrong for an upload 400.
+  ///
+  /// For a create's 500 body this is the duplicate-name check. RomM answers a
   /// `CollectionAlreadyExistsException` with a 500 whose `detail` names the
   /// collection (`Collection {name} already exists`); a 500 from anything
   /// else (the database down, a bug) says nothing of the kind, and must not
@@ -3743,7 +4305,7 @@ class RommService {
   /// The name counts only as a whole word: a substring match let a short
   /// name ("a", "Server") turn any error text into a duplicate.
   // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Collection Write Calls", REQ "Error Handling Standards"
-  static bool _isDuplicateCollectionBody(String body, String name) {
+  static bool _saysAlreadyExists(String body, String name) {
     String? detail;
     try {
       final decoded = jsonDecode(body);
