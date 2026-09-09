@@ -1,7 +1,10 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/utils/log_redaction.dart';
 import 'package:neostation/utils/neo_sync_error_message.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// The sign-in screen renders `AppLocale.<key>.getString(context)` fed through
 /// [NeoSyncLocalizedError.format]. `format` is the pure-Dart half of that, so
@@ -11,6 +14,8 @@ String render(NeoSyncLocalizedError error, Map<String, dynamic> locale) =>
     error.format(locale[error.localeKey] as String);
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   const locales = <String, Map<String, dynamic>>{
     'en': AppLocale.en,
     'es': AppLocale.es,
@@ -180,6 +185,92 @@ void main() {
       };
       expect(result[kNeoSyncLocalizedError], isA<NeoSyncLocalizedError>());
       expect(result['message'], 'Network error: raw');
+    });
+  });
+
+  group('what the sign-in screen renders for a result map', () {
+    // Issue #221. `neoSyncResultMessage` returns `String?`, and one site in
+    // `auth_form.dart` interpolates it into a sentence instead of parking it
+    // in the nullable field that hides the box. A result map with neither a
+    // localized sentence nor a `message` put the literal word `null` on the
+    // sign-in screen there. These need a real `BuildContext` because the
+    // fallback is resolved through `getString`, so a bare MaterialApp with
+    // the app's localization delegates stands in for the form.
+    setUpAll(() async {
+      SharedPreferences.setMockInitialValues({});
+      await FlutterLocalization.instance.ensureInitialized();
+      FlutterLocalization.instance.init(
+        mapLocales: [MapLocale('en', AppLocale.en)],
+        initLanguageCode: 'en',
+      );
+    });
+
+    Future<BuildContext> pumpContext(WidgetTester tester) async {
+      late BuildContext captured;
+      await tester.pumpWidget(
+        MaterialApp(
+          localizationsDelegates:
+              FlutterLocalization.instance.localizationsDelegates,
+          supportedLocales: FlutterLocalization.instance.supportedLocales,
+          home: Builder(
+            builder: (context) {
+              captured = context;
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      return captured;
+    }
+
+    testWidgets('an empty result map falls back to our own sentence', (
+      tester,
+    ) async {
+      final context = await pumpContext(tester);
+      final empty = <String, dynamic>{};
+
+      // The hazard, measured: this is what the interpolation used to print.
+      expect(neoSyncResultMessage(context, empty), isNull);
+      expect('${neoSyncResultMessage(context, empty)}', 'null');
+
+      final shown = neoSyncResultMessageOrFallback(context, empty);
+      expect(shown, AppLocale.en[AppLocale.anErrorOccurred]);
+      expect(shown, 'An error occurred');
+      expect(shown, isNot('null'));
+    });
+
+    testWidgets('a result map with wording keeps its own wording', (
+      tester,
+    ) async {
+      final context = await pumpContext(tester);
+
+      // The fallback must not shadow a message the service did record.
+      expect(
+        neoSyncResultMessageOrFallback(context, {'message': 'Wrong password'}),
+        'Wrong password',
+      );
+      expect(
+        neoSyncResultMessageOrFallback(context, {
+          'message': 'raw',
+          kNeoSyncLocalizedError: const NeoSyncLocalizedError(
+            AppLocale.neoSyncLoginFailed,
+          ),
+        }),
+        AppLocale.en[AppLocale.neoSyncLoginFailed],
+      );
+    });
+
+    testWidgets('the fallback key is the caller\'s to choose', (tester) async {
+      final context = await pumpContext(tester);
+      expect(
+        neoSyncResultMessageOrFallback(
+          context,
+          const {},
+          fallbackKey: AppLocale.emailVerifiedLoginFailed,
+        ),
+        AppLocale.en[AppLocale.emailVerifiedLoginFailed],
+      );
     });
   });
 
