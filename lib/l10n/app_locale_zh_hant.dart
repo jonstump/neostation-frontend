@@ -1436,4 +1436,8 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.rommSyncOutcomeCollectionManagedHere:
       '收藏集 "{name}" 由本裝置管理，未從 RomM 更新',
   AppLocale.collectionPushRommMembersQueued: '「{name}」已在 RomM 上建立，遊戲將在伺服器可用時同步',
+  AppLocale.neoSyncLoginSuccessfulEmailNotVerified: '登入成功，但您的電子郵件尚未驗證',
+  AppLocale.neoSyncVerificationEmailSent: '驗證郵件已傳送',
+  AppLocale.neoSyncPasswordResetEmailSent: '密碼重設郵件已傳送',
+  AppLocale.neoSyncNotAuthenticated: '未登入',
 };

@@ -1700,4 +1700,10 @@ const Map<String, dynamic> appLocaleEs = {
       'La colección "{name}" se gestiona desde este dispositivo y no se actualizó desde RomM',
   AppLocale.collectionPushRommMembersQueued:
       '"{name}" está en RomM; sus juegos se enviarán cuando el servidor esté disponible',
+  AppLocale.neoSyncLoginSuccessfulEmailNotVerified:
+      'Inicio de sesión con éxito, pero tu correo aún no está verificado',
+  AppLocale.neoSyncVerificationEmailSent: 'Correo de verificación enviado',
+  AppLocale.neoSyncPasswordResetEmailSent:
+      'Correo de restablecimiento de contraseña enviado',
+  AppLocale.neoSyncNotAuthenticated: 'Sesión no iniciada',
 };

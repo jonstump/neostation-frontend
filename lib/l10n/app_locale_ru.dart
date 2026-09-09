@@ -1658,4 +1658,10 @@ const Map<String, dynamic> appLocaleRu = {
       'Коллекция «{name}» управляется с этого устройства и не была обновлена из RomM',
   AppLocale.collectionPushRommMembersQueued:
       '«{name}» создана на RomM; игры будут отправлены, когда сервер станет доступен',
+  AppLocale.neoSyncLoginSuccessfulEmailNotVerified:
+      'Вход выполнен, но email ещё не подтвержден',
+  AppLocale.neoSyncVerificationEmailSent: 'Письмо с подтверждением отправлено',
+  AppLocale.neoSyncPasswordResetEmailSent:
+      'Письмо для сброса пароля отправлено',
+  AppLocale.neoSyncNotAuthenticated: 'Вход не выполнен',
 };

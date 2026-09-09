@@ -294,9 +294,7 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
         }
       }
     } catch (e) {
-      setState(() {
-        _message = '${AppLocale.anErrorOccurred.getString(context)}: $e';
-      });
+      _showCaught(e, localeKey: AppLocale.anErrorOccurred, where: 'submit');
     } finally {
       setState(() {
         _isLoading = false;
@@ -344,9 +342,11 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
         }
       }
     } catch (e) {
-      setState(() {
-        _message = '${AppLocale.anErrorOccurred.getString(context)}: $e';
-      });
+      _showCaught(
+        e,
+        localeKey: AppLocale.anErrorOccurred,
+        where: 'verifyEmail',
+      );
     } finally {
       setState(() {
         _isLoading = false;
@@ -383,9 +383,11 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
         _startEmailVerificationPolling();
       }
     } catch (e) {
-      setState(() {
-        _message = '${AppLocale.anErrorOccurred.getString(context)}: $e';
-      });
+      _showCaught(
+        e,
+        localeKey: AppLocale.anErrorOccurred,
+        where: 'resendVerification',
+      );
     } finally {
       setState(() {
         _isLoading = false;
@@ -474,11 +476,12 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
         }
       }
     } catch (e) {
-      setState(() {
-        _message =
-            '${AppLocale.emailVerifiedLoginFailed.getString(context)}: $e';
-        _showEmailVerification = false;
-      });
+      _showCaught(
+        e,
+        localeKey: AppLocale.emailVerifiedLoginFailed,
+        where: 'autoLoginAfterVerification',
+        andAlso: () => _showEmailVerification = false,
+      );
     }
   }
 
@@ -534,10 +537,12 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
         });
       }
     } catch (e) {
-      setState(() {
-        _message = '${AppLocale.anErrorOccurred.getString(context)}: $e';
-        _isLoading = false;
-      });
+      _showCaught(
+        e,
+        localeKey: AppLocale.anErrorOccurred,
+        where: 'sendForgotPasswordEmail',
+        andAlso: () => _isLoading = false,
+      );
     }
   }
 
@@ -589,11 +594,39 @@ class AuthFormState extends State<AuthForm> with LoginFormSelection<AuthForm> {
         });
       }
     } catch (e) {
-      setState(() {
-        _message = '${AppLocale.anErrorOccurred.getString(context)}: $e';
-        _isLoading = false;
-      });
+      _showCaught(
+        e,
+        localeKey: AppLocale.anErrorOccurred,
+        where: 'resetPassword',
+        andAlso: () => _isLoading = false,
+      );
     }
+  }
+
+  /// One of this form's own handlers threw. Issue #201: the [localeKey]
+  /// sentence goes in the message box by itself and the exception goes to the
+  /// log, redacted. It used to be `'$sentence: $e'` on screen, unredacted, at
+  /// all six sites — see [neoSyncCaughtException] for why that stopped.
+  ///
+  /// [where] is this form's handler name; the log tag it becomes is
+  /// `AuthForm.<where>`.
+  void _showCaught(
+    Object error, {
+    required String localeKey,
+    required String where,
+    VoidCallback? andAlso,
+  }) {
+    final caught = neoSyncCaughtException(
+      error,
+      localeKey: localeKey,
+      where: 'AuthForm.$where',
+    );
+    _log.e(caught.logged);
+    if (!mounted) return;
+    setState(() {
+      _message = neoSyncLocalizedErrorText(context, caught.shown);
+      andAlso?.call();
+    });
   }
 
   @override

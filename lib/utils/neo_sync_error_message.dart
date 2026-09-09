@@ -12,9 +12,13 @@ import 'log_redaction.dart';
 /// `contains('quota')`), while this entry is what the screen renders.
 const String kNeoSyncLocalizedError = 'localizedError';
 
-/// A NeoSync auth/billing failure worded by us rather than by the server: an
+/// A NeoSync auth/billing outcome worded by us rather than by the server: an
 /// `AppLocale` [localeKey] plus the optional [detail] to substitute into its
 /// `{error}` placeholder.
+///
+/// The name says "error" because failures adopted it first (issue #195); the
+/// success sentences ride the same carrier (issue #200) rather than a second
+/// mechanism, since the widget already resolves this entry before `message`.
 ///
 /// `AuthService`, `BillingService` and `NeoSyncService` have no `BuildContext`,
 /// so they cannot translate; they record the key here and the widget layer
@@ -47,6 +51,40 @@ class NeoSyncLocalizedError {
     return value == null ? template : template.replaceFirst('{error}', value);
   }
 }
+
+/// A success sentence for [localeKey].
+///
+/// Issue #200. `AuthService` used to hand the widget hardcoded English here
+/// (`'Login successful'`, `data['message'] ?? 'Password reset successfully'`).
+/// The server's own success text, when it sends one, stays in the result map's
+/// `message` for the log and is not rendered: it is English-only, which is the
+/// complaint this fixes, and the sentences in `AppLocale` already say the same
+/// thing — see `AuthService._success`.
+NeoSyncLocalizedError neoSyncSuccess(String localeKey) =>
+    NeoSyncLocalizedError(localeKey);
+
+/// What the sign-in screen shows, and what it logs, when one of its own
+/// handlers throws (issue #201).
+///
+/// Decision: the exception does not go on screen at all. `auth_form.dart`
+/// appended `': $e'` to the translated [localeKey] sentence at six sites, and
+/// the widget layer is the wrong place to rely on every service beneath it
+/// never rethrowing something that carries a URL or a token. The sentence alone
+/// is what the user can act on; the detail is only useful in the log, so
+/// [logged] carries it there, redacted, tagged with [where] so the log line
+/// still says which path failed.
+///
+/// [where] is the complete tag, class included (`'AuthForm.submit'`): this
+/// helper does not know who called it, so a second adopter names its own site
+/// rather than inheriting the first one's prefix.
+({NeoSyncLocalizedError shown, String logged}) neoSyncCaughtException(
+  Object error, {
+  required String localeKey,
+  required String where,
+}) => (
+  shown: NeoSyncLocalizedError(localeKey),
+  logged: '$where: ${redactSecrets(error.toString())}',
+);
 
 /// The "Network error: {error}" sentence for a thrown [error], with the
 /// exception text redacted.
@@ -88,8 +126,8 @@ String neoSyncLocalizedErrorText(
 /// sentence when the service recorded one, otherwise the map's own (already
 /// redacted) English `message`.
 ///
-/// The fallback matters for the success paths and for any result shape that has
-/// not adopted [NeoSyncLocalizedError] yet.
+/// The fallback matters for any result shape that has not adopted
+/// [NeoSyncLocalizedError] yet; `AuthService` success paths have (issue #200).
 String? neoSyncResultMessage(
   BuildContext context,
   Map<String, dynamic> result,

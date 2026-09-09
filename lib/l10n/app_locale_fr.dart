@@ -1719,4 +1719,10 @@ const Map<String, dynamic> appLocaleFr = {
       'La collection « {name} » est gérée depuis cet appareil et n\'a pas été mise à jour depuis RomM',
   AppLocale.collectionPushRommMembersQueued:
       '« {name} » est sur RomM ; ses jeux suivront dès que le serveur sera joignable',
+  AppLocale.neoSyncLoginSuccessfulEmailNotVerified:
+      'Connexion réussie, mais votre e-mail n’est pas encore vérifié',
+  AppLocale.neoSyncVerificationEmailSent: 'E-mail de vérification envoyé',
+  AppLocale.neoSyncPasswordResetEmailSent:
+      'E-mail de réinitialisation du mot de passe envoyé',
+  AppLocale.neoSyncNotAuthenticated: 'Non connecté',
 };

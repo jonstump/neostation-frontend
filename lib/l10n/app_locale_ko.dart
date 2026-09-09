@@ -1504,4 +1504,9 @@ const Map<String, dynamic> appLocaleKo = {
       '컬렉션 "{name}"은(는) 이 기기에서 관리되므로 RomM에서 업데이트되지 않았습니다',
   AppLocale.collectionPushRommMembersQueued:
       '"{name}"이(가) RomM에 생성되었습니다. 게임은 서버에 연결되면 전송됩니다',
+  AppLocale.neoSyncLoginSuccessfulEmailNotVerified:
+      '로그인에 성공했지만 이메일 인증이 아직 완료되지 않았습니다',
+  AppLocale.neoSyncVerificationEmailSent: '인증 이메일을 보냈습니다',
+  AppLocale.neoSyncPasswordResetEmailSent: '비밀번호 재설정 이메일을 보냈습니다',
+  AppLocale.neoSyncNotAuthenticated: '로그인되어 있지 않습니다',
 };
