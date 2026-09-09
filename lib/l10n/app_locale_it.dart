@@ -1679,4 +1679,24 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.rommRemoteDownloadReadyTitle: 'Download completato',
   AppLocale.rommRemoteDownloadReadyBody: '{name} è pronto per giocare.',
   AppLocale.rommRemoteSecondaryState: 'Sul server RomM, non scaricato',
+  AppLocale.collectionPushRomm: 'Invia a RomM',
+  AppLocale.collectionRommPushed: 'Inviata a RomM',
+  AppLocale.collectionPushRommOutcome:
+      '"{name}" inviata a RomM: {pushed} inviati, {unlinked} non collegati',
+  AppLocale.collectionPushRommAlreadyExists:
+      'Su RomM esiste già una collezione con questo nome',
+  AppLocale.collectionPushRommDenied:
+      'Questo accesso a RomM non può scrivere collezioni',
+  AppLocale.collectionPushRommFailed: 'Impossibile inviare "{name}" a RomM',
+  AppLocale.collectionDeleteRommTitle: 'Eliminare anche su RomM?',
+  AppLocale.collectionDeleteRommBody:
+      '"{name}" è stata inviata a RomM. Eliminarla anche lì o conservare la copia su RomM?',
+  AppLocale.collectionDeleteRommConfirm: 'Elimina su RomM',
+  AppLocale.collectionDeleteRommKeep: 'Conserva su RomM',
+  AppLocale.collectionUnlinkPushedConfirm:
+      'Questa collezione smetterà di inviare le sue modifiche a RomM. I suoi giochi restano qui e su RomM.',
+  AppLocale.rommSyncOutcomeCollectionManagedHere:
+      'La collezione "{name}" è gestita da questo dispositivo e non è stata aggiornata da RomM',
+  AppLocale.collectionPushRommMembersQueued:
+      '"{name}" è su RomM; i suoi giochi seguiranno quando il server sarà raggiungibile',
 };

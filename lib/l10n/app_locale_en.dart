@@ -1615,4 +1615,24 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rommRemoteDownloadReadyTitle: 'Download complete',
   AppLocale.rommRemoteDownloadReadyBody: '{name} is ready to play.',
   AppLocale.rommRemoteSecondaryState: 'On the RomM server, not downloaded',
+  AppLocale.collectionPushRomm: 'Push to RomM',
+  AppLocale.collectionRommPushed: 'Pushed to RomM',
+  AppLocale.collectionPushRommOutcome:
+      '"{name}" pushed to RomM: {pushed} pushed, {unlinked} not linked',
+  AppLocale.collectionPushRommAlreadyExists:
+      'A collection with this name already exists on RomM',
+  AppLocale.collectionPushRommDenied:
+      'This RomM login cannot write collections',
+  AppLocale.collectionPushRommFailed: '"{name}" could not be pushed to RomM',
+  AppLocale.collectionDeleteRommTitle: 'Also delete on RomM?',
+  AppLocale.collectionDeleteRommBody:
+      '"{name}" was pushed to RomM. Delete it there too, or keep the RomM copy?',
+  AppLocale.collectionDeleteRommConfirm: 'Delete on RomM',
+  AppLocale.collectionDeleteRommKeep: 'Keep on RomM',
+  AppLocale.collectionUnlinkPushedConfirm:
+      'This collection will stop pushing its changes to RomM. Its games stay here and on RomM.',
+  AppLocale.rommSyncOutcomeCollectionManagedHere:
+      'Collection "{name}" is managed from this device and was not updated from RomM',
+  AppLocale.collectionPushRommMembersQueued:
+      '"{name}" is on RomM; its games will follow when the server is reachable',
 };

@@ -236,4 +236,241 @@ void main() {
       expect(info.badgeIcon, isNull);
     });
   });
+
+  // ── ADR-0015: the push side of the same surfaces ──────────────────────────
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Push Action", REQ "Origin Badge", REQ "Origin Column", REQ "Localized User-Facing Text"
+
+  group('collectionMenuIds with a pushable server', () {
+    test('an unlinked collection gets push after delete while connected', () {
+      final ids = collectionMenuIds(
+        hasImage: false,
+        isRommMirror: false,
+        canPushToRomm: true,
+      );
+      expect(ids, [
+        kCollectionMenuRename,
+        kCollectionMenuChangeImage,
+        kCollectionMenuDelete,
+        kCollectionMenuPushRomm,
+        kCollectionMenuViewMode,
+      ]);
+      expect(ids, isNot(contains(kCollectionMenuUnlinkRomm)));
+    });
+
+    test('no push without a server that may write', () {
+      expect(
+        collectionMenuIds(hasImage: true, isRommMirror: false),
+        isNot(contains(kCollectionMenuPushRomm)),
+      );
+      expect(
+        collectionMenuIds(
+          hasImage: true,
+          isRommMirror: false,
+          canPushToRomm: false,
+        ),
+        isNot(contains(kCollectionMenuPushRomm)),
+      );
+    });
+
+    test('a mirror is never offered push, even while connected', () {
+      final ids = collectionMenuIds(
+        hasImage: false,
+        isRommMirror: true,
+        canPushToRomm: true,
+      );
+      expect(ids, isNot(contains(kCollectionMenuPushRomm)));
+      expect(ids, contains(kCollectionMenuUnlinkRomm));
+    });
+
+    test('a pushed collection gets unlink in the same slot, never push', () {
+      final ids = collectionMenuIds(
+        hasImage: true,
+        isRommMirror: true,
+        isPushedToRomm: true,
+        canPushToRomm: true,
+      );
+      expect(ids, [
+        kCollectionMenuRename,
+        kCollectionMenuChangeImage,
+        kCollectionMenuRemoveImage,
+        kCollectionMenuDelete,
+        kCollectionMenuUnlinkRomm,
+        kCollectionMenuViewMode,
+      ]);
+      // The pushed flag alone is enough: the model's isRommMirror also reads
+      // true for a pushed collection, but the layout must not depend on it.
+      expect(
+        collectionMenuIds(
+          hasImage: false,
+          isRommMirror: false,
+          isPushedToRomm: true,
+          canPushToRomm: true,
+        ),
+        allOf(
+          contains(kCollectionMenuUnlinkRomm),
+          isNot(contains(kCollectionMenuPushRomm)),
+        ),
+      );
+    });
+
+    test('the entries above the RomM slot keep their positions', () {
+      final withPush = collectionMenuIds(
+        hasImage: true,
+        isRommMirror: false,
+        canPushToRomm: true,
+      );
+      final without = collectionMenuIds(hasImage: true, isRommMirror: false);
+      expect(withPush.sublist(0, 4), without.sublist(0, 4));
+      expect(withPush.last, kCollectionMenuViewMode);
+    });
+  });
+
+  group('rommCollectionOutcomeMessage for a pushed collection', () {
+    test('a mirror run that declined a local-origin collection says so', () {
+      final message = rommCollectionOutcomeMessage(
+        const RommCollectionMirrorSummary(
+          collectionId: 'local-1',
+          skippedLocalOrigin: true,
+        ),
+        name: 'Best of SNES',
+      );
+      expect(message, isNotNull);
+      expect(message!.key, AppLocale.rommSyncOutcomeCollectionManagedHere);
+      expect(message.placeholders, {'name': 'Best of SNES'});
+      expect(
+        message.format(_en),
+        'Collection "Best of SNES" is managed from this device and was not '
+        'updated from RomM',
+      );
+    });
+
+    test('the skip line resolves in every language', () {
+      for (final entry in _allLanguages.entries) {
+        final message = rommCollectionOutcomeMessage(
+          const RommCollectionMirrorSummary(
+            collectionId: 'x',
+            skippedLocalOrigin: true,
+          ),
+          name: 'N',
+        );
+        final text = message!.format((k) => entry.value[k] as String);
+        expect(text, isNotEmpty, reason: entry.key);
+        expect(text, isNot(contains('{')), reason: entry.key);
+      }
+    });
+  });
+
+  group('collectionToSystemInfo pushed badge', () {
+    const pushed = CollectionModel(
+      id: 'c3',
+      name: 'Mine, on RomM',
+      rommServerUrl: 'https://romm.local',
+      rommCollectionId: '77',
+      rommOrigin: CollectionModel.originLocal,
+    );
+    const mirrored = CollectionModel(
+      id: 'c1',
+      name: 'Best of SNES',
+      rommServerUrl: 'https://romm.local',
+      rommCollectionId: '12',
+      rommOrigin: CollectionModel.originRomm,
+    );
+
+    test('a pushed collection carries its own glyph and label', () {
+      final info = collectionToSystemInfo(
+        pushed,
+        imageVersion: 0,
+        rommMirroredLabel: 'Synced from RomM',
+        rommPushedLabel: 'Pushed to RomM',
+      );
+      expect(info.badgeIcon, kRommPushedGlyph);
+      expect(info.badgeLabel, 'Pushed to RomM');
+      expect(kRommPushedGlyph, isNot(kRommMirrorGlyph));
+    });
+
+    test('a mirror keeps the mirror glyph when both labels are given', () {
+      final info = collectionToSystemInfo(
+        mirrored,
+        imageVersion: 0,
+        rommMirroredLabel: 'Synced from RomM',
+        rommPushedLabel: 'Pushed to RomM',
+      );
+      expect(info.badgeIcon, kRommMirrorGlyph);
+      expect(info.badgeLabel, 'Synced from RomM');
+    });
+
+    test('a pushed collection never falls back to the mirror glyph', () {
+      // Only the mirror label given: the pushed collection is linked, but
+      // saying "synced from RomM" about it would be the wrong owner.
+      final info = collectionToSystemInfo(
+        pushed,
+        imageVersion: 0,
+        rommMirroredLabel: 'Synced from RomM',
+      );
+      expect(info.badgeIcon, isNull);
+      expect(info.badgeLabel, isNull);
+    });
+  });
+
+  group('push localized keys', () {
+    const pushKeys = {
+      AppLocale.collectionPushRomm,
+      AppLocale.collectionRommPushed,
+      AppLocale.collectionPushRommOutcome,
+      AppLocale.collectionPushRommAlreadyExists,
+      AppLocale.collectionPushRommDenied,
+      AppLocale.collectionPushRommFailed,
+      AppLocale.collectionDeleteRommTitle,
+      AppLocale.collectionDeleteRommBody,
+      AppLocale.collectionDeleteRommConfirm,
+      AppLocale.collectionDeleteRommKeep,
+      AppLocale.collectionUnlinkPushedConfirm,
+      AppLocale.rommSyncOutcomeCollectionManagedHere,
+      AppLocale.collectionPushRommMembersQueued,
+    };
+
+    test('every new key has a value in every language', () {
+      for (final entry in _allLanguages.entries) {
+        for (final key in pushKeys) {
+          expect(
+            entry.value[key],
+            isA<String>().having((s) => s.isNotEmpty, 'non-empty', true),
+            reason: '$key missing in ${entry.key}',
+          );
+        }
+      }
+    });
+
+    test('the placeholders survive translation', () {
+      for (final entry in _allLanguages.entries) {
+        final maps = entry.value;
+        expect(
+          maps[AppLocale.collectionPushRommOutcome],
+          allOf(
+            contains('{name}'),
+            contains('{pushed}'),
+            contains('{unlinked}'),
+          ),
+          reason: entry.key,
+        );
+        for (final key in [
+          AppLocale.collectionPushRommFailed,
+          AppLocale.collectionDeleteRommBody,
+          AppLocale.rommSyncOutcomeCollectionManagedHere,
+          AppLocale.collectionPushRommMembersQueued,
+        ]) {
+          expect(maps[key], contains('{name}'), reason: '$key ${entry.key}');
+        }
+      }
+    });
+
+    // Scenario: push with unlinked members — "3 pushed, 2 not linked".
+    test('the outcome reads the two counts', () {
+      final text = _en(AppLocale.collectionPushRommOutcome)
+          .replaceFirst('{name}', 'RPGs')
+          .replaceFirst('{pushed}', '3')
+          .replaceFirst('{unlinked}', '2');
+      expect(text, '"RPGs" pushed to RomM: 3 pushed, 2 not linked');
+    });
+  });
 }

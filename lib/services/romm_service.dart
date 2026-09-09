@@ -3739,6 +3739,9 @@ class RommService {
   /// collection (`Collection {name} already exists`); a 500 from anything
   /// else (the database down, a bug) says nothing of the kind, and must not
   /// tell the user to pick another name. The status alone is not the signal.
+  ///
+  /// The name counts only as a whole word: a substring match let a short
+  /// name ("a", "Server") turn any error text into a duplicate.
   // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Collection Write Calls", REQ "Error Handling Standards"
   static bool _isDuplicateCollectionBody(String body, String name) {
     String? detail;
@@ -3752,9 +3755,14 @@ class RommService {
     }
     final text = (detail ?? body).toLowerCase();
     if (text.isEmpty) return false;
-    return text.contains('already exists') ||
-        text.contains('duplicate') ||
-        text.contains(name.toLowerCase());
+    if (text.contains('already exists') || text.contains('duplicate')) {
+      return true;
+    }
+    final needle = name.trim().toLowerCase();
+    if (needle.isEmpty) return false;
+    return RegExp(
+      '(^|[^a-z0-9])${RegExp.escape(needle)}([^a-z0-9]|\$)',
+    ).hasMatch(text);
   }
 
   /// Updates a collection (`PUT /api/collections/{id}`, multipart).

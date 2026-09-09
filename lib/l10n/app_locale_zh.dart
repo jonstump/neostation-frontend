@@ -1417,4 +1417,21 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.rommRemoteDownloadReadyTitle: '下载完成',
   AppLocale.rommRemoteDownloadReadyBody: '{name} 已可以游玩。',
   AppLocale.rommRemoteSecondaryState: '位于 RomM 服务器，未下载',
+  AppLocale.collectionPushRomm: '推送到 RomM',
+  AppLocale.collectionRommPushed: '已推送到 RomM',
+  AppLocale.collectionPushRommOutcome:
+      '"{name}" 已推送到 RomM：已推送 {pushed} 个，未关联 {unlinked} 个',
+  AppLocale.collectionPushRommAlreadyExists: 'RomM 上已存在同名收藏集',
+  AppLocale.collectionPushRommDenied: '此 RomM 登录无法写入收藏集',
+  AppLocale.collectionPushRommFailed: '无法将 "{name}" 推送到 RomM',
+  AppLocale.collectionDeleteRommTitle: '同时在 RomM 上删除？',
+  AppLocale.collectionDeleteRommBody:
+      '"{name}" 已推送到 RomM。是否也在那里删除，还是保留 RomM 副本？',
+  AppLocale.collectionDeleteRommConfirm: '在 RomM 上删除',
+  AppLocale.collectionDeleteRommKeep: '保留在 RomM',
+  AppLocale.collectionUnlinkPushedConfirm:
+      '此收藏集将不再向 RomM 推送更改。其中的游戏在本机和 RomM 上都会保留。',
+  AppLocale.rommSyncOutcomeCollectionManagedHere:
+      '收藏集 "{name}" 由本设备管理，未从 RomM 更新',
+  AppLocale.collectionPushRommMembersQueued: '"{name}"已在 RomM 上创建，游戏将在服务器可用时同步',
 };

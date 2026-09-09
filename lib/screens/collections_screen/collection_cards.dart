@@ -17,6 +17,13 @@ const String kCollectionFallbackColor = '#7C4DFF';
 /// in the tab's vocabulary.
 const IconData kRommMirrorGlyph = Symbols.cloud_sync_rounded;
 
+/// The glyph a pushed collection's card carries: an upload cloud, distinct
+/// from [kRommMirrorGlyph] because the two say opposite things about who
+/// writes the collection — a mirror is RomM's and the sync overwrites local
+/// edits; a pushed collection is this device's and its edits overwrite RomM.
+// Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Badge"
+const IconData kRommPushedGlyph = Symbols.cloud_upload_rounded;
+
 /// Presents [collection] to the systems-card widgets.
 ///
 /// Collections are not systems, but they are shown with the same card, so they
@@ -43,11 +50,20 @@ SystemInfo collectionToSystemInfo(
   required int imageVersion,
   List<String> mosaicPaths = const [],
 
-  /// Localized label for the RomM glyph; the glyph is drawn only when
-  /// [CollectionModel.isRommMirror] and this is given.
+  /// Localized label for the mirror glyph; that glyph is drawn only when
+  /// the collection is a mirror (linked, not pushed) and this is given.
   String? rommMirroredLabel,
+
+  /// Localized label for the pushed glyph; that glyph is drawn only when
+  /// [CollectionModel.isPushedToRomm] and this is given.
+  // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Origin Badge"
+  String? rommPushedLabel,
 }) {
-  final mirrored = collection.isRommMirror && rommMirroredLabel != null;
+  final pushed = collection.isPushedToRomm && rommPushedLabel != null;
+  final mirrored =
+      !collection.isPushedToRomm &&
+      collection.isRommMirror &&
+      rommMirroredLabel != null;
   return SystemInfo(
     title: collection.name,
     shortName: collection.name,
@@ -58,8 +74,16 @@ SystemInfo collectionToSystemInfo(
     customBackgroundPath: collection.imagePath,
     imageVersion: imageVersion,
     mosaicPaths: mosaicPaths,
-    badgeIcon: mirrored ? kRommMirrorGlyph : null,
-    badgeLabel: mirrored ? rommMirroredLabel : null,
+    badgeIcon: pushed
+        ? kRommPushedGlyph
+        : mirrored
+        ? kRommMirrorGlyph
+        : null,
+    badgeLabel: pushed
+        ? rommPushedLabel
+        : mirrored
+        ? rommMirroredLabel
+        : null,
   );
 }
 

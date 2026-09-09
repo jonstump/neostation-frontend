@@ -1479,4 +1479,22 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommRemoteDownloadReadyTitle: 'ダウンロード完了',
   AppLocale.rommRemoteDownloadReadyBody: '{name} をプレイできます。',
   AppLocale.rommRemoteSecondaryState: 'RomM サーバー上、未ダウンロード',
+  AppLocale.collectionPushRomm: 'RomM に送信',
+  AppLocale.collectionRommPushed: 'RomM に送信済み',
+  AppLocale.collectionPushRommOutcome:
+      '「{name}」を RomM に送信しました：{pushed} 件送信、{unlinked} 件未リンク',
+  AppLocale.collectionPushRommAlreadyExists: '同じ名前のコレクションが RomM に既にあります',
+  AppLocale.collectionPushRommDenied: 'この RomM ログインではコレクションを書き込めません',
+  AppLocale.collectionPushRommFailed: '「{name}」を RomM に送信できませんでした',
+  AppLocale.collectionDeleteRommTitle: 'RomM でも削除しますか？',
+  AppLocale.collectionDeleteRommBody:
+      '「{name}」は RomM に送信済みです。RomM 側でも削除しますか、それとも RomM のコピーを残しますか？',
+  AppLocale.collectionDeleteRommConfirm: 'RomM で削除',
+  AppLocale.collectionDeleteRommKeep: 'RomM に残す',
+  AppLocale.collectionUnlinkPushedConfirm:
+      'このコレクションは変更を RomM に送信しなくなります。ゲームはこの端末と RomM の両方に残ります。',
+  AppLocale.rommSyncOutcomeCollectionManagedHere:
+      'コレクション「{name}」はこの端末で管理されているため、RomM から更新されませんでした',
+  AppLocale.collectionPushRommMembersQueued:
+      '「{name}」は RomM に作成されました。ゲームはサーバーに接続できたときに送信されます',
 };

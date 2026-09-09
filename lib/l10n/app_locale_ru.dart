@@ -1638,4 +1638,24 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommRemoteDownloadReadyTitle: 'Загрузка завершена',
   AppLocale.rommRemoteDownloadReadyBody: '{name} готова к запуску.',
   AppLocale.rommRemoteSecondaryState: 'На сервере RomM, не загружено',
+  AppLocale.collectionPushRomm: 'Отправить в RomM',
+  AppLocale.collectionRommPushed: 'Отправлена в RomM',
+  AppLocale.collectionPushRommOutcome:
+      '«{name}» отправлена в RomM: отправлено {pushed}, не привязано {unlinked}',
+  AppLocale.collectionPushRommAlreadyExists:
+      'Коллекция с таким названием уже есть в RomM',
+  AppLocale.collectionPushRommDenied:
+      'Этот вход в RomM не может изменять коллекции',
+  AppLocale.collectionPushRommFailed: 'Не удалось отправить «{name}» в RomM',
+  AppLocale.collectionDeleteRommTitle: 'Удалить и в RomM?',
+  AppLocale.collectionDeleteRommBody:
+      '«{name}» была отправлена в RomM. Удалить её и там или оставить копию в RomM?',
+  AppLocale.collectionDeleteRommConfirm: 'Удалить в RomM',
+  AppLocale.collectionDeleteRommKeep: 'Оставить в RomM',
+  AppLocale.collectionUnlinkPushedConfirm:
+      'Эта коллекция перестанет отправлять изменения в RomM. Её игры остаются здесь и в RomM.',
+  AppLocale.rommSyncOutcomeCollectionManagedHere:
+      'Коллекция «{name}» управляется с этого устройства и не была обновлена из RomM',
+  AppLocale.collectionPushRommMembersQueued:
+      '«{name}» создана на RomM; игры будут отправлены, когда сервер станет доступен',
 };

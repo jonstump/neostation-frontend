@@ -22,6 +22,7 @@ import 'package:neostation/repositories/config_repository.dart';
 import 'package:neostation/repositories/scraper_repository.dart';
 import 'package:neostation/services/steam_scraper_service.dart';
 import 'package:neostation/providers/collections_provider.dart';
+import 'package:neostation/services/collections/collections_service.dart';
 import 'package:neostation/providers/system_background_provider.dart';
 import 'package:neostation/providers/neo_assets_provider.dart';
 import 'package:neostation/widgets/app_lifecycle_handler.dart';
@@ -1021,6 +1022,12 @@ class _MyAppState extends State<MyApp> {
             // Governing: ADR-0009 (mirror synced RomM collections), SPEC-0009 REQ "Concurrency Safety"
             widget.rommProvider.onCollectionsMirrored = () =>
                 unawaited(collections.load());
+            // An edit to a pushed collection queues in the collection outbox;
+            // flush it now when connected rather than at the next play-state
+            // flush. The service cannot import the provider, so it asks.
+            // Governing: ADR-0015 (collections push), SPEC-0015 REQ "Follow-Up Pushes"
+            CollectionsService.onRommOutboxQueued = () =>
+                unawaited(widget.rommProvider.flushCollectionOutbox());
             return collections;
           },
         ),

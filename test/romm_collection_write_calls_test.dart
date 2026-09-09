@@ -274,6 +274,47 @@ void main() {
       );
     });
 
+    // A one-letter name is a substring of almost any error text; the name
+    // counts only as a whole word.
+    test(
+      'a short name inside unrelated error text is not a duplicate',
+      () async {
+        final service = await connected(
+          createStatus: 500,
+          createBody: jsonEncode({'detail': 'Internal Server Error'}),
+        );
+
+        await expectLater(
+          service.createCollection('a'),
+          throwsA(
+            isA<RommException>().having(
+              (e) => e.kind,
+              'kind',
+              RommErrorKind.other,
+            ),
+          ),
+        );
+      },
+    );
+
+    test('the name as a whole word still reads as the duplicate', () async {
+      final service = await connected(
+        createStatus: 500,
+        createBody: jsonEncode({'detail': 'Collection "RPGs" is taken'}),
+      );
+
+      await expectLater(
+        service.createCollection('RPGs'),
+        throwsA(
+          isA<RommException>().having(
+            (e) => e.kind,
+            'kind',
+            RommErrorKind.alreadyExists,
+          ),
+        ),
+      );
+    });
+
     test('a bare 500 with no body stays the generic kind', () async {
       final service = await connected(createStatus: 500, createBody: '');
 
