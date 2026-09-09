@@ -126,7 +126,7 @@ class RommMetadataFetchRunner {
       type: NotificationType.info,
     );
     unawaited(
-      _runDetached(
+      runDetached(
         notificationId: 'romm_metadata_fetch_${system.folderName}',
         start: (pass) => pass.run(system, mode),
         refreshSystems: [system],
@@ -164,7 +164,7 @@ class RommMetadataFetchRunner {
     };
 
     unawaited(
-      _runDetached(
+      runDetached(
         // Per label, like the per-system id, so a refused second collection
         // run reports in its own notification rather than over the running
         // one's progress.
@@ -187,7 +187,12 @@ class RommMetadataFetchRunner {
   /// Runs one pass to completion with progress and the summary in the global
   /// notification. Holds providers and pre-resolved strings only — no widget,
   /// no context — so it outlives whatever started it.
-  static Future<void> _runDetached({
+  ///
+  /// Not private only so a test can drive a pass to its terminal row without
+  /// a widget tree: [start] is the seam, and the providers are untouched
+  /// unless the summary wrote something.
+  @visibleForTesting
+  static Future<void> runDetached({
     required String notificationId,
     required Future<RommMetadataFetchSummary> Function(RommMetadataFetch pass)
     start,
@@ -243,32 +248,51 @@ class RommMetadataFetchRunner {
           romm.scheduleLibraryRefresh(system);
         }
       }
-      notifications.update(
-        id: notificationId,
+      _showTerminal(
+        notifications,
+        notificationId: notificationId,
         message: strings.summary(summary),
         type: summary.cancelled
             ? GlobalNotificationType.info
             : (summary.failed > 0
                   ? GlobalNotificationType.error
                   : GlobalNotificationType.success),
-        progress: null,
       );
     } on RommMetadataFetchBusyException catch (e) {
       _log.w('$e');
-      notifications.update(
-        id: notificationId,
+      _showTerminal(
+        notifications,
+        notificationId: notificationId,
         message: strings.busy(e.runningSystemFolder),
         type: GlobalNotificationType.error,
-        progress: null,
       );
     } catch (e, st) {
       _log.e('RomM metadata fetch pass did not run', error: e, stackTrace: st);
-      notifications.update(
-        id: notificationId,
+      _showTerminal(
+        notifications,
+        notificationId: notificationId,
         message: strings.failedToStart(e),
         type: GlobalNotificationType.error,
-        progress: null,
       );
     }
+  }
+
+  /// The row a run ends on. Goes through [GlobalNotificationService.show]
+  /// rather than `update`, which keeps the previous fraction when handed
+  /// `progress: null` (`progress ?? existing.progress`): the summary must not
+  /// sit under a bar left full by a completed pass or frozen part-way by a
+  /// cancel. `show` replaces the row wholesale, so the bar clears.
+  ///
+  /// Every other field the terminal row needs already matches what `update`
+  /// produced here: this notification is shown without a title, icon or image,
+  /// and `update` takes `ongoing` as a non-nullable `false` default rather
+  /// than carrying the running row's `true` forward. Only `progress` differed.
+  static void _showTerminal(
+    GlobalNotificationService notifications, {
+    required String notificationId,
+    required String message,
+    required GlobalNotificationType type,
+  }) {
+    notifications.show(id: notificationId, message: message, type: type);
   }
 }
