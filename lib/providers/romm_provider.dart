@@ -1596,11 +1596,14 @@ class RommProvider extends ChangeNotifier {
     // Record the rom_id ↔ local game mapping so save sync can target this ROM.
     // [indexedName] is the on-disk filename the library scan indexes as
     // GameModel.romname (the .m3u for unpacked multi-disc ROMs), so the key
-    // matches at sync time.
-    await RommSaveMapRepository.putMapping(
+    // matches at sync time. Tagged as a download so a later manual pick can
+    // replace it; a row the user already picked by hand is kept as-is and the
+    // download still completes (the repository refuses the replace).
+    final linked = await RommSaveMapRepository.putMapping(
       romname: indexedName,
       systemFolder: system.folderName,
       rommRomId: rom.id,
+      source: RommLinkSource.download,
       fsName: indexedName,
     );
     _completedPendingIndex[rom.id] = _CompletedRommDownload(
@@ -1609,6 +1612,12 @@ class RommProvider extends ChangeNotifier {
       indexedName: indexedName,
       tracker: tracker,
     );
+    if (!linked) {
+      _log.i(
+        'RomM: ${system.folderName}/$indexedName keeps its manual link; '
+        'downloaded rom ${rom.id} was not re-linked',
+      );
+    }
     _notifyDownloadState();
     // Arm the debounced rescan so this ROM (and any others finishing around the
     // same time) get indexed + their lists refreshed shortly, without waiting

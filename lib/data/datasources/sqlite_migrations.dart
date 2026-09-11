@@ -38,13 +38,15 @@ class SqliteMigrations {
     );
   ''';
 
-  /// CREATE for the local-game → RomM rom_id save-sync map (v111).
+  /// CREATE for the local-game → RomM rom_id save-sync map (v111;
+  /// `link_source` added in v157).
   static const String createAppRommRomMapTableSql = '''
     CREATE TABLE IF NOT EXISTS app_romm_rom_map (
       romname TEXT NOT NULL,
       system_folder TEXT NOT NULL,
       romm_rom_id INTEGER NOT NULL,
       romm_fs_name TEXT,
+      link_source TEXT,
       updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
       PRIMARY KEY (romname, system_folder)
     );
@@ -605,6 +607,9 @@ class SqliteMigrations {
         break;
       case 156:
         await _migrateToVersion156(db);
+        break;
+      case 157:
+        await _migrateToVersion157(db);
         break;
       default:
         _log.w('No migration defined for version $version');
@@ -6953,6 +6958,38 @@ class SqliteMigrations {
       _log.i('Migration v156 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v156: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v157: Adds `app_romm_rom_map.link_source`, recording which
+  /// writer produced a RomM link row (`download`, `auto`, or `manual`).
+  ///
+  /// Existing rows are left null and read as automatic: both the download
+  /// path and the automatic link paths populate `romm_fs_name`, so no backfill
+  /// could tell them apart, and only `manual` changes behaviour. Nullable and
+  /// guarded by `PRAGMA table_info`, so a re-run is a no-op. A database that
+  /// skipped v119 (no map table at all) gets the table from its CREATE, which
+  /// already carries the column.
+  static Future<void> _migrateToVersion157(Database db) async {
+    _log.i('Migration v157: Adding link_source to app_romm_rom_map');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(app_romm_rom_map)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (columns.isEmpty) {
+        db.execute(createAppRommRomMapTableSql);
+        db.execute(createAppRommRomMapIndexSql);
+        _log.i('Table app_romm_rom_map created with link_source via v157');
+      } else if (!columns.contains('link_source')) {
+        db.execute('ALTER TABLE app_romm_rom_map ADD COLUMN link_source TEXT');
+        _log.i('Column link_source added via v157');
+      } else {
+        _log.i('Column link_source already exists');
+      }
+      _log.i('Migration v157 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v157: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }
