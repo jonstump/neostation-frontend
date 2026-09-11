@@ -1625,7 +1625,6 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.libraryScopeDownloaded: 'Baixados',
   AppLocale.libraryScopeFooter: 'Biblioteca: {scope}',
   AppLocale.libraryScopeToggle: 'Alternar o escopo da biblioteca',
-  AppLocale.libraryScopeSwitched: 'Mostrando: {scope}',
   AppLocale.libraryOfflineCached:
       'Offline — mostrando a biblioteca do RomM em cache',
   AppLocale.rommRemoteOnlySystemLabel: 'Somente no servidor RomM',

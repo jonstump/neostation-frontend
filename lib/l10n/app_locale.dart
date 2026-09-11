@@ -1690,7 +1690,6 @@ mixin AppLocale {
   static const String libraryScopeDownloaded = 'library_scope_downloaded';
   static const String libraryScopeFooter = 'library_scope_footer';
   static const String libraryScopeToggle = 'library_scope_toggle';
-  static const String libraryScopeSwitched = 'library_scope_switched';
   static const String libraryOfflineCached = 'library_offline_cached';
   static const String rommRemoteOnlySystemLabel =
       'romm_remote_only_system_label';

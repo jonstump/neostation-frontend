@@ -107,6 +107,12 @@ class LibraryScopePill extends StatelessWidget {
                     'assets/images/gamepad/Xbox_X_button.png',
                     width: 15.r,
                     height: 15.r,
+                    // Tinted like the View glyph above it and every other
+                    // gamepad glyph in lib/ — the two shared renderers
+                    // (`glass_button.dart`, `core_footer.dart`) both do this.
+                    // Untinted, the asset drew in its own colour and was
+                    // invisible against a dark surface. Issue #234.
+                    color: scheme.onSurface,
                   ),
                   SizedBox(width: 4.r),
                   Icon(

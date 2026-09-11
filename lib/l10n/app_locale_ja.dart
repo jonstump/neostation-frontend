@@ -1447,7 +1447,6 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.libraryScopeDownloaded: 'ダウンロード済み',
   AppLocale.libraryScopeFooter: 'ライブラリ：{scope}',
   AppLocale.libraryScopeToggle: 'ライブラリの範囲を切り替え',
-  AppLocale.libraryScopeSwitched: '表示中：{scope}',
   AppLocale.libraryOfflineCached: 'オフライン — キャッシュされた RomM ライブラリを表示中',
   AppLocale.rommRemoteOnlySystemLabel: 'RomM サーバーのみ',
   AppLocale.rommRefreshLibraryNow: 'RomM ライブラリを今すぐ更新',

@@ -74,7 +74,6 @@ void main() {
       onSettings: null,
       onDownload: () => downloads++,
       downloadLabel: label(ctx, AppLocale.download),
-      onToggleLibraryScope: () {},
     );
     await tester.pumpAndSettle();
 
@@ -89,6 +88,32 @@ void main() {
     await tester.tap(find.text(label(ctx, AppLocale.download)));
     await tester.pumpAndSettle();
     expect(downloads, 1);
+  });
+
+  testWidgets('the menu does not offer library scope', (tester) async {
+    final ctx = await pumpHost(tester);
+    // ignore: unawaited_futures
+    showGameContextMenu(
+      context: ctx,
+      targets: const [],
+      onSettings: null,
+      onViewMode: () {},
+      onRandom: () {},
+    );
+    await tester.pumpAndSettle();
+
+    // Scope is a view-level filter and lives on the footer pill, which shows
+    // the chord and the current scope and is tappable without a pad. On a
+    // per-game menu it read as acting on the highlighted game. Issue #234.
+    expect(
+      find.text(label(ctx, AppLocale.libraryScopeToggle)),
+      findsNothing,
+      reason: 'library scope was removed from the game context menu',
+    );
+    // The neighbours it sat between are still there, so this is not an
+    // empty menu passing by accident.
+    expect(find.text(label(ctx, AppLocale.viewMode)), findsOneWidget);
+    expect(find.text(label(ctx, AppLocale.randomGame)), findsOneWidget);
   });
 
   testWidgets('a failed download offers Retry under the host\'s label', (

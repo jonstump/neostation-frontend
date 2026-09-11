@@ -1597,7 +1597,6 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.libraryScopeDownloaded: 'Sudah diunduh',
   AppLocale.libraryScopeFooter: 'Pustaka: {scope}',
   AppLocale.libraryScopeToggle: 'Ganti cakupan pustaka',
-  AppLocale.libraryScopeSwitched: 'Menampilkan: {scope}',
   AppLocale.libraryOfflineCached:
       'Offline — menampilkan pustaka RomM dari cache',
   AppLocale.rommRemoteOnlySystemLabel: 'Hanya di server RomM',

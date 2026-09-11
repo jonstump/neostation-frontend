@@ -1455,7 +1455,6 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.libraryScopeDownloaded: '다운로드됨',
   AppLocale.libraryScopeFooter: '라이브러리: {scope}',
   AppLocale.libraryScopeToggle: '라이브러리 범위 전환',
-  AppLocale.libraryScopeSwitched: '표시 중: {scope}',
   AppLocale.libraryOfflineCached: '오프라인 — 캐시된 RomM 라이브러리를 표시 중',
   AppLocale.rommRemoteOnlySystemLabel: 'RomM 서버에만 있음',
   AppLocale.rommRefreshLibraryNow: '지금 RomM 라이브러리 새로 고침',

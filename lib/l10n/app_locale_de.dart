@@ -1656,7 +1656,6 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.libraryScopeDownloaded: 'Heruntergeladen',
   AppLocale.libraryScopeFooter: 'Bibliothek: {scope}',
   AppLocale.libraryScopeToggle: 'Bibliotheksumfang wechseln',
-  AppLocale.libraryScopeSwitched: 'Angezeigt: {scope}',
   AppLocale.libraryOfflineCached:
       'Offline — zwischengespeicherte RomM-Bibliothek wird angezeigt',
   AppLocale.rommRemoteOnlySystemLabel: 'Nur auf dem RomM-Server',

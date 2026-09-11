@@ -190,9 +190,6 @@ extension _ContextMenu on _SystemGamesListState {
       onUploadToRomm: onUploadToRomm,
       onViewMode: () =>
           GameViewModeDropdown.globalKey.currentState?.showDropdown(),
-      // The same switch Select + X is, for a user without a pad.
-      // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
-      onToggleLibraryScope: _libraryScopeAvailable ? _toggleLibraryScope : null,
       onRandom: _showRandomGameDialog,
     );
 

@@ -39,7 +39,6 @@ void main() {
     AppLocale.libraryScopeDownloaded,
     AppLocale.libraryScopeFooter,
     AppLocale.libraryScopeToggle,
-    AppLocale.libraryScopeSwitched,
     AppLocale.libraryOfflineCached,
     AppLocale.rommRemoteOnlySystemLabel,
     AppLocale.rommRefreshLibraryNow,
@@ -60,7 +59,6 @@ void main() {
 
   test('English carries the placeholders the code substitutes', () {
     expect(tokensOf(appLocaleEn[AppLocale.libraryScopeFooter]), {'{scope}'});
-    expect(tokensOf(appLocaleEn[AppLocale.libraryScopeSwitched]), {'{scope}'});
     expect(tokensOf(appLocaleEn[AppLocale.rommCoverCacheSizeValue]), {
       '{size}',
     });

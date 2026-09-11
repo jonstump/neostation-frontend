@@ -1389,7 +1389,6 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.libraryScopeDownloaded: '已下載',
   AppLocale.libraryScopeFooter: '媒體庫：{scope}',
   AppLocale.libraryScopeToggle: '切換媒體庫範圍',
-  AppLocale.libraryScopeSwitched: '正在顯示：{scope}',
   AppLocale.libraryOfflineCached: '離線 — 正在顯示快取的 RomM 媒體庫',
   AppLocale.rommRemoteOnlySystemLabel: '僅在 RomM 伺服器上',
   AppLocale.rommRefreshLibraryNow: '立即重新整理 RomM 媒體庫',

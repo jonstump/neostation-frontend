@@ -42,7 +42,6 @@ const String _createId = 'create';
 const String _scrapeId = 'scrape';
 const String _viewModeId = 'view_mode';
 const String _randomId = 'random';
-const String _libraryScopeId = 'library_scope';
 const String _downloadId = 'download';
 const String _cancelDownloadId = 'cancel_download';
 const String _uploadToRommId = 'upload_to_romm';
@@ -80,11 +79,13 @@ const String _togglePrefix = 'toggle:';
 /// separated from it, and each is omitted when the host has nothing to bind —
 /// the menu is the only route to them for a user without a gamepad.
 ///
-/// [onToggleLibraryScope] is the third view-level action: it flips the
-/// unified library between `all` and `downloaded`, the same thing Select + X
-/// does on the pad. Omitted when the feature is off. [onSettings] is null for
-/// an entry that has no per-game settings to open — a remote entry, which
-/// has no local row for them to be keyed to.
+/// Library scope is deliberately **not** here. It is a view-level filter on a
+/// per-game menu, which reads as acting on the highlighted game, and the
+/// footer pill already carries it — showing the chord, the current scope and
+/// its icon, tappable for a user without a pad. Issue #234.
+///
+/// [onSettings] is null for an entry that has no per-game settings to open —
+/// a remote entry, which has no local row for them to be keyed to.
 ///
 /// [onDownload] and [onCancelDownload] are a remote entry's own actions, at
 /// the top where Settings sits for a local game: the host binds the first
@@ -109,7 +110,6 @@ Future<void> showGameContextMenu({
   VoidCallback? onScrape,
   VoidCallback? onViewMode,
   VoidCallback? onRandom,
-  VoidCallback? onToggleLibraryScope,
   VoidCallback? onDownload,
   String? downloadLabel,
   VoidCallback? onCancelDownload,
@@ -187,19 +187,12 @@ Future<void> showGameContextMenu({
         icon: Symbols.grid_view_rounded,
         separatorBefore: true,
       ),
-    if (onToggleLibraryScope != null)
-      ContextMenuItem(
-        id: _libraryScopeId,
-        label: AppLocale.libraryScopeToggle.getString(context),
-        icon: Symbols.cloud_rounded,
-        separatorBefore: onViewMode == null,
-      ),
     if (onRandom != null)
       ContextMenuItem(
         id: _randomId,
         label: AppLocale.randomGame.getString(context),
         icon: Symbols.casino_rounded,
-        separatorBefore: onViewMode == null && onToggleLibraryScope == null,
+        separatorBefore: onViewMode == null,
       ),
   ];
 
@@ -235,10 +228,6 @@ Future<void> showGameContextMenu({
   }
   if (result == _cancelDownloadId) {
     onCancelDownload?.call();
-    return;
-  }
-  if (result == _libraryScopeId) {
-    onToggleLibraryScope?.call();
     return;
   }
   if (result == _scrapeId) {

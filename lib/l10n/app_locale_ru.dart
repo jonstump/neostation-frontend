@@ -1602,7 +1602,6 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.libraryScopeDownloaded: 'Загруженные',
   AppLocale.libraryScopeFooter: 'Библиотека: {scope}',
   AppLocale.libraryScopeToggle: 'Переключить область библиотеки',
-  AppLocale.libraryScopeSwitched: 'Показано: {scope}',
   AppLocale.libraryOfflineCached:
       'Офлайн — показана кэшированная библиотека RomM',
   AppLocale.rommRemoteOnlySystemLabel: 'Только на сервере RomM',
