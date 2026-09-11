@@ -173,8 +173,11 @@ class GameViewFooter extends StatelessWidget {
             // Scaled rather than shed, unlike the details-card footer: that row
             // is a curated budget of items each of which has a documented place
             // in the order things are dropped, and this one is a mixed group with
-            // no such order. Nothing moves at any width the group already fits
-            // in, which is every width it is laid out in today.
+            // no such order. The scale is 1.0 wherever the group already fits,
+            // which is every width English is laid out in today; the one real
+            // case that scales is German on a 4:3 panel, at 0.866. The file
+            // this replaces throws an overflow at exactly that case, so the
+            // shrink is what a clipped row used to be, not a new cost.
             ConstrainedBox(
               constraints: BoxConstraints(
                 maxWidth: (constraints.maxWidth - 12.r).clamp(
