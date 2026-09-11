@@ -1534,6 +1534,25 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.rommSurpriseMeFailed:
       'Não foi possível carregar a escolha aleatória',
   AppLocale.rommSurpriseMePicked: 'Escolhido: {name}',
+  AppLocale.rommMaintenanceNotRunnable:
+      'Este servidor não permite que o NeoStation inicie essa tarefa. Inicie-a na interface web do RomM.',
+  AppLocale.rommScanStatus: 'Estado da análise',
+  AppLocale.rommScanWatchWaiting:
+      'A verificar se há uma análise em curso no servidor…',
+  AppLocale.rommScanWatchProgress: 'A analisar: {done} de {total} ROMs',
+  AppLocale.rommScanWatchProgressUnknown:
+      'O servidor está a analisar a biblioteca…',
+  AppLocale.rommScanWatchResults:
+      'Análise concluída: {new} novos, {identified} identificados',
+  AppLocale.rommScanWatchNothing:
+      'Análise concluída. Não foi encontrado nada novo.',
+  AppLocale.rommScanWatchFailed: 'A análise no servidor falhou.',
+  AppLocale.rommScanWatchNone:
+      'Não há nenhuma análise em curso no servidor. Inicie uma na interface web do RomM.',
+  AppLocale.rommScanWatchTimeout:
+      'Ainda a analisar após {minutes} minutos. Veja o resto no RomM.',
+  AppLocale.rommScanWatchUnreachable:
+      'Não foi possível verificar a análise no servidor. Abra o RomM para ver o progresso.',
   AppLocale.rommMaintenanceTitle: 'Manutenção do servidor',
   AppLocale.rommMaintenanceRescan: 'Reanalisar a biblioteca',
   AppLocale.rommMaintenanceRescanConfirm:
@@ -1721,6 +1740,8 @@ const Map<String, dynamic> appLocalePt = {
       'Varredura da biblioteca solicitada no servidor',
   AppLocale.rommUploadScanPending:
       'Aguardando uma varredura da biblioteca no servidor',
+  AppLocale.rommUploadScanRefused:
+      'Enviado, mas este servidor não permite que o NeoStation inicie uma análise. Inicie uma no RomM para indexar os ficheiros.',
   AppLocale.rommUploadLinkNow: 'Vincular agora',
   AppLocale.rommUploadLinkNowResult: '{count} jogos vinculados',
   AppLocale.rommUploadLinkNowNothing:

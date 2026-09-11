@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../models/game_model.dart';
+import '../models/romm_server_task.dart';
 import '../services/logger_service.dart';
 import '../services/retroachievements_hash_service.dart';
 import '../services/romm/rom_upload_source.dart';
@@ -99,9 +100,10 @@ typedef RommUploadSender =
       bool Function()? shouldCancel,
     });
 
-/// Requests the server's `scan_library` task and resolves to its id, or null
-/// when the call was gated. `RommProvider.runServerTask` in the app.
-typedef RommUploadScanRequester = Future<String?> Function();
+/// Asks the server to scan its library and reports what came of it.
+/// `RommProvider.requestLibraryScan` in the app, which probes what the server
+/// will actually run before asking for anything.
+typedef RommUploadScanRequester = Future<RommScanRequest> Function();
 
 /// Last chance to call the batch off once the files have been opened and
 /// their total size is known. Returning false ends the batch before anything
@@ -199,14 +201,25 @@ enum RommUploadScanState {
   /// Nothing was uploaded, so there was nothing to scan for.
   none,
 
-  /// `scan_library` was queued.
+  /// A scan the server named as runnable was queued.
   requested,
 
-  /// The files are on the server but no scan was queued: this login lacks
-  /// `tasks.run`, or the server was already scanning, or the request failed.
-  /// Honest rather than "failed": the files are there and the link pass
-  /// links them once the server indexes them.
+  /// The files are on the server and a scan is still expected to index them:
+  /// this login lacks `tasks.run` (somebody else's scan, or the server's own
+  /// schedule, will pick them up), the server was already scanning, or the
+  /// request never reached it. Honest rather than "failed": the link pass
+  /// links the files once the server indexes them.
   pending,
+
+  /// The files are on the server and **no scan is coming**: the server names
+  /// no scan a REST caller may start, or it refused the one it names.
+  ///
+  /// Split out of [pending] for issue #236. Everything used to be pending,
+  /// including the refusal RomM has answered `scan_library` with since at
+  /// least 4.8.0 — so the app told the user to wait for a scan that could
+  /// never start. The remedy is on the server's own web interface, and saying
+  /// so is the difference between a wait and an action.
+  refused,
 }
 
 /// How the batch ended.
@@ -258,6 +271,16 @@ class RommUploadSummary {
   final List<RommUploadFileOutcome> skipped;
   final List<RommUploadFileOutcome> failed;
   final RommUploadScanState scan;
+
+  /// The id the server gave the scan this batch queued, or empty when it
+  /// queued none (or gave no id). The watch that follows uses it to tell that
+  /// scan from whatever the server had been doing before the batch — without
+  /// it, a scan that takes a while to appear in the status list lets the
+  /// previous scan's finished counts be reported as this batch's result.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Maintenance Tasks"
+  final String scanTaskId;
+
   final RommUploadEnd end;
 
   /// The candidates behind [uploaded], in the same order.
@@ -281,6 +304,7 @@ class RommUploadSummary {
     this.skipped = const [],
     this.failed = const [],
     this.scan = RommUploadScanState.none,
+    this.scanTaskId = '',
     this.uploadedCandidates = const [],
     this.endDetail = '',
     required this.end,
@@ -292,7 +316,8 @@ class RommUploadSummary {
       skipped = const [],
       failed = const [],
       uploadedCandidates = const [],
-      scan = RommUploadScanState.none;
+      scan = RommUploadScanState.none,
+      scanTaskId = '';
 
   /// True when anything reached the server.
   bool get wroteSomething => uploaded.isNotEmpty;
@@ -341,7 +366,9 @@ class RommUploadBusyException implements Exception {
 class RommRomUpload extends ChangeNotifier {
   static final _defaultLog = LoggerService.instance;
 
-  /// The task the post-batch scan queues.
+  /// The task the post-batch scan asks for when the server's own registry
+  /// could not be read. RomM's historical library-scan name; a server that
+  /// answers `GET /api/tasks` names the task itself and this is not used.
   static const String scanTaskName = 'scan_library';
 
   final LoggerService _log;
@@ -392,7 +419,10 @@ class RommRomUpload extends ChangeNotifier {
   /// folded into the session's own cancel poll. After the last file, when at
   /// least one landed, [requestScan] is called once; a null [requestScan]
   /// means the caller cannot ask (no `tasks.run`) and the scan is reported
-  /// as pending. A scan the server refuses is pending too, never a failure.
+  /// as pending. A scan that is merely delayed — already running, or one this
+  /// login may not queue — is pending too, never a failure; a server that
+  /// will not start a scan at all is [RommUploadScanState.refused], which is
+  /// the one case the user has to act on.
   ///
   /// Never throws for a per-file problem: each is logged once and listed.
   /// Throws [RommUploadBusyException] before touching anything when a batch
@@ -428,6 +458,7 @@ class RommRomUpload extends ChangeNotifier {
     final failed = <RommUploadFileOutcome>[];
     var end = RommUploadEnd.completed;
     var scan = RommUploadScanState.none;
+    var scanTaskId = '';
     bool stopRequested() => shouldStop?.call() ?? false;
 
     try {
@@ -648,7 +679,9 @@ class RommRomUpload extends ChangeNotifier {
       // are indexed.
       // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Scan And Link After Upload"
       if (uploaded.isNotEmpty) {
-        scan = await _requestScan(requestScan);
+        final result = await _requestScan(requestScan);
+        scan = result.state;
+        scanTaskId = result.taskId;
       }
 
       return RommUploadSummary(
@@ -656,6 +689,7 @@ class RommRomUpload extends ChangeNotifier {
         skipped: skipped,
         failed: failed,
         scan: scan,
+        scanTaskId: scanTaskId,
         uploadedCandidates: uploadedCandidates,
         end: end,
       );
@@ -673,34 +707,78 @@ class RommRomUpload extends ChangeNotifier {
     }
   }
 
-  Future<RommUploadScanState> _requestScan(
+  /// Maps what the scan request reported onto what the summary tells the user.
+  ///
+  /// The one distinction that matters: a scan that is coming (queued, already
+  /// going, or one this login may not ask for but the server will run anyway)
+  /// is pending, and a server that will not start one at all is
+  /// [RommUploadScanState.refused]. A thrown exception is still handled here
+  /// — the requester is a callback, and a caller that lets one through should
+  /// not lose the batch's summary over it.
+  ///
+  /// The task id comes back with the state so the watch that follows can tell
+  /// the scan it queued from whatever the server was doing before it.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Scan And Link After Upload"
+  Future<({RommUploadScanState state, String taskId})> _requestScan(
     RommUploadScanRequester? requestScan,
   ) async {
+    ({RommUploadScanState state, String taskId}) result(
+      RommUploadScanState state, [
+      String taskId = '',
+    ]) => (state: state, taskId: taskId);
+
     if (requestScan == null) {
       _log.i('RomM upload scan pending: reason=tasks_run_not_granted');
-      return RommUploadScanState.pending;
+      return result(RommUploadScanState.pending);
     }
     try {
-      final id = await requestScan();
-      if (id == null) {
-        _log.i('RomM upload scan pending: reason=gated');
-        return RommUploadScanState.pending;
+      final request = await requestScan();
+      switch (request.outcome) {
+        case RommScanRequestOutcome.queued:
+          _log.i(
+            'RomM upload scan requested: task=${request.taskName} '
+            'id=${request.taskId}',
+          );
+          return result(
+            RommUploadScanState.requested,
+            request.correlationId ?? '',
+          );
+        case RommScanRequestOutcome.alreadyRunning:
+          _log.i('RomM upload scan pending: reason=already_running');
+          return result(RommUploadScanState.pending);
+        case RommScanRequestOutcome.notGranted:
+          _log.i('RomM upload scan pending: reason=gated');
+          return result(RommUploadScanState.pending);
+        case RommScanRequestOutcome.unavailable:
+          _log.w('RomM upload scan pending: reason=request_not_delivered');
+          return result(RommUploadScanState.pending);
+        case RommScanRequestOutcome.refused:
+          _log.w(
+            'RomM upload scan refused: task=${request.taskName} '
+            'reason=server_will_not_run_a_scan',
+          );
+          return result(RommUploadScanState.refused);
       }
-      _log.i('RomM upload scan requested: task=$scanTaskName id=$id');
-      return RommUploadScanState.requested;
     } on RommException catch (e) {
       if (e.kind == RommErrorKind.taskBusy) {
         _log.i('RomM upload scan pending: reason=already_running');
-      } else {
-        _log.w(
-          'RomM upload scan pending: reason=request_failed '
-          'kind=${e.kind.name} status=${e.statusCode}',
-        );
+        return result(RommUploadScanState.pending);
       }
-      return RommUploadScanState.pending;
+      // Only RomM's own refusal statuses are a refusal; a proxy's 5xx or a
+      // 429 is a server that was briefly unreachable, and telling the user to
+      // go start a scan by hand over one would be the same false certainty
+      // this split set out to remove.
+      final refused = RommScanRequest.isRefusalStatus(e.statusCode);
+      _log.w(
+        'RomM upload scan ${refused ? 'refused' : 'pending'}: '
+        'reason=request_failed kind=${e.kind.name} status=${e.statusCode}',
+      );
+      return result(
+        refused ? RommUploadScanState.refused : RommUploadScanState.pending,
+      );
     } catch (e) {
       _log.w('RomM upload scan pending: reason=request_failed error=$e');
-      return RommUploadScanState.pending;
+      return result(RommUploadScanState.pending);
     }
   }
 

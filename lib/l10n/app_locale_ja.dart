@@ -1370,6 +1370,20 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommSurpriseMeUnsupported: 'この RomM サーバーはランダム選択に対応していない古いバージョンです',
   AppLocale.rommSurpriseMeFailed: 'ランダム選択を読み込めませんでした',
   AppLocale.rommSurpriseMePicked: '{name} を選びました',
+  AppLocale.rommMaintenanceNotRunnable:
+      'このサーバーでは NeoStation からそのタスクを開始できません。RomM のウェブ画面から実行してください。',
+  AppLocale.rommScanStatus: 'スキャンの状態',
+  AppLocale.rommScanWatchWaiting: 'サーバーで実行中のスキャンを確認しています…',
+  AppLocale.rommScanWatchProgress: 'スキャン中: {total} 本中 {done} 本',
+  AppLocale.rommScanWatchProgressUnknown: 'サーバーがライブラリをスキャンしています…',
+  AppLocale.rommScanWatchResults: 'スキャン完了: 新規 {new} 件、識別 {identified} 件',
+  AppLocale.rommScanWatchNothing: 'スキャンが完了しました。新しいものは見つかりませんでした。',
+  AppLocale.rommScanWatchFailed: 'サーバーでのスキャンに失敗しました。',
+  AppLocale.rommScanWatchNone: 'サーバーでスキャンは実行されていません。RomM のウェブ画面から開始してください。',
+  AppLocale.rommScanWatchTimeout:
+      '{minutes} 分経ってもスキャンが続いています。残りは RomM で確認してください。',
+  AppLocale.rommScanWatchUnreachable:
+      'サーバーでスキャンを確認できませんでした。進捗は RomM で確認してください。',
   AppLocale.rommMaintenanceTitle: 'サーバーのメンテナンス',
   AppLocale.rommMaintenanceRescan: 'ライブラリを再スキャン',
   AppLocale.rommMaintenanceRescanConfirm:
@@ -1531,6 +1545,8 @@ const Map<String, dynamic> appLocaleJa = {
       'アップロードを停止しました。RomM に到達できません — {summary}',
   AppLocale.rommUploadScanRequested: 'サーバーにライブラリスキャンを要求しました',
   AppLocale.rommUploadScanPending: 'サーバーのライブラリスキャン待ちです',
+  AppLocale.rommUploadScanRefused:
+      'アップロードは完了しましたが、このサーバーでは NeoStation からスキャンを開始できません。ファイルを登録するには RomM でスキャンしてください。',
   AppLocale.rommUploadLinkNow: '今すぐリンク',
   AppLocale.rommUploadLinkNowResult: '{count} 本のゲームをリンクしました',
   AppLocale.rommUploadLinkNowNothing: 'まだリンクされていません。サーバーがスキャン中の可能性があります',

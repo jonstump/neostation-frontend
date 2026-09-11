@@ -1377,6 +1377,20 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommSurpriseMeUnsupported: '이 RomM 서버는 무작위 선택을 지원하기에 너무 오래된 버전입니다',
   AppLocale.rommSurpriseMeFailed: '무작위 선택을 불러오지 못했습니다',
   AppLocale.rommSurpriseMePicked: '{name}을(를) 골랐습니다',
+  AppLocale.rommMaintenanceNotRunnable:
+      '이 서버에서는 NeoStation이 해당 작업을 시작할 수 없습니다. RomM 웹 인터페이스에서 실행하세요.',
+  AppLocale.rommScanStatus: '스캔 상태',
+  AppLocale.rommScanWatchWaiting: '서버에서 실행 중인 스캔을 확인하는 중…',
+  AppLocale.rommScanWatchProgress: '스캔 중: {total}개 중 {done}개',
+  AppLocale.rommScanWatchProgressUnknown: '서버가 라이브러리를 스캔하고 있습니다…',
+  AppLocale.rommScanWatchResults: '스캔 완료: 새 항목 {new}개, 식별 {identified}개',
+  AppLocale.rommScanWatchNothing: '스캔이 완료되었습니다. 새로운 항목이 없습니다.',
+  AppLocale.rommScanWatchFailed: '서버의 스캔에 실패했습니다.',
+  AppLocale.rommScanWatchNone: '서버에서 실행 중인 스캔이 없습니다. RomM 웹 인터페이스에서 시작하세요.',
+  AppLocale.rommScanWatchTimeout:
+      '{minutes}분이 지나도 스캔이 계속됩니다. 나머지는 RomM에서 확인하세요.',
+  AppLocale.rommScanWatchUnreachable:
+      '서버에서 스캔을 확인할 수 없습니다. 진행 상황은 RomM에서 확인하세요.',
   AppLocale.rommMaintenanceTitle: '서버 유지 관리',
   AppLocale.rommMaintenanceRescan: '라이브러리 다시 검사',
   AppLocale.rommMaintenanceRescanConfirm:
@@ -1537,6 +1551,8 @@ const Map<String, dynamic> appLocaleKo = {
       '업로드 중단됨, RomM에 연결할 수 없음 — {summary}',
   AppLocale.rommUploadScanRequested: '서버에 라이브러리 검사를 요청했습니다',
   AppLocale.rommUploadScanPending: '서버의 라이브러리 검사를 기다리는 중',
+  AppLocale.rommUploadScanRefused:
+      '업로드했지만 이 서버에서는 NeoStation이 스캔을 시작할 수 없습니다. 파일을 색인하려면 RomM에서 스캔하세요.',
   AppLocale.rommUploadLinkNow: '지금 연결',
   AppLocale.rommUploadLinkNowResult: '게임 {count}개 연결됨',
   AppLocale.rommUploadLinkNowNothing: '아직 연결된 항목 없음; 서버가 아직 검사 중일 수 있습니다',

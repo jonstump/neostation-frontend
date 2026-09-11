@@ -1566,6 +1566,24 @@ const Map<String, dynamic> appLocaleFr = {
       'Ce serveur RomM est trop ancien pour un tirage au sort',
   AppLocale.rommSurpriseMeFailed: 'Le tirage au sort n\'a pas pu être chargé',
   AppLocale.rommSurpriseMePicked: 'Choisi : {name}',
+  AppLocale.rommMaintenanceNotRunnable:
+      'Ce serveur ne laisse pas NeoStation lancer cette tâche. Lancez-la depuis l\'interface web de RomM.',
+  AppLocale.rommScanStatus: 'État de l\'analyse',
+  AppLocale.rommScanWatchWaiting:
+      'Vérification d\'une analyse en cours sur le serveur…',
+  AppLocale.rommScanWatchProgress: 'Analyse : {done} ROM sur {total}',
+  AppLocale.rommScanWatchProgressUnknown: 'Le serveur analyse sa bibliothèque…',
+  AppLocale.rommScanWatchResults:
+      'Analyse terminée : {new} nouveaux, {identified} identifiés',
+  AppLocale.rommScanWatchNothing:
+      'Analyse terminée. Rien de nouveau n\'a été trouvé.',
+  AppLocale.rommScanWatchFailed: 'L\'analyse sur le serveur a échoué.',
+  AppLocale.rommScanWatchNone:
+      'Aucune analyse n\'est en cours sur le serveur. Lancez-en une depuis l\'interface web de RomM.',
+  AppLocale.rommScanWatchTimeout:
+      'Toujours en cours après {minutes} minutes. Consultez la suite dans RomM.',
+  AppLocale.rommScanWatchUnreachable:
+      'Impossible de vérifier l\'analyse sur le serveur. Ouvrez RomM pour voir où elle en est.',
   AppLocale.rommMaintenanceTitle: 'Maintenance du serveur',
   AppLocale.rommMaintenanceRescan: 'Réanalyser la bibliothèque',
   AppLocale.rommMaintenanceRescanConfirm:
@@ -1758,6 +1776,8 @@ const Map<String, dynamic> appLocaleFr = {
       'Analyse de la bibliothèque demandée sur le serveur',
   AppLocale.rommUploadScanPending:
       'En attente d’une analyse de la bibliothèque sur le serveur',
+  AppLocale.rommUploadScanRefused:
+      'Envoyé, mais ce serveur ne laisse pas NeoStation lancer d\'analyse. Lancez-en une dans RomM pour indexer les fichiers.',
   AppLocale.rommUploadLinkNow: 'Lier maintenant',
   AppLocale.rommUploadLinkNowResult: '{count} jeux liés',
   AppLocale.rommUploadLinkNowNothing:

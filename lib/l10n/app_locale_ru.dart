@@ -1515,6 +1515,23 @@ const Map<String, dynamic> appLocaleRu = {
       'Этот сервер RomM слишком старый для случайного выбора',
   AppLocale.rommSurpriseMeFailed: 'Не удалось загрузить случайный выбор',
   AppLocale.rommSurpriseMePicked: 'Выбрано: {name}',
+  AppLocale.rommMaintenanceNotRunnable:
+      'Этот сервер не позволяет NeoStation запускать эту задачу. Запустите её в веб-интерфейсе RomM.',
+  AppLocale.rommScanStatus: 'Состояние сканирования',
+  AppLocale.rommScanWatchWaiting: 'Проверяем, идёт ли сканирование на сервере…',
+  AppLocale.rommScanWatchProgress: 'Сканирование: {done} из {total} ROM',
+  AppLocale.rommScanWatchProgressUnknown: 'Сервер сканирует библиотеку…',
+  AppLocale.rommScanWatchResults:
+      'Сканирование завершено: {new} новых, {identified} опознано',
+  AppLocale.rommScanWatchNothing:
+      'Сканирование завершено. Ничего нового не найдено.',
+  AppLocale.rommScanWatchFailed: 'Сканирование на сервере завершилось ошибкой.',
+  AppLocale.rommScanWatchNone:
+      'На сервере не выполняется сканирование. Запустите его в веб-интерфейсе RomM.',
+  AppLocale.rommScanWatchTimeout:
+      'Сканирование идёт уже {minutes} мин. Остальное смотрите в RomM.',
+  AppLocale.rommScanWatchUnreachable:
+      'Не удалось проверить сканирование на сервере. Откройте RomM, чтобы увидеть его состояние.',
   AppLocale.rommMaintenanceTitle: 'Обслуживание сервера',
   AppLocale.rommMaintenanceRescan: 'Пересканировать библиотеку',
   AppLocale.rommMaintenanceRescanConfirm:
@@ -1696,6 +1713,8 @@ const Map<String, dynamic> appLocaleRu = {
       'Сканирование библиотеки запрошено на сервере',
   AppLocale.rommUploadScanPending:
       'Ожидается сканирование библиотеки на сервере',
+  AppLocale.rommUploadScanRefused:
+      'Загружено, но этот сервер не позволяет NeoStation запустить сканирование. Запустите его в RomM, чтобы файлы попали в библиотеку.',
   AppLocale.rommUploadLinkNow: 'Связать сейчас',
   AppLocale.rommUploadLinkNowResult: 'Связано игр: {count}',
   AppLocale.rommUploadLinkNowNothing:

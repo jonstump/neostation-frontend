@@ -27,6 +27,7 @@ const _strings = RommUploadStrings(
   disconnectedTemplate: 'disconnected {summary}',
   scanRequested: 'scan-requested',
   scanPending: 'scan-pending',
+  scanRefused: 'scan-refused',
   linkNow: 'link-now',
   linkNowResultTemplate: 'linked {count}',
   linkNowNothing: 'linked-nothing',

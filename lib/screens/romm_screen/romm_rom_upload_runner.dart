@@ -15,6 +15,7 @@ import '../../services/logger_service.dart';
 import '../../utils/byte_size_format.dart';
 import '../../widgets/confirm_action_dialog.dart';
 import '../../widgets/custom_notification.dart';
+import 'romm_scan_watch_runner.dart';
 
 /// The localized text a detached ROM upload reports with, resolved up front
 /// so the run never needs a [BuildContext] once it has started.
@@ -28,6 +29,7 @@ class RommUploadStrings {
   final String disconnectedTemplate;
   final String scanRequested;
   final String scanPending;
+  final String scanRefused;
   final String linkNow;
   final String linkNowResultTemplate;
   final String linkNowNothing;
@@ -58,6 +60,7 @@ class RommUploadStrings {
     required this.disconnectedTemplate,
     required this.scanRequested,
     required this.scanPending,
+    required this.scanRefused,
     required this.linkNow,
     required this.linkNowResultTemplate,
     required this.linkNowNothing,
@@ -91,6 +94,7 @@ class RommUploadStrings {
       disconnectedTemplate: s(AppLocale.rommUploadSummaryDisconnected),
       scanRequested: s(AppLocale.rommUploadScanRequested),
       scanPending: s(AppLocale.rommUploadScanPending),
+      scanRefused: s(AppLocale.rommUploadScanRefused),
       linkNow: s(AppLocale.rommUploadLinkNow),
       linkNowResultTemplate: s(AppLocale.rommUploadLinkNowResult),
       linkNowNothing: s(AppLocale.rommUploadLinkNowNothing),
@@ -232,6 +236,8 @@ class RommUploadStrings {
         lines.add(scanRequested);
       case RommUploadScanState.pending:
         lines.add(scanPending);
+      case RommUploadScanState.refused:
+        lines.add(scanRefused);
       case RommUploadScanState.none:
         break;
     }
@@ -357,6 +363,9 @@ class RommRomUploadRunner {
     bool singleGame = false,
   }) async {
     final strings = RommUploadStrings.of(context);
+    // Resolved with the rest: the batch outlives this context, and a scan it
+    // queues is watched after it ends.
+    final watchStrings = RommScanWatchStrings.of(context);
     final romm = context.read<RommProvider>();
     final notifications = GlobalNotificationService();
 
@@ -457,6 +466,27 @@ class RommRomUploadRunner {
             )
           : null,
     );
+
+    // The batch's own row is finished; what the server's scan then finds gets
+    // its own, from the same watcher a "Scan status" check uses. Only a scan
+    // that was actually queued is watched — a refused one has nothing to
+    // report, and the summary above has already said so. Issue #236.
+    // Governing: ADR-0019, SPEC-0018 REQ "Maintenance Tasks",
+    // SPEC-0014 REQ "Scan And Link After Upload"
+    if (summary.scan == RommUploadScanState.requested) {
+      unawaited(
+        RommScanWatchRunner.runDetached(
+          strings: watchStrings,
+          poll: romm.scanTaskStatus,
+          shouldStop: () => !romm.isConnected,
+          awaitStart: true,
+          // Correlate when the server named the job: a scan that takes longer
+          // than the grace to appear must not let the previous scan's counts
+          // be reported as this batch's result.
+          expectTaskId: summary.scanTaskId,
+        ),
+      );
+    }
   }
 
   /// The row a batch ends on: the summary, with no progress bar under it and

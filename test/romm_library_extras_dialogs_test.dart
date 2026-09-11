@@ -236,7 +236,7 @@ void main() {
   });
 
   group('maintenance menu', () {
-    testWidgets('offers exactly the three tasks', (tester) async {
+    testWidgets('offers a row for every entry', (tester) async {
       await pumpApp(tester);
       unawaited(RommMaintenanceMenuDialog.show(host));
       await settle(tester);
@@ -281,11 +281,17 @@ void main() {
     testWidgets('the task names are RomM\'s registry names', (tester) async {
       // Wire contract, not UI: a typo here is a 404 the user reads as
       // "the task could not be started".
-      expect(RommMaintenanceTask.values.map((t) => t.taskName), [
-        'scan_library',
-        'sync_folder_scan',
-        'cleanup_missing_roms',
-      ]);
+      expect(
+        RommMaintenanceTask.values
+            .where((t) => t.queuesTask)
+            .map((t) => t.taskName),
+        ['scan_library', 'sync_folder_scan', 'cleanup_missing_roms'],
+      );
+      // Appended, never inserted: the rows are drawn in enum order and the
+      // focus index is an ordinal. Issue #236 added the status check last.
+      expect(RommMaintenanceTask.values.last, RommMaintenanceTask.scanStatus);
+      expect(RommMaintenanceTask.scanStatus.queuesTask, isFalse);
+      expect(RommMaintenanceTask.scanStatus.confirmBodyKey, isNull);
     });
   });
 }

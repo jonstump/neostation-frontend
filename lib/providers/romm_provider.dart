@@ -15,9 +15,11 @@ import '../models/romm_pairing.dart';
 import '../models/romm_platform.dart';
 import '../models/romm_rom.dart';
 import '../models/romm_rom_filters.dart';
+import '../models/romm_scan_task_status.dart';
 import '../models/romm_scrape_step.dart';
 import '../models/romm_screenshot.dart';
 import '../models/romm_server_capabilities.dart';
+import '../models/romm_server_task.dart';
 import '../models/system_model.dart';
 import '../repositories/collection_repository.dart';
 import '../repositories/game_repository.dart';
@@ -1780,6 +1782,149 @@ class RommProvider extends ChangeNotifier {
     return id;
   }
 
+  /// What the server says it knows how to run, cached for [_serverTasksTtl].
+  ///
+  /// Null is "could not ask", not "nothing" — see
+  /// [RommService.listServerTasks]. The cache exists because a maintenance
+  /// press and the scan after an upload both want the same answer within
+  /// seconds of each other, and `GET /api/tasks` walks the whole registry.
+  // Governing: ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
+  Future<List<RommServerTask>?> serverTasks({bool refresh = false}) async {
+    final cached = _serverTasks;
+    final at = _serverTasksAt;
+    if (!refresh &&
+        cached != null &&
+        at != null &&
+        DateTime.now().difference(at) < _serverTasksTtl) {
+      return cached;
+    }
+    final tasks = await service.listServerTasks();
+    await _persistRefreshedTokens();
+    if (tasks != null) {
+      _serverTasks = tasks;
+      _serverTasksAt = DateTime.now();
+    }
+    return tasks;
+  }
+
+  List<RommServerTask>? _serverTasks;
+  DateTime? _serverTasksAt;
+  static const Duration _serverTasksTtl = Duration(minutes: 2);
+
+  /// Whether the server will start [name] for a REST caller: true yes, false
+  /// no, null unknown.
+  ///
+  /// False also covers a task the server's registry does not list at all — a
+  /// name it does not know is a name it will not run, and saying so is better
+  /// than sending a request whose refusal the user reads as a mystery. Null
+  /// (the registry could not be read) means the caller should just try.
+  // Governing: ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
+  Future<bool?> serverTaskRunnable(String name) async {
+    final tasks = await serverTasks();
+    if (tasks == null) return null;
+    for (final task in tasks) {
+      if (task.name == name) return task.runnable;
+    }
+    return false;
+  }
+
+  /// Asks the server to scan its library, having first asked what it will run.
+  ///
+  /// This replaced a blind `POST /api/tasks/run/scan_library` after every
+  /// upload. That request has never queued anything on a modern server:
+  /// RomM's registry marks `scan_library` as not manually runnable and the
+  /// run route refuses it, which is the undocumented 400 issue #170 recorded
+  /// against RomM 5.1.0 — and the app reported it as pending, so the user
+  /// waited for a scan that was never going to happen.
+  ///
+  /// The probe is a data check, not a version check: `GET /api/tasks` exists
+  /// on every RomM release NeoStation supports, and what changes between them
+  /// is each task's `manual_run` flag, which only the server can answer.
+  ///
+  /// [RommScanRequestOutcome.refused] is the honest new answer — the files are
+  /// on the server and nothing more will happen until a scan is started from
+  /// RomM's own interface. Everything transient stays pending.
+  // Governing: ADR-0019, SPEC-0018 REQ "Maintenance Tasks",
+  // ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Scan And Link After Upload"
+  Future<RommScanRequest> requestLibraryScan() async {
+    if (!canRunServerTasks) {
+      return const RommScanRequest(RommScanRequestOutcome.notGranted);
+    }
+
+    var name = RommRomUpload.scanTaskName;
+    final tasks = await serverTasks();
+    if (tasks != null) {
+      final pick = RommServerTask.pickScan(tasks);
+      if (pick == null) {
+        _log.w(
+          'RomM scan not requested: reason=no_runnable_scan_task '
+          'tasks="${tasks.map((t) => '${t.name}:${t.manualRun}').join(',')}"',
+        );
+        return const RommScanRequest(RommScanRequestOutcome.refused);
+      }
+      name = pick.name;
+    }
+
+    try {
+      final id = await runServerTask(name);
+      if (id == null) {
+        return RommScanRequest(
+          RommScanRequestOutcome.notGranted,
+          taskName: name,
+        );
+      }
+      return RommScanRequest(
+        RommScanRequestOutcome.queued,
+        taskName: name,
+        taskId: id,
+      );
+    } on RommException catch (e) {
+      if (e.kind == RommErrorKind.taskBusy) {
+        return RommScanRequest(
+          RommScanRequestOutcome.alreadyRunning,
+          taskName: name,
+        );
+      }
+      if (e.kind == RommErrorKind.scopeDenied) {
+        return RommScanRequest(
+          RommScanRequestOutcome.notGranted,
+          taskName: name,
+        );
+      }
+      // Only the statuses RomM itself refuses with are a refusal. No status
+      // means the request never reached RomM (timeout, socket), and a
+      // transient one — a proxy's 5xx, a 429 — means it may never have got
+      // there either; neither is the server declining to scan, and saying it
+      // is would send the user to fix a server that was merely busy.
+      final outcome = RommScanRequest.isRefusalStatus(e.statusCode)
+          ? RommScanRequestOutcome.refused
+          : RommScanRequestOutcome.unavailable;
+      _log.w(
+        'RomM scan request failed: task=$name status=${e.statusCode} '
+        'outcome=${outcome.name}',
+      );
+      return RommScanRequest(outcome, taskName: name);
+    } catch (e) {
+      _log.w('RomM scan request failed: task=$name error=$e');
+      return RommScanRequest(
+        RommScanRequestOutcome.unavailable,
+        taskName: name,
+      );
+    }
+  }
+
+  /// The newest library scan the server reports.
+  ///
+  /// The watcher's single server call; it reports a scan started from RomM's
+  /// web UI exactly like one this app queued. A poll the server did not answer
+  /// is [RommScanPoll.unanswered], never an answer of "no scan".
+  // Governing: ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
+  Future<RommScanPoll> scanTaskStatus() async {
+    final poll = await service.getScanTaskStatus();
+    await _persistRefreshedTokens();
+    return poll;
+  }
+
   // ── ROM upload ─────────────────────────────────────────────────────────────
 
   /// The upload batch in progress, if any: progress for a settings row still
@@ -1998,15 +2143,13 @@ class RommProvider extends ChangeNotifier {
           },
       // The scope is read when the scan is asked for, at the end of the
       // batch, not when it is bound: a group learned while the files were
-      // going up counts. Null from here is the gated answer the engine
-      // reports as pending.
+      // going up counts. What the server will actually run is asked at the
+      // same moment, and a server that will run no scan is reported as
+      // refused rather than as pending (issue #236).
       // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Optional Scope Groups",
       // ADR-0019 (expose RomM library filters, search and maintenance),
       // SPEC-0018 REQ "Maintenance Tasks"
-      requestScan: () async {
-        if (!canRunServerTasks) return null;
-        return runServerTask(RommRomUpload.scanTaskName);
-      },
+      requestScan: requestLibraryScan,
       shouldStop: () =>
           !isConnected || _reachability == RommReachability.offline,
       confirm: confirm,

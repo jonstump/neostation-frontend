@@ -1549,6 +1549,25 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.rommSurpriseMeFailed:
       'Non è stato possibile caricare la scelta casuale',
   AppLocale.rommSurpriseMePicked: 'Scelto: {name}',
+  AppLocale.rommMaintenanceNotRunnable:
+      'Questo server non consente a NeoStation di avviare quell\'attività. Avviala dall\'interfaccia web di RomM.',
+  AppLocale.rommScanStatus: 'Stato della scansione',
+  AppLocale.rommScanWatchWaiting:
+      'Controllo di una scansione in corso sul server…',
+  AppLocale.rommScanWatchProgress: 'Scansione: {done} di {total} ROM',
+  AppLocale.rommScanWatchProgressUnknown:
+      'Il server sta scansionando la sua libreria…',
+  AppLocale.rommScanWatchResults:
+      'Scansione completata: {new} nuovi, {identified} identificati',
+  AppLocale.rommScanWatchNothing:
+      'Scansione completata. Non è stato trovato nulla di nuovo.',
+  AppLocale.rommScanWatchFailed: 'La scansione sul server non è riuscita.',
+  AppLocale.rommScanWatchNone:
+      'Nessuna scansione in corso sul server. Avviane una dall\'interfaccia web di RomM.',
+  AppLocale.rommScanWatchTimeout:
+      'Ancora in scansione dopo {minutes} minuti. Controlla il resto in RomM.',
+  AppLocale.rommScanWatchUnreachable:
+      'Non è stato possibile verificare la scansione sul server. Apri RomM per vedere a che punto è.',
   AppLocale.rommMaintenanceTitle: 'Manutenzione del server',
   AppLocale.rommMaintenanceRescan: 'Riesamina la libreria',
   AppLocale.rommMaintenanceRescanConfirm:
@@ -1739,6 +1758,8 @@ const Map<String, dynamic> appLocaleIt = {
       'Scansione della libreria richiesta sul server',
   AppLocale.rommUploadScanPending:
       'In attesa di una scansione della libreria sul server',
+  AppLocale.rommUploadScanRefused:
+      'Caricato, ma questo server non consente a NeoStation di avviare una scansione. Avviane una in RomM per indicizzare i file.',
   AppLocale.rommUploadLinkNow: 'Collega ora',
   AppLocale.rommUploadLinkNowResult: '{count} giochi collegati',
   AppLocale.rommUploadLinkNowNothing:

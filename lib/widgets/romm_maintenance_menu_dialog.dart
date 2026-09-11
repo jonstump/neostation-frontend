@@ -8,22 +8,39 @@ import '../services/game_service.dart' show GamepadNavigationManager;
 import '../services/sfx_service.dart';
 import '../utils/gamepad_nav.dart';
 
-/// The three RomM maintenance tasks NeoStation can queue, with the task names
-/// RomM's `tasks/registry` publishes.
+/// The RomM server actions this menu offers: the three tasks NeoStation can
+/// ask the server to queue, named as RomM's `tasks/registry` publishes them,
+/// and the read-only scan status check.
 ///
 /// Names are the wire contract of `POST /api/tasks/run/{name}` and are not
 /// localized; the label and the confirmation body beside them are.
+///
+/// [scanStatus] runs nothing, which is why its [taskName] is empty and its
+/// [confirmBodyKey] null. It exists because on a stock RomM server a library
+/// scan cannot be started over REST at all (issue #236) — the user starts one
+/// in RomM's web interface, and this is how they see what it did without
+/// leaving the app.
 // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
 // SPEC-0018 REQ "Maintenance Tasks"
 enum RommMaintenanceTask {
   rescanLibrary('scan_library'),
   syncFolderScan('sync_folder_scan'),
-  cleanupMissingRoms('cleanup_missing_roms');
+  cleanupMissingRoms('cleanup_missing_roms'),
+  scanStatus('');
 
   const RommMaintenanceTask(this.taskName);
 
-  /// The `{name}` in `POST /api/tasks/run/{name}`.
+  /// The `{name}` in `POST /api/tasks/run/{name}`, or empty for an entry that
+  /// queues nothing.
   final String taskName;
+
+  /// Whether picking this sends a task-run request (and so needs confirming).
+  bool get queuesTask => taskName.isNotEmpty;
+
+  /// Whether this task is a library scan, and so worth watching afterwards.
+  bool get isScan =>
+      this == RommMaintenanceTask.rescanLibrary ||
+      this == RommMaintenanceTask.syncFolderScan;
 
   /// The `AppLocale` key for this task's menu row.
   String get labelKey {
@@ -34,11 +51,14 @@ enum RommMaintenanceTask {
         return AppLocale.rommMaintenanceSyncFolders;
       case RommMaintenanceTask.cleanupMissingRoms:
         return AppLocale.rommMaintenanceCleanup;
+      case RommMaintenanceTask.scanStatus:
+        return AppLocale.rommScanStatus;
     }
   }
 
-  /// The `AppLocale` key for the body of this task's confirmation.
-  String get confirmBodyKey {
+  /// The `AppLocale` key for the body of this task's confirmation, or null
+  /// for an entry that changes nothing on the server and so is not confirmed.
+  String? get confirmBodyKey {
     switch (this) {
       case RommMaintenanceTask.rescanLibrary:
         return AppLocale.rommMaintenanceRescanConfirm;
@@ -46,6 +66,8 @@ enum RommMaintenanceTask {
         return AppLocale.rommMaintenanceSyncFoldersConfirm;
       case RommMaintenanceTask.cleanupMissingRoms:
         return AppLocale.rommMaintenanceCleanupConfirm;
+      case RommMaintenanceTask.scanStatus:
+        return null;
     }
   }
 
@@ -57,6 +79,8 @@ enum RommMaintenanceTask {
         return Symbols.folder_open_rounded;
       case RommMaintenanceTask.cleanupMissingRoms:
         return Symbols.cleaning_services_rounded;
+      case RommMaintenanceTask.scanStatus:
+        return Symbols.monitor_heart_rounded;
     }
   }
 }
@@ -67,7 +91,13 @@ enum RommMaintenanceTask {
 /// one, B closes. Returns the chosen task, or null on cancel — the *caller*
 /// then confirms it (via `ConfirmActionDialog`) and sends the request, so this
 /// dialog stays a chooser and the confirmation keeps the one wording the rest
-/// of the app uses for a consequential action.
+/// of the app uses for a consequential action. An entry that queues nothing
+/// ([RommMaintenanceTask.scanStatus]) has no confirmation to keep, and the
+/// caller skips it.
+///
+/// New entries are *appended* to the enum, never inserted: the rows are drawn
+/// in enum order and the focus index is an ordinal, so inserting one moves
+/// every row the user has learned the position of.
 ///
 /// Gamepad wiring follows [ConfirmActionDialog]: layer pushed in the same
 /// post-frame callback as `initialize()`, popped in `dispose()`.
