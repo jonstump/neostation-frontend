@@ -429,8 +429,17 @@ void main() {
   });
 
   group('new_only cooperation', () {
+    // Inverted by #233. This asserted the row was skipped, which is what
+    // SPEC-0005 REQ "Cooperation With ScreenScraper" and SPEC-0006 REQ
+    // "Cooperation With Provenance And Modes" currently require — and what the
+    // issue argues is wrong: a RomM fetch fills perhaps three of fourteen
+    // metadata columns and then marks the row done, so ScreenScraper never
+    // fills the rest. **Both specs need the requirement changed to match**;
+    // that edit is deferred to a docs PR because `sdd/` is protected in
+    // feature branches. Until it lands, this test and those requirements
+    // disagree on purpose, and the PR says so.
     // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "Cooperation With Provenance And Modes"
-    test('a row RomM completed is not a candidate in new_only', () async {
+    test('a row RomM completed is still a candidate in new_only', () async {
       await db.execute(
         "INSERT INTO app_systems (id, real_name, folder_name, screenscraper_id) VALUES ('snes', 'SNES', 'snes', 4)",
       );
@@ -457,10 +466,10 @@ void main() {
         'snes',
         'new_only',
       );
-      expect(newOnly.map((r) => r['filename']), ['other.sfc']);
+      expect(newOnly.map((r) => r['filename']), ['ct.sfc', 'other.sfc']);
       expect(
         await ScraperRepository.getRomCountForScraping('snes', 'new_only'),
-        1,
+        2,
       );
 
       final all = await ScraperRepository.getRomsForScraping('snes', 'all');

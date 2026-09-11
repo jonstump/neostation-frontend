@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:neostation/models/metadata_field_sources.dart';
 import 'package:neostation/repositories/scraper_repository.dart';
 
 import 'database_test_helper.dart';
@@ -250,7 +251,13 @@ void main() {
       expect(write, isNotNull);
       expect(
         write!.keys.toSet(),
-        {'genre', 'developer', 'players', 'updated_at'},
+        {
+          'genre',
+          'developer',
+          'players',
+          MetadataFieldSources.column,
+          'updated_at',
+        },
         reason:
             'populated columns are untouched, blank counts as empty, and '
             'the key / scrape state / source are not rewritten',
@@ -295,7 +302,11 @@ void main() {
         },
         source: MetadataSource.romm,
       );
-      expect(write!.keys.toSet(), {'genre', 'updated_at'});
+      expect(write!.keys.toSet(), {
+        'genre',
+        MetadataFieldSources.column,
+        'updated_at',
+      });
     });
 
     test('alwaysWrite columns go in even when nothing else does', () {
@@ -307,7 +318,11 @@ void main() {
         source: MetadataSource.esde,
         alwaysWrite: {'esde_media_subdir': 'new'},
       );
-      expect(write!.keys.toSet(), {'esde_media_subdir', 'updated_at'});
+      expect(write!.keys.toSet(), {
+        'esde_media_subdir',
+        MetadataFieldSources.column,
+        'updated_at',
+      });
       expect(write['esde_media_subdir'], 'new');
     });
   });
@@ -340,7 +355,11 @@ void main() {
         esde: {'real_name': 'ES-DE', 'genre': 'RPG'},
         mediaSubdir: 'sub',
       );
-      expect(write!.keys.toSet(), {'genre', 'updated_at'});
+      expect(write!.keys.toSet(), {
+        'genre',
+        MetadataFieldSources.column,
+        'updated_at',
+      });
     });
 
     test('a changed media subdir alone is still a write', () {
@@ -351,7 +370,11 @@ void main() {
         esde: {'real_name': 'ES-DE'},
         mediaSubdir: 'new',
       );
-      expect(write!.keys.toSet(), {'esde_media_subdir', 'updated_at'});
+      expect(write!.keys.toSet(), {
+        'esde_media_subdir',
+        MetadataFieldSources.column,
+        'updated_at',
+      });
     });
   });
 
@@ -494,8 +517,15 @@ void main() {
       );
     });
 
-    test('a row a RomM fill-gaps insert marked fully scraped is skipped in '
-        'new_only', () async {
+    // Inverted by #233, name and reasoning with it. This used to assert the
+    // row was skipped, which was the defect: `insertFullyScraped` marked a row
+    // RomM had filled three of fourteen columns of as done, and ScreenScraper
+    // never saw it again. In a RomM-first library that is the common path, so
+    // games sat permanently short of a genre, a players count or a summary.
+    // The row is still marked fully scraped — nothing about the RomM write
+    // changed — but `new_only` now reads `metadata_source` as well.
+    test('a row a RomM fill-gaps insert marked fully scraped is still offered '
+        'in new_only', () async {
       await rom('snes', 'linked.smc');
       await rom('snes', 'fresh.smc');
       await ScraperRepository.mergeFillGapsMetadata(
@@ -510,10 +540,13 @@ void main() {
         'snes',
         'new_only',
       );
-      expect(roms.map((r) => r['filename']).toList(), ['fresh.smc']);
+      expect(roms.map((r) => r['filename']).toList(), [
+        'linked.smc',
+        'fresh.smc',
+      ]);
       expect(
         await ScraperRepository.getRomCountForScraping('snes', 'new_only'),
-        1,
+        2,
       );
     });
 

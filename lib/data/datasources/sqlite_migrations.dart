@@ -875,6 +875,9 @@ class SqliteMigrations {
       case 167:
         await _migrateToVersion167(db);
         break;
+      case 168:
+        await _migrateToVersion168(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -7695,6 +7698,55 @@ class SqliteMigrations {
       _log.i('Migration v167 completed');
     } catch (e, stackTrace) {
       _log.e('Error in migration v167: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v168: per-field metadata provenance.
+  ///
+  /// Adds `user_screenscraper_metadata.field_sources`, a JSON object mapping
+  /// each metadata column to the source that last wrote it. `metadata_source`
+  /// stays and keeps its meaning — who wrote the *row* — because that is what
+  /// the `new_only` scrape predicate asks. This column answers the finer
+  /// question a fill-gaps write and a RomM upload both need: which values are
+  /// ours and which came from somewhere else.
+  ///
+  /// Idempotent via the usual `PRAGMA table_info` guard, and **not**
+  /// backfilled. Existing rows have no per-field record and guessing one would
+  /// be worse than admitting it: a row written by RomM may since have had
+  /// ScreenScraper fill its gaps, and nothing in the row says which columns
+  /// went which way. Null reads as "nothing known", which every reader has to
+  /// handle anyway for rows written before this version.
+  ///
+  /// **Numbered 168**, the first free slot above v167 on `main`; no in-flight
+  /// branch claims it at the time of writing.
+  ///
+  /// A database without the table (nothing to migrate) is not failed. Fresh
+  /// installs get the column from the CREATE in `SqliteService`.
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Metadata Source Provenance"
+  static Future<void> _migrateToVersion168(Database db) async {
+    _log.i('Migration v168: Adding per-field metadata provenance');
+    try {
+      final columns = db
+          .select('PRAGMA table_info(user_screenscraper_metadata)')
+          .map((c) => c['name'].toString())
+          .toList();
+      if (columns.isEmpty) {
+        _log.i('Table user_screenscraper_metadata absent - nothing to migrate');
+      } else if (columns.contains('field_sources')) {
+        _log.i('Column field_sources already exists');
+      } else {
+        db.execute(
+          'ALTER TABLE user_screenscraper_metadata ADD COLUMN '
+          'field_sources TEXT',
+        );
+        _log.i('Column field_sources added via v168');
+      }
+
+      _log.i('Migration v168 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v168: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }
