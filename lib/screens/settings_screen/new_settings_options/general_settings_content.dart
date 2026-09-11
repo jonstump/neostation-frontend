@@ -232,6 +232,18 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     count++; // Cloud-save mark in the game views
     count++; // Achievement badges on game tiles
     count++; // Match RetroAchievements on startup
+    // The unified library's three rows. They are rendered and dispatched
+    // unconditionally, between the RetroAchievements row and the nav-tab
+    // block, but were never counted here — so this returned three fewer than
+    // the list actually draws and the tail of the section could not be
+    // reached. Any row added between here and `hidableNavTabs` has to be
+    // added in three places, and this is the one that is easy to miss because
+    // nothing fails loudly when it is: the rows still draw, they just stop
+    // being reachable. Issue #239.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
+    count++; // Show the RomM library
+    count++; // Default library scope
+    count++; // Cover cache size
     count += hidableNavTabs().length; // Navigation tab visibility
     count++; // Language
     if (!kIsWeb &&
