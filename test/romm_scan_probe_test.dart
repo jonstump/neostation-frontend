@@ -2,7 +2,6 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/models/romm_scan_task_status.dart';
-import 'package:neostation/models/romm_server_capabilities.dart';
 import 'package:neostation/models/romm_server_task.dart';
 import 'package:neostation/providers/romm_provider.dart';
 import 'package:neostation/services/romm_service.dart';
