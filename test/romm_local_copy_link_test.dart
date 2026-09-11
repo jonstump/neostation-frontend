@@ -378,6 +378,7 @@ void main() {
         },
         'snes',
         source: MetadataSource.manual,
+        mode: MetadataWriteMode.replace,
         isFullyScraped: true,
       );
       final provider = _PinnedSystem(_snes)..fake.detail = detail();

@@ -203,6 +203,7 @@ void main() {
       },
       'snes',
       source: MetadataSource.screenscraper,
+      mode: MetadataWriteMode.replace,
     );
     final cover = mediaFile('box2d', 'png');
     await cover.create(recursive: true);
@@ -354,6 +355,7 @@ void main() {
         },
         'snes',
         source: MetadataSource.manual,
+        mode: MetadataWriteMode.replace,
         isFullyScraped: true,
       );
       final before = (await row())!;

@@ -67,6 +67,7 @@ void main() {
         {'filename': 'game.smc', 'real_name': 'Game'},
         'snes',
         source: MetadataSource.screenscraper,
+        mode: MetadataWriteMode.replace,
       );
       expect(saved, isTrue);
 
@@ -79,12 +80,14 @@ void main() {
         {'filename': 'game.smc', 'real_name': 'Game', 'publisher': 'Pub'},
         'snes',
         source: MetadataSource.screenscraper,
+        mode: MetadataWriteMode.replace,
       );
 
       await ScraperRepository.saveGameMetadata(
         {'filename': 'game.smc', 'real_name': 'Game (RomM)'},
         'snes',
         source: MetadataSource.romm,
+        mode: MetadataWriteMode.replace,
         isFullyScraped: true,
       );
 
@@ -104,6 +107,7 @@ void main() {
         {'filename': 'game.smc', 'metadata_source': 'manual'},
         'snes',
         source: MetadataSource.esde,
+        mode: MetadataWriteMode.replace,
       );
 
       final r = await row('snes', 'game.smc');
@@ -138,6 +142,7 @@ void main() {
         {'filename': 'game.smc', 'real_name': 'Game', 'genre': 'RPG'},
         'snes',
         source: MetadataSource.screenscraper,
+        mode: MetadataWriteMode.replace,
         isFullyScraped: true,
       );
 
@@ -172,6 +177,7 @@ void main() {
         {'filename': 'game.smc', 'real_name': 'Game'},
         'snes',
         source: MetadataSource.romm,
+        mode: MetadataWriteMode.replace,
       );
 
       // Only reserved keys: nothing user-visible changes, so provenance stays.
@@ -368,6 +374,7 @@ void main() {
           },
           'snes',
           source: MetadataSource.screenscraper,
+          mode: MetadataWriteMode.replace,
           isFullyScraped: true,
         );
 
@@ -416,6 +423,7 @@ void main() {
         {'filename': 'game.smc', 'genre': 'RPG'},
         'snes',
         source: MetadataSource.screenscraper,
+        mode: MetadataWriteMode.replace,
       );
 
       final merged = await ScraperRepository.mergeFillGapsMetadata(
@@ -524,6 +532,7 @@ void main() {
         {'filename': 'partial.smc', 'real_name': 'Partial'},
         'snes',
         source: MetadataSource.screenscraper,
+        mode: MetadataWriteMode.replace,
         isFullyScraped: false,
       );
 
