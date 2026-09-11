@@ -1116,6 +1116,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.rommSearchClear: 'Effacer la recherche',
   AppLocale.rommDownloading: 'Téléchargement...',
   AppLocale.rommDownloaded: 'Téléchargé',
+  AppLocale.rommLinked: 'Lié à RomM',
   AppLocale.rommDownloadComplete: 'Téléchargement terminé',
   AppLocale.rommDownloadFailed: 'Échec du téléchargement',
   AppLocale.rommDownloadCancelled: 'Téléchargement annulé',
@@ -1134,6 +1135,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.rommSyncConfirmPlan:
       'Télécharge {count} jeux ({size}). Cela peut être long.',
   AppLocale.rommSyncConfirmSkipped: '{count} déjà sur cet appareil.',
+  AppLocale.rommSyncConfirmLinked: '{count} liés à RomM.',
   AppLocale.rommSyncConfirmFree: '{free} disponibles.',
   AppLocale.rommSyncConfirmNoSpace:
       'Espace insuffisant : {size} nécessaires, seulement {free} disponibles.',
@@ -1148,6 +1150,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.rommSyncComplete: '{count} jeux synchronisés',
   AppLocale.rommSyncCancelled: 'Synchronisation annulée',
   AppLocale.rommSyncNothingToDo: 'Tout est déjà téléchargé',
+  AppLocale.rommSyncLinkedCount: '{count} jeux liés à RomM',
   AppLocale.rommSyncFailedCount: '{count} en échec',
   AppLocale.searchTitle: 'Rechercher',
   AppLocale.searchNameHint: 'Rechercher...',

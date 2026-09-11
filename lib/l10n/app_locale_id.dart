@@ -1080,6 +1080,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommSearchClear: 'Hapus pencarian',
   AppLocale.rommDownloading: 'Mengunduh...',
   AppLocale.rommDownloaded: 'Terunduh',
+  AppLocale.rommLinked: 'Tertaut ke RomM',
   AppLocale.rommDownloadComplete: 'Unduhan selesai',
   AppLocale.rommDownloadFailed: 'Unduhan gagal',
   AppLocale.rommDownloadCancelled: 'Unduhan dibatalkan',
@@ -1098,6 +1099,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommSyncConfirmPlan:
       'Mengunduh {count} gim ({size}). Ini bisa memakan waktu lama.',
   AppLocale.rommSyncConfirmSkipped: '{count} sudah ada di perangkat ini.',
+  AppLocale.rommSyncConfirmLinked: '{count} tertaut ke RomM.',
   AppLocale.rommSyncConfirmFree: '{free} tersedia.',
   AppLocale.rommSyncConfirmNoSpace:
       'Penyimpanan tidak cukup: perlu {size}, hanya {free} tersedia.',
@@ -1112,6 +1114,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommSyncComplete: '{count} gim disinkronkan',
   AppLocale.rommSyncCancelled: 'Sinkronisasi dibatalkan',
   AppLocale.rommSyncNothingToDo: 'Semuanya sudah diunduh',
+  AppLocale.rommSyncLinkedCount: '{count} gim tertaut ke RomM',
   AppLocale.rommSyncFailedCount: '{count} gagal',
   AppLocale.searchTitle: 'Cari',
   AppLocale.searchNameHint: 'Cari...',
