@@ -23,30 +23,22 @@ class Flutter7zipBindings {
 
   /// The symbols are looked up with [lookup].
   Flutter7zipBindings.fromLookup(
-      ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName)
-          lookup)
-      : _lookup = lookup;
+    ffi.Pointer<T> Function<T extends ffi.NativeType>(String symbolName) lookup,
+  ) : _lookup = lookup;
 
-  void freeArchiveFile(
-    ArchiveFile archive,
-  ) {
-    return _freeArchiveFile(
-      archive,
-    );
+  void freeArchiveFile(ArchiveFile archive) {
+    return _freeArchiveFile(archive);
   }
 
   late final _freeArchiveFilePtr =
       _lookup<ffi.NativeFunction<ffi.Void Function(ArchiveFile)>>(
-          'freeArchiveFile');
+    'freeArchiveFile',
+  );
   late final _freeArchiveFile =
       _freeArchiveFilePtr.asFunction<void Function(ArchiveFile)>();
 
-  ffi.Pointer<ffi.Void> openArchive(
-    ffi.Pointer<ffi.Char> path,
-  ) {
-    return _openArchive(
-      path,
-    );
+  ffi.Pointer<ffi.Void> openArchive(ffi.Pointer<ffi.Char> path) {
+    return _openArchive(path);
   }
 
   late final _openArchivePtr = _lookup<
@@ -56,12 +48,8 @@ class Flutter7zipBindings {
   late final _openArchive = _openArchivePtr
       .asFunction<ffi.Pointer<ffi.Void> Function(ffi.Pointer<ffi.Char>)>();
 
-  ArchiveStatus checkArchiveStatus(
-    ffi.Pointer<ffi.Void> archive,
-  ) {
-    return ArchiveStatus.fromValue(_checkArchiveStatus(
-      archive,
-    ));
+  ArchiveStatus checkArchiveStatus(ffi.Pointer<ffi.Void> archive) {
+    return ArchiveStatus.fromValue(_checkArchiveStatus(archive));
   }
 
   late final _checkArchiveStatusPtr = _lookup<
@@ -70,42 +58,30 @@ class Flutter7zipBindings {
   late final _checkArchiveStatus =
       _checkArchiveStatusPtr.asFunction<int Function(ffi.Pointer<ffi.Void>)>();
 
-  void closeArchive(
-    ffi.Pointer<ffi.Void> archive,
-  ) {
-    return _closeArchive(
-      archive,
-    );
+  void closeArchive(ffi.Pointer<ffi.Void> archive) {
+    return _closeArchive(archive);
   }
 
   late final _closeArchivePtr =
       _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>(
-          'closeArchive');
+    'closeArchive',
+  );
   late final _closeArchive =
       _closeArchivePtr.asFunction<void Function(ffi.Pointer<ffi.Void>)>();
 
-  int getArchiveFileCount(
-    ffi.Pointer<ffi.Void> archive,
-  ) {
-    return _getArchiveFileCount(
-      archive,
-    );
+  int getArchiveFileCount(ffi.Pointer<ffi.Void> archive) {
+    return _getArchiveFileCount(archive);
   }
 
   late final _getArchiveFileCountPtr =
       _lookup<ffi.NativeFunction<ffi.Uint32 Function(ffi.Pointer<ffi.Void>)>>(
-          'getArchiveFileCount');
+    'getArchiveFileCount',
+  );
   late final _getArchiveFileCount =
       _getArchiveFileCountPtr.asFunction<int Function(ffi.Pointer<ffi.Void>)>();
 
-  ArchiveFile getArchiveFile(
-    ffi.Pointer<ffi.Void> archive,
-    int index,
-  ) {
-    return _getArchiveFile(
-      archive,
-      index,
-    );
+  ArchiveFile getArchiveFile(ffi.Pointer<ffi.Void> archive, int index) {
+    return _getArchiveFile(archive, index);
   }
 
   late final _getArchiveFilePtr = _lookup<
@@ -119,30 +95,26 @@ class Flutter7zipBindings {
     ffi.Pointer<ffi.Void> archive,
     int index,
   ) {
-    return _readArchiveFile(
-      archive,
-      index,
-    );
+    return _readArchiveFile(archive, index);
   }
 
   late final _readArchiveFilePtr = _lookup<
       ffi.NativeFunction<
           ffi.Pointer<ffi.UnsignedChar> Function(
-              ffi.Pointer<ffi.Void>, ffi.Uint32)>>('readArchiveFile');
+            ffi.Pointer<ffi.Void>,
+            ffi.Uint32,
+          )>>('readArchiveFile');
   late final _readArchiveFile = _readArchiveFilePtr.asFunction<
       ffi.Pointer<ffi.UnsignedChar> Function(ffi.Pointer<ffi.Void>, int)>();
 
-  void freeReadData(
-    ffi.Pointer<ffi.Void> p,
-  ) {
-    return _freeReadData(
-      p,
-    );
+  void freeReadData(ffi.Pointer<ffi.Void> p) {
+    return _freeReadData(p);
   }
 
   late final _freeReadDataPtr =
       _lookup<ffi.NativeFunction<ffi.Void Function(ffi.Pointer<ffi.Void>)>>(
-          'freeReadData');
+    'freeReadData',
+  );
   late final _freeReadData =
       _freeReadDataPtr.asFunction<void Function(ffi.Pointer<ffi.Void>)>();
 
@@ -151,17 +123,16 @@ class Flutter7zipBindings {
     int index,
     ffi.Pointer<ffi.Char> path,
   ) {
-    return ArchiveStatus.fromValue(_extractArchiveToFile(
-      archive,
-      index,
-      path,
-    ));
+    return ArchiveStatus.fromValue(_extractArchiveToFile(archive, index, path));
   }
 
   late final _extractArchiveToFilePtr = _lookup<
       ffi.NativeFunction<
-          ffi.UnsignedInt Function(ffi.Pointer<ffi.Void>, ffi.Uint32,
-              ffi.Pointer<ffi.Char>)>>('extractArchiveToFile');
+          ffi.UnsignedInt Function(
+            ffi.Pointer<ffi.Void>,
+            ffi.Uint32,
+            ffi.Pointer<ffi.Char>,
+          )>>('extractArchiveToFile');
   late final _extractArchiveToFile = _extractArchiveToFilePtr.asFunction<
       int Function(ffi.Pointer<ffi.Void>, int, ffi.Pointer<ffi.Char>)>();
 }
