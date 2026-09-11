@@ -43,7 +43,11 @@ The system SHALL define a RomM scrape step that `RommProvider` produces when con
 
 ### Requirement: Scrape Success Rule
 
-The system SHALL treat the RomM step as having scraped a game only when the outcome wrote at least one metadata column or media file, or when the outcome shows the row already holds everything RomM offers (nothing written, at least one media file skipped as existing, nothing failed). Not linked, not found, a failed request, and an outcome that wrote nothing with nothing skipped MUST count as "RomM did not scrape the game" and MUST fall through to ScreenScraper.
+The system SHALL treat the RomM step as having scraped a game only when the outcome wrote at least one metadata column or media file. A completed fetch that wrote nothing because every media file RomM carries was already on disk, with none failed, MUST report a distinct "already complete" outcome: the row holds everything RomM offers, which is not the same claim as "this row is fully scraped", since a RomM fetch fills only the columns RomM carries. That game MUST fall through to ScreenScraper for the rest. Not linked, not found, a failed request, and an outcome that wrote nothing with nothing skipped MUST likewise count as "RomM did not scrape the game" and MUST fall through.
+
+This is what makes the chain agree with SPEC-0005's `new_only` predicate, which offers exactly these rows. Classifying the already-complete case as scraped terminated the chain at RomM, so the offered row went nowhere, the gaps never filled, and every pass cost one uncached RomM detail request per game.
+
+Where there is no ScreenScraper to fall through to — a RomM-only install, or a run with ScreenScraper unavailable — an already-complete game MUST be reported as handled by RomM rather than as a failure, since nothing about it went wrong.
 
 #### Scenario: RomM delivered
 
@@ -58,7 +62,12 @@ The system SHALL treat the RomM step as having scraped a game only when the outc
 #### Scenario: Already complete
 
 - **WHEN** a fill-gaps step writes nothing because every column and media file already exists
-- **THEN** the game counts as scraped by RomM and ScreenScraper is not called
+- **THEN** the game does not count as scraped by RomM, and ScreenScraper scrapes it for the columns RomM does not carry
+
+#### Scenario: Already complete with no ScreenScraper
+
+- **WHEN** that same step runs on an install with no ScreenScraper credentials
+- **THEN** the game is reported as handled by RomM, not as a failure
 
 ### Requirement: Overwrite Mode Mapping
 
@@ -133,12 +142,12 @@ The Force Rescrape action, the grid and carousel scrape chord, the details-card 
 
 ### Requirement: Cooperation With Provenance And Modes
 
-Rows written by the step MUST carry source `romm` and rows written by ScreenScraper MUST carry `screenscraper`, per SPEC-0005. A bulk run in `new_only` mode MUST skip rows RomM completed on an earlier run, and a run in `all` mode MUST re-run the chain for every candidate.
+Rows written by the step MUST carry source `romm` and rows written by ScreenScraper MUST carry `screenscraper`, per SPEC-0005. A bulk run in `new_only` mode MUST offer rows RomM completed on an earlier run — RomM completes only the columns it carries, so the row is not fully scraped in ScreenScraper's sense — and MUST skip rows ScreenScraper completed. A run in `all` mode MUST re-run the chain for every candidate.
 
 #### Scenario: New-only after a RomM run
 
 - **WHEN** a bulk run completed a game from RomM and the user runs another bulk scrape in new-only mode
-- **THEN** that game is not a candidate
+- **THEN** that game is a candidate, and the chain offers it onward to ScreenScraper
 
 ### Requirement: Localized User-Facing Text
 
