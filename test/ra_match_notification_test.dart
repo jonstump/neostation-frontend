@@ -265,4 +265,71 @@ void main() {
       );
     });
   });
+
+  group('the bar the manual pass opens survives an unknown denominator', () {
+    final dbHelper = DatabaseTestHelper();
+    late dynamic db;
+
+    setUp(() async {
+      db = await dbHelper.setUp();
+      GlobalNotificationService().dismiss(RaLibraryMatchRunner.notificationId);
+      // A multidisc system with no disc hash algorithm is outside the hashable
+      // set, so `getRaHashCoverage` reports zero eligible ROMs — the runner's
+      // progress denominator is zero. The lookup pass does not use that filter
+      // and still walks the ROM, so it reports progress against a denominator
+      // it does not have. That is the unknown-total window of issue #230.
+      await db.execute(
+        "INSERT INTO app_systems (id, real_name, folder_name, ra_id, multidisc)"
+        " VALUES ('psx', 'PlayStation', 'psx', '12', 1)",
+      );
+      await db.execute(
+        "INSERT INTO user_roms (filename, rom_path, app_system_id, ra_hash) "
+        "VALUES ('Game0.cue', '/roms/psx/Game0.cue', 'psx', 'hash0')",
+      );
+    });
+
+    tearDown(() async {
+      SqliteService.raSeedChangedThisLaunch = false;
+      GlobalNotificationService().dismiss(RaLibraryMatchRunner.notificationId);
+      await dbHelper.tearDown();
+    });
+
+    test('every running row keeps a bar, never a blank one', () async {
+      // The terminal row clears the bar by design, so asserting on the final
+      // state would say nothing. Watch every state the row passes through and
+      // judge the running ones, which are the ones worded "looking-up".
+      final runningBars = <double?>[];
+      void record() {
+        final row = _raNotification();
+        if (row != null && row.message == _strings.lookingUp) {
+          runningBars.add(row.progress);
+        }
+      }
+
+      GlobalNotificationService().notifier.addListener(record);
+      try {
+        await RaLibraryMatchRunner.run(
+          strings: _strings,
+          trigger: RaMatchTrigger.manual,
+        );
+      } finally {
+        GlobalNotificationService().notifier.removeListener(record);
+      }
+
+      expect(
+        runningBars,
+        isNotEmpty,
+        reason: 'the manual pass reports the lookup it is running',
+      );
+      expect(
+        runningBars,
+        everyElement(isNotNull),
+        reason:
+            'the pass opens this row at `progress: 0` and `update` clears the '
+            'bar unless the call names one (#229), so a null denominator would '
+            'blank the bar it just drew — and Tools renders its own inline bar '
+            'from this notification. Issue #230',
+      );
+    });
+  });
 }

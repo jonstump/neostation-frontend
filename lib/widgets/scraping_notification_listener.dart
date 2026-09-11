@@ -59,7 +59,18 @@ class _ScrapingNotificationListenerState
           ? '${AppLocale.scrapingInProgress.getString(context)} $processed / $total'
           : AppLocale.scrapingInProgress.getString(context),
       type: GlobalNotificationType.info,
-      progress: total > 0 ? processed / total : null,
+      // Zero, not null, while the total is unknown: the scrape opens this same
+      // id at `progress: 0` and `update` clears the bar unless the call names
+      // one (#229), so null here would blank a bar that is about to come back.
+      //
+      // Not because a flicker is otherwise guaranteed: `startScraping()`
+      // notifies before the scrape opens the row, so that first notify hits a
+      // missing id and `update` no-ops. What can land inside the system-id
+      // sync window is an unrelated notify — a concurrent RomM metadata fetch
+      // calls `markArtworkUpdated()` — and null there would blank a bar that
+      // is about to come back. Zero is also the honest reading: nothing has
+      // been processed yet. Issue #230.
+      progress: total > 0 ? processed / total : 0,
       ongoing: true,
     );
   }
