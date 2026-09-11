@@ -473,7 +473,13 @@ void main() {
     // declining to scan, and must not send the user off to start one by hand.
     // Governing: ADR-0014, SPEC-0014 REQ "Scan And Link After Upload"
     test('a transient status from the requester stays pending', () async {
-      for (final status in const [408, 429, 500, 502, 503, 504]) {
+      // 409 sits here rather than with the refusals: a conflict is
+      // usually transient, and `runTask` maps an already-running body to
+      // taskBusy before any status is read, so a 409 only arrives when its
+      // wording escaped that check. Calling that a permanent policy is a
+      // guess, and the cost of guessing wrong is telling the user to go and
+      // fix a server that was merely busy.
+      for (final status in const [408, 409, 429, 500, 502, 503, 504]) {
         final summary = await batch.run(
           candidates: [_candidate('a.sfc')],
           platformId: 7,
@@ -491,7 +497,7 @@ void main() {
     });
 
     test('a thrown refusal status is still refused', () async {
-      for (final status in const [400, 404, 405, 409, 422]) {
+      for (final status in const [400, 404, 405, 422]) {
         final summary = await batch.run(
           candidates: [_candidate('a.sfc')],
           platformId: 7,

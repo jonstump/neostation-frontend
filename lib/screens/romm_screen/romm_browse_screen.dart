@@ -1530,8 +1530,11 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
         type = NotificationType.success;
         queued = true;
         // The id the server gave this run, so the watch below reports this
-        // scan's result and not the one before it.
-        queuedTaskId = id;
+        // scan's result and not the one before it. `runServerTask` answers
+        // with the task *name* when a 2xx carried no id, and that stand-in
+        // must not be correlated against — see
+        // `RommScanRequest.correlationId`.
+        queuedTaskId = id == task.taskName ? null : id;
       }
     } on RommException catch (e) {
       final busy = e.kind == RommErrorKind.taskBusy;

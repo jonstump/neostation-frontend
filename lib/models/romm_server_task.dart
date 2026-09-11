@@ -196,6 +196,20 @@ class RommScanRequest {
 
   const RommScanRequest(this.outcome, {this.taskName = '', this.taskId});
 
+  /// The id a scan watch may correlate against, or null when the server gave
+  /// none.
+  ///
+  /// [taskId] is not always an id. `RommService.runTask` answers `id ?? name`
+  /// so that a caller can tell "accepted" from "gated", which means a 2xx
+  /// carrying no parseable id yields the task *name* here. Correlating against
+  /// that stand-in rejects the very row it was meant to match: the finished
+  /// entry carries the server's real id, the two differ, and the watch reports
+  /// "no scan is running" instead of the counts it just watched accumulate.
+  /// Null is the honest answer — it falls back to the uncorrelated path a
+  /// web-UI-started scan already uses.
+  String? get correlationId =>
+      taskId == null || taskId!.isEmpty || taskId == taskName ? null : taskId;
+
   /// Whether a failed `POST /api/tasks/run/{name}` carrying [status] is RomM
   /// refusing to run the task, as opposed to something transient between here
   /// and it.
@@ -221,9 +235,15 @@ class RommScanRequest {
 
   /// 400 is the refusal issue #170 recorded (a task whose `manual_run` is
   /// false); 404 and 405 are a task name or a route this RomM does not have;
-  /// 409 is a stated conflict; 422 is the route's own documented rejection of
-  /// what was asked. Asking again changes none of them.
-  static const Set<int> _refusalStatuses = {400, 404, 405, 409, 422};
+  /// 422 is the route's own documented rejection of what was asked. Asking
+  /// again changes none of them.
+  ///
+  /// 409 is deliberately absent. A conflict is usually transient, and it is
+  /// barely reachable here anyway: `runTask` maps a body that says the task is
+  /// already running to [RommErrorKind.taskBusy] before any status is
+  /// consulted, so a 409 only arrives when its wording escaped that check —
+  /// and calling *that* a permanent policy is a guess.
+  static const Set<int> _refusalStatuses = {400, 404, 405, 422};
 
   /// True when a scan is now expected to happen, or already is.
   bool get scanExpected =>

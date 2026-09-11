@@ -739,7 +739,10 @@ class RommRomUpload extends ChangeNotifier {
             'RomM upload scan requested: task=${request.taskName} '
             'id=${request.taskId}',
           );
-          return result(RommUploadScanState.requested, request.taskId ?? '');
+          return result(
+            RommUploadScanState.requested,
+            request.correlationId ?? '',
+          );
         case RommScanRequestOutcome.alreadyRunning:
           _log.i('RomM upload scan pending: reason=already_running');
           return result(RommUploadScanState.pending);

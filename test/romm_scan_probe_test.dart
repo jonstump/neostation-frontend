@@ -256,7 +256,13 @@ void main() {
     // may answer for RomM.
     // Governing: ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
     test('a transient status is not the server refusing to scan', () async {
-      for (final status in const [408, 429, 500, 502, 503, 504]) {
+      // 409 sits here rather than with the refusals: a conflict is
+      // usually transient, and `runTask` maps an already-running body to
+      // taskBusy before any status is read, so a 409 only arrives when its
+      // wording escaped that check. Calling that a permanent policy is a
+      // guess, and the cost of guessing wrong is telling the user to go and
+      // fix a server that was merely busy.
+      for (final status in const [408, 409, 429, 500, 502, 503, 504]) {
         svc
           ..tasks = null
           ..ran.clear()
@@ -282,7 +288,7 @@ void main() {
     });
 
     test('RomM\'s own refusal statuses stay refusals', () async {
-      for (final status in const [400, 404, 405, 409, 422]) {
+      for (final status in const [400, 404, 405, 422]) {
         svc
           ..tasks = null
           ..ran.clear()
