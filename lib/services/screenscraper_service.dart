@@ -684,9 +684,20 @@ class ScreenScraperService {
   /// `all` means "re-scrape everything, whatever is already there" — the mode
   /// a user picks to *replace* stale or wrong metadata — so it keeps the
   /// whole-row replace. Every other mode is a routine pass that must add to
-  /// the row without destroying what another source put there. The same
-  /// setting already decides whether media is re-downloaded
-  /// (`forceOverwrite`), so the two stay in step.
+  /// the row without destroying what another source put there. In a bulk run
+  /// the same setting already decides whether media is re-downloaded, so the
+  /// two agree there.
+  ///
+  /// They do **not** agree on the single-game path. `scrapeSingleGame` takes
+  /// `forceOverwrite` from its caller, and both callers set it heuristically —
+  /// "this game already has a description, so the user must mean to redo it"
+  /// (`my_games_list.dart`, `game_details_card_list.dart`). Under the default
+  /// `new_only` that path therefore replaces media but merges columns. That is
+  /// deliberate: threading a heuristic flag into the write mode would let an
+  /// ordinary per-game scrape null out another source's columns, which is the
+  /// bug this mode exists to stop (#248). An explicit Force Rescrape of a
+  /// RomM-filled row consequently keeps the columns ScreenScraper has no value
+  /// for; `all` mode is the way to clear them.
   ///
   /// Public only as a test seam.
   // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Metadata Source Provenance"
