@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:path/path.dart' as path;
@@ -67,12 +68,26 @@ class RommService {
   static const int maxPlaySessionBatch = 100;
 
   /// Shared client that tolerates self-signed certificates (homelab servers).
-  static final http.Client _httpClient = () {
+  static final http.Client _sharedHttpClient = () {
     final inner = HttpClient()
       ..badCertificateCallback =
           ((X509Certificate cert, String host, int port) => true);
     return IOClient(inner);
   }();
+
+  /// Test seam: when set, every request goes through this client instead of
+  /// [_sharedHttpClient]. Process-wide, like the client it replaces.
+  static http.Client? _httpClientOverride;
+
+  /// Routes all RomM HTTP through [client] (a `MockClient`, typically); pass
+  /// null to restore the shared client.
+  @visibleForTesting
+  static void debugUseHttpClient(http.Client? client) {
+    _httpClientOverride = client;
+  }
+
+  static http.Client get _httpClient =>
+      _httpClientOverride ?? _sharedHttpClient;
 
   String _baseUrl = '';
 
