@@ -101,6 +101,7 @@ mixin AppLocale {
   // General settings
   // ---------------------------------------------------------------------------
   static const String generalSettings = 'general_settings';
+  static const String rommSettings = 'romm_settings';
   static const String alwaysShowRomName = 'always_show_rom_name';
   static const String hideExtension = 'hide_extension';
   static const String hideParentheses = 'hide_parentheses';
