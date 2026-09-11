@@ -15,11 +15,14 @@ import '../../providers/romm_provider.dart';
 import '../../providers/sqlite_config_provider.dart';
 import '../../services/game_service.dart';
 import '../../services/romm_service.dart';
+import '../../services/logger_service.dart';
 import '../../services/sfx_service.dart';
 import '../../sync/providers/neo_sync_adapter.dart';
 import '../../sync/providers/romm_provider.dart';
 import '../../sync/sync_manager.dart';
+import '../../utils/debounced_search.dart';
 import '../../utils/gamepad_nav.dart';
+import '../../utils/romm_search_message.dart';
 import '../../widgets/confirm_action_dialog.dart';
 import '../../widgets/core_footer.dart' show kCoreFooterHeight;
 import '../../widgets/custom_notification.dart';
@@ -171,11 +174,71 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   /// Header buttons, in cursor order.
   static const int _headerSlotCount = 2;
 
+  // ── In-platform search ──────────────────────────────────────────────────────
+
+  static final _log = LoggerService.instance;
+
+  /// How long typing has to settle before the term is searched.
+  static const Duration _searchDebounce = Duration(milliseconds: 400);
+
+  static const String _searchLayerId = 'romm_search_field';
+
+  final TextEditingController _searchController = TextEditingController();
+  final FocusNode _searchFocus = FocusNode();
+
+  /// Input layer for the search row. The ROM views push their own layer on
+  /// mount, so the row needs one of its own to take the controller back.
+  late final GamepadNavigation _searchNav;
+  late final DebouncedSearch<void> _search;
+
+  /// Whether the cursor is on the search row rather than down in the grid.
+  bool _searchSelected = false;
+
+  /// Which control on the search row the cursor is on — see
+  /// [_romSearchSlots], whose length changes with the field's text.
+  int _searchSlot = 0;
+
   @override
   void initState() {
     super.initState();
     _rommProvider = context.read<RommProvider>();
     _restorePosition();
+    // The term lives on the provider so it survives this screen being rebuilt
+    // (leaving the tab with L1/R1 disposes it); the field only mirrors it.
+    _searchController.text = _rommProvider.searchTerm;
+    _searchFocus.addListener(_onSearchFocusChanged);
+    _search = DebouncedSearch<void>(
+      delay: _searchDebounce,
+      run: _rommProvider.searchRoms,
+      // searchRoms records its own failures on the provider (see
+      // RommProvider.lastError, drawn under the field); this only catches a
+      // throw that escaped it, so nothing goes unlogged.
+      onError: (term, error, _) =>
+          _log.w('RomM search failed: term="$term" error=$error'),
+    );
+    _searchNav = GamepadNavigation(
+      onNavigateUp: _searchStay,
+      onNavigateDown: _enterGridFromSearch,
+      onNavigateLeft: () => _moveSearchSlot(-1),
+      onNavigateRight: () => _moveSearchSlot(1),
+      onSelectItem: _confirmSearchSlot,
+      onBack: _handleBack,
+      onXButton: _toggleRomLayout,
+      // Y opens a confirm dialog, which pushes a plain (non-modal) layer; it
+      // has to go above the ROM view's layer, not under this modal one.
+      onFavorite: () {
+        _leaveSearchField();
+        _syncFocusedSource();
+      },
+      onPreviousTab: AppNavigation.previousTab,
+      onNextTab: AppNavigation.nextTab,
+      onLeftBumper: AppNavigation.previousTab,
+      onRightBumper: AppNavigation.nextTab,
+      // While typing, the D-pad belongs to the field (soft keyboard on
+      // Android); B is still the way out.
+      isTextFieldFocused: () => _searchFocus.hasFocus,
+      allowRepeat: false,
+    );
     _gamepadNav = GamepadNavigation(
       onNavigateUp: _navigateUp,
       onNavigateDown: _navigateDown,
@@ -192,6 +255,9 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
     );
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _gamepadNav.initialize();
+      // The search navigator needs its input subscription too; it stays
+      // deactivated until its layer is pushed.
+      _searchNav.initialize();
       GamepadNavigationManager.pushLayer(
         'romm_browse_screen',
         onActivate: () => _gamepadNav.activate(),
@@ -249,6 +315,12 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   @override
   void dispose() {
     _savePosition();
+    _search.cancel();
+    if (_searchSelected) GamepadNavigationManager.popLayer(_searchLayerId);
+    _searchNav.dispose();
+    _searchFocus.removeListener(_onSearchFocusChanged);
+    _searchFocus.dispose();
+    _searchController.dispose();
     GamepadNavigationManager.popLayer('romm_browse_screen');
     _gamepadNav.dispose();
     _sourceScroll.dispose();
@@ -752,6 +824,12 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   /// the PopScope callback in [build], which spins the UI thread forever. Tabs
   /// are left with L1/R1, exactly as on the systems and games tabs.
   void _handleBack() {
+    // B leaves a focused search field first, keeping what was typed — the
+    // app-wide way out of a text field, as on the search tab.
+    if (_searchFocus.hasFocus) {
+      _searchFocus.unfocus();
+      return;
+    }
     // B is the way out of the header, before it is the way out of a view.
     if (_releaseHeader()) return;
     if (_inRomGrid) {
@@ -767,7 +845,13 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   /// offset is set explicitly).
   void _returnToList() {
     final wasCollection = _rommProvider.currentCollection != null;
+    // Backing out of a platform drops its search with it: reopening one shows
+    // the full list, matching the provider, whose backToPlatforms clears the
+    // term.
+    _search.cancel();
+    _leaveSearchField();
     setState(() {
+      _searchController.clear();
       _romIndex = 0;
       _view = wasCollection
           ? RommBrowseView.collections
@@ -1584,10 +1668,28 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   /// the pieces they can't know about: the ROM set, the download actions, and
   /// what the footer should say about the open platform or collection.
   Widget _buildRomView(ThemeData theme, RommProvider provider) {
+    // The search row is row 0 of the ROM view: it stays put while the grid
+    // below it loads, empties or remounts, so a search that found nothing can
+    // still be cleared.
+    _syncSearchSlot();
+    return Column(
+      children: [
+        _buildSearchRow(theme, provider),
+        Expanded(child: _buildRomBody(theme, provider)),
+      ],
+    );
+  }
+
+  /// The grid or list under the search row, or the state standing in for it.
+  Widget _buildRomBody(ThemeData theme, RommProvider provider) {
     if (provider.loadingRoms && provider.roms.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
     if (provider.roms.isEmpty) {
+      // With a term active the line under the field already says nothing
+      // matched; repeating "No ROMs found" would read as the platform being
+      // empty.
+      if (provider.searchTerm.trim().isNotEmpty) return const SizedBox();
       return _centeredMessage(
         theme,
         Symbols.search_off_rounded,
@@ -1607,7 +1709,13 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
     );
     Widget footerBuilder(RommRom? focused) =>
         _buildRomFooter(provider, focused);
-    void onIndexChanged(int index) => _romIndex = index;
+    void onIndexChanged(int index) {
+      _romIndex = index;
+      // A tap on a tile while the cursor is up on the search row moves the
+      // cursor down to it, as the D-pad would.
+      _leaveSearchField();
+    }
+
     void onConfirm(RommRom rom) => _confirmRom(rom);
     void onCancel(RommRom rom) => provider.cancelDownload(rom.id);
 
@@ -1623,6 +1731,7 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
           onConfirm: onConfirm,
           onCancel: onCancel,
           onBack: _handleBack,
+          onExitTop: _selectSearchField,
           onToggleView: _toggleRomLayout,
           onSyncAll: _syncFocusedSource,
           footerBuilder: footerBuilder,
@@ -1638,11 +1747,277 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
           onConfirm: onConfirm,
           onCancel: onCancel,
           onBack: _handleBack,
+          onExitTop: _selectSearchField,
           onToggleView: _toggleRomLayout,
           onSyncAll: _syncFocusedSource,
           footerBuilder: footerBuilder,
         );
     }
+  }
+
+  // ── Search row ──────────────────────────────────────────────────────────────
+
+  /// The search row's controls, in cursor order. The clear button only exists
+  /// while there is something to clear.
+  List<_SearchSlot> get _romSearchSlots => [
+    _SearchSlot.field,
+    if (_searchController.text.isNotEmpty) _SearchSlot.clear,
+  ];
+
+  /// The control the cursor is on, or null while it is down in the grid.
+  _SearchSlot? get _selectedSearchSlot {
+    if (!_searchSelected) return null;
+    final slots = _romSearchSlots;
+    if (_searchSlot < 0 || _searchSlot >= slots.length) return null;
+    return slots[_searchSlot];
+  }
+
+  /// Keeps the cursor inside the row when the clear button comes or goes
+  /// underneath it. Runs during build, so the `setState` is deferred.
+  void _syncSearchSlot() {
+    if (!_searchSelected) return;
+    final parked = _searchSlot;
+    final next = parked.clamp(0, _romSearchSlots.length - 1);
+    if (next == parked) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_searchSelected) return;
+      // Re-check: the cursor may have moved between the build and this
+      // callback, and writing the index computed from the older one would
+      // drag it back.
+      if (_searchSlot != parked) return;
+      setState(() => _searchSlot = next);
+    });
+  }
+
+  /// Moves the cursor up onto the search row, taking the controller off the
+  /// ROM view. Up from the grid's first row lands here, as does a tap or
+  /// click on the field.
+  void _selectSearchField() {
+    if (_searchSelected) return;
+    setState(() {
+      _searchSelected = true;
+      _searchSlot = 0;
+    });
+    SfxService().playNavSound();
+    // Modal on purpose: the ROM view unmounts for the spinner while a search
+    // loads and mounts again with the results, pushing a fresh layer each
+    // time. A modal layer keeps those remounts beneath it, so the cursor
+    // stays on the field until the user moves it. The one thing opened from
+    // here that pushes its own layer — the Y sync confirm — leaves the field
+    // first (see the search navigator in initState).
+    GamepadNavigationManager.pushLayer(
+      _searchLayerId,
+      modal: true,
+      onActivate: _searchNav.activate,
+      onDeactivate: _searchNav.deactivate,
+    );
+  }
+
+  /// Hands the controller back to the ROM view. Its layer, if mounted, picks
+  /// up where its cursor was; otherwise this screen's own layer does.
+  void _leaveSearchField() {
+    if (!_searchSelected) return;
+    _searchFocus.unfocus();
+    setState(() => _searchSelected = false);
+    GamepadNavigationManager.popLayer(_searchLayerId);
+  }
+
+  /// Down from the search row drops into the grid — unless there is nothing
+  /// in it, or the field is being typed in (desktop gamepads still deliver
+  /// directions while a field has focus).
+  bool _enterGridFromSearch() {
+    if (_searchFocus.hasFocus || _rommProvider.roms.isEmpty) return false;
+    _leaveSearchField();
+    return true;
+  }
+
+  /// Up has nowhere to go from the top row.
+  bool _searchStay() => false;
+
+  /// Left/Right walk the row's controls.
+  bool _moveSearchSlot(int delta) {
+    if (_searchFocus.hasFocus) return false;
+    final next = _searchSlot + delta;
+    if (next < 0 || next >= _romSearchSlots.length) return false;
+    SfxService().playNavSound();
+    setState(() => _searchSlot = next);
+    return true;
+  }
+
+  /// A on the focused control: the field opens for typing, the clear button
+  /// empties it.
+  void _confirmSearchSlot() {
+    switch (_selectedSearchSlot) {
+      case _SearchSlot.clear:
+        _clearSearch();
+      case _SearchSlot.field:
+      case null:
+        _searchFocus.requestFocus();
+    }
+  }
+
+  /// Keeps the cursor and the styling in step with the platform's focus: a
+  /// tap or click focuses the field directly, without going through
+  /// [_selectSearchField].
+  void _onSearchFocusChanged() {
+    if (!mounted) return;
+    if (_searchFocus.hasFocus) _selectSearchField();
+    setState(() {});
+  }
+
+  /// Every keystroke restarts the debounce; the settled term goes to the
+  /// provider's scoped search. The grid starts over at its first row for a
+  /// new result set.
+  void _onSearchChanged(String text) {
+    _romIndex = 0;
+    // The clear button appears with the first character and goes with the
+    // last, which reshapes the row mid-typing (see [_syncSearchSlot]).
+    setState(() {});
+    _search.submit(text);
+  }
+
+  void _clearSearch() {
+    if (_searchController.text.isEmpty) return;
+    _searchController.clear();
+    _onSearchChanged('');
+  }
+
+  /// The field, and under it the line reporting what the term matched.
+  Widget _buildSearchRow(ThemeData theme, RommProvider provider) {
+    final scheme = theme.colorScheme;
+    final focused = _searchFocus.hasFocus;
+    final fieldSelected = _selectedSearchSlot == _SearchSlot.field;
+    final clearSelected = _selectedSearchSlot == _SearchSlot.clear;
+    final message = rommSearchMessageFor(
+      term: provider.searchTerm,
+      count: provider.roms.length,
+      hasMore: provider.romsHasMore,
+      loading: provider.loadingRoms,
+    );
+    final error = provider.lastError;
+    final hint =
+        (provider.currentCollection != null
+                ? AppLocale.rommSearchCollectionHint
+                : AppLocale.rommSearchHint)
+            .getString(context);
+
+    return Padding(
+      padding: EdgeInsets.fromLTRB(12.r, 6.r, 12.r, 4.r),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildSearchField(theme, hint, fieldSelected, focused, clearSelected),
+          if (error != null || message != null)
+            Padding(
+              padding: EdgeInsets.only(top: 4.r, left: 4.r),
+              child: Text(
+                error ?? message!.format((key) => key.getString(context)),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10.r,
+                  color: error != null
+                      ? scheme.error
+                      : scheme.onSurface.withValues(alpha: 0.6),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSearchField(
+    ThemeData theme,
+    String hint,
+    bool fieldSelected,
+    bool focused,
+    bool clearSelected,
+  ) {
+    final scheme = theme.colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12.r),
+        border: Border.all(
+          color: fieldSelected || focused ? scheme.primary : Colors.transparent,
+          width: 2.r,
+        ),
+      ),
+      child: TextField(
+        controller: _searchController,
+        focusNode: _searchFocus,
+        textInputAction: TextInputAction.search,
+        style: TextStyle(fontSize: 12.r),
+        onTap: _selectSearchField,
+        onChanged: _onSearchChanged,
+        // Enter / the keyboard's search key: search now rather than after the
+        // pause, and give the D-pad back.
+        onSubmitted: (_) {
+          _search.flush();
+          _searchFocus.unfocus();
+        },
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: TextStyle(
+            fontSize: 12.r,
+            color: scheme.onSurface.withValues(alpha: 0.5),
+          ),
+          prefixIcon: Icon(Symbols.search_rounded, size: 18.r),
+          prefixIconConstraints: BoxConstraints(
+            minWidth: 36.r,
+            minHeight: 18.r,
+          ),
+          suffixIcon: _searchController.text.isEmpty
+              ? null
+              : _buildClearSearchButton(scheme, clearSelected),
+          isDense: true,
+          contentPadding: EdgeInsets.symmetric(horizontal: 10.r, vertical: 8.r),
+          filled: true,
+          fillColor: scheme.surfaceContainerHighest.withValues(
+            alpha: focused ? 0.7 : 0.5,
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12.r),
+            borderSide: BorderSide.none,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Clears the field. Wears the same selection ring the field does, since it
+  /// is a cursor stop of its own — every control here is reachable by D-pad
+  /// as well as by touch.
+  Widget _buildClearSearchButton(ColorScheme scheme, bool selected) {
+    return Semantics(
+      button: true,
+      label: AppLocale.rommSearchClear.getString(context),
+      child: InkWell(
+        onTap: () {
+          _selectSearchField();
+          final index = _romSearchSlots.indexOf(_SearchSlot.clear);
+          if (index >= 0) setState(() => _searchSlot = index);
+          _clearSearch();
+        },
+        borderRadius: BorderRadius.circular(10.r),
+        child: Container(
+          margin: EdgeInsets.symmetric(horizontal: 6.r, vertical: 4.r),
+          padding: EdgeInsets.all(3.r),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(10.r),
+            border: Border.all(
+              color: selected ? scheme.primary : Colors.transparent,
+              width: 2.r,
+            ),
+          ),
+          child: Icon(
+            Symbols.close_rounded,
+            size: 16.r,
+            color: scheme.onSurface.withValues(alpha: 0.7),
+          ),
+        ),
+      ),
+    );
   }
 
   /// Footer for the ROM view. Same [RommBrowseFooter] the platform view uses,
@@ -1672,6 +2047,9 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
     );
   }
 }
+
+/// The controls on the ROM view's search row, in cursor order.
+enum _SearchSlot { field, clear }
 
 /// Platform list-tile icon: RomM's bundled SVG when available, falling back to
 /// the IGDB raster logo, then a generic gamepad icon. Fetched SVGs are cached
