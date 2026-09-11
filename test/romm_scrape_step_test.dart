@@ -175,10 +175,23 @@ void main() {
       );
     });
 
+    // Inverted by #233, to match the name it always had. "Already complete"
+    // is what the fetch proved — every media file RomM carries was on disk
+    // and nothing was left to write — and that is not "fully scraped": RomM
+    // fills only the columns it carries. Classifying it as `scraped`
+    // terminated the chain at RomM, so the row the `new_only` predicate now
+    // offers never reached ScreenScraper and its gaps never filled.
     test('nothing written, only skips, nothing failed: already complete', () {
       expect(
         classify(_outcome(RommMetadataOutcomeKind.filled, skipped: 2)),
-        RommScrapeStepStatus.scraped,
+        RommScrapeStepStatus.alreadyComplete,
+      );
+      expect(
+        RommScrapeStepResult.fromOutcome(
+          _outcome(RommMetadataOutcomeKind.filled, skipped: 2),
+        ).scraped,
+        isFalse,
+        reason: 'the chain must offer it onward to ScreenScraper',
       );
     });
 
@@ -422,7 +435,9 @@ void main() {
         expect(svc.detailRequests, [42]);
       });
 
-      test('a row that already holds everything counts as scraped', () async {
+      // Inverted by #233: see the classifyOutcome group. The row holds
+      // everything RomM has, which is not everything the row needs.
+      test('a row that already holds everything falls through', () async {
         await link();
         svc.detail = _detail(cover: _coverUrl);
         final cover = File(
@@ -441,7 +456,8 @@ void main() {
         expect(result.outcome?.mediaWritten, 0);
         expect(result.outcome?.mediaSkipped, greaterThan(0));
         expect(result.outcome?.mediaFailed, 0);
-        expect(result.status, RommScrapeStepStatus.scraped);
+        expect(result.status, RommScrapeStepStatus.alreadyComplete);
+        expect(result.scraped, isFalse);
       });
 
       test('no detail on the server: not found', () async {

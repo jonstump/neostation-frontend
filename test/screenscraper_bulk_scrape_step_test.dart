@@ -1,6 +1,7 @@
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:neostation/models/romm_metadata_fetch.dart';
 import 'package:neostation/models/romm_scrape_step.dart';
 import 'package:neostation/providers/scraping_provider.dart';
 import 'package:neostation/repositories/scraper_repository.dart';
@@ -429,8 +430,17 @@ void main() {
   });
 
   group('new_only cooperation', () {
+    // Inverted by #233. This asserted the row was skipped, which is what
+    // SPEC-0005 REQ "Cooperation With ScreenScraper" and SPEC-0006 REQ
+    // "Cooperation With Provenance And Modes" currently require — and what the
+    // issue argues is wrong: a RomM fetch fills perhaps three of fourteen
+    // metadata columns and then marks the row done, so ScreenScraper never
+    // fills the rest. **Both specs need the requirement changed to match**;
+    // that edit is deferred to a docs PR because `sdd/` is protected in
+    // feature branches. Until it lands, this test and those requirements
+    // disagree on purpose, and the PR says so.
     // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "Cooperation With Provenance And Modes"
-    test('a row RomM completed is not a candidate in new_only', () async {
+    test('a row RomM completed is still a candidate in new_only', () async {
       await db.execute(
         "INSERT INTO app_systems (id, real_name, folder_name, screenscraper_id) VALUES ('snes', 'SNES', 'snes', 4)",
       );
@@ -457,10 +467,10 @@ void main() {
         'snes',
         'new_only',
       );
-      expect(newOnly.map((r) => r['filename']), ['other.sfc']);
+      expect(newOnly.map((r) => r['filename']), ['ct.sfc', 'other.sfc']);
       expect(
         await ScraperRepository.getRomCountForScraping('snes', 'new_only'),
-        1,
+        2,
       );
 
       final all = await ScraperRepository.getRomsForScraping('snes', 'all');
@@ -474,6 +484,99 @@ void main() {
       expect(nes.map((r) => r['filename']), [
         'ct.sfc',
       ], reason: 'the snes row does not hide the nes ROM');
+    });
+
+    /// A RomM-completed row with its media already on disk, taken from the
+    /// `new_only` query and run through the chain the pipeline runs — the
+    /// predicate and the chain together, which is the whole point of the
+    /// predicate. The step returns what the writer returns on a second pass
+    /// over such a game: a completed fetch, no column written, no media
+    /// written, every media file skipped, none failed. Before #233's chain
+    /// half that classified as `scraped` and the chain stopped at RomM, so
+    /// the row the predicate had just offered reached nothing and its gaps
+    /// stayed empty.
+    // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "Bulk Source Chain", REQ "Scrape Success Rule"
+    group('a candidate RomM completed with media on disk', () {
+      /// The outcome a second fill-gaps pass produces for such a game.
+      const nothingLeft = RommMetadataOutcome(
+        kind: RommMetadataOutcomeKind.filled,
+        mediaSkipped: 3,
+      );
+
+      late RommScrapeStep step;
+
+      setUp(() async {
+        await db.execute(
+          "INSERT INTO app_systems (id, real_name, folder_name, screenscraper_id) VALUES ('snes', 'SNES', 'snes', 4)",
+        );
+        await db.execute(
+          "INSERT INTO user_roms (filename, rom_path, app_system_id) VALUES ('ct.sfc', '/roms/snes/ct.sfc', 'snes')",
+        );
+        await db.execute(
+          "INSERT INTO user_screenscraper_metadata (filename, app_system_id, is_fully_scraped, metadata_source) VALUES ('ct.sfc', 'snes', 1, 'romm')",
+        );
+        step = (target) async {
+          stepCalls.add(target);
+          return RommScrapeStepResult.fromOutcome(nothingLeft);
+        };
+      });
+
+      test('reaches ScreenScraper', () async {
+        final provider = ScrapingProvider()..startScraping(maxThreads: 4);
+        final candidates = await ScraperRepository.getRomsForScraping(
+          'snes',
+          'new_only',
+        );
+        expect(candidates.map((r) => r['filename']), [
+          'ct.sfc',
+        ], reason: 'the predicate offers it');
+
+        final results = await runChain(
+          candidates,
+          step: step,
+          screenscraperAvailable: true,
+          provider: provider,
+        );
+
+        expect(stepCalls.length, 1, reason: 'RomM is still offered it first');
+        expect(
+          screenscraperCalls,
+          1,
+          reason: 'and RomM, having nothing left, hands it on',
+        );
+        expect(tally(results), (romm: 0, screenscraper: 1, failed: 0));
+      });
+
+      // The other side of the same classification: with no second source to
+      // hand it to, a game RomM has nothing left for is done, not failed. A
+      // RomM-only library would otherwise report every already fetched game
+      // as a failure on its second pass.
+      test(
+        'counts as scraped by RomM when ScreenScraper is not set up',
+        () async {
+          final provider = ScrapingProvider()..startScraping(maxThreads: 4);
+          final candidates = await ScraperRepository.getRomsForScraping(
+            'snes',
+            'new_only',
+          );
+
+          final results = await runChain(
+            candidates,
+            step: step,
+            screenscraperAvailable: false,
+            provider: provider,
+          );
+
+          expect(tally(results), (romm: 1, screenscraper: 0, failed: 0));
+          expect(screenscraperCalls, 0);
+          expect(
+            LoggerService.instance.takeCapture().where(
+              (l) => l.contains('counting as failed'),
+            ),
+            isEmpty,
+          );
+        },
+      );
     });
   });
 }

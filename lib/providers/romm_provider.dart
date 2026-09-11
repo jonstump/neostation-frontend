@@ -25,6 +25,7 @@ import '../repositories/romm_repository.dart';
 import '../repositories/romm_catalog_repository.dart';
 import '../repositories/romm_save_map_repository.dart';
 import '../repositories/retro_achievements_repository.dart';
+import '../models/metadata_field_sources.dart';
 import '../repositories/scraper_repository.dart';
 import '../repositories/system_repository.dart';
 import '../services/collections/collections_service.dart';
@@ -3954,6 +3955,10 @@ class RommProvider extends ChangeNotifier {
     'filename',
     'is_fully_scraped',
     'metadata_source',
+    // Per-field provenance about the write, not a value the user gained.
+    // Counting it would inflate every "filled N fields" the fetch reports by
+    // one. Issue #233.
+    MetadataFieldSources.column,
     'updated_at',
   };
 

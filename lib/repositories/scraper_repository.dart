@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import '../data/datasources/sqlite_service.dart';
+import '../models/metadata_field_sources.dart';
 import '../models/rom_fingerprint.dart';
 import '../services/credential_store.dart';
 import 'package:neostation/services/logger_service.dart';
@@ -851,6 +852,9 @@ class ScraperRepository {
   }) async {
     try {
       final db = await SqliteService.getDatabase();
+      // Every column, deliberately: the builder reads the row's existing
+      // `field_sources` to carry provenance forward, so an explicit column
+      // list here would silently drop it on every update.
       final existing = await db.query(
         'user_screenscraper_metadata',
         where: 'app_system_id = ? AND filename = ? COLLATE NOCASE',
@@ -890,6 +894,9 @@ class ScraperRepository {
     'filename',
     'is_fully_scraped',
     'metadata_source',
+    // Provenance about the write, not a value a write can carry. Left out so
+    // an `incoming` map that happens to hold it cannot be written as content.
+    MetadataFieldSources.column,
     'updated_at',
   };
 
@@ -936,6 +943,18 @@ class ScraperRepository {
     });
 
     if (toWrite.isEmpty) return null;
+
+    // Per-field provenance for exactly the columns this write fills, carried
+    // forward from whatever the row already recorded. `toWrite` is the answer
+    // to "which columns is this write responsible for", so it is taken before
+    // the bookkeeping columns below are added to it. Issue #233.
+    // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Metadata Source Provenance"
+    final fieldSources = MetadataFieldSources.fromDb(
+      row?[MetadataFieldSources.column],
+    ).withWrites(toWrite.keys.toList(), source.dbValue);
+    final encoded = fieldSources.toDb();
+    if (encoded != null) toWrite[MetadataFieldSources.column] = encoded;
+
     toWrite['updated_at'] = DateTime.now().toIso8601String();
 
     if (row == null) {
@@ -1255,11 +1274,53 @@ class ScraperRepository {
 
   // ── Bulk scraping ─────────────────────────────────────────────────────────
 
-  /// The `new_only` predicate: no metadata row for this system, or one that
-  /// a partial scrape or importer left unfinished. A row any source marked
-  /// fully scraped (including a RomM insert) is skipped.
+  /// The `new_only` predicate: no metadata row for this system, one that a
+  /// partial scrape or importer left unfinished, or one ScreenScraper has
+  /// never completed.
+  ///
+  /// That last clause is the fix for #233. `is_fully_scraped` is one flag for
+  /// the whole row and *any* source sets it, so a RomM fetch that filled three
+  /// of fourteen columns marked the game done and ScreenScraper never looked
+  /// at it again. The fork's library is RomM-first, which made that the common
+  /// path rather than an edge: games sat with no genre, no players count and
+  /// no summary, and a full re-scrape of the system was the only way out.
+  ///
+  /// `metadata_source` answers the right question, because only a whole-row
+  /// writer sets it and a ScreenScraper pass is one: a row naming another
+  /// source has never had a ScreenScraper pass, whatever else filled it in.
+  ///
+  /// A **null** source is deliberately treated as done, not as unknown. Rows
+  /// written before that column existed all read null, and offering them would
+  /// turn the first `new_only` pass after an upgrade into a full re-scrape of
+  /// the library — thousands of requests against a daily quota, to re-fetch
+  /// what is already there. The cost of being wrong the other way is one
+  /// legacy row keeping a gap RomM never filled, which is what `all` mode is
+  /// for.
+  ///
+  /// The rule is "any source that is not ScreenScraper", deliberately, not
+  /// "romm": a Steam-written row is in the same position — another whole-row
+  /// writer completed it and ScreenScraper never saw it — and the question the
+  /// predicate asks is about ScreenScraper, so naming one other source would
+  /// be an accident of who happens to exist today.
+  ///
+  /// It terminates, which the obvious alternative ("offer any row with an
+  /// empty column") does not: once ScreenScraper runs, `saveGameMetadata`
+  /// writes `metadata_source = 'screenscraper'` and `markGameFullyScraped`
+  /// sets the flag, so the row drops out. A game ScreenScraper simply has no
+  /// Italian description for is finished, not re-offered every pass.
+  ///
+  /// Offering the row is only half of it. The chain a candidate then runs
+  /// through offers it to RomM first, and a RomM fetch with nothing left to
+  /// add must not end that chain — see
+  /// `RommScrapeStepResult.classifyOutcome`, which reports that case as
+  /// `alreadyComplete` rather than `scraped` for exactly this reason. Without
+  /// that half the row is offered every pass, costs a RomM request every pass,
+  /// and never reaches ScreenScraper.
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Cooperation With ScreenScraper", REQ "Metadata Source Provenance"
   static String _scrapeModeFilter(String scrapeMode) => scrapeMode == 'new_only'
-      ? 'AND (usm.filename IS NULL OR usm.is_fully_scraped = 0)'
+      ? 'AND (usm.filename IS NULL OR usm.is_fully_scraped = 0 '
+            'OR (usm.metadata_source IS NOT NULL '
+            "AND usm.metadata_source != '${MetadataSource.screenscraper.dbValue}'))"
       : '';
 
   /// Returns the count of ROMs eligible for scraping for a given system.
