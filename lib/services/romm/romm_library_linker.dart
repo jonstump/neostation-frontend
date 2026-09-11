@@ -69,8 +69,9 @@ class RommLinkAmbiguity {
 ///
 /// The row is left exactly as it was — rows are never overwritten — but the
 /// disagreement is worth a line: it is either a server whose ids changed
-/// (a re-scan, a migration) or two ROMs on one system sharing a filename,
-/// and either way the user's saves are following the *old* id.
+/// (a re-scan, a migration), two ROMs on one system sharing a filename, or a
+/// link the user picked by hand ([existingSource] is manual), and either way
+/// the user's saves are following the id in the row.
 @immutable
 class RommLinkConflict {
   /// The on-disk filename, as indexed.
@@ -82,6 +83,10 @@ class RommLinkConflict {
   /// The RomM ROM id the existing row points at.
   final int existingRomId;
 
+  /// Who wrote the existing row. A manual row is the user's choice and is
+  /// reported so the log explains why the pass did not follow the filename.
+  final RommLinkSource existingSource;
+
   /// The RomM ROM id this pass matched the file to.
   final int matchedRomId;
 
@@ -89,12 +94,14 @@ class RommLinkConflict {
     required this.filename,
     required this.systemFolder,
     required this.existingRomId,
+    required this.existingSource,
     required this.matchedRomId,
   });
 
   @override
   String toString() =>
-      '$systemFolder/$filename (row $existingRomId, matched $matchedRomId)';
+      '$systemFolder/$filename (row $existingRomId ${existingSource.dbValue}, '
+      'matched $matchedRomId)';
 }
 
 /// What one run of [RommLibraryLinker] did.
@@ -386,7 +393,8 @@ class RommLibraryLinker {
         // ambiguous is moot for it. A row pointing somewhere none of this
         // pass's matches do is recorded, not corrected: the user's saves are
         // attached to the id in the row, and swapping it silently would move
-        // them to a ROM the server may have renumbered underneath us.
+        // them to a ROM the server may have renumbered underneath us — or,
+        // for a manual row, away from the ROM the user deliberately chose.
         final existingRomId = game.existingRomId;
         if (existingRomId != null) {
           alreadyPresent++;
@@ -397,6 +405,7 @@ class RommLibraryLinker {
                   filename: game.filename,
                   systemFolder: game.systemFolder,
                   existingRomId: existingRomId,
+                  existingSource: game.existingSource ?? RommLinkSource.auto,
                   matchedRomId: matchedRomId,
                 ),
               );
@@ -567,8 +576,9 @@ class RommLibraryLinker {
       for (final conflict in s.conflicts.take(_conflictLogLimit)) {
         _log.w(
           'RomM link pass left ${conflict.systemFolder}/${conflict.filename} '
-          'on rom ${conflict.existingRomId}: this pass matched it to rom '
-          '${conflict.matchedRomId}, existing rows are never overwritten',
+          'on rom ${conflict.existingRomId} '
+          '(${conflict.existingSource.dbValue} link): this pass matched it to '
+          'rom ${conflict.matchedRomId}, existing rows are never overwritten',
         );
       }
       final hidden = s.conflicts.length - _conflictLogLimit;
@@ -621,11 +631,16 @@ class _LocalGame {
   /// a match that disagrees with the row can be reported.
   final int? existingRomId;
 
+  /// Who wrote that row (null when there is none), reported alongside
+  /// [existingRomId] so a conflict with a manual row reads as such.
+  final RommLinkSource? existingSource;
+
   const _LocalGame({
     required this.filename,
     required this.romname,
     required this.systemFolder,
     required this.existingRomId,
+    required this.existingSource,
   });
 
   /// Already had a mapping row when the pass started.
@@ -669,16 +684,24 @@ class _LocalIndex {
       );
       if (byKey.containsKey(key)) continue;
       // The map is written with the on-disk name but read by either spelling
-      // (see RommSaveMapRepository.getRomIdIndex), so ask both ways.
-      final existingRomId =
-          romIds.lookup(filename, folder) ??
-          romIds.lookup(game.romname, folder);
+      // (see RommSaveMapRepository.getRomIdIndex), so ask both ways. The
+      // source is read under whichever spelling answered, so it describes the
+      // same row as the id.
+      var spelling = filename;
+      var existingRomId = romIds.lookup(spelling, folder);
+      if (existingRomId == null) {
+        spelling = game.romname;
+        existingRomId = romIds.lookup(spelling, folder);
+      }
       if (existingRomId == null) unlinked++;
       byKey[key] = _LocalGame(
         filename: filename,
         romname: game.romname,
         systemFolder: folder,
         existingRomId: existingRomId,
+        existingSource: existingRomId == null
+            ? null
+            : romIds.sourceFor(spelling, folder),
       );
     }
     return _LocalIndex._(byKey, unlinked);
