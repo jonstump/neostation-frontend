@@ -149,6 +149,7 @@ void main() {
         {'filename': 'game.smc', 'title': 'Super Game'},
         'snes',
         source: MetadataSource.screenscraper,
+        mode: MetadataWriteMode.replace,
       );
       expect(saved, isTrue);
 

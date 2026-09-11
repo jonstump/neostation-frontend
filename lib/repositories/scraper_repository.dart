@@ -22,7 +22,7 @@ typedef EsdeSystemMediaLocation = ({
 /// `metadata_source`.
 ///
 /// Whole-row writers ([ScraperRepository.saveGameMetadata], the Steam upsert)
-/// set it on every write; fill-gaps writers
+/// set it on every write, in either [MetadataWriteMode]; fill-gaps writers
 /// ([ScraperRepository.buildFillGapsMetadataWrite]) set it only when they
 /// insert a row, so an existing row keeps the source that created it. The
 /// manual metadata editor writes [manual]. Rows written before the column
@@ -58,6 +58,41 @@ enum MetadataSource {
     }
     return null;
   }
+}
+
+/// What [ScraperRepository.saveGameMetadata] does with the columns its caller
+/// did **not** hand it.
+///
+/// The distinction is in the API rather than in the shape of the map because
+/// the two intents are genuinely different and neither is safe as a default:
+/// a routine pass must not destroy another source's work, and a forced
+/// re-scrape must be able to.
+///
+/// A column the caller supplies as an explicit `null` counts as **not handed
+/// over** in [merge]. Nothing that writes whole rows means "erase this" by a
+/// null — a scraper's mapper produces null for "the API had no value" — and
+/// the one writer that genuinely clears columns, the manual metadata editor,
+/// goes through [ScraperRepository.updateGameMetadata], a partial update that
+/// can still write null. So [merge] never nulls a column, by construction.
+// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Metadata Source Provenance"
+enum MetadataWriteMode {
+  /// Columns absent from the write — and columns present but null or blank —
+  /// keep whatever the row already held, whichever source put it there.
+  ///
+  /// What a metadata pass wants: ScreenScraper fills 14 of the table's
+  /// columns, so a whole-row replace by a ScreenScraper pass threw away
+  /// RomM's developer / players / genre, the ES-DE importer's
+  /// `esde_media_subdir` / `esde_imported`, and the `field_sources`
+  /// provenance. Issue #248.
+  merge,
+
+  /// Whole-row replace: the row is rebuilt from the map alone, so every column
+  /// absent from it returns to its declared default.
+  ///
+  /// What a *forced* re-scrape (`all` mode) and RomM's own replace mode want —
+  /// "discard what is there and take this source's answer" — and the reason
+  /// this is a mode rather than a bug.
+  replace,
 }
 
 class MetadataTransferResult {
@@ -753,34 +788,144 @@ class ScraperRepository {
 
   /// Saves the metadata to the local user_screenscraper_metadata table.
   ///
-  /// A whole-row replace: every column not in [metadata] is reset, and
-  /// `metadata_source` is set to [source] on every write, so the row records
-  /// whoever last replaced it.
+  /// [mode] decides what happens to the columns [metadata] does not carry —
+  /// see [MetadataWriteMode]; it is required because neither answer is a safe
+  /// default. `metadata_source` is set to [source] on every write in either
+  /// mode, so the row always records whoever last wrote it and ScreenScraper's
+  /// `new_only` predicate still terminates (see [_scrapeModeFilter]).
+  ///
+  /// [MetadataWriteMode.merge] reads the row and writes only what it has, so
+  /// it is a read-then-write where the replace is a single statement; the pair
+  /// runs inside a transaction so a concurrent writer cannot land between
+  /// them. Bulk scraping runs several ROMs at once, but each worker owns its
+  /// own row, so the lock is only ever contended briefly.
   // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Metadata Source Provenance"
   static Future<bool> saveGameMetadata(
     Map<String, dynamic> metadata,
     String appSystemId, {
     required MetadataSource source,
+    required MetadataWriteMode mode,
     bool isFullyScraped = false,
   }) async {
     try {
       final db = await SqliteService.getDatabase();
-      metadata['app_system_id'] = appSystemId;
-      metadata['is_fully_scraped'] = isFullyScraped ? 1 : 0;
-      metadata['metadata_source'] = source.dbValue;
-      metadata['updated_at'] = DateTime.now().toIso8601String();
+      final filename = metadata['filename']?.toString();
 
-      await db.insert(
-        'user_screenscraper_metadata',
-        metadata,
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
+      // A map with no filename has no row to read back, so it can only be
+      // written the one way — and the insert is what surfaces that it is not a
+      // valid row either.
+      if (filename == null || mode == MetadataWriteMode.replace) {
+        metadata['app_system_id'] = appSystemId;
+        metadata['is_fully_scraped'] = isFullyScraped ? 1 : 0;
+        metadata['metadata_source'] = source.dbValue;
+        metadata['updated_at'] = DateTime.now().toIso8601String();
+
+        await db.insert(
+          'user_screenscraper_metadata',
+          metadata,
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+        return true;
+      }
+
+      await db.transaction((txn) async {
+        // Every column, deliberately: the builder reads the row's existing
+        // `field_sources` to carry provenance forward.
+        final existing = await txn.query(
+          'user_screenscraper_metadata',
+          where: 'app_system_id = ? AND filename = ? COLLATE NOCASE',
+          whereArgs: [appSystemId, filename],
+          limit: 1,
+        );
+        final row = existing.isNotEmpty ? existing.first : null;
+
+        final toWrite = buildMergeMetadataWrite(
+          appSystemId: appSystemId,
+          filename: filename,
+          row: row,
+          metadata: metadata,
+          source: source,
+          isFullyScraped: isFullyScraped,
+        );
+
+        if (row == null) {
+          await txn.insert(
+            'user_screenscraper_metadata',
+            toWrite,
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        } else {
+          await txn.update(
+            'user_screenscraper_metadata',
+            toWrite,
+            where: 'app_system_id = ? AND filename = ? COLLATE NOCASE',
+            whereArgs: [appSystemId, filename],
+          );
+        }
+      });
 
       return true;
     } catch (e) {
       _log.e('Error saving game metadata: $e');
       return false;
     }
+  }
+
+  /// Computes a [MetadataWriteMode.merge] write for [metadata] against [row] —
+  /// the game's current `user_screenscraper_metadata` row, or null when it has
+  /// none.
+  ///
+  /// Content columns whose candidate is null or blank are dropped, so the
+  /// returned map holds only values this source actually has plus the
+  /// bookkeeping columns a whole-row write always decides: `is_fully_scraped`,
+  /// `metadata_source`, `updated_at`, and the key when the row is new.
+  /// Applying it as an UPDATE therefore leaves every other column alone —
+  /// which is the whole point, and is what a REPLACE cannot do.
+  ///
+  /// Unlike [buildFillGapsMetadataWrite] a value this source *does* have wins
+  /// over the row's current value: this is a scrape, not a gap fill.
+  ///
+  /// `field_sources` is maintained rather than merely preserved: the columns
+  /// this write touches move to [source] and every other field keeps whoever
+  /// wrote it. The whole-row path used to reset the column to null (#233's
+  /// documented limit); with a merge it can finally carry provenance.
+  ///
+  /// Pure — no database access — so the write can be inspected in a test
+  /// without one.
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Metadata Source Provenance"
+  static Map<String, dynamic> buildMergeMetadataWrite({
+    required String appSystemId,
+    required String filename,
+    required Map<String, Object?>? row,
+    required Map<String, dynamic> metadata,
+    required MetadataSource source,
+    required bool isFullyScraped,
+  }) {
+    final toWrite = <String, dynamic>{};
+    metadata.forEach((col, val) {
+      if (_reservedWriteColumns.contains(col)) return;
+      if (val == null) return;
+      if (val is String && val.trim().isEmpty) return;
+      toWrite[col] = val;
+    });
+
+    // Taken before the bookkeeping columns below join the map: `toWrite` is
+    // the answer to "which content columns is this write responsible for".
+    final fieldSources = MetadataFieldSources.fromDb(
+      row?[MetadataFieldSources.column],
+    ).withWrites(toWrite.keys.toList(), source.dbValue);
+    final encoded = fieldSources.toDb();
+    if (encoded != null) toWrite[MetadataFieldSources.column] = encoded;
+
+    toWrite['is_fully_scraped'] = isFullyScraped ? 1 : 0;
+    toWrite['metadata_source'] = source.dbValue;
+    toWrite['updated_at'] = DateTime.now().toIso8601String();
+
+    if (row == null) {
+      toWrite['app_system_id'] = appSystemId;
+      toWrite['filename'] = filename;
+    }
+    return toWrite;
   }
 
   /// Merges ES-DE-imported metadata into `user_screenscraper_metadata`,
@@ -887,9 +1032,11 @@ class ScraperRepository {
     }
   }
 
-  /// Columns a fill-gaps write never takes from its caller: the row key,
-  /// scrape state, provenance, and the timestamp are decided here.
-  static const Set<String> _fillGapsReservedColumns = {
+  /// Columns a metadata write never takes from its caller: the row key,
+  /// scrape state, provenance, and the timestamp are decided by the writer.
+  ///
+  /// Shared by the fill-gaps and merge builders so the two cannot drift.
+  static const Set<String> _reservedWriteColumns = {
     'app_system_id',
     'filename',
     'is_fully_scraped',
@@ -930,7 +1077,7 @@ class ScraperRepository {
   }) {
     final toWrite = <String, dynamic>{};
     incoming.forEach((col, val) {
-      if (_fillGapsReservedColumns.contains(col)) return;
+      if (_reservedWriteColumns.contains(col)) return;
       if (val == null) return;
       if (val is String && val.trim().isEmpty) return;
       final cur = row?[col];
@@ -938,7 +1085,7 @@ class ScraperRepository {
       if (curEmpty) toWrite[col] = val;
     });
     alwaysWrite?.forEach((col, val) {
-      if (_fillGapsReservedColumns.contains(col)) return;
+      if (_reservedWriteColumns.contains(col)) return;
       toWrite[col] = val;
     });
 
@@ -1383,6 +1530,14 @@ class ScraperRepository {
 
   /// Whole-row replace for the Steam scraper; records
   /// [MetadataSource.steam] on every write.
+  ///
+  /// Deliberately still an unconditional replace where [saveGameMetadata] grew
+  /// a [MetadataWriteMode] (#248). The loss that motivated the mode is one
+  /// source overwriting another's columns on the same row, and nothing else
+  /// writes these rows: a Steam entry has no RomM match and no ES-DE gamelist
+  /// media, and the scraper re-derives every column it fills from the store
+  /// page each time. Should a second writer ever reach the Steam system, this
+  /// should move to [MetadataWriteMode.merge] with it.
   static Future<void> upsertSteamMetadata(Map<String, dynamic> metadata) async {
     final db = await SqliteService.getDatabase();
     metadata['metadata_source'] = MetadataSource.steam.dbValue;
