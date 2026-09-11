@@ -76,8 +76,9 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
 
     // Pre-allocate keys for maximum theoretical setting items (the fixed rows
     // plus one per navigation tab that can be toggled).
-    // 20: the seventeen rows that were here plus the three unified-library
-    // rows (toggle, default scope, cover cache size).
+    // 20: comfortably above the sixteen fixed rows Android draws, the most of
+    // any platform. Running short here is a range error, not a miscount, so the
+    // ceiling is deliberately loose.
     for (int i = 0; i < 20 + NavTab.values.length; i++) {
       _itemKeys.add(GlobalKey());
     }

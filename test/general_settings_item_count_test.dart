@@ -13,18 +13,20 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 /// `getItemCount()` must equal the number of rows General actually draws.
 ///
-/// It is what `new_settings_screen.dart:408` bounds gamepad navigation on, so a
-/// count lower than the row count makes the tail of the section unreachable —
-/// the rows still draw, D-pad traversal just stops short of them, and on a
-/// gamepad UI there is no scrollbar to drag as a workaround.
+/// It is what `_getContentItemCount()` in `new_settings_screen.dart` bounds
+/// gamepad navigation on, so a count lower than the row count makes the tail of
+/// the section unreachable — the rows still draw, D-pad traversal just stops
+/// short of them, and on a gamepad UI there is no scrollbar to drag as a
+/// workaround.
 ///
 /// That is exactly what happened: the unified library's three rows (show the
-/// library, default scope, cover cache size) are rendered and dispatched
-/// unconditionally, between the RetroAchievements row and the nav-tab block,
-/// but were never counted. The count sat three low and the last three rows of
-/// the section could not be reached. Nothing failed loudly — which is why this
-/// test compares the two numbers rather than asserting a fixed total that would
-/// need updating with every new row. Issue #239.
+/// library, default scope, cover cache size) were rendered and dispatched
+/// unconditionally but never counted, so the count sat three low and the last
+/// three rows of the section could not be reached. Nothing failed loudly —
+/// which is why this test compares the two numbers rather than asserting a
+/// fixed total that would need updating with every new row. Issue #239. Those
+/// three rows have since moved to the RomM section, which this file covers the
+/// same way.
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
