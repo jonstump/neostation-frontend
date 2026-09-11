@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
@@ -163,75 +165,13 @@ class GameDetailsFooter extends StatelessWidget {
                   // the card would put a second cursor in a view that owns its
                   // own selection.
                   child: ExcludeFocus(
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        // Readouts first: the score, then the achievements pill
-                        // taking whatever the controls leave it.
-                        if (hasRating) ...[
-                          _InlineRating(game: game, onTap: onShowGameInfo),
-                          SizedBox(width: _rowGap),
-                        ],
-                        Expanded(
-                          child: showsAchievements
-                              ? Align(
-                                  // Left, so a capped pill leaves its slack between
-                                  // itself and the controls rather than beside the
-                                  // score.
-                                  alignment: Alignment.centerLeft,
-                                  child: LayoutBuilder(
-                                    builder: (context, constraints) =>
-                                        _buildCompactAchievementsIndicator(
-                                          context,
-                                          availableWidth: constraints.maxWidth,
-                                        ),
-                                  ),
-                                )
-                              // Nothing to report, but the slot stays: it is what
-                              // pushes the controls to the right margin.
-                              : const SizedBox.shrink(),
-                        ),
-                        SizedBox(width: _rowGap),
-                        // The library scope, ahead of the per-game controls:
-                        // it acts on the whole list, and the chord it shows
-                        // is the only hint the pad user gets for it.
-                        // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
-                        if (libraryScope != null &&
-                            onToggleLibraryScope != null) ...[
-                          LibraryScopePill(
-                            scope: libraryScope!,
-                            onToggle: onToggleLibraryScope!,
-                            offline: libraryOffline,
-                            height: _controlSize,
-                          ),
-                          SizedBox(width: _rowGap),
-                        ],
-                        // Controls, in the order the removed rail had them.
-                        if (onShowRandomGame != null) ...[
-                          _FooterActionButton(
-                            // The same dice the Y context menu gives Random, so the
-                            // action carries one glyph wherever it is offered.
-                            icon: Symbols.casino_rounded,
-                            onTap: onShowRandomGame!,
-                          ),
-                          SizedBox(width: _rowGap),
-                        ],
-                        _FooterActionButton(
-                          icon: Symbols.favorite_rounded,
-                          // Filled and tinted when the game is already a
-                          // favourite: the button is a toggle, so its state has to
-                          // be readable without pressing it.
-                          isOn: game.isFavorite == true,
-                          onTap: onToggleFavorite,
-                        ),
-                        SizedBox(width: _rowGap),
-                        _FooterActionButton(
-                          icon: Symbols.settings_rounded,
-                          onTap: onOpenGameSettings,
-                        ),
-                        SizedBox(width: _rowGap),
-                        _buildPlayButton(context),
-                      ],
+                    child: LayoutBuilder(
+                      builder: (context, constraints) => _buildActionRow(
+                        context,
+                        budget: constraints.maxWidth,
+                        hasRating: hasRating,
+                        showsAchievements: showsAchievements,
+                      ),
                     ),
                   ),
                 ),
@@ -240,6 +180,134 @@ class GameDetailsFooter extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  /// The action row, fitted to the width the card actually has.
+  ///
+  /// Everything on this row but the achievements pill used to be laid out at
+  /// its natural width, and the pill — the row's only [Expanded] — was the
+  /// only thing that could give. Its floor is zero, not [_pillMinWidth]: that
+  /// constant only decides whether what is left is worth *drawing*. So once
+  /// the pill had given all of it the row was simply wider than the card, the
+  /// surplus ran off the right edge, and the child sitting on that edge is
+  /// PLAY. The footer is inside a [ClipRRect], so there was no overflow banner
+  /// either — the row's primary action was quietly cut in half. Issue #238.
+  ///
+  /// Nothing about the selected game's *artwork* is involved, which is where
+  /// that issue started looking: the card is an [Expanded] beside a fixed
+  /// 200-unit sidebar and the art is a `Positioned.fill` panel in the same
+  /// stack as this footer, so the art cannot move this row's width by a pixel.
+  /// What moves is the card, and the card is set by the panel's aspect ratio:
+  /// roughly 641 of these units on a 16:9 screen, 556 on 16:10 and 428 on 4:3.
+  /// The row's fixed items come to about 460 with a scope pill and a score, so
+  /// 16:9 never showed it and a 4:3 panel showed it on every scraped game.
+  ///
+  /// So the optional items are fitted against the width rather than assumed to
+  /// fit, and what does not fit is dropped in a fixed order: the achievements
+  /// pill first (it already sheds itself under [_pillMinWidth]), then the
+  /// score, then the dice, and the scope pill last — and the scope pill's
+  /// label ellipsizes before anything is dropped at all, since the chord it
+  /// shows is the only hint the pad user gets for the toggle.
+  ///
+  /// The three that are never dropped — the two toggles and PLAY — come to
+  /// [_mandatoryWidth], well under any card this view is laid out in.
+  Widget _buildActionRow(
+    BuildContext context, {
+    required double budget,
+    required bool hasRating,
+    required bool showsAchievements,
+  }) {
+    final double gap = _rowGap;
+    final double control = _controlSize.r;
+
+    // What is left once the row has paid for what it always shows.
+    double spare = math.max(0.0, budget - _mandatoryWidth);
+
+    // The scope pill only has to fit at its narrowest to earn its place; it
+    // grows back into whatever the items decided after it leave behind.
+    final bool showScope =
+        libraryScope != null &&
+        onToggleLibraryScope != null &&
+        spare >= _scopeMinWidth.r + gap;
+    if (showScope) spare -= _scopeMinWidth.r + gap;
+
+    final bool showRandom = onShowRandomGame != null && spare >= control + gap;
+    if (showRandom) spare -= control + gap;
+
+    final bool showRating = hasRating && spare >= _scoreWidth.r + gap;
+    if (showRating) spare -= _scoreWidth.r + gap;
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.center,
+      children: [
+        // Readouts first: the score, then the achievements pill taking
+        // whatever the controls leave it.
+        if (showRating) ...[
+          _InlineRating(game: game, onTap: onShowGameInfo),
+          SizedBox(width: gap),
+        ],
+        Expanded(
+          child: showsAchievements
+              ? Align(
+                  // Left, so a capped pill leaves its slack between itself and
+                  // the controls rather than beside the score.
+                  alignment: Alignment.centerLeft,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) =>
+                        _buildCompactAchievementsIndicator(
+                          context,
+                          availableWidth: constraints.maxWidth,
+                        ),
+                  ),
+                )
+              // Nothing to report, but the slot stays: it is what pushes the
+              // controls to the right margin.
+              : const SizedBox.shrink(),
+        ),
+        SizedBox(width: gap),
+        // The library scope, ahead of the per-game controls: it acts on the
+        // whole list, and the chord it shows is the only hint the pad user
+        // gets for it.
+        // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
+        if (showScope) ...[
+          LibraryScopePill(
+            scope: libraryScope!,
+            onToggle: onToggleLibraryScope!,
+            offline: libraryOffline,
+            height: _controlSize,
+            // Its natural width, or the row's leftover, whichever is smaller.
+            // Under the leftover the label ellipsizes instead of the pill
+            // pushing PLAY off the edge.
+            maxWidth: _scopeMinWidth.r + spare,
+          ),
+          SizedBox(width: gap),
+        ],
+        // Controls, in the order the removed rail had them.
+        if (showRandom) ...[
+          _FooterActionButton(
+            // The same dice the Y context menu gives Random, so the action
+            // carries one glyph wherever it is offered.
+            icon: Symbols.casino_rounded,
+            onTap: onShowRandomGame!,
+          ),
+          SizedBox(width: gap),
+        ],
+        _FooterActionButton(
+          icon: Symbols.favorite_rounded,
+          // Filled and tinted when the game is already a favourite: the button
+          // is a toggle, so its state has to be readable without pressing it.
+          isOn: game.isFavorite == true,
+          onTap: onToggleFavorite,
+        ),
+        SizedBox(width: gap),
+        _FooterActionButton(
+          icon: Symbols.settings_rounded,
+          onTap: onOpenGameSettings,
+        ),
+        SizedBox(width: gap),
+        _buildPlayButton(context),
+      ],
     );
   }
 
@@ -275,7 +343,7 @@ class GameDetailsFooter extends StatelessWidget {
       // growing the button (see the FittedBox below). 88 rather than 80 since
       // the row grew: the badge and the label grew with it, and at 80 the
       // English label was the one being scaled down to fit.
-      width: 88.r,
+      width: _playWidth.r,
       height: _controlSize.r,
       decoration: BoxDecoration(
         color: const Color(0xFF2ECC71),
@@ -696,6 +764,29 @@ const double _pillMinWidth = 64;
 /// [_bottomRow] unscaled, for the widgets that take a bare `double` and apply
 /// `.r` themselves.
 const double _controlSize = _bottomRow;
+
+/// PLAY's fixed width. See [GameDetailsFooter._buildPlayButton] for why it is
+/// fixed rather than sized to its label.
+const double _playWidth = 88;
+
+/// The narrowest the library-scope pill may draw before it is dropped instead.
+///
+/// Its fixed parts -- the two chord glyphs, the scope icon, their gaps, the
+/// padding and the border -- come to about 73, so this leaves the label around
+/// 20: enough for a stub and its ellipsis, and short of the width where the
+/// pill would say nothing but the ellipsis. Under it the pill goes altogether,
+/// the same call [_pillMinWidth] makes for the achievements pill.
+const double _scopeMinWidth = 96;
+
+/// What the action row costs before any of its optional items: the favourite
+/// toggle, the settings button, PLAY, the two gaps between them, and the gap
+/// that separates the controls from the readouts.
+///
+/// This is the row's floor. It is about 183 against the ~404 the narrowest
+/// card this view is laid out in leaves (a 4:3 panel), so there is no width at
+/// which PLAY is the thing that gives -- see
+/// [GameDetailsFooter._buildActionRow].
+double get _mandatoryWidth => _playWidth.r + _controlSize.r * 2 + _rowGap * 3;
 
 /// Height of the play-time line above the row.
 ///

@@ -101,142 +101,181 @@ class GameViewFooter extends StatelessWidget {
 
     return Container(
       padding: EdgeInsets.symmetric(horizontal: 12.r, vertical: 8.r),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // Identity section: title and optional ROM subtitle.
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                MarqueeText(
-                  text: GameUtils.formatGameName(game.name),
-                  isActive: true,
-                  style: TextStyle(
-                    color: scheme.onSurface,
-                    fontSize: 18.r,
-                    fontWeight: FontWeight.bold,
+      // The width the row actually has, which nothing here could otherwise
+      // see: the action group below is a plain non-flexible child, so it is
+      // laid out with no main-axis ceiling and takes whatever its contents
+      // want. See the ceiling put on it further down — issue #238.
+      child: LayoutBuilder(
+        builder: (context, constraints) => Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Identity section: title and optional ROM subtitle.
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  MarqueeText(
+                    text: GameUtils.formatGameName(game.name),
+                    isActive: true,
+                    style: TextStyle(
+                      color: scheme.onSurface,
+                      fontSize: 18.r,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  // Always reserve the ROM-filename subtitle's line height so the
+                  // identity column stays a constant height. Unscraped games have
+                  // no subtitle; without this reservation the shorter column
+                  // re-centers the rating/RA pill + PLAY row upward. The empty
+                  // string still lays out a full line box via the forced strut.
+                  // A remote entry's size rides on the same line, after the
+                  // filename when that is shown: it is the one fact about the
+                  // entry the catalog has that a card cannot draw.
+                  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entry Presentation"
+                  Text(
+                    [
+                      if (game.showRomFileNameSubtitle) game.romname,
+                      ?remoteEntrySizeLabel(game),
+                    ].join('  \u2022  '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    strutStyle: StrutStyle(
+                      fontSize: 12.r,
+                      forceStrutHeight: true,
+                    ),
+                    style: TextStyle(
+                      color: scheme.onSurface.withValues(alpha: 0.72),
+                      fontSize: 12.r,
+                      fontWeight: FontWeight.w400,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            SizedBox(width: 12.r),
+
+            // Action/status section: rating, RetroAchievements, play.
+            //
+            // Capped at the row's whole inner width and scaled down inside that
+            // cap. Every item in this group is laid out at its natural width and
+            // the identity column beside it is the row's only [Expanded], so once
+            // the column had collapsed to nothing there was no give left: the
+            // group ran past the right edge and PLAY, its last child, was the
+            // part that went over. That is the details-card footer's bug in this
+            // footer's shape (issue #238), and this footer is further from it
+            // only because it spans the whole screen rather than the details
+            // card — about 640 of these units on a 4:3 panel against the card's
+            // 428. Close enough to reach on a squarer panel in a language with a
+            // long scope label at a large system font size.
+            //
+            // Scaled rather than shed, unlike the details-card footer: that row
+            // is a curated budget of items each of which has a documented place
+            // in the order things are dropped, and this one is a mixed group with
+            // no such order. Nothing moves at any width the group already fits
+            // in, which is every width it is laid out in today.
+            ConstrainedBox(
+              constraints: BoxConstraints(
+                maxWidth: (constraints.maxWidth - 12.r).clamp(
+                  0.0,
+                  double.infinity,
+                ),
+              ),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                alignment: Alignment.centerRight,
+                child: ExcludeFocus(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // The cloud mark leads the row, next to the name it reports on
+                      // rather than among the controls at the far end. It is a marker
+                      // on the file, not a fact to read, so it stays a bare glyph:
+                      // the filled chip it wore on the old action rail is what made
+                      // it read as a button sitting among buttons.
+                      //
+                      // It is here and not on the identity column's second line
+                      // because every "nothing to say" state collapses it to zero
+                      // size, and that column's height is load-bearing — see the
+                      // subtitle's forced strut above.
+                      // Watched here rather than passed in: the views that host this
+                      // footer memoize the widget instance, so a setting read there
+                      // would not reach a footer already built.
+                      if (!isFolder &&
+                          system != null &&
+                          syncProvider != null &&
+                          context.select<SqliteConfigProvider, bool>(
+                            (p) => p.config.showCloudSyncIcon,
+                          )) ...[
+                        NeoSyncStatusIcon(
+                          system: system!,
+                          game: game,
+                          syncProvider: syncProvider!,
+                          size: 16.0,
+                          showBackground: false,
+                          showGlyphShadow: false,
+                        ),
+                        SizedBox(width: 8.r),
+                      ],
+                      // The scope leads the pills: it describes the whole list,
+                      // not the selected game, so it sits before anything that does.
+                      // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
+                      if (libraryScope != null &&
+                          onToggleLibraryScope != null) ...[
+                        LibraryScopePill(
+                          scope: libraryScope!,
+                          onToggle: onToggleLibraryScope!,
+                          offline: libraryOffline,
+                        ),
+                        SizedBox(width: 6.r),
+                      ],
+                      if (onToggleMute != null && hasVideo) ...[
+                        _MuteHintPill(onToggleMute: onToggleMute!),
+                        SizedBox(width: 6.r),
+                      ],
+                      if (game.rating > 0) ...[
+                        _SteamStyleRating(game: game),
+                        SizedBox(width: 6.r),
+                      ],
+                      // The details card's own test, shared rather than restated:
+                      // signed out nothing is ever loaded, so the pill would settle
+                      // on its "none" state for every game in the library and read as
+                      // "this game has no achievements" rather than "nobody asked";
+                      // and a game RetroAchievements has answered zero for gets no
+                      // pill at all rather than one saying so. A lookup still in
+                      // flight keeps it — only a settled zero hides it.
+                      if (GameDetailsFooter.showsAchievementsFor(
+                        context,
+                        game: game,
+                        hasRetroAchievements: hasRetroAchievements,
+                        isLoadingAchievements: isLoadingAchievements,
+                        currentGameInfo: currentGameInfo,
+                      )) ...[
+                        _CompactAchievementsIndicator(
+                          game: game,
+                          isLoading: isLoadingAchievements,
+                          gameInfo: currentGameInfo,
+                          onTap: onShowAchievements,
+                        ),
+                        SizedBox(width: 6.r),
+                      ],
+                      // Accumulated play time as its own pill to the left of PLAY
+                      // (only once the game has been played), mirroring the details
+                      // card footer.
+                      if (GameUtils.formatPlayTime(game.playTime ?? 0) !=
+                          '0s') ...[
+                        _PlayTimePill(game: game),
+                        SizedBox(width: 6.r),
+                      ],
+                      _buildPlayButton(context),
+                    ],
                   ),
                 ),
-                // Always reserve the ROM-filename subtitle's line height so the
-                // identity column stays a constant height. Unscraped games have
-                // no subtitle; without this reservation the shorter column
-                // re-centers the rating/RA pill + PLAY row upward. The empty
-                // string still lays out a full line box via the forced strut.
-                // A remote entry's size rides on the same line, after the
-                // filename when that is shown: it is the one fact about the
-                // entry the catalog has that a card cannot draw.
-                // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entry Presentation"
-                Text(
-                  [
-                    if (game.showRomFileNameSubtitle) game.romname,
-                    ?remoteEntrySizeLabel(game),
-                  ].join('  \u2022  '),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  strutStyle: StrutStyle(
-                    fontSize: 12.r,
-                    forceStrutHeight: true,
-                  ),
-                  style: TextStyle(
-                    color: scheme.onSurface.withValues(alpha: 0.72),
-                    fontSize: 12.r,
-                    fontWeight: FontWeight.w400,
-                  ),
-                ),
-              ],
+              ),
             ),
-          ),
-
-          SizedBox(width: 12.r),
-
-          // Action/status section: rating, RetroAchievements, play.
-          ExcludeFocus(
-            child: Row(
-              children: [
-                // The cloud mark leads the row, next to the name it reports on
-                // rather than among the controls at the far end. It is a marker
-                // on the file, not a fact to read, so it stays a bare glyph:
-                // the filled chip it wore on the old action rail is what made
-                // it read as a button sitting among buttons.
-                //
-                // It is here and not on the identity column's second line
-                // because every "nothing to say" state collapses it to zero
-                // size, and that column's height is load-bearing — see the
-                // subtitle's forced strut above.
-                // Watched here rather than passed in: the views that host this
-                // footer memoize the widget instance, so a setting read there
-                // would not reach a footer already built.
-                if (!isFolder &&
-                    system != null &&
-                    syncProvider != null &&
-                    context.select<SqliteConfigProvider, bool>(
-                      (p) => p.config.showCloudSyncIcon,
-                    )) ...[
-                  NeoSyncStatusIcon(
-                    system: system!,
-                    game: game,
-                    syncProvider: syncProvider!,
-                    size: 16.0,
-                    showBackground: false,
-                    showGlyphShadow: false,
-                  ),
-                  SizedBox(width: 8.r),
-                ],
-                // The scope leads the pills: it describes the whole list,
-                // not the selected game, so it sits before anything that does.
-                // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
-                if (libraryScope != null && onToggleLibraryScope != null) ...[
-                  LibraryScopePill(
-                    scope: libraryScope!,
-                    onToggle: onToggleLibraryScope!,
-                    offline: libraryOffline,
-                  ),
-                  SizedBox(width: 6.r),
-                ],
-                if (onToggleMute != null && hasVideo) ...[
-                  _MuteHintPill(onToggleMute: onToggleMute!),
-                  SizedBox(width: 6.r),
-                ],
-                if (game.rating > 0) ...[
-                  _SteamStyleRating(game: game),
-                  SizedBox(width: 6.r),
-                ],
-                // The details card's own test, shared rather than restated:
-                // signed out nothing is ever loaded, so the pill would settle
-                // on its "none" state for every game in the library and read as
-                // "this game has no achievements" rather than "nobody asked";
-                // and a game RetroAchievements has answered zero for gets no
-                // pill at all rather than one saying so. A lookup still in
-                // flight keeps it — only a settled zero hides it.
-                if (GameDetailsFooter.showsAchievementsFor(
-                  context,
-                  game: game,
-                  hasRetroAchievements: hasRetroAchievements,
-                  isLoadingAchievements: isLoadingAchievements,
-                  currentGameInfo: currentGameInfo,
-                )) ...[
-                  _CompactAchievementsIndicator(
-                    game: game,
-                    isLoading: isLoadingAchievements,
-                    gameInfo: currentGameInfo,
-                    onTap: onShowAchievements,
-                  ),
-                  SizedBox(width: 6.r),
-                ],
-                // Accumulated play time as its own pill to the left of PLAY
-                // (only once the game has been played), mirroring the details
-                // card footer.
-                if (GameUtils.formatPlayTime(game.playTime ?? 0) != '0s') ...[
-                  _PlayTimePill(game: game),
-                  SizedBox(width: 6.r),
-                ],
-                _buildPlayButton(context),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
