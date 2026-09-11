@@ -47,7 +47,6 @@ import '../../services/romm/romm_cover_cache.dart';
 import '../../utils/remote_entry_secondary_state.dart';
 import 'my_games_list/remote_download_flow.dart';
 import 'my_games_list/selection_retention.dart';
-import '../../widgets/library_scope_pill.dart';
 import '../../utils/rom_tree.dart';
 import 'game_details_card/game_details_card_list.dart';
 import 'game_details_card/random_game_dialog.dart';
@@ -703,9 +702,14 @@ class _SystemGamesListState extends State<SystemGamesList> {
 
   /// Flips the scope and rebuilds the visible list from the merged one in
   /// memory. The selection follows the same game when it survives the
-  /// change, else it lands on the first entry. Reports the new scope, and —
-  /// when `all` is chosen while the server is unreachable — that what is
-  /// listed is the cached catalog.
+  /// change, else it lands on the first entry.
+  ///
+  /// Silent. The list redraws and the footer pill switches its icon and label,
+  /// which is the feedback; a toast on top of that is the notification-area
+  /// equivalent of announcing that a filter applied. The offline case the old
+  /// toast also carried is on the pill too — it wears a cloud-off mark and
+  /// says so in its tooltip whenever the scope is `all` and the server is
+  /// unreachable. Issue #234.
   // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
   void _toggleLibraryScope() {
     if (!_libraryScopeAvailable || _isLoading) return;
@@ -719,17 +723,6 @@ class _SystemGamesListState extends State<SystemGamesList> {
       _selectedGameIndex = kept >= 0 ? kept : 0;
       _selectedGame = _games.isNotEmpty ? _games[_selectedGameIndex] : null;
     });
-    final offline = _libraryOffline;
-    final label = LibraryScopePill.labelFor(context, _libraryScope);
-    AppNotification.showNotification(
-      context,
-      offline && _libraryScope == LibraryScope.all
-          ? AppLocale.libraryOfflineCached.getString(context)
-          : AppLocale.libraryScopeSwitched
-                .getString(context)
-                .replaceFirst('{scope}', label),
-      type: NotificationType.info,
-    );
     if (_selectedGame != null && !identical(_selectedGame, previous)) {
       _resetVideoState();
       _performBackgroundOperationsForSelectedGame();

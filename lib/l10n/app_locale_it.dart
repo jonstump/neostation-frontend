@@ -1643,7 +1643,6 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.libraryScopeDownloaded: 'Scaricati',
   AppLocale.libraryScopeFooter: 'Libreria: {scope}',
   AppLocale.libraryScopeToggle: 'Cambia ambito della libreria',
-  AppLocale.libraryScopeSwitched: 'Visualizzazione: {scope}',
   AppLocale.libraryOfflineCached:
       'Offline — libreria RomM in cache visualizzata',
   AppLocale.rommRemoteOnlySystemLabel: 'Solo sul server RomM',

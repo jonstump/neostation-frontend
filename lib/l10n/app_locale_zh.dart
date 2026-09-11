@@ -1388,7 +1388,6 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.libraryScopeDownloaded: '已下载',
   AppLocale.libraryScopeFooter: '库：{scope}',
   AppLocale.libraryScopeToggle: '切换库范围',
-  AppLocale.libraryScopeSwitched: '正在显示：{scope}',
   AppLocale.libraryOfflineCached: '离线 — 正在显示缓存的 RomM 库',
   AppLocale.rommRemoteOnlySystemLabel: '仅在 RomM 服务器上',
   AppLocale.rommRefreshLibraryNow: '立即刷新 RomM 库',
