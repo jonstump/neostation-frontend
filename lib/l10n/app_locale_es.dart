@@ -1327,4 +1327,6 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.rommLinkFailed: 'No se pudo vincular con RomM',
   AppLocale.rommUnlinked: 'Desvinculado de RomM',
   AppLocale.rommUnlinkFailed: 'No se pudo desvincular de RomM',
+  // Link action on search results
+  AppLocale.searchLinkToRomm: 'Vincular con RomM',
 };

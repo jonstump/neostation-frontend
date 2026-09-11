@@ -1177,4 +1177,6 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommLinkFailed: 'RomM へのリンクに失敗しました',
   AppLocale.rommUnlinked: 'RomM とのリンクを解除しました',
   AppLocale.rommUnlinkFailed: 'RomM とのリンクを解除できませんでした',
+  // Link action on search results
+  AppLocale.searchLinkToRomm: 'RomM にリンク',
 };

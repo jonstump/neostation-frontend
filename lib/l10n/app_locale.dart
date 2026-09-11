@@ -1315,6 +1315,8 @@ mixin AppLocale {
   static const String rommUnlinked = 'romm_unlinked';
   static const String rommUnlinkFailed = 'romm_unlink_failed';
 
+  // Link action on search results
+  static const String searchLinkToRomm = 'search_link_to_romm';
   // ==========================================================================
   // Localization Maps
   // ==========================================================================

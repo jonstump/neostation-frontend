@@ -1294,4 +1294,6 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommLinkFailed: 'Не удалось связать с RomM',
   AppLocale.rommUnlinked: 'Связь с RomM удалена',
   AppLocale.rommUnlinkFailed: 'Не удалось отвязать от RomM',
+  // Link action on search results
+  AppLocale.searchLinkToRomm: 'Связать с RomM',
 };

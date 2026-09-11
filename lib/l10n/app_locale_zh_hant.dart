@@ -1147,4 +1147,6 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.rommLinkFailed: '連結至 RomM 失敗',
   AppLocale.rommUnlinked: '已取消與 RomM 的連結',
   AppLocale.rommUnlinkFailed: '無法取消與 RomM 的連結',
+  // Link action on search results
+  AppLocale.searchLinkToRomm: '連結至 RomM',
 };
