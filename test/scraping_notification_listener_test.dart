@@ -113,9 +113,9 @@ void main() {
       0,
       reason:
           'a null here would blank the bar the scrape just opened at zero — '
-          '`update` clears progress unless the call names one (#229) — and it '
-          'would come back at the first counted game, so the user sees the bar '
-          'flicker out and in on every scrape. Issue #230',
+          '`update` clears progress unless the call names one (#229) — so any '
+          'notify landing before the count is known must not clear it. Issue '
+          '#230',
     );
     expect(scrapingNotification().ongoing, isTrue);
 

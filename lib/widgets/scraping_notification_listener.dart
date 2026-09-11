@@ -63,11 +63,12 @@ class _ScrapingNotificationListenerState
       // id at `progress: 0` and `update` clears the bar unless the call names
       // one (#229), so null here would blank a bar that is about to come back.
       //
-      // The window is not a frame. `startScraping()` zeroes `_totalGames` and
-      // notifies immediately, and the count is only known after the system-id
-      // sync round trip, so the bar would vanish for as long as that network
-      // call takes and reappear at the first counted game — a flicker on every
-      // single scrape. A zeroed bar is also the honest reading: nothing has
+      // Not because a flicker is otherwise guaranteed: `startScraping()`
+      // notifies before the scrape opens the row, so that first notify hits a
+      // missing id and `update` no-ops. What can land inside the system-id
+      // sync window is an unrelated notify — a concurrent RomM metadata fetch
+      // calls `markArtworkUpdated()` — and null there would blank a bar that
+      // is about to come back. Zero is also the honest reading: nothing has
       // been processed yet. Issue #230.
       progress: total > 0 ? processed / total : 0,
       ongoing: true,
