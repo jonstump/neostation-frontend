@@ -34,6 +34,7 @@ import '../services/romm/romm_collection_mirror.dart';
 import '../services/romm/romm_collection_outbox_service.dart';
 import '../services/romm/romm_cover_cache.dart';
 import '../services/romm/romm_metadata_fetch.dart';
+import '../services/romm/romm_metadata_push.dart';
 import '../services/romm/romm_library_linker.dart';
 import '../services/romm/romm_props_outbox_service.dart';
 import '../services/romm/rom_upload_source.dart';
@@ -1980,6 +1981,52 @@ class RommProvider extends ChangeNotifier {
           !isConnected || _reachability == RommReachability.offline,
       confirm: confirm,
       onProgress: onProgress,
+    );
+  }
+
+  /// Pushes NeoStation's own metadata for the games [candidates] names onto
+  /// their RomM entries — what "Upload to RomM" never did before #237, where
+  /// the file went up and everything the app knew about the game stayed here.
+  ///
+  /// Called after the link pass, not after the upload, and that ordering is
+  /// forced rather than chosen: an uploaded ROM has no RomM id until the
+  /// server has ingested it (the `scan_library` the batch requests) and the
+  /// link pass has written the mapping row. A target still unlinked when this
+  /// runs is skipped, not queued — pressing "Link now" again once the server
+  /// has finished scanning runs both steps over the same files.
+  ///
+  /// Never throws: the summary counts what happened, and the service logged
+  /// any gate once per connection.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Scan And Link After Upload",
+  // ADR-0005 (RomM metadata source), SPEC-0005 REQ "Metadata Source Provenance"
+  Future<RommMetadataPushSummary> pushUploadedMetadata(
+    List<RommUploadCandidate> candidates,
+  ) async {
+    if (!isConnected || candidates.isEmpty) {
+      return (pushed: 0, skipped: 0, failed: 0);
+    }
+    return RommMetadataPush.run(
+      targets: [
+        for (final candidate in candidates)
+          (
+            // The batch's file name is the on-disk name with its extension,
+            // which is exactly how both the metadata table and the link map
+            // spell a local game (`GameModel.romname`).
+            romname: candidate.fileName,
+            systemFolder: candidate.systemFolder,
+          ),
+      ],
+      resolveSystemId: (folder) async =>
+          (await ScraperRepository.resolveSystemByFolderName(
+            folder,
+          ))?['app_system_id'],
+      readRow: ScraperRepository.getGameMetadata,
+      readRomId: RommSaveMapRepository.getRommRomId,
+      send: (romId, fields) async {
+        final rom = await _service.applyRomMetadata(romId, fields);
+        await _persistRefreshedTokens();
+        return rom != null;
+      },
     );
   }
 

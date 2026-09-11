@@ -1529,6 +1529,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommUploadLinkNow: '今すぐリンク',
   AppLocale.rommUploadLinkNowResult: '{count} 本のゲームをリンクしました',
   AppLocale.rommUploadLinkNowNothing: 'まだリンクされていません。サーバーがスキャン中の可能性があります',
+  AppLocale.rommUploadMetadataPushed: '{count} 本のゲームの詳細を送信しました',
   AppLocale.rommUploadSkippedLine: 'スキップ {name}: {reason}',
   AppLocale.rommUploadFailedLine: '失敗 {name}: {reason}',
   AppLocale.rommUploadMore: '他 {count} 件',

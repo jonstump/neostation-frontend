@@ -2676,6 +2676,33 @@ class RommService {
     return _putRomForm(romId, {'url_cover': trimmed}, action: 'cover');
   }
 
+  /// Writes NeoStation's own metadata [fields] onto the RomM entry for
+  /// [romId] — the push behind "Upload to RomM", which until #237 sent the
+  /// ROM file and nothing NeoStation knew about it.
+  ///
+  /// Same gate and same return contract as [applyRomMatch]: null without
+  /// sending anything when this connection is known not to hold
+  /// [RommScopeGroup.romsWrite], the ROM as RomM returned it otherwise, a
+  /// [RommException] on any other failure.
+  ///
+  /// [fields] is what `buildRommMetadataPush` produced — already keyed by
+  /// RomM field name, already stripped of blanks and of values RomM itself
+  /// gave us. This layer does not second-guess it beyond refusing an empty
+  /// map, which would be a request that asks the server to change nothing.
+  /// The blank rule matters as much here as it does in [applyRomMatch]: RomM
+  /// reads a present-but-empty form field as a value, so a blank `name` would
+  /// erase the entry's title for every client of the server.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Metadata Search And Apply"
+  Future<RommRom?> applyRomMetadata(
+    int romId,
+    Map<String, String> fields,
+  ) async {
+    if (_scopeGated(RommScopeGroup.romsWrite)) return null;
+    if (fields.isEmpty) return null;
+    return _putRomForm(romId, fields, action: 'metadata');
+  }
+
   /// Shared body of the two searches: one authenticated GET whose 500 becomes
   /// [RommErrorKind.noMetadataSource]. Every failure is logged once with the
   /// endpoint and status before it is rethrown, never swallowed.

@@ -1800,6 +1800,7 @@ mixin AppLocale {
   static const String rommUploadLinkNow = 'romm_upload_link_now';
   static const String rommUploadLinkNowResult = 'romm_upload_link_now_result';
   static const String rommUploadLinkNowNothing = 'romm_upload_link_now_nothing';
+  static const String rommUploadMetadataPushed = 'romm_upload_metadata_pushed';
   static const String rommUploadSkippedLine = 'romm_upload_skipped_line';
   static const String rommUploadFailedLine = 'romm_upload_failed_line';
   static const String rommUploadMore = 'romm_upload_more';

@@ -1721,6 +1721,7 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.rommUploadLinkNowResult: '{count} jogos vinculados',
   AppLocale.rommUploadLinkNowNothing:
       'Nada vinculado ainda; o servidor pode estar varrendo',
+  AppLocale.rommUploadMetadataPushed: 'Detalhes enviados de {count} jogos',
   AppLocale.rommUploadSkippedLine: 'Ignorado {name}: {reason}',
   AppLocale.rommUploadFailedLine: 'Falhou {name}: {reason}',
   AppLocale.rommUploadMore: '+{count} mais',

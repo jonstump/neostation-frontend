@@ -1696,6 +1696,7 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommUploadLinkNowResult: 'Связано игр: {count}',
   AppLocale.rommUploadLinkNowNothing:
       'Пока ничего не связано; сервер, возможно, ещё сканирует',
+  AppLocale.rommUploadMetadataPushed: 'Отправлены сведения об играх: {count}',
   AppLocale.rommUploadSkippedLine: 'Пропущено {name}: {reason}',
   AppLocale.rommUploadFailedLine: 'Ошибка {name}: {reason}',
   AppLocale.rommUploadMore: '+{count} ещё',

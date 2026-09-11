@@ -1758,6 +1758,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.rommUploadLinkNowResult: '{count} jeux liés',
   AppLocale.rommUploadLinkNowNothing:
       'Rien de lié pour l’instant ; le serveur analyse peut-être encore',
+  AppLocale.rommUploadMetadataPushed: 'Détails envoyés pour {count} jeux',
   AppLocale.rommUploadSkippedLine: 'Ignoré {name} : {reason}',
   AppLocale.rommUploadFailedLine: 'Échec {name} : {reason}',
   AppLocale.rommUploadMore: '+{count} de plus',
