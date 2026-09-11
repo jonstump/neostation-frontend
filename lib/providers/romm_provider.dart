@@ -3861,10 +3861,13 @@ class RommProvider extends ChangeNotifier {
           // saveGameMetadata adds its bookkeeping to the map it is handed, so
           // count first.
           columnsWritten = metadata.keys.where((k) => k != 'filename').length;
+          // Replace is this mode's whole point: the user asked for RomM's
+          // answer to stand in for whatever the row held. #248.
           final ok = await ScraperRepository.saveGameMetadata(
             metadata,
             sysId,
             source: MetadataSource.romm,
+            mode: MetadataWriteMode.replace,
             isFullyScraped: true,
           );
           if (!ok) {

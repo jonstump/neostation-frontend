@@ -507,7 +507,21 @@ class ScreenScraperService {
   ///
   /// Handles language localization priority and region-based selection
   /// using the global priority map (World > US > EU > FR/SP/IT/DE > JP > KR/CN).
-  static Future<Map<String, dynamic>> _mapGameInfoToMetadata(
+  ///
+  /// **A column ScreenScraper has no value for is left out of the map**, never
+  /// put in it as null. The key set is then an honest answer to "what did this
+  /// scrape learn", which is what a [MetadataWriteMode.merge] write needs to
+  /// decide what to carry forward and what to attribute in `field_sources`.
+  /// `developer`, `publisher` and `players` used to be assigned
+  /// unconditionally from possibly-absent keys and so arrived present-but-null
+  /// — writing NULL over another source's good value. Under
+  /// [MetadataWriteMode.replace] omitting a key and supplying null are the same
+  /// thing, so this costs nothing there. Issue #248.
+  ///
+  /// Public only as a test seam: the key set is the contract, and it is not
+  /// observable from the database once the writer has dropped the nulls too.
+  @visibleForTesting
+  static Future<Map<String, dynamic>> mapGameInfoToMetadata(
     String filename,
     String romPath,
     Map<String, dynamic> gameInfo, {
@@ -531,7 +545,12 @@ class ScreenScraperService {
         }
       }
     }
-    metadata['real_name'] = realName ?? filename;
+    // Only a name ScreenScraper actually returned. The old `realName ??
+    // filename` fallback was invisible on the replace path — the display
+    // queries already `COALESCE(usm.real_name, …, ur.filename)` — but under a
+    // merge it would assert the raw filename over a proper name another source
+    // had found.
+    if (realName != null) metadata['real_name'] = realName;
 
     final synopses = gameInfo['synopsis'] as List<dynamic>? ?? [];
     String? preferredDescription;
@@ -616,8 +635,10 @@ class ScreenScraperService {
       metadata['release_date'] = releaseDate.toIso8601String();
     }
 
-    metadata['developer'] = gameInfo['developpeur']?['text']?.toString();
-    metadata['publisher'] = gameInfo['editeur']?['text']?.toString();
+    final developer = gameInfo['developpeur']?['text']?.toString();
+    if (developer != null) metadata['developer'] = developer;
+    final publisher = gameInfo['editeur']?['text']?.toString();
+    if (publisher != null) metadata['publisher'] = publisher;
 
     final genres = gameInfo['genres'] as List<dynamic>? ?? [];
     if (genres.isNotEmpty) {
@@ -647,19 +668,39 @@ class ScreenScraperService {
         }
       }
 
-      metadata['genre'] =
+      final genreValue =
           genreText ?? (genreNoms.isNotEmpty ? genreNoms[0]['text'] : null);
+      if (genreValue != null) metadata['genre'] = genreValue;
     }
 
-    metadata['players'] = gameInfo['joueurs']?['text']?.toString();
+    final players = gameInfo['joueurs']?['text']?.toString();
+    if (players != null) metadata['players'] = players;
 
     return metadata;
   }
+
+  /// The write mode a scrape run uses, from its `scrape_mode` setting.
+  ///
+  /// `all` means "re-scrape everything, whatever is already there" — the mode
+  /// a user picks to *replace* stale or wrong metadata — so it keeps the
+  /// whole-row replace. Every other mode is a routine pass that must add to
+  /// the row without destroying what another source put there. The same
+  /// setting already decides whether media is re-downloaded
+  /// (`forceOverwrite`), so the two stay in step.
+  ///
+  /// Public only as a test seam.
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Metadata Source Provenance"
+  @visibleForTesting
+  static MetadataWriteMode writeModeFor(Map<String, dynamic> scraperConfig) =>
+      scraperConfig['scrape_mode'].toString() == 'all'
+      ? MetadataWriteMode.replace
+      : MetadataWriteMode.merge;
 
   /// Saves the metadata to the local user_screenscraper_metadata table.
   static Future<bool> _saveGameMetadata(
     Map<String, dynamic> metadata,
     String appSystemId, {
+    required MetadataWriteMode mode,
     bool isFullyScraped = false,
   }) async {
     try {
@@ -667,6 +708,7 @@ class ScreenScraperService {
         metadata,
         appSystemId,
         source: MetadataSource.screenscraper,
+        mode: mode,
         isFullyScraped: isFullyScraped,
       );
     } catch (e) {
@@ -815,13 +857,18 @@ class ScreenScraperService {
       final scraperConfig = await getScraperConfig();
 
       if (scraperConfig['scrape_metadata'] as bool? ?? true) {
-        final metadata = await _mapGameInfoToMetadata(
+        final metadata = await mapGameInfoToMetadata(
           romName,
           romPath,
           gameInfo,
           preferredLanguage: preferredLanguage,
         );
-        await _saveGameMetadata(metadata, appSystemId, isFullyScraped: true);
+        await _saveGameMetadata(
+          metadata,
+          appSystemId,
+          mode: writeModeFor(scraperConfig),
+          isFullyScraped: true,
+        );
       }
 
       onProgress?.call(AppLocale.downloadingImages, 0.2);
@@ -1395,13 +1442,18 @@ class ScreenScraperService {
 
       if (gameInfo != null) {
         if (scraperConfig['scrape_metadata'] as bool? ?? true) {
-          final metadata = await _mapGameInfoToMetadata(
+          final metadata = await mapGameInfoToMetadata(
             filename,
             romPath,
             gameInfo,
             preferredLanguage: preferredLanguage,
           );
-          await _saveGameMetadata(metadata, appSystemId, isFullyScraped: false);
+          await _saveGameMetadata(
+            metadata,
+            appSystemId,
+            mode: writeModeFor(scraperConfig),
+            isFullyScraped: false,
+          );
         }
 
         final allowedTypes = await ScraperRepository.getEnabledMediaTypes();

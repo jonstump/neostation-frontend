@@ -22,17 +22,20 @@ import 'dart:convert';
 /// Unparseable or absent JSON reads as empty rather than throwing: this is
 /// provenance, and losing it must never fail a metadata write.
 ///
-/// **Maintained on the fill-gaps path only.** `ScraperRepository
-/// .saveGameMetadata` (every whole-row ScreenScraper write, and RomM's
-/// replace mode) and the Steam upsert write with `INSERT OR REPLACE`, which
-/// deletes the row and reinserts only the columns it was handed — so a
-/// whole-row write resets this column to null along with `esde_media_subdir`
-/// and `esde_imported`. A reader must therefore treat "no provenance" as the
-/// normal case, not as a bug, and must not infer from an empty map that no
-/// source wrote the row. Recording provenance on the whole-row path means
-/// changing those writes to a merge, which is a change to what `all` mode
-/// means and is deliberately not made here; #237, the first consumer, is
-/// where that belongs.
+/// **Maintained by every writer except the deliberate replaces.**
+/// `ScraperRepository.saveGameMetadata` in `MetadataWriteMode.merge` — which
+/// is how a routine ScreenScraper pass writes — attributes the columns it
+/// actually wrote to its own source and leaves every other field with whoever
+/// wrote it, the same rule the fill-gaps path follows. What still resets this
+/// column to null, along with `esde_media_subdir` and `esde_imported`, is a
+/// write that means to: `MetadataWriteMode.replace` (a forced `all`-mode
+/// re-scrape, RomM's replace mode) and the Steam upsert, both `INSERT OR
+/// REPLACE`, which delete the row and reinsert only the columns they were
+/// handed.
+///
+/// So a reader must still treat "no provenance" as a normal case rather than a
+/// bug — rows predating the column read empty, and a replace clears it — and
+/// must not infer from an empty map that no source wrote the row.
 // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Metadata Source Provenance"
 class MetadataFieldSources {
   /// The database column this serialises to.

@@ -328,6 +328,7 @@ void main() {
       },
       'snes',
       source: MetadataSource.screenscraper,
+      mode: MetadataWriteMode.replace,
     );
 
     setUp(() async {
