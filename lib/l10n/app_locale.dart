@@ -1150,6 +1150,14 @@ mixin AppLocale {
   static const String rommNoRoms = 'romm_no_roms';
   static const String rommSearch = 'romm_search';
   static const String rommSearching = 'romm_searching';
+  static const String rommSearchHint = 'romm_search_hint';
+  static const String rommSearchCollectionHint = 'romm_search_collection_hint';
+  static const String rommSearchResultCount = 'romm_search_result_count';
+  static const String rommSearchResultCountOne = 'romm_search_result_count_one';
+  static const String rommSearchResultCountMore =
+      'romm_search_result_count_more';
+  static const String rommSearchNoResults = 'romm_search_no_results';
+  static const String rommSearchClear = 'romm_search_clear';
   static const String rommDownloading = 'romm_downloading';
   static const String rommDownloaded = 'romm_downloaded';
   static const String rommDownloadComplete = 'romm_download_complete';
