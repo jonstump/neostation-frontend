@@ -59,6 +59,16 @@ void main() {
     AppLocale.rommMaintenanceQueued,
     AppLocale.rommMaintenanceBusy,
     AppLocale.rommMaintenanceFailed,
+    AppLocale.rommMaintenanceNotRunnable,
+    AppLocale.rommScanStatus,
+    AppLocale.rommScanWatchWaiting,
+    AppLocale.rommScanWatchProgress,
+    AppLocale.rommScanWatchProgressUnknown,
+    AppLocale.rommScanWatchResults,
+    AppLocale.rommScanWatchNothing,
+    AppLocale.rommScanWatchFailed,
+    AppLocale.rommScanWatchNone,
+    AppLocale.rommScanWatchTimeout,
   ];
 
   final placeholder = RegExp(r'\{[a-zA-Z]+\}');
@@ -123,11 +133,16 @@ void main() {
   test('every maintenance task has a label and a confirmation body', () {
     for (final task in RommMaintenanceTask.values) {
       expect(appLocaleEn[task.labelKey], isA<String>(), reason: task.name);
+      // An entry that queues nothing has nothing to confirm; every entry that
+      // does must still name a body.
+      final confirmBodyKey = task.confirmBodyKey;
       expect(
-        appLocaleEn[task.confirmBodyKey],
-        isA<String>(),
-        reason: task.name,
+        confirmBodyKey == null,
+        !task.queuesTask,
+        reason: '${task.name}: confirmation and task-running must agree',
       );
+      if (confirmBodyKey == null) continue;
+      expect(appLocaleEn[confirmBodyKey], isA<String>(), reason: task.name);
     }
   });
 

@@ -1583,6 +1583,22 @@ mixin AppLocale {
   static const String rommMaintenanceBusy = 'romm_maintenance_busy';
   static const String rommMaintenanceFailed = 'romm_maintenance_failed';
 
+  // ── RomM scan probe and scan watcher (SPEC-0018, issue #236) ───────────
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Maintenance Tasks"
+  static const String rommMaintenanceNotRunnable =
+      'romm_maintenance_not_runnable';
+  static const String rommScanStatus = 'romm_scan_status';
+  static const String rommScanWatchWaiting = 'romm_scan_watch_waiting';
+  static const String rommScanWatchProgress = 'romm_scan_watch_progress';
+  static const String rommScanWatchProgressUnknown =
+      'romm_scan_watch_progress_unknown';
+  static const String rommScanWatchResults = 'romm_scan_watch_results';
+  static const String rommScanWatchNothing = 'romm_scan_watch_nothing';
+  static const String rommScanWatchFailed = 'romm_scan_watch_failed';
+  static const String rommScanWatchNone = 'romm_scan_watch_none';
+  static const String rommScanWatchTimeout = 'romm_scan_watch_timeout';
+
   // ── RomM metadata fix-up in the match picker (SPEC-0018) ────────────────
   // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
   // SPEC-0018 REQ "Localized User-Facing Text"
@@ -1800,6 +1816,7 @@ mixin AppLocale {
       'romm_upload_summary_disconnected';
   static const String rommUploadScanRequested = 'romm_upload_scan_requested';
   static const String rommUploadScanPending = 'romm_upload_scan_pending';
+  static const String rommUploadScanRefused = 'romm_upload_scan_refused';
   static const String rommUploadLinkNow = 'romm_upload_link_now';
   static const String rommUploadLinkNowResult = 'romm_upload_link_now_result';
   static const String rommUploadLinkNowNothing = 'romm_upload_link_now_nothing';

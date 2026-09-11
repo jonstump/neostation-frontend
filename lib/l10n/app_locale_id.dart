@@ -1513,6 +1513,22 @@ const Map<String, dynamic> appLocaleId = {
       'Server RomM ini terlalu lama untuk pilihan acak',
   AppLocale.rommSurpriseMeFailed: 'Pilihan acak tidak dapat dimuat',
   AppLocale.rommSurpriseMePicked: 'Terpilih: {name}',
+  AppLocale.rommMaintenanceNotRunnable:
+      'Server ini tidak mengizinkan NeoStation menjalankan tugas itu. Jalankan dari antarmuka web RomM.',
+  AppLocale.rommScanStatus: 'Status pemindaian',
+  AppLocale.rommScanWatchWaiting:
+      'Memeriksa pemindaian yang sedang berjalan di server…',
+  AppLocale.rommScanWatchProgress: 'Memindai: {done} dari {total} ROM',
+  AppLocale.rommScanWatchProgressUnknown: 'Server sedang memindai pustakanya…',
+  AppLocale.rommScanWatchResults:
+      'Pemindaian selesai: {new} baru, {identified} teridentifikasi',
+  AppLocale.rommScanWatchNothing:
+      'Pemindaian selesai. Tidak ada yang baru ditemukan.',
+  AppLocale.rommScanWatchFailed: 'Pemindaian di server gagal.',
+  AppLocale.rommScanWatchNone:
+      'Tidak ada pemindaian yang berjalan di server. Mulai satu dari antarmuka web RomM.',
+  AppLocale.rommScanWatchTimeout:
+      'Masih memindai setelah {minutes} menit. Lihat sisanya di RomM.',
   AppLocale.rommMaintenanceTitle: 'Pemeliharaan server',
   AppLocale.rommMaintenanceRescan: 'Pindai ulang pustaka',
   AppLocale.rommMaintenanceRescanConfirm:
@@ -1687,6 +1703,8 @@ const Map<String, dynamic> appLocaleId = {
       'Unggahan dihentikan, RomM tidak dapat dijangkau — {summary}',
   AppLocale.rommUploadScanRequested: 'Pemindaian pustaka diminta di server',
   AppLocale.rommUploadScanPending: 'Menunggu pemindaian pustaka di server',
+  AppLocale.rommUploadScanRefused:
+      'Terunggah, tetapi server ini tidak mengizinkan NeoStation memulai pemindaian. Mulai satu di RomM agar berkasnya terindeks.',
   AppLocale.rommUploadLinkNow: 'Tautkan sekarang',
   AppLocale.rommUploadLinkNowResult: '{count} game tertaut',
   AppLocale.rommUploadLinkNowNothing:

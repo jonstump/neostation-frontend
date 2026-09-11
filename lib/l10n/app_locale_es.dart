@@ -1553,6 +1553,23 @@ const Map<String, dynamic> appLocaleEs = {
       'Este servidor RomM es demasiado antiguo para una elección aleatoria',
   AppLocale.rommSurpriseMeFailed: 'No se pudo cargar la elección aleatoria',
   AppLocale.rommSurpriseMePicked: 'Elegido: {name}',
+  AppLocale.rommMaintenanceNotRunnable:
+      'Este servidor no permite que NeoStation inicie esa tarea. Iníciala desde la interfaz web de RomM.',
+  AppLocale.rommScanStatus: 'Estado del escaneo',
+  AppLocale.rommScanWatchWaiting:
+      'Comprobando si hay un escaneo en curso en el servidor…',
+  AppLocale.rommScanWatchProgress: 'Escaneando: {done} de {total} ROMs',
+  AppLocale.rommScanWatchProgressUnknown:
+      'El servidor está escaneando su biblioteca…',
+  AppLocale.rommScanWatchResults:
+      'Escaneo finalizado: {new} nuevos, {identified} identificados',
+  AppLocale.rommScanWatchNothing:
+      'Escaneo finalizado. No se encontró nada nuevo.',
+  AppLocale.rommScanWatchFailed: 'El escaneo en el servidor ha fallado.',
+  AppLocale.rommScanWatchNone:
+      'No hay ningún escaneo en curso en el servidor. Inicia uno desde la interfaz web de RomM.',
+  AppLocale.rommScanWatchTimeout:
+      'Sigue escaneando después de {minutes} minutos. Consulta el resto en RomM.',
   AppLocale.rommMaintenanceTitle: 'Mantenimiento del servidor',
   AppLocale.rommMaintenanceRescan: 'Reanalizar la biblioteca',
   AppLocale.rommMaintenanceRescanConfirm:
@@ -1738,6 +1755,8 @@ const Map<String, dynamic> appLocaleEs = {
       'Escaneo de biblioteca solicitado en el servidor',
   AppLocale.rommUploadScanPending:
       'Pendiente de un escaneo de biblioteca en el servidor',
+  AppLocale.rommUploadScanRefused:
+      'Subido, pero este servidor no permite que NeoStation inicie un escaneo. Inicia uno en RomM para indexar los archivos.',
   AppLocale.rommUploadLinkNow: 'Vincular ahora',
   AppLocale.rommUploadLinkNowResult: '{count} juegos vinculados',
   AppLocale.rommUploadLinkNowNothing:

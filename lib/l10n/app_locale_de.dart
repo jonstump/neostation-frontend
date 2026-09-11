@@ -1562,6 +1562,23 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.rommSurpriseMeFailed:
       'Die Zufallsauswahl konnte nicht geladen werden',
   AppLocale.rommSurpriseMePicked: 'Ausgewählt: {name}',
+  AppLocale.rommMaintenanceNotRunnable:
+      'Dieser Server lässt NeoStation diese Aufgabe nicht starten. Starte sie in der RomM-Weboberfläche.',
+  AppLocale.rommScanStatus: 'Scan-Status',
+  AppLocale.rommScanWatchWaiting:
+      'Server wird auf einen laufenden Scan geprüft …',
+  AppLocale.rommScanWatchProgress: 'Scan läuft: {done} von {total} ROMs',
+  AppLocale.rommScanWatchProgressUnknown:
+      'Der Server scannt seine Bibliothek …',
+  AppLocale.rommScanWatchResults:
+      'Scan abgeschlossen: {new} neu, {identified} erkannt',
+  AppLocale.rommScanWatchNothing:
+      'Scan abgeschlossen. Es wurde nichts Neues gefunden.',
+  AppLocale.rommScanWatchFailed: 'Der Scan auf dem Server ist fehlgeschlagen.',
+  AppLocale.rommScanWatchNone:
+      'Auf dem Server läuft kein Scan. Starte einen in der RomM-Weboberfläche.',
+  AppLocale.rommScanWatchTimeout:
+      'Nach {minutes} Minuten läuft der Scan noch. Den Rest zeigt RomM.',
   AppLocale.rommMaintenanceTitle: 'Serverwartung',
   AppLocale.rommMaintenanceRescan: 'Bibliothek neu einlesen',
   AppLocale.rommMaintenanceRescanConfirm:
@@ -1756,6 +1773,8 @@ const Map<String, dynamic> appLocaleDe = {
       'Bibliotheksscan auf dem Server angefordert',
   AppLocale.rommUploadScanPending:
       'Wartet auf einen Bibliotheksscan auf dem Server',
+  AppLocale.rommUploadScanRefused:
+      'Hochgeladen, aber dieser Server lässt NeoStation keinen Scan starten. Starte einen in RomM, damit die Dateien indiziert werden.',
   AppLocale.rommUploadLinkNow: 'Jetzt verknüpfen',
   AppLocale.rommUploadLinkNowResult: '{count} Spiele verknüpft',
   AppLocale.rommUploadLinkNowNothing:

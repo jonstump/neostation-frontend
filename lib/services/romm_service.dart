@@ -17,8 +17,10 @@ import '../models/romm_rom_filters.dart';
 import '../models/romm_rom_page.dart';
 import '../models/romm_play_session.dart';
 import '../models/romm_rom.dart';
+import '../models/romm_scan_task_status.dart';
 import '../models/romm_search_result.dart';
 import '../models/romm_server_capabilities.dart';
+import '../models/romm_server_task.dart';
 import '../models/romm_screenshot.dart';
 import '../utils/log_redaction.dart';
 import 'logger_service.dart';
@@ -2228,6 +2230,105 @@ class RommService {
       statusCode: resp.statusCode,
       kind: kind,
     );
+  }
+
+  /// What `GET /api/tasks` says this server knows how to run, or null when the
+  /// question could not be asked.
+  ///
+  /// Null is "unknown", never "nothing": the scope gate, an unreachable
+  /// server, a proxy error page and a body in a shape the parser does not
+  /// recognise all come back null, and the caller then falls back to trying
+  /// the task rather than telling the user the server refuses. Only a list
+  /// that parsed is a statement about the server.
+  ///
+  /// Read-only, but gated on `tasks.run` like the run call it informs: it is
+  /// asked exclusively to decide what to run, and a login without that scope
+  /// is not shown the surface at all.
+  ///
+  /// The flag this is here for is each task's `manual_run`. RomM's registry
+  /// marks `scan_library` as not manually runnable, and the run route refuses
+  /// such a task with a 400 — which is the undocumented 400 issue #170
+  /// recorded against RomM 5.1.0, and the reason the post-upload scan has
+  /// never actually run there.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Maintenance Tasks"
+  Future<List<RommServerTask>?> listServerTasks() async {
+    if (_scopeGated(RommScopeGroup.tasksRun)) return null;
+    try {
+      final resp = await _sendWithAuthRetry<http.Response>(
+        () => _httpClient
+            .get(_uri('/api/tasks'), headers: _authHeaders)
+            .timeout(const Duration(seconds: 20)),
+        statusOf: (r) => r.statusCode,
+      );
+      if (resp.statusCode == 403) {
+        _noteScopeDenial(RommScopeGroup.tasksRun, resp.statusCode);
+        return null;
+      }
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        _log.w(
+          'RomM task list failed: endpoint=/api/tasks '
+          'status=${resp.statusCode} body=${_briefBody(resp.body)}',
+        );
+        return null;
+      }
+      final tasks = RommServerTask.listFrom(jsonDecode(resp.body));
+      if (tasks.isEmpty) {
+        _log.w(
+          'RomM task list unreadable: endpoint=/api/tasks '
+          'body=${_briefBody(resp.body)}',
+        );
+        return null;
+      }
+      _log.i(
+        'RomM tasks listed: endpoint=/api/tasks count=${tasks.length} '
+        'runnable="${tasks.where((t) => t.runnable).map((t) => t.name).join(',')}"',
+      );
+      return tasks;
+    } catch (e) {
+      _log.w('RomM task list failed: endpoint=/api/tasks error=$e');
+      return null;
+    }
+  }
+
+  /// The newest library scan `GET /api/tasks/status` reports, or null when the
+  /// server names none (and when the question could not be asked).
+  ///
+  /// This is what makes a scan observable at all: the run route answers with
+  /// an id and nothing else, so before this nothing could tell a scan that was
+  /// running from one that never started. It reports a scan started from
+  /// RomM's own web UI just the same, which on a stock server is the only
+  /// place one can be started from.
+  ///
+  /// Never throws: a watcher polling every few seconds must not turn one bad
+  /// answer into a failure, so everything is logged and reported as null.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Maintenance Tasks"
+  Future<RommScanTaskStatus?> getScanTaskStatus() async {
+    if (_scopeGated(RommScopeGroup.tasksRun)) return null;
+    try {
+      final resp = await _sendWithAuthRetry<http.Response>(
+        () => _httpClient
+            .get(_uri('/api/tasks/status'), headers: _authHeaders)
+            .timeout(const Duration(seconds: 20)),
+        statusOf: (r) => r.statusCode,
+      );
+      if (resp.statusCode == 403) {
+        _noteScopeDenial(RommScopeGroup.tasksRun, resp.statusCode);
+        return null;
+      }
+      if (resp.statusCode < 200 || resp.statusCode >= 300) {
+        _log.w(
+          'RomM task status failed: endpoint=/api/tasks/status '
+          'status=${resp.statusCode} body=${_briefBody(resp.body)}',
+        );
+        return null;
+      }
+      return RommScanTaskStatus.newestScanFrom(jsonDecode(resp.body));
+    } catch (e) {
+      _log.w('RomM task status failed: endpoint=/api/tasks/status error=$e');
+      return null;
+    }
   }
 
   /// The `task_id` of a task-run response body, or null for any other shape.

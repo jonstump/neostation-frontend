@@ -41,6 +41,7 @@ import 'romm_metadata_fetch_runner.dart';
 import 'romm_rom_card.dart';
 import 'romm_rom_grid.dart';
 import 'romm_rom_list.dart';
+import 'romm_scan_watch_runner.dart';
 
 /// Gamepad/touch-navigable browser for a connected RomM server.
 ///
@@ -1463,11 +1464,19 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
     final task = await RommMaintenanceMenuDialog.show(context);
     if (!mounted || task == null) return;
 
+    // "Scan status" queues nothing and changes nothing: there is no
+    // consequential action to confirm, so it starts the watch straight away.
+    final confirmBodyKey = task.confirmBodyKey;
+    if (!task.queuesTask || confirmBodyKey == null) {
+      RommScanWatchRunner.start(context);
+      return;
+    }
+
     final scheme = Theme.of(context).colorScheme;
     final confirmed = await ConfirmActionDialog.show(
       context,
       title: task.labelKey.getString(context),
-      body: task.confirmBodyKey.getString(context),
+      body: confirmBodyKey.getString(context),
       confirmLabel: AppLocale.rommMaintenanceRun.getString(context),
       icon: task.icon,
       // Only the cleanup actually removes rows; the two scans are additive, so
@@ -1481,7 +1490,14 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   }
 
   /// Sends the one task-run request and reports queued / already running /
-  /// failed as a toast.
+  /// refused / failed as a toast, and starts watching a scan it queued.
+  ///
+  /// The server is asked what it will run *before* anything is sent. RomM's
+  /// registry marks `scan_library` as not manually runnable and refuses it
+  /// with an undocumented 400 (issue #170, RomM 5.1.0), so "Rescan library"
+  /// could never have worked there; telling the user to start it from RomM's
+  /// web interface is the only useful thing to say. An unreadable registry
+  /// (null) changes nothing: the request is sent exactly as before.
   // Governing: ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
   Future<void> _runMaintenanceTask(RommMaintenanceTask task) async {
     // The outcome is decided as an `AppLocale` *key*, and only resolved to a
@@ -1489,7 +1505,18 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
     // await is what `use_build_context_synchronously` is there to stop.
     String key;
     NotificationType type;
+    var queued = false;
     try {
+      final runnable = await _rommProvider.serverTaskRunnable(task.taskName);
+      if (runnable == false) {
+        if (!mounted) return;
+        AppNotification.showNotification(
+          context,
+          AppLocale.rommMaintenanceNotRunnable.getString(context),
+          type: NotificationType.info,
+        );
+        return;
+      }
       final id = await _rommProvider.runServerTask(task.taskName);
       if (id == null) {
         // Gated: the connection lost the scope between the button being drawn
@@ -1500,6 +1527,7 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
       } else {
         key = AppLocale.rommMaintenanceQueued;
         type = NotificationType.success;
+        queued = true;
       }
     } on RommException catch (e) {
       final busy = e.kind == RommErrorKind.taskBusy;
@@ -1518,6 +1546,11 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
       key.getString(context),
       type: type,
     );
+    // A queued scan is watched from here on, so the toast is the last thing
+    // the user has to read: what the scan finds arrives in the notification.
+    if (queued && task.isScan) {
+      RommScanWatchRunner.start(context, awaitStart: true);
+    }
   }
 
   // ── Filters and Surprise me ─────────────────────────────────────────────────
