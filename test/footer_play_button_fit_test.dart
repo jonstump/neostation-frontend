@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -352,21 +353,51 @@ void main() {
           reason: 'PLAY runs past the footer edge at $width ($lang)',
         );
 
-        // The achievements pill in this footer overflows its own fixed
-        // 101-unit box by a pixel at every width. That is inside the pill and
-        // predates this test; anything else is the row, which is what this is
-        // about.
-        final error = tester.takeException();
-        if (error != null) {
-          expect(
-            '$error',
-            contains('overflowed by 1.00 pixels'),
-            reason: 'unexpected layout error at $width ($lang)',
-          );
-        }
+        expect(
+          tester.takeException(),
+          isNull,
+          reason: 'layout error at $width ($lang)',
+        );
         await tester.pumpWidget(const SizedBox.shrink());
         await tester.pump(const Duration(milliseconds: 1));
       }
     }
+  });
+
+  testWidgets('the achievements pill is as wide as the row it holds', (
+    tester,
+  ) async {
+    // The pill is a fixed-width box, and both its border and its padding
+    // deflate the row inside it before the row gets a constraint. Its width
+    // has to cover all three or the row overflows by the shortfall — which is
+    // what it did: the box was 101 design units, the row needed 102, and every
+    // frame that drew the pill reported a 1.00-pixel overflow.
+    //
+    // Asserting on the numbers directly would just restate them. A Row that
+    // overflows is laid out at its *constraint*, while its children still take
+    // the width they asked for, so the two agree only when the box is big
+    // enough. That comparison holds whatever the terms are later changed to.
+    await pumpGameViewFooter(tester, width: _screen4x3);
+
+    final row = tester.renderObject<RenderFlex>(
+      find
+          .ancestor(
+            of: find.byIcon(Symbols.emoji_events_rounded),
+            matching: find.byType(Row),
+          )
+          .first,
+    );
+
+    var content = 0.0;
+    row.visitChildren((child) => content += (child as RenderBox).size.width);
+
+    expect(
+      row.size.width,
+      greaterThanOrEqualTo(content),
+      reason:
+          'the pill gives its row ${row.size.width} units for $content units '
+          'of children — widen the pill or trim what it reserves',
+    );
+    expect(tester.takeException(), isNull);
   });
 }

@@ -382,13 +382,24 @@ class GameViewFooter extends StatelessWidget {
 ///
 /// Border, radius and elevation now live here alongside the token so they
 /// cannot drift again; 0.1 matches the PLAY button next to them.
+/// The stroke [_pillDecoration] draws, in design units.
+///
+/// Named because a `BoxDecoration` border deflates the box's child on every
+/// side, so any pill that reserves a fixed amount of inner space has to count
+/// it — see [_CompactAchievementsIndicator], which did not and overflowed by
+/// exactly this much.
+const double _pillBorderWidth = 1;
+
 BoxDecoration _pillDecoration(BuildContext context) {
   final theme = Theme.of(context);
   final radii = theme.extension<CornerRadii>() ?? CornerRadii.m();
   return BoxDecoration(
     color: ChromeSurface.fill(context),
     borderRadius: radii.radiusExternal,
-    border: Border.all(color: theme.colorScheme.outline, width: 1.r),
+    border: Border.all(
+      color: theme.colorScheme.outline,
+      width: _pillBorderWidth.r,
+    ),
     boxShadow: [
       BoxShadow(
         color: theme.colorScheme.shadow.withValues(alpha: 0.1),
@@ -502,6 +513,40 @@ class _SteamStyleRating extends StatelessWidget {
 }
 
 /// Compact RetroAchievements indicator reused from the details footer.
+/// Horizontal inset between the pill's border and its row.
+const double _achievementsPillPadding = 8;
+
+/// The game icon's box, and the gap between it and the text column.
+const double _achievementsIconSize = 22;
+const double _achievementsIconGap = 6;
+
+/// The text + progress column. The text ellipsizes into it and the bar is
+/// deliberately narrower, so this is the column's width, not a minimum.
+const double _achievementsTextColumn = 56;
+
+/// The pill's fixed width: everything its row needs, plus everything that
+/// deflates the row before it gets there.
+///
+///     border        1 + 1  =   2
+///     padding       8 + 8  =  16
+///     icon                 =  22
+///     icon -> text gap     =   6
+///     text column          =  56
+///                            ---
+///                            102
+///
+/// Kept as a sum rather than a literal because the border is exactly the term
+/// a literal left out before: the box was 101, the row needed 102, and every
+/// frame that drew the pill reported `A RenderFlex overflowed by 1.00 pixels
+/// on the right`. A debug-only error and a hairline clip, but a constant one
+/// in grid and carousel view, which buried real overflow errors in this footer.
+const double _achievementsPillWidth =
+    2 * _pillBorderWidth +
+    2 * _achievementsPillPadding +
+    _achievementsIconSize +
+    _achievementsIconGap +
+    _achievementsTextColumn;
+
 class _CompactAchievementsIndicator extends StatelessWidget {
   final GameModel game;
   final bool isLoading;
@@ -584,22 +629,24 @@ class _CompactAchievementsIndicator extends StatelessWidget {
         // inner radius, so it doesn't square off against the rounded corners.
         borderRadius: radii.radiusExternal,
         child: Container(
-          width: 101.r,
+          // See [_achievementsPillWidth] for what the number is made of.
+          width: _achievementsPillWidth.r,
           height: 32.r,
           decoration: _pillDecoration(context),
           child: Padding(
-            // Match the rating pill's 8.r horizontal inset so the trophy icon
-            // doesn't hug the pill's left border (the pill's width above is
-            // widened to 101.r to absorb the padding + the 6.r icon→text gap
-            // without squeezing the 56.r text/progress column).
-            padding: EdgeInsets.symmetric(horizontal: 8.r, vertical: 3.r),
+            // Matches the rating pill's inset, so the trophy icon doesn't hug
+            // the pill's left border.
+            padding: EdgeInsets.symmetric(
+              horizontal: _achievementsPillPadding.r,
+              vertical: 3.r,
+            ),
             child: Row(
               children: [
                 ClipRRect(
                   borderRadius: radii.radiusInternal,
                   child: Container(
-                    width: 22.r,
-                    height: 22.r,
+                    width: _achievementsIconSize.r,
+                    height: _achievementsIconSize.r,
                     color: theme.colorScheme.surface,
                     child: gameIconUrl != null
                         ? Image.network(
@@ -618,13 +665,13 @@ class _CompactAchievementsIndicator extends StatelessWidget {
                           ),
                   ),
                 ),
-                SizedBox(width: 6.r),
+                SizedBox(width: _achievementsIconGap.r),
                 Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     SizedBox(
-                      width: 56.r,
+                      width: _achievementsTextColumn.r,
                       child: Text(
                         progressText.toUpperCase(),
                         style: TextStyle(
@@ -638,7 +685,7 @@ class _CompactAchievementsIndicator extends StatelessWidget {
                       ),
                     ),
                     SizedBox(height: 2.r),
-                    // Bar is deliberately narrower than the 56.r text row so it
+                    // Bar is deliberately narrower than the text column so it
                     // doesn't run to the pill's right edge — leaves a right
                     // margin under the progress count.
                     SizedBox(
