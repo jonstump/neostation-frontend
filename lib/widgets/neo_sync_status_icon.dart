@@ -108,7 +108,7 @@ class NeoSyncStatusIcon extends StatefulWidget {
     // `cloudOnly` is untouched by this: that status is about a *save* living
     // only in the cloud, which is a real thing to report for a downloaded
     // game, and is unrelated to the game itself being remote.
-    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entry Presentation"
     if (game.isRemote) return false;
     return true;
   }
