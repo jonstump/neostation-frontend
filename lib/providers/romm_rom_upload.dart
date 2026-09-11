@@ -228,8 +228,22 @@ enum RommUploadEnd {
   /// The provider's gate was closed when the action was asked for.
   notOffered,
 
-  /// The system resolves to no RomM platform, or to more than one.
+  /// The server has no platform for the game's system. The remedy is on the
+  /// server — NeoStation cannot create a platform — so the user is told to
+  /// add it there. Issue #235.
   noPlatform,
+
+  /// The game names a system this install does not have: nothing resolved
+  /// locally, so no platform was even looked for. A NeoStation-side problem
+  /// with a NeoStation-side remedy, which is why it is not [noPlatform].
+  /// Issue #235.
+  unknownSystem,
+
+  /// Several RomM platforms resolve to the same local system — the alias
+  /// table folds `ps`, `psx` and `playstation` onto one folder — so picking
+  /// one would be picking at random. The remedy is on the server too, but a
+  /// different one: merge the duplicates. Issue #235.
+  ambiguousPlatform,
 
   /// No unlinked single-file game to send, or the one game asked for is
   /// already linked.
@@ -256,17 +270,24 @@ class RommUploadSummary {
   // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Scan And Link After Upload"
   final List<RommUploadCandidate> uploadedCandidates;
 
+  /// The one detail an end's message needs beyond the system's name, or
+  /// empty. Only [RommUploadEnd.ambiguousPlatform] fills it, with the RomM
+  /// slugs that collided: "merge them on the server" is unactionable without
+  /// knowing which ones. Issue #235.
+  final String endDetail;
+
   const RommUploadSummary({
     this.uploaded = const [],
     this.skipped = const [],
     this.failed = const [],
     this.scan = RommUploadScanState.none,
     this.uploadedCandidates = const [],
+    this.endDetail = '',
     required this.end,
   });
 
   /// A batch that never started, ended by [end].
-  const RommUploadSummary.ended(this.end)
+  const RommUploadSummary.ended(this.end, {this.endDetail = ''})
     : uploaded = const [],
       skipped = const [],
       failed = const [],
@@ -285,6 +306,8 @@ class RommUploadSummary {
     RommUploadEnd.declined ||
     RommUploadEnd.notOffered ||
     RommUploadEnd.noPlatform ||
+    RommUploadEnd.unknownSystem ||
+    RommUploadEnd.ambiguousPlatform ||
     RommUploadEnd.nothingToUpload => true,
   };
 }

@@ -1785,6 +1785,9 @@ mixin AppLocale {
   static const String rommUploadPreparing = 'romm_upload_preparing';
   static const String rommUploadProgress = 'romm_upload_progress';
   static const String rommUploadNoPlatform = 'romm_upload_no_platform';
+  static const String rommUploadUnknownSystem = 'romm_upload_unknown_system';
+  static const String rommUploadAmbiguousPlatform =
+      'romm_upload_ambiguous_platform';
   static const String rommUploadNothingToUpload =
       'romm_upload_nothing_to_upload';
   static const String rommUploadAlreadyLinked = 'romm_upload_already_linked';

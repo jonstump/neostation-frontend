@@ -1449,7 +1449,11 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.rommUploadConfirmAction: '上传',
   AppLocale.rommUploadPreparing: '正在准备上传到 RomM…',
   AppLocale.rommUploadProgress: '正在上传 {name}（{current}/{total}）',
-  AppLocale.rommUploadNoPlatform: 'RomM 没有与 {system} 匹配的平台',
+  AppLocale.rommUploadNoPlatform: 'RomM 没有 {system} 平台。请先在 RomM 服务器上添加，然后重新上传。',
+  AppLocale.rommUploadUnknownSystem:
+      'NeoStation 中没有名为 {system} 的系统，因此无法选择 RomM 平台。请检查 ROM 文件夹名称。',
+  AppLocale.rommUploadAmbiguousPlatform:
+      'RomM 有多个 {system} 平台：{platforms}。请在服务器上合并后重新上传。',
   AppLocale.rommUploadNothingToUpload: '无需上传：RomM 已有 {system} 的全部游戏',
   AppLocale.rommUploadAlreadyLinked: '此游戏已关联到 RomM',
   AppLocale.rommUploadBusy: '已有一个上传到 RomM 的任务在进行',

@@ -1738,7 +1738,11 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.rommUploadPreparing: 'Préparation de l’envoi vers RomM…',
   AppLocale.rommUploadProgress: 'Envoi de {name} ({current}/{total})',
   AppLocale.rommUploadNoPlatform:
-      'RomM n’a aucune plateforme correspondant à {system}',
+      'RomM n’a aucune plateforme pour {system}. Ajoutez-la sur votre serveur RomM, puis relancez l’envoi.',
+  AppLocale.rommUploadUnknownSystem:
+      'NeoStation ne connaît aucun système nommé {system} et ne peut donc pas choisir de plateforme RomM. Vérifiez le nom du dossier de ROM.',
+  AppLocale.rommUploadAmbiguousPlatform:
+      'RomM a plusieurs plateformes pour {system} : {platforms}. Fusionnez-les sur le serveur, puis relancez l’envoi.',
   AppLocale.rommUploadNothingToUpload:
       'Rien à envoyer : RomM possède déjà tous les jeux de {system}',
   AppLocale.rommUploadAlreadyLinked: 'Ce jeu est déjà lié à RomM',

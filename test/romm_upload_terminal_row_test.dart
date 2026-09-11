@@ -39,6 +39,8 @@ const _strings = RommUploadStrings(
   confirmBodyTemplate: '{count} {size}',
   confirmAction: 'confirm',
   noPlatformTemplate: 'no-platform {system}',
+  unknownSystemTemplate: 'unknown-system {system}',
+  ambiguousPlatformTemplate: 'ambiguous {system} {platforms}',
   nothingToUploadTemplate: 'nothing-to-upload {system}',
   alreadyLinked: 'already-linked',
   busy: 'busy',

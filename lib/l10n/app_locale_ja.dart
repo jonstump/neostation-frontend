@@ -1513,7 +1513,12 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommUploadConfirmAction: 'アップロード',
   AppLocale.rommUploadPreparing: 'RomM へのアップロードを準備中…',
   AppLocale.rommUploadProgress: '{name} をアップロード中（{current}/{total}）',
-  AppLocale.rommUploadNoPlatform: 'RomM に {system} に対応するプラットフォームがありません',
+  AppLocale.rommUploadNoPlatform:
+      'RomM に {system} のプラットフォームがありません。RomM サーバーで追加してから、もう一度アップロードしてください。',
+  AppLocale.rommUploadUnknownSystem:
+      'NeoStation に {system} という名前のシステムがないため、RomM のプラットフォームを選べません。ROM フォルダー名を確認してください。',
+  AppLocale.rommUploadAmbiguousPlatform:
+      'RomM に {system} のプラットフォームが複数あります: {platforms}。サーバー側で統合してから、もう一度アップロードしてください。',
   AppLocale.rommUploadNothingToUpload:
       'アップロードするものはありません: {system} のゲームはすべて RomM にあります',
   AppLocale.rommUploadAlreadyLinked: 'このゲームはすでに RomM にリンクされています',

@@ -1736,7 +1736,11 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.rommUploadPreparing: 'Upload zu RomM wird vorbereitet…',
   AppLocale.rommUploadProgress: 'Lade {name} hoch ({current}/{total})',
   AppLocale.rommUploadNoPlatform:
-      'RomM hat keine zu {system} passende Plattform',
+      'RomM hat keine Plattform für {system}. Lege sie auf deinem RomM-Server an und lade dann erneut hoch.',
+  AppLocale.rommUploadUnknownSystem:
+      'NeoStation kennt kein System namens {system} und kann daher keine RomM-Plattform wählen. Prüfe den Namen des ROM-Ordners.',
+  AppLocale.rommUploadAmbiguousPlatform:
+      'RomM hat mehrere Plattformen für {system}: {platforms}. Führe sie auf dem Server zusammen und lade dann erneut hoch.',
   AppLocale.rommUploadNothingToUpload:
       'Nichts hochzuladen: RomM hat bereits jedes Spiel von {system}',
   AppLocale.rommUploadAlreadyLinked:

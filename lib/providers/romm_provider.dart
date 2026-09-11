@@ -1828,11 +1828,13 @@ class RommProvider extends ChangeNotifier {
   /// caller that knows the view it came from); the game's own wins.
   ///
   /// Ends early, without sending anything, as [RommUploadEnd.notOffered]
-  /// when [canUploadRoms] is false, [RommUploadEnd.noPlatform] when the
-  /// game's system resolves to no single platform, and
-  /// [RommUploadEnd.nothingToUpload] when the game has no path or is already
-  /// linked. Otherwise a one-file batch through [romUpload]; throws
-  /// [RommUploadBusyException] while another batch runs.
+  /// when [canUploadRoms] is false, [RommUploadEnd.unknownSystem] when the
+  /// game names a system this install does not have, the platform ends of
+  /// [_uploadPlatformFor] when it does but the server's platform list does
+  /// not answer with exactly one, and [RommUploadEnd.nothingToUpload] when
+  /// the game has no path or is already linked. Otherwise a one-file batch
+  /// through [romUpload]; throws [RommUploadBusyException] while another
+  /// batch runs.
   // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Upload Surfaces",
   // REQ "Platform Mapping"
   Future<RommUploadSummary> uploadToRomm(
@@ -1855,13 +1857,10 @@ class RommProvider extends ChangeNotifier {
     final system = await SystemRepository.getSystemByFolderName(folder);
     if (system == null) {
       _log.w('RomM upload refused: system=$folder reason=no_local_system');
-      return const RommUploadSummary.ended(RommUploadEnd.noPlatform);
+      return const RommUploadSummary.ended(RommUploadEnd.unknownSystem);
     }
-    final platform = await platformForSystem(system);
-    if (platform == null) {
-      _log.w('RomM upload refused: system=$folder reason=no_platform');
-      return const RommUploadSummary.ended(RommUploadEnd.noPlatform);
-    }
+    final (platform, refusal) = await _uploadPlatformFor(system);
+    if (platform == null) return refusal!;
     final fileName = uploadFileNameFor(romPath);
     final index = await RommSaveMapRepository.getRomIdIndex();
     if (index.lookup(fileName, folder) != null ||
@@ -1901,13 +1900,8 @@ class RommProvider extends ChangeNotifier {
     if (!canUploadRoms) {
       return const RommUploadSummary.ended(RommUploadEnd.notOffered);
     }
-    final platform = await platformForSystem(system);
-    if (platform == null) {
-      _log.w(
-        'RomM upload refused: system=${system.folderName} reason=no_platform',
-      );
-      return const RommUploadSummary.ended(RommUploadEnd.noPlatform);
-    }
+    final (platform, refusal) = await _uploadPlatformFor(system);
+    if (platform == null) return refusal!;
     final games = await GameRepository.loadGamesForSystem(system.folderName);
     final index = await RommSaveMapRepository.getRomIdIndex();
     final candidates = <RommUploadCandidate>[
@@ -1929,6 +1923,42 @@ class RommProvider extends ChangeNotifier {
       platformId: platform.id,
       confirm: confirm,
       onProgress: onProgress,
+    );
+  }
+
+  /// The platform an upload into [system] must write to, or the refusal that
+  /// says why there is none — exactly one of the two is non-null.
+  ///
+  /// The two failures are separated because their remedies are: a server with
+  /// no platform for the system needs one added there (NeoStation cannot
+  /// create it), while several platforms folding onto one local system needs
+  /// them merged. Conflating them under one message is what issue #235 was
+  /// about — the user was told "no matching platform" and left with nothing
+  /// to do about it.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Platform Mapping"
+  Future<(RommPlatform?, RommUploadSummary?)> _uploadPlatformFor(
+    SystemModel system,
+  ) async {
+    final matches = await platformMatchesForSystem(system);
+    if (matches.length == 1) return (matches.first, null);
+    if (matches.isEmpty) {
+      _log.w(
+        'RomM upload refused: system=${system.folderName} reason=no_platform',
+      );
+      return (null, const RommUploadSummary.ended(RommUploadEnd.noPlatform));
+    }
+    final slugs = matches.map((p) => p.slug).join(', ');
+    _log.w(
+      'RomM upload refused: system=${system.folderName} '
+      'reason=ambiguous_platform '
+      'platforms=${matches.map((p) => '${p.id}:${p.slug}').join(',')}',
+    );
+    return (
+      null,
+      RommUploadSummary.ended(
+        RommUploadEnd.ambiguousPlatform,
+        endDetail: slugs,
+      ),
     );
   }
 
@@ -2367,18 +2397,24 @@ class RommProvider extends ChangeNotifier {
     return index;
   }
 
-  /// The one RomM platform whose ROMs belong to [system], for an upload.
+  /// Every RomM platform whose ROMs belong to [system], for an upload.
   ///
   /// The inverse of [systemForPlatform] over the loaded platform list, by
   /// the same slug and alias candidates the link pass resolves with
-  /// (SPEC-0001's rule). Null when no platform resolves to the system.
-  /// Several can — the alias table folds `ps`, `psx` and `playstation` onto
-  /// one folder — and then this returns null too, with a warning naming the
-  /// candidates: a wrong platform folder is worse than a refusal, and
-  /// picking the first would be picking at random.
+  /// (SPEC-0001's rule). Exactly one is the answer an upload can use; empty
+  /// means the server has no platform for the system; more than one means
+  /// the alias table folded several RomM slugs onto one local folder (`ps`,
+  /// `psx` and `playstation` all land on `ps1`) and picking the first would
+  /// be picking at random.
+  ///
+  /// Returning the list rather than "the one or null" is what lets the
+  /// upload tell those last two apart: they are different problems with
+  /// different remedies and, before issue #235, one message.
   // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Platform Mapping",
   // ADR-0001 (filename linking), SPEC-0001 REQ "Filename Equivalence Rule"
-  Future<RommPlatform?> platformForSystem(SystemModel system) async {
+  Future<List<RommPlatform>> platformMatchesForSystem(
+    SystemModel system,
+  ) async {
     await loadPlatforms();
     await platformsLoaded;
     final matches = <RommPlatform>[];
@@ -2388,14 +2424,7 @@ class RommProvider extends ChangeNotifier {
         matches.add(platform);
       }
     }
-    if (matches.length == 1) return matches.first;
-    if (matches.length > 1) {
-      _log.w(
-        'RomM platform mapping ambiguous: system=${system.folderName} '
-        'platforms=${matches.map((p) => '${p.id}:${p.slug}').join(',')}',
-      );
-    }
-    return null;
+    return matches;
   }
 
   /// Local system for a RomM platform, for callers that have a platform and

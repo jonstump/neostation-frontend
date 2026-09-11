@@ -38,6 +38,8 @@ void main() {
     AppLocale.rommUploadPreparing,
     AppLocale.rommUploadProgress,
     AppLocale.rommUploadNoPlatform,
+    AppLocale.rommUploadUnknownSystem,
+    AppLocale.rommUploadAmbiguousPlatform,
     AppLocale.rommUploadNothingToUpload,
     AppLocale.rommUploadAlreadyLinked,
     AppLocale.rommUploadBusy,
@@ -73,6 +75,8 @@ void main() {
     AppLocale.rommUploadConfirmBody: ['{count}', '{size}'],
     AppLocale.rommUploadProgress: ['{name}', '{current}', '{total}'],
     AppLocale.rommUploadNoPlatform: ['{system}'],
+    AppLocale.rommUploadUnknownSystem: ['{system}'],
+    AppLocale.rommUploadAmbiguousPlatform: ['{system}', '{platforms}'],
     AppLocale.rommUploadNothingToUpload: ['{system}'],
     AppLocale.rommUploadSummary: ['{uploaded}', '{skipped}', '{failed}'],
     AppLocale.rommUploadSummaryCancelled: ['{summary}'],
@@ -138,4 +142,26 @@ void main() {
       }
     },
   );
+
+  // Governing: SPEC-0014 REQ "Localized User-Facing Text"; issue #235
+  test('the three platform refusals read differently in every language', () {
+    // One message for "the server has no platform", "this install has no
+    // such system" and "several platforms fold onto one" is the bug #235
+    // reported: the remedies differ, so the lines must too.
+    for (final entry in locales.entries) {
+      final refusals = <String>{
+        for (final key in const [
+          AppLocale.rommUploadNoPlatform,
+          AppLocale.rommUploadUnknownSystem,
+          AppLocale.rommUploadAmbiguousPlatform,
+        ])
+          entry.value[key] as String,
+      };
+      expect(
+        refusals.length,
+        3,
+        reason: '${entry.key} repeats a platform refusal',
+      );
+    }
+  });
 }
