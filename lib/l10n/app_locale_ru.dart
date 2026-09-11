@@ -1068,6 +1068,7 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommSearching: 'Поиск в RomM...',
   AppLocale.rommDownloading: 'Загрузка...',
   AppLocale.rommDownloaded: 'Загружено',
+  AppLocale.rommLinked: 'Связано с RomM',
   AppLocale.rommDownloadComplete: 'Загрузка завершена',
   AppLocale.rommDownloadFailed: 'Не удалось загрузить',
   AppLocale.rommDownloadCancelled: 'Загрузка отменена',
@@ -1086,6 +1087,7 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommSyncConfirmPlan:
       'Загрузит {count} игр ({size}). Это может занять много времени.',
   AppLocale.rommSyncConfirmSkipped: '{count} уже есть на устройстве.',
+  AppLocale.rommSyncConfirmLinked: 'Связано с RomM: {count}.',
   AppLocale.rommSyncConfirmFree: 'Свободно {free}.',
   AppLocale.rommSyncConfirmNoSpace:
       'Недостаточно места: нужно {size}, свободно только {free}.',
@@ -1100,6 +1102,7 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommSyncComplete: 'Синхронизировано игр: {count}',
   AppLocale.rommSyncCancelled: 'Синхронизация отменена',
   AppLocale.rommSyncNothingToDo: 'Всё уже загружено',
+  AppLocale.rommSyncLinkedCount: 'Связано с RomM игр: {count}',
   AppLocale.rommSyncFailedCount: 'Не удалось: {count}',
   AppLocale.searchTitle: 'Поиск',
   AppLocale.searchNameHint: 'Поиск...',
