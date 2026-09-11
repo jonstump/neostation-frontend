@@ -84,6 +84,9 @@ class NeoSyncStatusIcon extends StatefulWidget {
   /// reserve the icon's width up front — the details card measures its filename
   /// against the space left over — asks here rather than re-deriving these
   /// conditions and drifting out of step with them.
+  ///
+  /// A remote entry is one of those states: see the `isRemote` clause below.
+  /// Issue #240.
   static bool willRender({
     required SystemModel system,
     required GameModel? game,
@@ -95,7 +98,19 @@ class NeoSyncStatusIcon extends StatefulWidget {
     if (system.screenscraperId == null || system.screenscraperId == 0) {
       return false;
     }
-    return game != null;
+    if (game == null) return false;
+    // A catalog entry the server has and this device does not. There is no
+    // local save to push, nothing to pull it onto, and no sync relationship to
+    // report — the icon would say nothing, on what in a RomM-first library can
+    // be most of the list, which is what makes it noise where it does mean
+    // something. It returns once the game is downloaded and a save exists.
+    //
+    // `cloudOnly` is untouched by this: that status is about a *save* living
+    // only in the cloud, which is a real thing to report for a downloaded
+    // game, and is unrelated to the game itself being remote.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Remote Entry Presentation"
+    if (game.isRemote) return false;
+    return true;
   }
 
   @override

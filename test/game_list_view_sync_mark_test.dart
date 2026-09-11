@@ -78,6 +78,22 @@ final _games = [
   _game('metroid.sfc', 'Super Metroid'),
 ];
 
+/// A catalog entry the server has and this device does not: no `romPath`, a
+/// `rommRomId`, which is what `GameModel.isRemote` reads. Issue #240.
+GameModel _remoteGame(String romname, String name) => GameModel(
+  romname: romname,
+  realname: name,
+  name: name,
+  year: '',
+  developer: '',
+  publisher: '',
+  genre: '',
+  players: '',
+  rating: 0,
+  cloudSyncEnabled: true,
+  rommRomId: 4242,
+);
+
 SystemModel _system({bool sync = true, int? screenscraperId = 4}) =>
     SystemModel(
       id: 'snes',
@@ -300,5 +316,48 @@ void main() {
     expect(find.byIcon(Symbols.cloud_off_rounded), findsNothing);
 
     await drain(tester);
+  });
+
+  group('a remote entry carries no mark', () {
+    // A catalog entry has no local save to push and nothing to pull onto, so
+    // the mark would say nothing — on what in a RomM-first library can be most
+    // of the list. Issue #240.
+    test('willRender says no for a remote entry', () {
+      expect(
+        NeoSyncStatusIcon.willRender(
+          system: _system(),
+          game: _remoteGame('lynx.lnx', 'Chip\'s Challenge'),
+          syncProvider: _FakeSync(GameSyncStatus.upToDate),
+        ),
+        isFalse,
+      );
+    });
+
+    test('willRender still says yes for the same game downloaded', () {
+      // Identical but for `romPath`, so this pins the remote-ness and not some
+      // other difference between the two fixtures.
+      expect(
+        NeoSyncStatusIcon.willRender(
+          system: _system(),
+          game: _game('lynx.lnx', 'Chip\'s Challenge'),
+          syncProvider: _FakeSync(GameSyncStatus.upToDate),
+        ),
+        isTrue,
+      );
+    });
+
+    test('a cloud-only save on a downloaded game is untouched', () {
+      // `cloudOnly` is about a save living only in the cloud, which is a real
+      // thing to report for a downloaded game. It is not the same question as
+      // the game itself being remote, and this change must not fold them.
+      expect(
+        NeoSyncStatusIcon.willRender(
+          system: _system(),
+          game: _game('mario.sfc', 'Super Mario World'),
+          syncProvider: _FakeSync(GameSyncStatus.cloudOnly),
+        ),
+        isTrue,
+      );
+    });
   });
 }
