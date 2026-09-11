@@ -1529,6 +1529,8 @@ const Map<String, dynamic> appLocaleId = {
       'Tidak ada pemindaian yang berjalan di server. Mulai satu dari antarmuka web RomM.',
   AppLocale.rommScanWatchTimeout:
       'Masih memindai setelah {minutes} menit. Lihat sisanya di RomM.',
+  AppLocale.rommScanWatchUnreachable:
+      'Pemindaian tidak dapat diperiksa di server. Buka RomM untuk melihat statusnya.',
   AppLocale.rommMaintenanceTitle: 'Pemeliharaan server',
   AppLocale.rommMaintenanceRescan: 'Pindai ulang pustaka',
   AppLocale.rommMaintenanceRescanConfirm:

@@ -1530,6 +1530,8 @@ const Map<String, dynamic> appLocaleRu = {
       'На сервере не выполняется сканирование. Запустите его в веб-интерфейсе RomM.',
   AppLocale.rommScanWatchTimeout:
       'Сканирование идёт уже {minutes} мин. Остальное смотрите в RomM.',
+  AppLocale.rommScanWatchUnreachable:
+      'Не удалось проверить сканирование на сервере. Откройте RomM, чтобы увидеть его состояние.',
   AppLocale.rommMaintenanceTitle: 'Обслуживание сервера',
   AppLocale.rommMaintenanceRescan: 'Пересканировать библиотеку',
   AppLocale.rommMaintenanceRescanConfirm:

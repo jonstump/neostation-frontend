@@ -1382,6 +1382,8 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommScanWatchNone: 'サーバーでスキャンは実行されていません。RomM のウェブ画面から開始してください。',
   AppLocale.rommScanWatchTimeout:
       '{minutes} 分経ってもスキャンが続いています。残りは RomM で確認してください。',
+  AppLocale.rommScanWatchUnreachable:
+      'サーバーでスキャンを確認できませんでした。進捗は RomM で確認してください。',
   AppLocale.rommMaintenanceTitle: 'サーバーのメンテナンス',
   AppLocale.rommMaintenanceRescan: 'ライブラリを再スキャン',
   AppLocale.rommMaintenanceRescanConfirm:

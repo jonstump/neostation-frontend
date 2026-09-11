@@ -69,6 +69,8 @@ void main() {
     AppLocale.rommScanWatchFailed,
     AppLocale.rommScanWatchNone,
     AppLocale.rommScanWatchTimeout,
+    AppLocale.rommScanWatchUnreachable,
+    AppLocale.rommUploadScanRefused,
   ];
 
   final placeholder = RegExp(r'\{[a-zA-Z]+\}');

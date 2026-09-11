@@ -480,6 +480,10 @@ class RommRomUploadRunner {
           poll: romm.scanTaskStatus,
           shouldStop: () => !romm.isConnected,
           awaitStart: true,
+          // Correlate when the server named the job: a scan that takes longer
+          // than the grace to appear must not let the previous scan's counts
+          // be reported as this batch's result.
+          expectTaskId: summary.scanTaskId,
         ),
       );
     }

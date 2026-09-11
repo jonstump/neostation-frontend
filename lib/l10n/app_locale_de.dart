@@ -1579,6 +1579,8 @@ const Map<String, dynamic> appLocaleDe = {
       'Auf dem Server läuft kein Scan. Starte einen in der RomM-Weboberfläche.',
   AppLocale.rommScanWatchTimeout:
       'Nach {minutes} Minuten läuft der Scan noch. Den Rest zeigt RomM.',
+  AppLocale.rommScanWatchUnreachable:
+      'Der Scan konnte auf dem Server nicht geprüft werden. Öffne RomM, um den Stand zu sehen.',
   AppLocale.rommMaintenanceTitle: 'Serverwartung',
   AppLocale.rommMaintenanceRescan: 'Bibliothek neu einlesen',
   AppLocale.rommMaintenanceRescanConfirm:

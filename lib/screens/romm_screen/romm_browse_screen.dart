@@ -1506,6 +1506,7 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
     String key;
     NotificationType type;
     var queued = false;
+    String? queuedTaskId;
     try {
       final runnable = await _rommProvider.serverTaskRunnable(task.taskName);
       if (runnable == false) {
@@ -1528,6 +1529,9 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
         key = AppLocale.rommMaintenanceQueued;
         type = NotificationType.success;
         queued = true;
+        // The id the server gave this run, so the watch below reports this
+        // scan's result and not the one before it.
+        queuedTaskId = id;
       }
     } on RommException catch (e) {
       final busy = e.kind == RommErrorKind.taskBusy;
@@ -1549,7 +1553,11 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
     // A queued scan is watched from here on, so the toast is the last thing
     // the user has to read: what the scan finds arrives in the notification.
     if (queued && task.isScan) {
-      RommScanWatchRunner.start(context, awaitStart: true);
+      RommScanWatchRunner.start(
+        context,
+        awaitStart: true,
+        expectTaskId: queuedTaskId,
+      );
     }
   }
 

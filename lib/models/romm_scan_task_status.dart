@@ -30,6 +30,41 @@ enum RommScanState {
   failed,
 }
 
+/// One answer to `GET /api/tasks/status`: whether the server answered at all,
+/// and the scan it named if it did.
+///
+/// The distinction the watcher cannot work without. A single null used to
+/// stand for six different things — the scope gate, a 403, any non-2xx, a
+/// timeout, a socket error, and a 200 naming no scan — and the watcher read
+/// every one of them as "there is no scan running on the server", which is a
+/// claim the server never made. One failed poll out of hundreds ended the
+/// watch on it, and a server too old to have the route 404'd into a
+/// permanently confident denial.
+///
+/// [answered] is true only when the server's own body was read. [status] is
+/// then the scan it named, or null when it named none — which is the one
+/// genuine "no scan is running".
+// Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+// SPEC-0018 REQ "Maintenance Tasks"
+class RommScanPoll {
+  /// True when the server answered and its body was parsed.
+  final bool answered;
+
+  /// The scan the server named, or null when it named none (and always null
+  /// when it did not answer).
+  final RommScanTaskStatus? status;
+
+  /// The server answered: [status] is the scan it named, or null for none.
+  const RommScanPoll.answered(this.status) : answered = true;
+
+  /// The question could not be asked, or the answer could not be read.
+  const RommScanPoll.unanswered() : answered = false, status = null;
+
+  @override
+  String toString() =>
+      answered ? 'RommScanPoll(answered $status)' : 'RommScanPoll(unanswered)';
+}
+
 class RommScanTaskStatus {
   /// The server's id for the job, for the log line only.
   final String id;
@@ -196,8 +231,29 @@ class RommScanTaskStatus {
     }
     final direct = map['scan_stats'] ?? map['scanStats'] ?? map['stats'];
     if (direct is Map) return direct;
-    return map;
+    // The entry itself, but only when it carries a count this parser
+    // recognises as a scan's. Reading the whole entry unconditionally would
+    // take an unrelated top-level `total` — a queue length, a page size — for
+    // a ROM count and report progress out of it.
+    if (map.keys.any((k) => _statKeys.contains(k.toString()))) return map;
+    return const {};
   }
+
+  /// The count keys that make a map scan stats. A bare `total` is not one of
+  /// them: it is the field most likely to mean something else entirely.
+  static const _statKeys = {
+    'total_roms',
+    'totalRoms',
+    'scanned_roms',
+    'scannedRoms',
+    'scanned',
+    'new_roms',
+    'newRoms',
+    'added_roms',
+    'identified_roms',
+    'identifiedRoms',
+    'matched_roms',
+  };
 
   static int _intOf(Map<dynamic, dynamic> map, List<String> keys) {
     for (final key in keys) {

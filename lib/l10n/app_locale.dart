@@ -1598,6 +1598,7 @@ mixin AppLocale {
   static const String rommScanWatchFailed = 'romm_scan_watch_failed';
   static const String rommScanWatchNone = 'romm_scan_watch_none';
   static const String rommScanWatchTimeout = 'romm_scan_watch_timeout';
+  static const String rommScanWatchUnreachable = 'romm_scan_watch_unreachable';
 
   // ── RomM metadata fix-up in the match picker (SPEC-0018) ────────────────
   // Governing: ADR-0019 (expose RomM library filters, search and maintenance),

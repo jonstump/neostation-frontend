@@ -61,8 +61,9 @@ class RommServerTask {
   /// RomM has published this registry as a bare list and as an object keyed by
   /// task group across releases, so the walk is shape-tolerant: any nested map
   /// that names a task is taken, anything else is descended into. A body this
-  /// finds nothing in yields an empty list, which callers read as "unknown"
-  /// rather than as "no tasks".
+  /// finds nothing in yields an empty list; turning that into the "unknown"
+  /// every caller works in terms of is `RommService.listServerTasks`' job, one
+  /// layer up, since only it knows the body was supposed to hold something.
   static List<RommServerTask> listFrom(dynamic decoded) {
     final out = <RommServerTask>[];
     final seen = <String>{};
@@ -168,13 +169,17 @@ enum RommScanRequestOutcome {
   /// A scan is already going — pending for the same reason.
   alreadyRunning,
 
-  /// The request could not be delivered (timeout, unreachable server). Says
-  /// nothing about what the server would have done, so also pending.
+  /// The request could not be delivered, or was answered by something other
+  /// than RomM's own policy: a timeout, an unreachable server, and every
+  /// transient status — a proxy's 502/503/504 while RomM restarts, a 429, a
+  /// 408. Says nothing about what the server would have done, so also pending.
+  /// See [RommScanRequest.isRefusalStatus].
   unavailable,
 
   /// The server will not let a REST caller start a scan: it names no runnable
-  /// scan task, or it refused the one it names. Nothing is pending — the user
-  /// has to start the scan from RomM's own web interface.
+  /// scan task, or it answered the one it names with a status that is RomM's
+  /// own refusal ([RommScanRequest.isRefusalStatus]). Nothing is pending — the
+  /// user has to start the scan from RomM's own web interface.
   refused,
 }
 
@@ -190,6 +195,35 @@ class RommScanRequest {
   final String? taskId;
 
   const RommScanRequest(this.outcome, {this.taskName = '', this.taskId});
+
+  /// Whether a failed `POST /api/tasks/run/{name}` carrying [status] is RomM
+  /// refusing to run the task, as opposed to something transient between here
+  /// and it.
+  ///
+  /// [RommScanRequestOutcome.refused] tells the user the files are uploaded
+  /// and nothing more will happen until they start a scan from RomM's own web
+  /// interface — advice about a permanent policy. A reverse proxy answering
+  /// 502 while RomM restarts, a 503, a 504, a rate-limiting 429 say nothing
+  /// about that policy, and `runTask`'s own doc already records that a proxy
+  /// may answer for RomM. So this is an allowlist of the statuses RomM itself
+  /// answers a refusal with, and everything else — every 5xx, 408, 429, an
+  /// expired 401, and any status not listed here — stays transient and is
+  /// reported as pending, which errs towards waiting rather than towards
+  /// sending the user to fix a server that was merely busy.
+  ///
+  /// 403 never reaches this: `runTask` maps it to
+  /// [RommErrorKind.scopeDenied] and the caller reports it as not granted.
+  // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
+  // SPEC-0018 REQ "Maintenance Tasks", ADR-0014 (chunked ROM upload),
+  // SPEC-0014 REQ "Scan And Link After Upload"
+  static bool isRefusalStatus(int? status) =>
+      status != null && _refusalStatuses.contains(status);
+
+  /// 400 is the refusal issue #170 recorded (a task whose `manual_run` is
+  /// false); 404 and 405 are a task name or a route this RomM does not have;
+  /// 409 is a stated conflict; 422 is the route's own documented rejection of
+  /// what was asked. Asking again changes none of them.
+  static const Set<int> _refusalStatuses = {400, 404, 405, 409, 422};
 
   /// True when a scan is now expected to happen, or already is.
   bool get scanExpected =>

@@ -1891,11 +1891,14 @@ class RommProvider extends ChangeNotifier {
           taskName: name,
         );
       }
-      // No status means the request never reached RomM (timeout, socket): the
-      // server has not refused anything, so this is not the refusal case.
-      final outcome = e.statusCode == null
-          ? RommScanRequestOutcome.unavailable
-          : RommScanRequestOutcome.refused;
+      // Only the statuses RomM itself refuses with are a refusal. No status
+      // means the request never reached RomM (timeout, socket), and a
+      // transient one — a proxy's 5xx, a 429 — means it may never have got
+      // there either; neither is the server declining to scan, and saying it
+      // is would send the user to fix a server that was merely busy.
+      final outcome = RommScanRequest.isRefusalStatus(e.statusCode)
+          ? RommScanRequestOutcome.refused
+          : RommScanRequestOutcome.unavailable;
       _log.w(
         'RomM scan request failed: task=$name status=${e.statusCode} '
         'outcome=${outcome.name}',
@@ -1910,15 +1913,16 @@ class RommProvider extends ChangeNotifier {
     }
   }
 
-  /// The newest library scan the server reports, or null when it names none.
+  /// The newest library scan the server reports.
   ///
   /// The watcher's single server call; it reports a scan started from RomM's
-  /// web UI exactly like one this app queued.
+  /// web UI exactly like one this app queued. A poll the server did not answer
+  /// is [RommScanPoll.unanswered], never an answer of "no scan".
   // Governing: ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
-  Future<RommScanTaskStatus?> scanTaskStatus() async {
-    final status = await service.getScanTaskStatus();
+  Future<RommScanPoll> scanTaskStatus() async {
+    final poll = await service.getScanTaskStatus();
     await _persistRefreshedTokens();
-    return status;
+    return poll;
   }
 
   // ── ROM upload ─────────────────────────────────────────────────────────────

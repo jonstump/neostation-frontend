@@ -25,6 +25,11 @@ class RommScanWatchStrings {
   final String none;
   final String timeoutTemplate;
 
+  /// What the watch ends on when the server stopped answering the question.
+  /// Deliberately not [none]: "there is no scan running" is a statement about
+  /// the server, and a poll that went unanswered is not one.
+  final String unreachable;
+
   const RommScanWatchStrings({
     required this.waiting,
     required this.progressTemplate,
@@ -34,6 +39,7 @@ class RommScanWatchStrings {
     required this.failed,
     required this.none,
     required this.timeoutTemplate,
+    required this.unreachable,
   });
 
   factory RommScanWatchStrings.of(BuildContext context) {
@@ -47,6 +53,7 @@ class RommScanWatchStrings {
       failed: s(AppLocale.rommScanWatchFailed),
       none: s(AppLocale.rommScanWatchNone),
       timeoutTemplate: s(AppLocale.rommScanWatchTimeout),
+      unreachable: s(AppLocale.rommScanWatchUnreachable),
     );
   }
 
@@ -102,7 +109,15 @@ class RommScanWatchRunner {
   /// the watch waits a few polls for a running one to appear before believing
   /// a finished entry. A plain "Scan status" check passes false and reports
   /// whatever the server says right now.
-  static void start(BuildContext context, {bool awaitStart = false}) {
+  ///
+  /// [expectTaskId] is the id the server gave the scan that was just queued,
+  /// when it gave one: a finished entry that is demonstrably a *different*
+  /// job is then never reported as this one's result.
+  static void start(
+    BuildContext context, {
+    bool awaitStart = false,
+    String? expectTaskId,
+  }) {
     final strings = RommScanWatchStrings.of(context);
     final romm = context.read<RommProvider>();
     unawaited(
@@ -111,6 +126,7 @@ class RommScanWatchRunner {
         poll: romm.scanTaskStatus,
         shouldStop: () => !romm.isConnected,
         awaitStart: awaitStart,
+        expectTaskId: expectTaskId,
       ),
     );
   }
@@ -127,15 +143,25 @@ class RommScanWatchRunner {
   /// [maxDuration] in total — because `GET /api/tasks/status` walks the
   /// server's whole job registry and a scan of a large library can run for
   /// longer than anyone will watch it.
+  ///
+  /// A poll that could not be asked or could not be read is not an answer:
+  /// [pollFailureTolerance] of them in a row ends the watch on
+  /// [RommScanWatchStrings.unreachable], and a single one is waited out. That
+  /// is the difference between "the server says there is no scan" and "the
+  /// server did not say" — the second used to be reported as the first, so
+  /// one bad poll out of hundreds, or a server too old to have the route at
+  /// all, ended the watch claiming no scan was running.
   // Governing: ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
   static Future<void> runDetached({
     required RommScanWatchStrings strings,
-    required Future<RommScanTaskStatus?> Function() poll,
+    required Future<RommScanPoll> Function() poll,
     bool Function()? shouldStop,
     bool awaitStart = false,
+    String? expectTaskId,
     Duration interval = const Duration(seconds: 3),
     Duration startGrace = const Duration(seconds: 15),
     Duration maxDuration = const Duration(minutes: 20),
+    int pollFailureTolerance = 5,
     Future<void> Function(Duration)? sleep,
   }) async {
     if (_running) {
@@ -148,16 +174,17 @@ class RommScanWatchRunner {
     final wait = sleep ?? (Duration d) => Future<void>.delayed(d);
     final started = DateTime.now();
     var seenRunning = false;
-
-    notifications.show(
-      id: notificationId,
-      message: strings.waiting,
-      type: GlobalNotificationType.info,
-      progress: 0,
-      ongoing: true,
-    );
+    var unanswered = 0;
 
     try {
+      notifications.show(
+        id: notificationId,
+        message: strings.waiting,
+        type: GlobalNotificationType.info,
+        progress: 0,
+        ongoing: true,
+      );
+
       while (true) {
         if (shouldStop?.call() ?? false) {
           _log.i('RomM scan watch stopped: reason=disconnected');
@@ -165,13 +192,35 @@ class RommScanWatchRunner {
           return;
         }
 
-        final status = await poll();
+        final answer = await poll();
         final elapsed = DateTime.now().difference(started);
         final withinGrace = elapsed < startGrace;
 
+        // A poll the server did not answer says nothing at all — not that
+        // there is no scan. A watch runs for up to four hundred polls and a
+        // proxy hiccup, a rate limit or a route an older server does not have
+        // must not end it on a claim the server never made. Only a run of
+        // them is worth giving up over, and giving up then says so.
+        if (!answer.answered) {
+          unanswered++;
+          if (unanswered >= pollFailureTolerance) {
+            _log.w('RomM scan watch ended: state=unanswered polls=$unanswered');
+            _terminal(
+              notifications,
+              strings.unreachable,
+              GlobalNotificationType.info,
+            );
+            return;
+          }
+          await wait(interval);
+          continue;
+        }
+        unanswered = 0;
+
+        final status = answer.status;
         if (status == null) {
-          // Nothing the server calls a scan. Before the grace is up that just
-          // means the job it accepted has not been listed yet.
+          // The server answered and named no scan. Before the grace is up
+          // that just means the job it accepted has not been listed yet.
           if (awaitStart && withinGrace) {
             await wait(interval);
             continue;
@@ -210,6 +259,31 @@ class RommScanWatchRunner {
           }
           await wait(interval);
           continue;
+        }
+
+        // A finished entry the server itself identifies as a different job
+        // than the one just queued is the *previous* scan, whatever its
+        // timestamp says and whether or not a running row was ever seen.
+        // Without this, a scan that takes longer than the grace to appear
+        // lets an hour-old "4 new, 2 identified" be reported as what just
+        // happened. Only finished entries are correlated: a scan the watch
+        // can see running is worth showing the progress of either way, and a
+        // server that gives its jobs no ids (an empty [status.id]) keeps the
+        // uncorrelated behaviour a web-UI-started scan depends on.
+        final expected = expectTaskId ?? '';
+        if (expected.isNotEmpty &&
+            status.id.isNotEmpty &&
+            status.id != expected) {
+          if (withinGrace) {
+            await wait(interval);
+            continue;
+          }
+          _log.i(
+            'RomM scan watch ended: state=queued_scan_not_listed '
+            'newest=${status.id} expected=$expected',
+          );
+          _terminal(notifications, strings.none, GlobalNotificationType.info);
+          return;
         }
 
         // A finished entry seen before the queued scan has even appeared is

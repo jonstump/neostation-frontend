@@ -468,6 +468,77 @@ void main() {
       expect(summary.uploaded.length, 1, reason: 'the file still landed');
     });
 
+    // The same rule as `RommProvider.requestLibraryScan`, at the second site
+    // that classifies a thrown status: a proxy's 5xx or a 429 is not RomM
+    // declining to scan, and must not send the user off to start one by hand.
+    // Governing: ADR-0014, SPEC-0014 REQ "Scan And Link After Upload"
+    test('a transient status from the requester stays pending', () async {
+      for (final status in const [408, 429, 500, 502, 503, 504]) {
+        final summary = await batch.run(
+          candidates: [_candidate('a.sfc')],
+          platformId: 7,
+          open: disk.open,
+          upload: _Server().upload,
+          requestScan: () async =>
+              throw RommException('transient', statusCode: status),
+        );
+        expect(
+          summary.scan,
+          RommUploadScanState.pending,
+          reason: '$status is a server that was briefly unreachable',
+        );
+      }
+    });
+
+    test('a thrown refusal status is still refused', () async {
+      for (final status in const [400, 404, 405, 409, 422]) {
+        final summary = await batch.run(
+          candidates: [_candidate('a.sfc')],
+          platformId: 7,
+          open: disk.open,
+          upload: _Server().upload,
+          requestScan: () async =>
+              throw RommException('no', statusCode: status),
+        );
+        expect(
+          summary.scan,
+          RommUploadScanState.refused,
+          reason: '$status is RomM declining to run the task',
+        );
+      }
+    });
+
+    // The id the watch correlates on: without it a scan slow to appear lets
+    // the previous scan's counts be reported as this batch's result.
+    // Governing: ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
+    test('the queued scan\'s id reaches the summary', () async {
+      final summary = await batch.run(
+        candidates: [_candidate('a.sfc')],
+        platformId: 7,
+        open: disk.open,
+        upload: _Server().upload,
+        requestScan: () async => const RommScanRequest(
+          RommScanRequestOutcome.queued,
+          taskName: 'scan_library',
+          taskId: 'job-77',
+        ),
+      );
+      expect(summary.scan, RommUploadScanState.requested);
+      expect(summary.scanTaskId, 'job-77');
+    });
+
+    test('a batch that queued no scan carries no id', () async {
+      final summary = await batch.run(
+        candidates: [_candidate('a.sfc')],
+        platformId: 7,
+        open: disk.open,
+        upload: _Server().upload,
+        requestScan: () async =>
+            const RommScanRequest(RommScanRequestOutcome.refused),
+      );
+      expect(summary.scanTaskId, isEmpty);
+    });
+
     test('is pending when the request never reached the server', () async {
       final summary = await batch.run(
         candidates: [_candidate('a.sfc')],

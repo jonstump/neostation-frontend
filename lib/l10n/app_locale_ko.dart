@@ -1389,6 +1389,8 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommScanWatchNone: '서버에서 실행 중인 스캔이 없습니다. RomM 웹 인터페이스에서 시작하세요.',
   AppLocale.rommScanWatchTimeout:
       '{minutes}분이 지나도 스캔이 계속됩니다. 나머지는 RomM에서 확인하세요.',
+  AppLocale.rommScanWatchUnreachable:
+      '서버에서 스캔을 확인할 수 없습니다. 진행 상황은 RomM에서 확인하세요.',
   AppLocale.rommMaintenanceTitle: '서버 유지 관리',
   AppLocale.rommMaintenanceRescan: '라이브러리 다시 검사',
   AppLocale.rommMaintenanceRescanConfirm:

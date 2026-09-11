@@ -2291,8 +2291,7 @@ class RommService {
     }
   }
 
-  /// The newest library scan `GET /api/tasks/status` reports, or null when the
-  /// server names none (and when the question could not be asked).
+  /// What `GET /api/tasks/status` says about the newest library scan.
   ///
   /// This is what makes a scan observable at all: the run route answers with
   /// an id and nothing else, so before this nothing could tell a scan that was
@@ -2300,12 +2299,23 @@ class RommService {
   /// RomM's own web UI just the same, which on a stock server is the only
   /// place one can be started from.
   ///
+  /// Answered-with-none and could-not-ask are two different answers and must
+  /// stay that way: a [RommScanPoll.unanswered] comes back for the scope gate,
+  /// a 403, any non-2xx (a server too old to have this route answers 404) and
+  /// every throw, while only a 2xx body the parser read is
+  /// [RommScanPoll.answered] — with a null status when that body names no
+  /// scan. Collapsing the two let one bad poll tell the user no scan was
+  /// running while one was.
+  ///
   /// Never throws: a watcher polling every few seconds must not turn one bad
-  /// answer into a failure, so everything is logged and reported as null.
+  /// answer into a failure, so everything is logged and reported as
+  /// unanswered.
   // Governing: ADR-0019 (expose RomM library filters, search and maintenance),
   // SPEC-0018 REQ "Maintenance Tasks"
-  Future<RommScanTaskStatus?> getScanTaskStatus() async {
-    if (_scopeGated(RommScopeGroup.tasksRun)) return null;
+  Future<RommScanPoll> getScanTaskStatus() async {
+    if (_scopeGated(RommScopeGroup.tasksRun)) {
+      return const RommScanPoll.unanswered();
+    }
     try {
       final resp = await _sendWithAuthRetry<http.Response>(
         () => _httpClient
@@ -2315,19 +2325,21 @@ class RommService {
       );
       if (resp.statusCode == 403) {
         _noteScopeDenial(RommScopeGroup.tasksRun, resp.statusCode);
-        return null;
+        return const RommScanPoll.unanswered();
       }
       if (resp.statusCode < 200 || resp.statusCode >= 300) {
         _log.w(
           'RomM task status failed: endpoint=/api/tasks/status '
           'status=${resp.statusCode} body=${_briefBody(resp.body)}',
         );
-        return null;
+        return const RommScanPoll.unanswered();
       }
-      return RommScanTaskStatus.newestScanFrom(jsonDecode(resp.body));
+      return RommScanPoll.answered(
+        RommScanTaskStatus.newestScanFrom(jsonDecode(resp.body)),
+      );
     } catch (e) {
       _log.w('RomM task status failed: endpoint=/api/tasks/status error=$e');
-      return null;
+      return const RommScanPoll.unanswered();
     }
   }
 

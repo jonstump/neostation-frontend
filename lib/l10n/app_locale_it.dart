@@ -1566,6 +1566,8 @@ const Map<String, dynamic> appLocaleIt = {
       'Nessuna scansione in corso sul server. Avviane una dall\'interfaccia web di RomM.',
   AppLocale.rommScanWatchTimeout:
       'Ancora in scansione dopo {minutes} minuti. Controlla il resto in RomM.',
+  AppLocale.rommScanWatchUnreachable:
+      'Non è stato possibile verificare la scansione sul server. Apri RomM per vedere a che punto è.',
   AppLocale.rommMaintenanceTitle: 'Manutenzione del server',
   AppLocale.rommMaintenanceRescan: 'Riesamina la libreria',
   AppLocale.rommMaintenanceRescanConfirm:

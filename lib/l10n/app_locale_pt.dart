@@ -1551,6 +1551,8 @@ const Map<String, dynamic> appLocalePt = {
       'Não há nenhuma análise em curso no servidor. Inicie uma na interface web do RomM.',
   AppLocale.rommScanWatchTimeout:
       'Ainda a analisar após {minutes} minutos. Veja o resto no RomM.',
+  AppLocale.rommScanWatchUnreachable:
+      'Não foi possível verificar a análise no servidor. Abra o RomM para ver o progresso.',
   AppLocale.rommMaintenanceTitle: 'Manutenção do servidor',
   AppLocale.rommMaintenanceRescan: 'Reanalisar a biblioteca',
   AppLocale.rommMaintenanceRescanConfirm:

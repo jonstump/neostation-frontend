@@ -1,6 +1,9 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:neostation/models/romm_scan_task_status.dart';
 import 'package:neostation/models/romm_server_task.dart';
 import 'package:neostation/providers/romm_provider.dart';
@@ -247,6 +250,54 @@ void main() {
       expect(request.outcome, RommScanRequestOutcome.unavailable);
     });
 
+    // A refusal sends the user to RomM's web interface to start a scan by
+    // hand — advice about a permanent policy. A proxy answering 502 while
+    // RomM restarts is not that, and `runTask`'s own doc records that a proxy
+    // may answer for RomM.
+    // Governing: ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
+    test('a transient status is not the server refusing to scan', () async {
+      for (final status in const [408, 429, 500, 502, 503, 504]) {
+        svc
+          ..tasks = null
+          ..ran.clear()
+          ..runThrows = RommException('transient', statusCode: status);
+
+        final request = await provider.requestLibraryScan();
+
+        expect(
+          request.outcome,
+          RommScanRequestOutcome.unavailable,
+          reason: '$status is a server that was briefly unreachable',
+        );
+      }
+    });
+
+    test('an expired session is not the server refusing to scan', () async {
+      svc.tasks = null;
+      svc.runThrows = RommException('unauthorized', statusCode: 401);
+
+      final request = await provider.requestLibraryScan();
+
+      expect(request.outcome, RommScanRequestOutcome.unavailable);
+    });
+
+    test('RomM\'s own refusal statuses stay refusals', () async {
+      for (final status in const [400, 404, 405, 409, 422]) {
+        svc
+          ..tasks = null
+          ..ran.clear()
+          ..runThrows = RommException('no', statusCode: status);
+
+        final request = await provider.requestLibraryScan();
+
+        expect(
+          request.outcome,
+          RommScanRequestOutcome.refused,
+          reason: '$status is RomM declining to run the task',
+        );
+      }
+    });
+
     test('a login without tasks.run asks nothing at all', () async {
       svc.scope = RommScopeState.denied;
       svc.tasks = const [RommServerTask(name: 'scan_library', manualRun: true)];
@@ -378,12 +429,135 @@ void main() {
       expect(status.state, RommScanState.doneWithResults);
     });
 
+    test('an unrelated top-level total is not a ROM count', () {
+      // `total` at the top of an entry can be anything — a queue length, a
+      // page size. Read as scan stats it would draw a progress bar out of it.
+      final status = parse('''
+      {"running": [{"id": "a", "task_type": "scan", "status": "running",
+                    "total": 9000}]}
+      ''');
+      expect(status!.totalRoms, 0);
+      expect(status.fraction, isNull, reason: 'no total means no bar (#232)');
+    });
+
+    test('stats the server put at the top level are still read', () {
+      final status = parse('''
+      {"finished": [{"id": "a", "task_type": "scan", "status": "finished",
+                     "total_roms": 10, "scanned_roms": 10, "new_roms": 2}]}
+      ''');
+      expect(status!.totalRoms, 10);
+      expect(status.newRoms, 2);
+      expect(status.state, RommScanState.doneWithResults);
+    });
+
     test('a body with no scan in it reports none', () {
       expect(
         parse('{"finished": [{"id": "a", "task_type": "cleanup"}]}'),
         isNull,
       );
       expect(parse('{}'), isNull);
+    });
+  });
+
+  // ── Answered-with-none is not could-not-ask ──────────────────────────────
+  // The service used to answer null for six different things: the scope gate,
+  // a 403, any non-2xx, a timeout, a socket error, and a 200 naming no scan.
+  // The watcher read every one of them as "no scan is running on the server",
+  // which is a claim the server never made — and a RomM too old to have this
+  // route 404s, so it made that claim permanently and confidently.
+  // Governing: ADR-0019, SPEC-0018 REQ "Maintenance Tasks"
+  group('GET /api/tasks/status answers three ways', () {
+    void serve(http.Response Function() status) {
+      RommService.debugUseHttpClient(
+        MockClient((request) async {
+          if (request.url.path == '/api/token') {
+            return http.Response(
+              '{"access_token": "tok", "expires": 3600}',
+              200,
+              headers: const {'content-type': 'application/json'},
+            );
+          }
+          if (request.url.path == '/api/tasks/status') return status();
+          return http.Response('not found', 404);
+        }),
+      );
+    }
+
+    RommService configured() => RommService()
+      ..configure(
+        serverUrl: 'https://romm.local',
+        username: 'jon',
+        password: 's3cret',
+      );
+
+    tearDown(() => RommService.debugUseHttpClient(null));
+
+    test('a scan the server named comes back answered', () async {
+      serve(
+        () => http.Response(
+          '{"running": [{"id": "a", "task_type": "scan", '
+          '"status": "running"}]}',
+          200,
+          headers: const {'content-type': 'application/json'},
+        ),
+      );
+
+      final poll = await configured().getScanTaskStatus();
+
+      expect(poll.answered, isTrue);
+      expect(poll.status?.id, 'a');
+    });
+
+    test('a 200 naming no scan is the answer "there is none"', () async {
+      serve(
+        () => http.Response(
+          '{}',
+          200,
+          headers: const {'content-type': 'application/json'},
+        ),
+      );
+
+      final poll = await configured().getScanTaskStatus();
+
+      expect(poll.answered, isTrue, reason: 'the server did answer');
+      expect(poll.status, isNull);
+    });
+
+    test(
+      'a status the server could not answer with is not an answer',
+      () async {
+        for (final code in const [404, 429, 500, 502, 503]) {
+          serve(() => http.Response('nope', code));
+
+          final poll = await configured().getScanTaskStatus();
+
+          expect(
+            poll.answered,
+            isFalse,
+            reason: '$code must not read as "no scan is running"',
+          );
+          expect(poll.status, isNull);
+        }
+      },
+    );
+
+    test('a request that threw is not an answer either', () async {
+      RommService.debugUseHttpClient(
+        MockClient((request) async {
+          if (request.url.path == '/api/token') {
+            return http.Response(
+              '{"access_token": "tok", "expires": 3600}',
+              200,
+              headers: const {'content-type': 'application/json'},
+            );
+          }
+          throw const SocketException('connection reset by peer');
+        }),
+      );
+
+      final poll = await configured().getScanTaskStatus();
+
+      expect(poll.answered, isFalse);
     });
   });
 }

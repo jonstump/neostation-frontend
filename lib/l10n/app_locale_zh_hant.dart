@@ -1328,6 +1328,7 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.rommScanWatchFailed: '伺服器上的掃描失敗。',
   AppLocale.rommScanWatchNone: '伺服器上沒有正在執行的掃描。請在 RomM 網頁介面中啟動一次。',
   AppLocale.rommScanWatchTimeout: '{minutes} 分鐘後仍在掃描。其餘進度請在 RomM 中查看。',
+  AppLocale.rommScanWatchUnreachable: '無法在伺服器上查看掃描狀態。請開啟 RomM 查看進度。',
   AppLocale.rommMaintenanceTitle: '伺服器維護',
   AppLocale.rommMaintenanceRescan: '重新掃描媒體庫',
   AppLocale.rommMaintenanceRescanConfirm: 'RomM 將重新掃描整個媒體庫。在大型伺服器上可能需要較長時間。',
