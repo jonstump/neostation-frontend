@@ -66,10 +66,8 @@ final _nchdReadSector = _dylib.lookupFunction<
     Int32 Function(Pointer<Void>, Int32, Uint32, Pointer<Uint8>),
     int Function(Pointer<Void>, int, int, Pointer<Uint8>)>('nchd_read_sector');
 
-final _nchdClose = _dylib
-    .lookupFunction<Void Function(Pointer<Void>), void Function(Pointer<Void>)>(
-  'nchd_close',
-);
+final _nchdClose = _dylib.lookupFunction<Void Function(Pointer<Void>),
+    void Function(Pointer<Void>)>('nchd_close');
 
 /// Bytes of user data in a data sector.
 const int chdSectorSize = 2048;
