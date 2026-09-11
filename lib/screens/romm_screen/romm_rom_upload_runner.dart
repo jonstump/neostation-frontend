@@ -31,6 +31,7 @@ class RommUploadStrings {
   final String linkNow;
   final String linkNowResultTemplate;
   final String linkNowNothing;
+  final String metadataPushedTemplate;
   final String linkFailed;
   final String skippedLineTemplate;
   final String failedLineTemplate;
@@ -58,6 +59,7 @@ class RommUploadStrings {
     required this.linkNow,
     required this.linkNowResultTemplate,
     required this.linkNowNothing,
+    required this.metadataPushedTemplate,
     required this.linkFailed,
     required this.skippedLineTemplate,
     required this.failedLineTemplate,
@@ -88,6 +90,7 @@ class RommUploadStrings {
       linkNow: s(AppLocale.rommUploadLinkNow),
       linkNowResultTemplate: s(AppLocale.rommUploadLinkNowResult),
       linkNowNothing: s(AppLocale.rommUploadLinkNowNothing),
+      metadataPushedTemplate: s(AppLocale.rommUploadMetadataPushed),
       linkFailed: s(AppLocale.rommLinkFailed),
       skippedLineTemplate: s(AppLocale.rommUploadSkippedLine),
       failedLineTemplate: s(AppLocale.rommUploadFailedLine),
@@ -145,6 +148,10 @@ class RommUploadStrings {
 
   String linkNowResult(int count) =>
       linkNowResultTemplate.replaceFirst('{count}', '$count');
+
+  /// The line the metadata push adds under the link result. Issue #237.
+  String metadataPushed(int count) =>
+      metadataPushedTemplate.replaceFirst('{count}', '$count');
 
   String reasonFor(RommUploadFileOutcome outcome) {
     if (outcome.skipped case final reason?) return skipReasons[reason] ?? '';
@@ -397,7 +404,13 @@ class RommRomUploadRunner {
                 : GlobalNotificationType.info),
       // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Scan And Link After Upload"
       action: summary.wroteSomething
-          ? _linkNowAction(romm, strings, notifications, summaryText: text)
+          ? _linkNowAction(
+              romm,
+              strings,
+              notifications,
+              summaryText: text,
+              uploaded: summary.uploadedCandidates,
+            )
           : null,
     );
   }
@@ -443,10 +456,17 @@ class RommRomUploadRunner {
     RommUploadStrings strings,
     GlobalNotificationService notifications, {
     required String summaryText,
+    required List<RommUploadCandidate> uploaded,
   }) => GlobalNotificationAction(
     label: strings.linkNow,
     onPressed: () => unawaited(
-      _linkNow(romm, strings, notifications, summaryText: summaryText),
+      _linkNow(
+        romm,
+        strings,
+        notifications,
+        summaryText: summaryText,
+        uploaded: uploaded,
+      ),
     ),
   );
 
@@ -467,6 +487,7 @@ class RommRomUploadRunner {
     RommUploadStrings strings,
     GlobalNotificationService notifications, {
     required String summaryText,
+    required List<RommUploadCandidate> uploaded,
   }) async {
     // The summary row has no bar, and `update` would not carry one over even
     // if it had; the action is withdrawn until the pass answers.
@@ -484,6 +505,15 @@ class RommRomUploadRunner {
           ? strings.linkNowResult(linked)
           : strings.linkNowNothing;
       if (linked > 0) type = GlobalNotificationType.success;
+      // Only now does an uploaded ROM have an id to write to: the server had
+      // to ingest it and the pass above had to record the mapping. Issue
+      // #237 — until it, the file went up and nothing NeoStation knew about
+      // the game followed it. Never throws, so it cannot cost the link line.
+      // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Scan And Link After Upload"
+      final push = await romm.pushUploadedMetadata(uploaded);
+      if (push.pushed > 0) {
+        line = '$line\n${strings.metadataPushed(push.pushed)}';
+      }
     } catch (e, st) {
       // `linkLibrary` is documented not to throw; this is what keeps a throw
       // from leaving the row `ongoing` with its action gone and no way back.
@@ -503,6 +533,7 @@ class RommRomUploadRunner {
         strings,
         notifications,
         summaryText: summaryText,
+        uploaded: uploaded,
       ),
     );
   }

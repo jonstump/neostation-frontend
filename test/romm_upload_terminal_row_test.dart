@@ -30,6 +30,7 @@ const _strings = RommUploadStrings(
   linkNow: 'link-now',
   linkNowResultTemplate: 'linked {count}',
   linkNowNothing: 'linked-nothing',
+  metadataPushedTemplate: 'metadata-pushed {count}',
   linkFailed: 'link-failed',
   skippedLineTemplate: '{name}: {reason}',
   failedLineTemplate: '{name}: {reason}',

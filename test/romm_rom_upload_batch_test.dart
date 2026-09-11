@@ -135,6 +135,44 @@ void main() {
       },
     );
 
+    // The metadata push that follows the link pass needs each uploaded
+    // game's system folder, and [RommUploadFileOutcome] carries only the
+    // file name — so the summary carries the candidates too. Issue #237.
+    // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Scan And Link After Upload"
+    test(
+      'the summary names the candidates behind the uploaded files',
+      () async {
+        final disk = _Disk(
+          sizes: {
+            '/roms/snes/a.sfc': 100,
+            '/roms/gb/b.gb': 200,
+            '/roms/snes/c.m3u': 10,
+          },
+        );
+
+        final summary = await batch.run(
+          candidates: [
+            _candidate('a.sfc'),
+            _candidate('c.m3u'),
+            _candidate('b.gb', folder: 'gb'),
+          ],
+          platformId: 7,
+          open: disk.open,
+          upload: _Server().upload,
+          requestScan: () async => 'task-1',
+        );
+
+        expect(summary.uploaded.map((o) => o.fileName), ['a.sfc', 'b.gb']);
+        expect(
+          summary.uploadedCandidates.map(
+            (c) => '${c.systemFolder}/${c.fileName}',
+          ),
+          ['snes/a.sfc', 'gb/b.gb'],
+          reason: 'the skipped playlist is not a target of the push',
+        );
+      },
+    );
+
     test(
       'every refusal reason is kept, and an unsendable name is one',
       () async {

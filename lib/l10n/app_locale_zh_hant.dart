@@ -1464,6 +1464,7 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.rommUploadLinkNow: '立即連結',
   AppLocale.rommUploadLinkNowResult: '已連結 {count} 個遊戲',
   AppLocale.rommUploadLinkNowNothing: '尚未連結任何遊戲；伺服器可能仍在掃描',
+  AppLocale.rommUploadMetadataPushed: '已傳送 {count} 個遊戲的詳細資料',
   AppLocale.rommUploadSkippedLine: '已略過 {name}：{reason}',
   AppLocale.rommUploadFailedLine: '失敗 {name}：{reason}',
   AppLocale.rommUploadMore: '還有 {count} 個',

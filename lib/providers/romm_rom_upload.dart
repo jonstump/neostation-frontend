@@ -246,11 +246,22 @@ class RommUploadSummary {
   final RommUploadScanState scan;
   final RommUploadEnd end;
 
+  /// The candidates behind [uploaded], in the same order.
+  ///
+  /// [RommUploadFileOutcome] carries the file name and nothing else, which is
+  /// all the summary line needs; the metadata push that follows the link pass
+  /// needs the system folder too, and has no other way back to it once the
+  /// batch has returned. Empty on every summary a batch did not upload
+  /// anything for. Issue #237.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Scan And Link After Upload"
+  final List<RommUploadCandidate> uploadedCandidates;
+
   const RommUploadSummary({
     this.uploaded = const [],
     this.skipped = const [],
     this.failed = const [],
     this.scan = RommUploadScanState.none,
+    this.uploadedCandidates = const [],
     required this.end,
   });
 
@@ -259,6 +270,7 @@ class RommUploadSummary {
     : uploaded = const [],
       skipped = const [],
       failed = const [],
+      uploadedCandidates = const [],
       scan = RommUploadScanState.none;
 
   /// True when anything reached the server.
@@ -388,6 +400,7 @@ class RommRomUpload extends ChangeNotifier {
 
     final started = DateTime.now();
     final uploaded = <RommUploadFileOutcome>[];
+    final uploadedCandidates = <RommUploadCandidate>[];
     final skipped = <RommUploadFileOutcome>[];
     final failed = <RommUploadFileOutcome>[];
     var end = RommUploadEnd.completed;
@@ -499,6 +512,7 @@ class RommRomUpload extends ChangeNotifier {
           );
           if (sent) {
             uploaded.add(RommUploadFileOutcome.uploaded(candidate.fileName));
+            uploadedCandidates.add(candidate);
           } else {
             // The service logged the gate; nothing else in the batch will
             // fare better against it.
@@ -619,6 +633,7 @@ class RommRomUpload extends ChangeNotifier {
         skipped: skipped,
         failed: failed,
         scan: scan,
+        uploadedCandidates: uploadedCandidates,
         end: end,
       );
     } finally {

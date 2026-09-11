@@ -1462,6 +1462,7 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.rommUploadLinkNow: '立即关联',
   AppLocale.rommUploadLinkNowResult: '已关联 {count} 个游戏',
   AppLocale.rommUploadLinkNowNothing: '尚未关联任何游戏；服务器可能仍在扫描',
+  AppLocale.rommUploadMetadataPushed: '已发送 {count} 个游戏的详细信息',
   AppLocale.rommUploadSkippedLine: '已跳过 {name}：{reason}',
   AppLocale.rommUploadFailedLine: '失败 {name}：{reason}',
   AppLocale.rommUploadMore: '还有 {count} 个',

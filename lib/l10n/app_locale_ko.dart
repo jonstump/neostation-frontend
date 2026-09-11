@@ -1535,6 +1535,7 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommUploadLinkNow: '지금 연결',
   AppLocale.rommUploadLinkNowResult: '게임 {count}개 연결됨',
   AppLocale.rommUploadLinkNowNothing: '아직 연결된 항목 없음; 서버가 아직 검사 중일 수 있습니다',
+  AppLocale.rommUploadMetadataPushed: '게임 {count}개의 정보를 전송했습니다',
   AppLocale.rommUploadSkippedLine: '건너뜀 {name}: {reason}',
   AppLocale.rommUploadFailedLine: '실패 {name}: {reason}',
   AppLocale.rommUploadMore: '+{count}개 더',

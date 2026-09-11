@@ -1687,6 +1687,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommUploadLinkNowResult: '{count} game tertaut',
   AppLocale.rommUploadLinkNowNothing:
       'Belum ada yang tertaut; server mungkin masih memindai',
+  AppLocale.rommUploadMetadataPushed: 'Detail dikirim untuk {count} game',
   AppLocale.rommUploadSkippedLine: 'Dilewati {name}: {reason}',
   AppLocale.rommUploadFailedLine: 'Gagal {name}: {reason}',
   AppLocale.rommUploadMore: '+{count} lagi',
