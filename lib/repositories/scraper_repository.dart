@@ -852,6 +852,9 @@ class ScraperRepository {
   }) async {
     try {
       final db = await SqliteService.getDatabase();
+      // Every column, deliberately: the builder reads the row's existing
+      // `field_sources` to carry provenance forward, so an explicit column
+      // list here would silently drop it on every update.
       final existing = await db.query(
         'user_screenscraper_metadata',
         where: 'app_system_id = ? AND filename = ? COLLATE NOCASE',
@@ -1294,11 +1297,25 @@ class ScraperRepository {
   /// legacy row keeping a gap RomM never filled, which is what `all` mode is
   /// for.
   ///
+  /// The rule is "any source that is not ScreenScraper", deliberately, not
+  /// "romm": a Steam-written row is in the same position — another whole-row
+  /// writer completed it and ScreenScraper never saw it — and the question the
+  /// predicate asks is about ScreenScraper, so naming one other source would
+  /// be an accident of who happens to exist today.
+  ///
   /// It terminates, which the obvious alternative ("offer any row with an
   /// empty column") does not: once ScreenScraper runs, `saveGameMetadata`
   /// writes `metadata_source = 'screenscraper'` and `markGameFullyScraped`
   /// sets the flag, so the row drops out. A game ScreenScraper simply has no
   /// Italian description for is finished, not re-offered every pass.
+  ///
+  /// Offering the row is only half of it. The chain a candidate then runs
+  /// through offers it to RomM first, and a RomM fetch with nothing left to
+  /// add must not end that chain — see
+  /// `RommScrapeStepResult.classifyOutcome`, which reports that case as
+  /// `alreadyComplete` rather than `scraped` for exactly this reason. Without
+  /// that half the row is offered every pass, costs a RomM request every pass,
+  /// and never reaches ScreenScraper.
   // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Cooperation With ScreenScraper", REQ "Metadata Source Provenance"
   static String _scrapeModeFilter(String scrapeMode) => scrapeMode == 'new_only'
       ? 'AND (usm.filename IS NULL OR usm.is_fully_scraped = 0 '

@@ -710,6 +710,10 @@ class ScreenScraperService {
       'rommAttempted': rommAttempted,
     };
 
+    // A RomM step that completed with nothing left to add, kept for the case
+    // below where there are no ScreenScraper credentials to fall through to.
+    var rommAlreadyComplete = false;
+
     if (rommStep != null) {
       onProgress?.call(AppLocale.scrapeFetchingFromRomm, 0.05);
       final target = RommScrapeTarget(
@@ -734,6 +738,8 @@ class ScreenScraperService {
           'rommAttempted': true,
         };
       }
+      rommAlreadyComplete =
+          stepResult.status == RommScrapeStepStatus.alreadyComplete;
       if (stepResult.status == RommScrapeStepStatus.failed) {
         _log.w(
           'RomM scrape step failed, falling through to ScreenScraper '
@@ -753,6 +759,17 @@ class ScreenScraperService {
       onProgress?.call(AppLocale.checkingCredentials, 0.05);
 
       if (!await hasSavedCredentials()) {
+        // RomM already holds everything it carries for this game and there is
+        // no second source to consult, so this is a success, not a missing
+        // credential. (#233)
+        if (rommAlreadyComplete) {
+          return {
+            'success': true,
+            'message': AppLocale.scrapeSuccessful,
+            'source': scrapeSourceRomm,
+            'rommAttempted': true,
+          };
+        }
         return screenscraperResult(false, AppLocale.scrapeNoCredentials);
       }
 
@@ -861,9 +878,9 @@ class ScreenScraperService {
   /// With a [rommStep] every worker offers its ROM to RomM first and only
   /// falls through to ScreenScraper when the step did not scrape it (see
   /// [processRomForBulk]). The run may then start without ScreenScraper
-  /// credentials, in which case a ROM the step does not scrape is counted as
-  /// failed and no ScreenScraper request is made for it. The summary reports
-  /// how many games each source scraped.
+  /// credentials, in which case a ROM the step neither scraped nor found
+  /// already complete is counted as failed and no ScreenScraper request is
+  /// made for it. The summary reports how many games each source scraped.
   // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "Bulk Source Chain"
   static Future<bool> startMetadataScraping(
     BuildContext context,
@@ -1098,7 +1115,9 @@ class ScreenScraperService {
   /// [scrapeWithScreenscraper] (the unchanged ScreenScraper worker) runs and
   /// its result is returned with `source` `screenscraper`. When ScreenScraper
   /// is not available ([screenscraperAvailable] is false) a ROM the step did
-  /// not scrape is counted as failed and no ScreenScraper request is made.
+  /// not scrape is counted as failed and no ScreenScraper request is made —
+  /// except one the step reported [RommScrapeStepStatus.alreadyComplete] for,
+  /// which counts as scraped by RomM because there is nothing else to try.
   ///
   /// Cancellation is checked at the top, where the worker always checked it;
   /// a step already in flight completes and keeps its write. The step is
@@ -1172,6 +1191,28 @@ class ScreenScraperService {
       }
 
       if (!screenscraperAvailable) {
+        // RomM completed the fetch and only had nothing left to add. With no
+        // second source to offer the game to, that is as scraped as it gets —
+        // counting it failed would report a RomM-only library as all failures
+        // on its second pass. (#233)
+        if (stepResult.status == RommScrapeStepStatus.alreadyComplete) {
+          scrapingProvider.updateThreadProgress(
+            threadId: threadId,
+            gameName: filename,
+            systemName: systemName,
+            isActive: false,
+            status: ThreadStatus.completed,
+            currentStep: ThreadProcessingStep.completed,
+            progress: 1.0,
+          );
+          return {
+            'success': true,
+            'cancelled': false,
+            'requests': 0,
+            'source': scrapeSourceRomm,
+            'rommAttempted': true,
+          };
+        }
         final log = stepResult.status == RommScrapeStepStatus.failed
             ? _log.w
             : _log.i;

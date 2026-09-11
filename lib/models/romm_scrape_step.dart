@@ -47,9 +47,16 @@ class RommScrapeTarget {
 /// every other status falls through to ScreenScraper.
 // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "RomM Scrape Step"
 enum RommScrapeStepStatus {
-  /// RomM wrote at least one column or media file, or the row already held
-  /// everything RomM offers.
+  /// RomM wrote at least one column or media file.
   scraped,
+
+  /// The fetch completed and wrote nothing because every media file RomM
+  /// carries was already on disk. The row holds everything RomM offers, which
+  /// is not everything the row needs: a RomM fetch fills only the columns RomM
+  /// carries, so the game falls through to ScreenScraper for the rest (#233).
+  /// With no ScreenScraper to fall through to, the game counts as handled
+  /// rather than failed.
+  alreadyComplete,
 
   /// The game has no `app_romm_rom_map` row; no request was made.
   notLinked,
@@ -99,12 +106,19 @@ class RommScrapeStepResult {
 
   /// The one definition of "RomM scraped this game".
   ///
-  /// A completed fetch (filled, replaced, or partial) counts when it wrote at
-  /// least one column or media file, or when it wrote nothing because every
-  /// media file already existed and none failed — the row already holds
-  /// everything RomM offers. A completed fetch that wrote nothing with
-  /// nothing to skip is [RommScrapeStepStatus.empty]; not found and failed map
-  /// to their own statuses. All of those fall through to ScreenScraper.
+  /// A completed fetch (filled, replaced, or partial) is [scraped] only when
+  /// it wrote at least one column or media file. A completed fetch that wrote
+  /// nothing because every media file already existed and none failed is
+  /// [RommScrapeStepStatus.alreadyComplete]: the row holds everything RomM
+  /// offers and RomM has nothing left to give, which is not the same claim as
+  /// "this row is fully scraped" — RomM fills only the columns it carries, so
+  /// the game is offered onward to ScreenScraper for the rest (#233). That
+  /// makes the chain agree with the `new_only` predicate, which offers a row
+  /// whose `metadata_source` is not `screenscraper`; classifying this case as
+  /// [scraped] terminated the chain at RomM and the offered row went nowhere.
+  /// A completed fetch that wrote nothing with nothing to skip is
+  /// [RommScrapeStepStatus.empty]; not found and failed map to their own
+  /// statuses. All of those fall through to ScreenScraper.
   // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "Scrape Success Rule"
   static RommScrapeStepStatus classifyOutcome(RommMetadataOutcome outcome) {
     switch (outcome.kind) {
@@ -115,7 +129,7 @@ class RommScrapeStepResult {
           return RommScrapeStepStatus.scraped;
         }
         if (outcome.mediaSkipped > 0 && outcome.mediaFailed == 0) {
-          return RommScrapeStepStatus.scraped;
+          return RommScrapeStepStatus.alreadyComplete;
         }
         return RommScrapeStepStatus.empty;
       case RommMetadataOutcomeKind.notFound:
