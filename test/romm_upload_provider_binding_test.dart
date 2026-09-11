@@ -249,7 +249,8 @@ void main() {
       expect(svc.uploads, isEmpty);
     });
 
-    test('when no platform resolves to the system', () async {
+    // Governing: SPEC-0014 REQ "Platform Mapping" — scenario "No platform"
+    test('when the server has no platform for the system', () async {
       svc.platforms = const [];
 
       final summary = await provider.uploadToRomm(
@@ -257,15 +258,41 @@ void main() {
       );
 
       expect(summary.end, RommUploadEnd.noPlatform);
+      expect(summary.endDetail, isEmpty);
       expect(svc.uploads, isEmpty);
     });
 
+    // A different cause with a different remedy — the system is missing
+    // here, not on the server — so it must not come back as `noPlatform`.
+    // Issue #235.
     test('when the game names a system this library does not have', () async {
       final summary = await provider.uploadToRomm(
         _game('Game', await rom('Game.sfc'), folder: 'n64'),
       );
 
-      expect(summary.end, RommUploadEnd.noPlatform);
+      expect(summary.end, RommUploadEnd.unknownSystem);
+      expect(svc.uploads, isEmpty);
+    });
+
+    // Several RomM platforms folding onto one local system is its own cause
+    // too, and the summary carries the slugs so the message can name what to
+    // merge. Issue #235.
+    test('when several platforms resolve to the system', () async {
+      await db.execute(
+        "INSERT INTO app_systems (id, real_name, folder_name) "
+        "VALUES ('ps1', 'PlayStation', 'ps1')",
+      );
+      svc.platforms = const [
+        RommPlatform(id: 5, name: 'PlayStation', slug: 'ps', romCount: 1),
+        RommPlatform(id: 6, name: 'PlayStation', slug: 'psx', romCount: 1),
+      ];
+
+      final summary = await provider.uploadToRomm(
+        _game('Game', await rom('Game.bin'), folder: 'ps1'),
+      );
+
+      expect(summary.end, RommUploadEnd.ambiguousPlatform);
+      expect(summary.endDetail, 'ps, psx');
       expect(svc.uploads, isEmpty);
     });
 

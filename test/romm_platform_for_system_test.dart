@@ -7,13 +7,16 @@ import 'package:neostation/services/romm_service.dart';
 
 import 'database_test_helper.dart';
 
-/// [RommProvider.platformForSystem]: the inverse of the platform-to-system
-/// resolution the link pass uses, over the loaded platform list.
+/// [RommProvider.platformMatchesForSystem]: the inverse of the
+/// platform-to-system resolution the link pass uses, over the loaded
+/// platform list.
 ///
-/// Exactly one platform resolving to the system is the answer; none is
-/// null; more than one — the alias table folds several RomM slugs onto one
-/// local folder — is null too, because uploading into the wrong platform
-/// folder is worse than refusing.
+/// Exactly one platform resolving to the system is the answer an upload can
+/// use; none means the server has no platform for it; more than one — the
+/// alias table folds several RomM slugs onto one local folder — means
+/// uploading would be picking at random. The list keeps those last two
+/// apart, which is what lets the upload say which one happened (issue #235);
+/// before that they were both a bare null.
 ///
 /// Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Platform
 /// Mapping"
@@ -75,9 +78,9 @@ void main() {
     await localSystem('nes');
     svc.platforms = [_platform(1, 'snes'), _platform(2, 'nes')];
 
-    final platform = await provider.platformForSystem(_system('snes'));
+    final matches = await provider.platformMatchesForSystem(_system('snes'));
 
-    expect(platform?.id, 1);
+    expect(matches.map((p) => p.id), [1]);
   });
 
   test(
@@ -90,32 +93,43 @@ void main() {
         _platform(4, 'gameboy-advance', fsSlug: 'gba'),
       ];
 
-      expect((await provider.platformForSystem(_system('genesis')))?.id, 3);
-      expect((await provider.platformForSystem(_system('gba')))?.id, 4);
+      expect(
+        (await provider.platformMatchesForSystem(_system('genesis'))).single.id,
+        3,
+      );
+      expect(
+        (await provider.platformMatchesForSystem(_system('gba'))).single.id,
+        4,
+      );
     },
   );
 
   // Governing: SPEC-0014 REQ "Platform Mapping" — scenario "No platform"
-  test('null when no platform resolves to the system', () async {
+  test('empty when no platform resolves to the system', () async {
     await localSystem('snes');
     await localSystem('n64');
     svc.platforms = [_platform(1, 'snes')];
 
-    expect(await provider.platformForSystem(_system('n64')), isNull);
+    expect(await provider.platformMatchesForSystem(_system('n64')), isEmpty);
   });
 
-  test('null when more than one platform resolves to it', () async {
+  // Ambiguity is reachable, not theoretical: RomM materialises a platform
+  // per ROM folder, so a server with both a `ps` and a `psx` folder has two
+  // platforms that both resolve to the one local `ps1`. Issue #235.
+  test('every platform that resolves to it, when several do', () async {
     await localSystem('ps1');
     // `ps` and `psx` are both aliases of the ps1 folder.
     svc.platforms = [_platform(5, 'ps'), _platform(6, 'psx')];
 
-    expect(await provider.platformForSystem(_system('ps1')), isNull);
+    final matches = await provider.platformMatchesForSystem(_system('ps1'));
+
+    expect(matches.map((p) => p.slug), ['ps', 'psx']);
   });
 
   test('a platform list that is empty resolves nothing', () async {
     await localSystem('snes');
     svc.platforms = [];
 
-    expect(await provider.platformForSystem(_system('snes')), isNull);
+    expect(await provider.platformMatchesForSystem(_system('snes')), isEmpty);
   });
 }

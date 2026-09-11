@@ -1520,7 +1520,12 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommUploadConfirmAction: '업로드',
   AppLocale.rommUploadPreparing: 'RomM 업로드 준비 중…',
   AppLocale.rommUploadProgress: '{name} 업로드 중 ({current}/{total})',
-  AppLocale.rommUploadNoPlatform: 'RomM에 {system}에 해당하는 플랫폼이 없습니다',
+  AppLocale.rommUploadNoPlatform:
+      'RomM에 {system} 플랫폼이 없습니다. RomM 서버에서 추가한 뒤 다시 업로드하세요.',
+  AppLocale.rommUploadUnknownSystem:
+      'NeoStation에 {system}(이)라는 시스템이 없어 RomM 플랫폼을 고를 수 없습니다. ROM 폴더 이름을 확인하세요.',
+  AppLocale.rommUploadAmbiguousPlatform:
+      'RomM에 {system} 플랫폼이 여러 개 있습니다: {platforms}. 서버에서 병합한 뒤 다시 업로드하세요.',
   AppLocale.rommUploadNothingToUpload:
       '업로드할 항목 없음: {system}의 모든 게임이 이미 RomM에 있습니다',
   AppLocale.rommUploadAlreadyLinked: '이 게임은 이미 RomM에 연결되어 있습니다',

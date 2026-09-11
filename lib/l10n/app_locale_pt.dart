@@ -1702,7 +1702,11 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.rommUploadPreparing: 'Preparando o envio para o RomM…',
   AppLocale.rommUploadProgress: 'Enviando {name} ({current}/{total})',
   AppLocale.rommUploadNoPlatform:
-      'O RomM não tem uma plataforma correspondente a {system}',
+      'O RomM não tem uma plataforma para {system}. Crie-a no seu servidor RomM e envie novamente.',
+  AppLocale.rommUploadUnknownSystem:
+      'O NeoStation não conhece nenhum sistema chamado {system}, por isso não consegue escolher uma plataforma do RomM. Verifique o nome da pasta de ROM.',
+  AppLocale.rommUploadAmbiguousPlatform:
+      'O RomM tem mais de uma plataforma para {system}: {platforms}. Junte-as no servidor e envie novamente.',
   AppLocale.rommUploadNothingToUpload:
       'Nada a enviar: o RomM já tem todos os jogos de {system}',
   AppLocale.rommUploadAlreadyLinked: 'Este jogo já está vinculado ao RomM',

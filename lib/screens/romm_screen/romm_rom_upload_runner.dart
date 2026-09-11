@@ -40,6 +40,8 @@ class RommUploadStrings {
   final String confirmBodyTemplate;
   final String confirmAction;
   final String noPlatformTemplate;
+  final String unknownSystemTemplate;
+  final String ambiguousPlatformTemplate;
   final String nothingToUploadTemplate;
   final String alreadyLinked;
   final String busy;
@@ -68,6 +70,8 @@ class RommUploadStrings {
     required this.confirmBodyTemplate,
     required this.confirmAction,
     required this.noPlatformTemplate,
+    required this.unknownSystemTemplate,
+    required this.ambiguousPlatformTemplate,
     required this.nothingToUploadTemplate,
     required this.alreadyLinked,
     required this.busy,
@@ -99,6 +103,8 @@ class RommUploadStrings {
       confirmBodyTemplate: s(AppLocale.rommUploadConfirmBody),
       confirmAction: s(AppLocale.rommUploadConfirmAction),
       noPlatformTemplate: s(AppLocale.rommUploadNoPlatform),
+      unknownSystemTemplate: s(AppLocale.rommUploadUnknownSystem),
+      ambiguousPlatformTemplate: s(AppLocale.rommUploadAmbiguousPlatform),
       nothingToUploadTemplate: s(AppLocale.rommUploadNothingToUpload),
       alreadyLinked: s(AppLocale.rommUploadAlreadyLinked),
       busy: s(AppLocale.rommUploadBusy),
@@ -140,8 +146,22 @@ class RommUploadStrings {
       .replaceFirst('{count}', '$count')
       .replaceFirst('{size}', formatByteSize(totalBytes));
 
+  /// The server has no platform for [system]: name it, and say the remedy
+  /// is on the server. Issue #235.
   String noPlatform(String system) =>
       noPlatformTemplate.replaceFirst('{system}', system);
+
+  /// [system] resolved to nothing locally — a NeoStation-side problem, and a
+  /// different remedy from [noPlatform]. Issue #235.
+  String unknownSystem(String system) =>
+      unknownSystemTemplate.replaceFirst('{system}', system);
+
+  /// Several RomM platforms fold onto [system]; [platforms] names them, so
+  /// "merge them on the server" is something the user can act on. Issue #235.
+  String ambiguousPlatform(String system, String platforms) =>
+      ambiguousPlatformTemplate
+          .replaceFirst('{system}', system)
+          .replaceFirst('{platforms}', platforms);
 
   String nothingToUpload(String system) =>
       nothingToUploadTemplate.replaceFirst('{system}', system);
@@ -152,6 +172,33 @@ class RommUploadStrings {
   /// The line the metadata push adds under the link result. Issue #237.
   String metadataPushed(int count) =>
       metadataPushedTemplate.replaceFirst('{count}', '$count');
+
+  /// The one line an early end — a batch that sent nothing — is reported
+  /// with, or null when it needs no line (a declined confirmation: the user
+  /// just said no).
+  ///
+  /// Each cause gets its own wording, because each has its own remedy:
+  /// a server missing the platform is fixed on the server, a system this
+  /// install does not know is fixed here, and several platforms folding onto
+  /// one system is fixed by merging them. Issue #235.
+  // Governing: ADR-0014 (chunked ROM upload), SPEC-0014 REQ "Localized User-Facing Text"
+  String? earlyEnd(
+    RommUploadSummary summary,
+    String subject, {
+    required bool singleGame,
+  }) => switch (summary.end) {
+    RommUploadEnd.noPlatform => noPlatform(subject),
+    RommUploadEnd.unknownSystem => unknownSystem(subject),
+    RommUploadEnd.ambiguousPlatform => ambiguousPlatform(
+      subject,
+      summary.endDetail,
+    ),
+    RommUploadEnd.nothingToUpload =>
+      singleGame ? alreadyLinked : nothingToUpload(subject),
+    RommUploadEnd.notOffered => notOffered,
+    RommUploadEnd.declined => null,
+    _ => null,
+  };
 
   String reasonFor(RommUploadFileOutcome outcome) {
     if (outcome.skipped case final reason?) return skipReasons[reason] ?? '';
@@ -367,14 +414,11 @@ class RommRomUploadRunner {
     // otherwise.
     if (summary.neverStarted) {
       notifications.dismiss(notificationId);
-      final String? message = switch (summary.end) {
-        RommUploadEnd.noPlatform => strings.noPlatform(subject),
-        RommUploadEnd.nothingToUpload =>
-          singleGame ? strings.alreadyLinked : strings.nothingToUpload(subject),
-        RommUploadEnd.notOffered => strings.notOffered,
-        RommUploadEnd.declined => null,
-        _ => null,
-      };
+      final message = strings.earlyEnd(
+        summary,
+        subject,
+        singleGame: singleGame,
+      );
       if (message == null) return;
       if (context.mounted) {
         _toast(context, message, NotificationType.info);

@@ -1677,7 +1677,11 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommUploadPreparing: 'Подготовка загрузки в RomM…',
   AppLocale.rommUploadProgress: 'Загрузка {name} ({current}/{total})',
   AppLocale.rommUploadNoPlatform:
-      'В RomM нет платформы, соответствующей {system}',
+      'В RomM нет платформы для {system}. Добавьте её на сервере RomM и загрузите снова.',
+  AppLocale.rommUploadUnknownSystem:
+      'NeoStation не знает системы с именем {system}, поэтому не может выбрать платформу RomM. Проверьте имя папки с ROM.',
+  AppLocale.rommUploadAmbiguousPlatform:
+      'В RomM несколько платформ для {system}: {platforms}. Объедините их на сервере и загрузите снова.',
   AppLocale.rommUploadNothingToUpload:
       'Нечего загружать: в RomM уже есть все игры {system}',
   AppLocale.rommUploadAlreadyLinked: 'Эта игра уже связана с RomM',

@@ -1451,7 +1451,11 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.rommUploadConfirmAction: '上傳',
   AppLocale.rommUploadPreparing: '正在準備上傳到 RomM…',
   AppLocale.rommUploadProgress: '正在上傳 {name}（{current}/{total}）',
-  AppLocale.rommUploadNoPlatform: 'RomM 沒有與 {system} 相符的平台',
+  AppLocale.rommUploadNoPlatform: 'RomM 沒有 {system} 平台。請先在 RomM 伺服器上新增，然後重新上傳。',
+  AppLocale.rommUploadUnknownSystem:
+      'NeoStation 中沒有名為 {system} 的系統，因此無法選擇 RomM 平台。請檢查 ROM 資料夾名稱。',
+  AppLocale.rommUploadAmbiguousPlatform:
+      'RomM 有多個 {system} 平台：{platforms}。請在伺服器上合併後重新上傳。',
   AppLocale.rommUploadNothingToUpload: '無需上傳：RomM 已有 {system} 的全部遊戲',
   AppLocale.rommUploadAlreadyLinked: '此遊戲已連結到 RomM',
   AppLocale.rommUploadBusy: '已有一個上傳到 RomM 的工作在進行',

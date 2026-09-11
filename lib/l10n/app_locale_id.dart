@@ -1670,7 +1670,11 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommUploadPreparing: 'Menyiapkan unggahan ke RomM…',
   AppLocale.rommUploadProgress: 'Mengunggah {name} ({current}/{total})',
   AppLocale.rommUploadNoPlatform:
-      'RomM tidak memiliki platform yang cocok dengan {system}',
+      'RomM tidak punya platform untuk {system}. Tambahkan di server RomM Anda, lalu unggah lagi.',
+  AppLocale.rommUploadUnknownSystem:
+      'NeoStation tidak mengenal sistem bernama {system}, jadi tidak bisa memilih platform RomM. Periksa nama folder ROM.',
+  AppLocale.rommUploadAmbiguousPlatform:
+      'RomM punya lebih dari satu platform untuk {system}: {platforms}. Gabungkan di server, lalu unggah lagi.',
   AppLocale.rommUploadNothingToUpload:
       'Tidak ada yang diunggah: RomM sudah memiliki semua game {system}',
   AppLocale.rommUploadAlreadyLinked: 'Game ini sudah tertaut ke RomM',
