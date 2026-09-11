@@ -13,7 +13,6 @@ import 'package:fullscreen_window/fullscreen_window.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/utils/adaptive_scroll.dart';
 import 'package:neostation/utils/nav_tabs.dart';
-import '../../../models/library_scope.dart';
 import '../../../providers/sqlite_config_provider.dart';
 import '../../../repositories/retro_achievements_repository.dart';
 import '../../../repositories/system_repository.dart';
@@ -67,26 +66,6 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     SfxService.maxVolume * 2 / 3,
     SfxService.maxVolume,
   ];
-
-  /// The caps the RomM cover cache row cycles through, in megabytes. 200 is
-  /// the column default; the row steps to the next entry and wraps.
-  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
-  static const List<int> _coverCacheMbCycle = [100, 200, 500, 1000];
-
-  void _cycleRommLibraryDefaultScope(SqliteConfigProvider provider) {
-    final current = LibraryScope.fromConfig(
-      provider.config.rommLibraryDefaultScope,
-    );
-    provider.updateRommLibraryDefaultScope(current.toggled.configValue);
-  }
-
-  void _cycleRommCoverCacheMb(SqliteConfigProvider provider) {
-    final index = _coverCacheMbCycle.indexOf(provider.config.rommCoverCacheMb);
-    final next = index == -1
-        ? _coverCacheMbCycle.first
-        : _coverCacheMbCycle[(index + 1) % _coverCacheMbCycle.length];
-    provider.updateRommCoverCacheMb(next);
-  }
 
   @override
   void initState() {
@@ -232,18 +211,6 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     count++; // Cloud-save mark in the game views
     count++; // Achievement badges on game tiles
     count++; // Match RetroAchievements on startup
-    // The unified library's three rows. They are rendered and dispatched
-    // unconditionally, between the RetroAchievements row and the nav-tab
-    // block, but were never counted here — so this returned three fewer than
-    // the list actually draws and the tail of the section could not be
-    // reached. Any row added between here and `hidableNavTabs` has to be
-    // added in three places, and this is the one that is easy to miss because
-    // nothing fails loudly when it is: the rows still draw, they just stop
-    // being reachable. Issue #239.
-    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
-    count++; // Show the RomM library
-    count++; // Default library scope
-    count++; // Cover cache size
     count += hidableNavTabs().length; // Navigation tab visibility
     count++; // Language
     if (!kIsWeb &&
@@ -430,27 +397,6 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
     // Protocol: Match RetroAchievements after the startup scan.
     if (index == currentItemIndex) {
       _setRaMatchOnStartup(!configProvider.config.raMatchOnStartup);
-      return;
-    }
-    currentItemIndex++;
-
-    // Protocol: the unified library — show the RomM library, its default
-    // scope, and the cover cache cap. Same order as the rows below.
-    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
-    if (index == currentItemIndex) {
-      configProvider.updateRommShowLibrary(
-        !configProvider.config.rommShowLibrary,
-      );
-      return;
-    }
-    currentItemIndex++;
-    if (index == currentItemIndex) {
-      _cycleRommLibraryDefaultScope(configProvider);
-      return;
-    }
-    currentItemIndex++;
-    if (index == currentItemIndex) {
-      _cycleRommCoverCacheMb(configProvider);
       return;
     }
     currentItemIndex++;
@@ -875,84 +821,6 @@ class GeneralSettingsContentState extends State<GeneralSettingsContent>
                       value: config.raMatchOnStartup,
                       onChanged: _setRaMatchOnStartup,
                       activeColor: theme.colorScheme.primary,
-                    ),
-                  );
-                }(),
-
-                // Setting: Show the RomM library inside the local systems.
-                // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
-                SizedBox(height: 12.r),
-                () {
-                  final index = currentItemIdx++;
-                  return SettingRow(
-                    key: _itemKeys[index],
-                    onTap: () => selectItem(index),
-                    focused:
-                        widget.isContentFocused &&
-                        widget.selectedContentIndex == index,
-                    title: AppLocale.rommShowLibrary.getString(context),
-                    subtitle: AppLocale.rommShowLibrarySubtitle.getString(
-                      context,
-                    ),
-                    trailing: CustomToggleSwitch(
-                      value: config.rommShowLibrary,
-                      onChanged: (value) {
-                        context
-                            .read<SqliteConfigProvider>()
-                            .updateRommShowLibrary(value);
-                      },
-                      activeColor: theme.colorScheme.primary,
-                    ),
-                  );
-                }(),
-
-                // Setting: the scope a game list opens in.
-                // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Library Scope"
-                SizedBox(height: 12.r),
-                () {
-                  final index = currentItemIdx++;
-                  final scope = LibraryScope.fromConfig(
-                    config.rommLibraryDefaultScope,
-                  );
-                  return SettingRow(
-                    key: _itemKeys[index],
-                    onTap: () => selectItem(index),
-                    focused:
-                        widget.isContentFocused &&
-                        widget.selectedContentIndex == index,
-                    title: AppLocale.rommLibraryDefaultScope.getString(context),
-                    subtitle: AppLocale.rommLibraryDefaultScopeSubtitle
-                        .getString(context),
-                    trailing: SettingValueChip(
-                      text: scope == LibraryScope.all
-                          ? AppLocale.libraryScopeAll.getString(context)
-                          : AppLocale.libraryScopeDownloaded.getString(context),
-                    ),
-                  );
-                }(),
-
-                // Setting: the RomM cover cache cap.
-                // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Cover Cache"
-                SizedBox(height: 12.r),
-                () {
-                  final index = currentItemIdx++;
-                  return SettingRow(
-                    key: _itemKeys[index],
-                    onTap: () => selectItem(index),
-                    focused:
-                        widget.isContentFocused &&
-                        widget.selectedContentIndex == index,
-                    title: AppLocale.rommCoverCacheSize.getString(context),
-                    subtitle: AppLocale.rommCoverCacheSizeSubtitle.getString(
-                      context,
-                    ),
-                    trailing: SettingValueChip(
-                      text: AppLocale.rommCoverCacheSizeValue
-                          .getString(context)
-                          .replaceFirst(
-                            '{size}',
-                            config.rommCoverCacheMb.toString(),
-                          ),
                     ),
                   );
                 }(),

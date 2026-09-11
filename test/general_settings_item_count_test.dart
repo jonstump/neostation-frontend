@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/screens/settings_screen/new_settings_options/general_settings_content.dart';
+import 'package:neostation/screens/settings_screen/new_settings_options/romm_settings_content.dart';
 import 'package:neostation/screens/settings_screen/new_settings_options/widgets/setting_row.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:provider/provider.dart';
@@ -80,14 +81,14 @@ void main() {
     );
   });
 
-  testWidgets('the unified library rows are among them', (tester) async {
+  testWidgets('the unified library rows have left General', (tester) async {
     await pump(tester);
     await tester.pump();
 
-    // Named explicitly: these are the three that were drawn but uncounted, and
-    // a regression that dropped them from the list entirely would otherwise
-    // satisfy the count test above by making both numbers agree at the wrong
-    // value.
+    // They moved to their own section. Named explicitly rather than trusting
+    // the count: a move that dropped them entirely would satisfy the count
+    // test above by making both numbers agree at the wrong value, and the
+    // matching assertion in the RomM group below is what catches that.
     for (final k in [
       AppLocale.rommShowLibrary,
       AppLocale.rommLibraryDefaultScope,
@@ -95,9 +96,69 @@ void main() {
     ]) {
       expect(
         find.text(k.getString(tester.element(find.byType(Scaffold)))),
-        findsOneWidget,
-        reason: '$k should be one of the rows General draws',
+        findsNothing,
+        reason: '$k belongs to the RomM section now',
       );
     }
+  });
+
+  group('the RomM section', () {
+    final rommKey = GlobalKey<RommSettingsContentState>();
+
+    Future<void> pumpRomm(WidgetTester tester) => tester.pumpWidget(
+      MediaQuery(
+        data: const MediaQueryData(size: Size(1920, 1080)),
+        child: ScreenUtilInit(
+          designSize: const Size(1920, 1080),
+          builder: (context, child) => MaterialApp(
+            localizationsDelegates:
+                FlutterLocalization.instance.localizationsDelegates,
+            supportedLocales: FlutterLocalization.instance.supportedLocales,
+            home: ChangeNotifierProvider<SqliteConfigProvider>(
+              create: (_) => SqliteConfigProvider(),
+              child: Scaffold(
+                body: RommSettingsContent(
+                  key: rommKey,
+                  isContentFocused: false,
+                  selectedContentIndex: 0,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    testWidgets('getItemCount matches the rows it draws', (tester) async {
+      await pumpRomm(tester);
+      await tester.pump();
+
+      final drawn = tester
+          .widgetList<SettingRow>(find.byType(SettingRow))
+          .length;
+
+      expect(
+        rommKey.currentState!.getItemCount(),
+        drawn,
+        reason: 'the same invariant General drifted on — pinned from the start',
+      );
+    });
+
+    testWidgets('it draws the three rows that left General', (tester) async {
+      await pumpRomm(tester);
+      await tester.pump();
+
+      for (final k in [
+        AppLocale.rommShowLibrary,
+        AppLocale.rommLibraryDefaultScope,
+        AppLocale.rommCoverCacheSize,
+      ]) {
+        expect(
+          find.text(k.getString(tester.element(find.byType(Scaffold)))),
+          findsOneWidget,
+          reason: '$k should have moved here, not been dropped',
+        );
+      }
+    });
   });
 }

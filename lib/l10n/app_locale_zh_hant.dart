@@ -75,6 +75,8 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.deleteThemeConfirm: '移除匯入的主題「%s」？',
 
   AppLocale.generalSettings: '一般設定',
+
+  AppLocale.rommSettings: 'RomM 設定',
   AppLocale.alwaysShowRomName: '一律顯示 ROM 檔案名稱',
   AppLocale.hideExtension: '隱藏檔案副檔名 (僅顯示 ROM 名稱)',
   AppLocale.hideParentheses: '隱藏檔案名稱中的圓括號 ()',

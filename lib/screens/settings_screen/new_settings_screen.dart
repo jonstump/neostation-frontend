@@ -9,6 +9,7 @@ import 'package:neostation/utils/adaptive_scroll.dart';
 import 'new_settings_options/general_settings_content.dart';
 import 'new_settings_options/secondary_settings_content.dart';
 import 'new_settings_options/directories_settings_content.dart';
+import 'new_settings_options/romm_settings_content.dart';
 import 'new_settings_options/tools_settings_content.dart';
 import 'new_settings_options/systems_settings_content.dart';
 import 'new_settings_options/launcher_settings_content.dart';
@@ -83,6 +84,8 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
       GlobalKey<SystemArtSettingsContentState>();
   final GlobalKey<DirectoriesSettingsContentState> _directoriesSettingsKey =
       GlobalKey<DirectoriesSettingsContentState>();
+  final GlobalKey<RommSettingsContentState> _rommSettingsKey =
+      GlobalKey<RommSettingsContentState>();
   final GlobalKey<ToolsSettingsContentState> _toolsSettingsKey =
       GlobalKey<ToolsSettingsContentState>();
   final GlobalKey<SystemsSettingsContentState> _systemsSettingsKey =
@@ -127,6 +130,18 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
         title: '',
         localeKey: AppLocale.general,
         icon: Symbols.settings_rounded,
+        isVisible: true,
+      ),
+    );
+
+    // RomM sits directly under General: the fork's library is RomM-first, and
+    // these rows were previously the tail of a section about everything else.
+    // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Settings And Actions"
+    _menuItems.add(
+      SettingsMenuItem(
+        title: '',
+        localeKey: AppLocale.romm,
+        icon: Symbols.cloud_rounded,
         isVisible: true,
       ),
     );
@@ -265,6 +280,8 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
       _generalSettingsKey.currentState?.scrollToIndex(_selectedContentIndex);
     } else if (selectedKey == AppLocale.secondaryDisplay) {
       _secondarySettingsKey.currentState?.scrollToIndex(_selectedContentIndex);
+    } else if (selectedKey == AppLocale.romm) {
+      _rommSettingsKey.currentState?.scrollToIndex(_selectedContentIndex);
     } else if (selectedKey == AppLocale.directories) {
       _directoriesSettingsKey.currentState?.scrollToIndex(
         _selectedContentIndex,
@@ -406,6 +423,8 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
     final selectedKey = _menuItems[_selectedMenuIndex].localeKey;
     if (selectedKey == AppLocale.general) {
       return _generalSettingsKey.currentState?.getItemCount() ?? 0;
+    } else if (selectedKey == AppLocale.romm) {
+      return _rommSettingsKey.currentState?.getItemCount() ?? 0;
     } else if (selectedKey == AppLocale.secondaryDisplay) {
       return _secondarySettingsKey.currentState?.getItemCount() ?? 0;
     } else if (selectedKey == AppLocale.themes) {
@@ -433,6 +452,8 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
     final selectedKey = _menuItems[_selectedMenuIndex].localeKey;
     if (selectedKey == AppLocale.general) {
       _generalSettingsKey.currentState?.selectItem(_selectedContentIndex);
+    } else if (selectedKey == AppLocale.romm) {
+      _rommSettingsKey.currentState?.selectItem(_selectedContentIndex);
     } else if (selectedKey == AppLocale.themes) {
       _themesSettingsKey.currentState?.selectItem(_selectedContentIndex);
     } else if (selectedKey == AppLocale.systemArt) {
@@ -615,6 +636,12 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
         isContentFocused: !_focusOnMenu,
         selectedContentIndex: _selectedContentIndex,
         onFullscreenToggle: (value) {},
+      );
+    } else if (selectedKey == AppLocale.romm) {
+      return RommSettingsContent(
+        key: _rommSettingsKey,
+        isContentFocused: !_focusOnMenu,
+        selectedContentIndex: _selectedContentIndex,
       );
     } else if (selectedKey == AppLocale.directories) {
       return DirectoriesSettingsContent(

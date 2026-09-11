@@ -82,6 +82,8 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.deleteThemeConfirm: 'Удалить импортированную тему «%s»?',
 
   AppLocale.generalSettings: 'Общие настройки',
+
+  AppLocale.rommSettings: 'Настройки RomM',
   AppLocale.alwaysShowRomName: 'Всегда показывать имя файла ROM',
   AppLocale.hideExtension: 'Скрывать расширение файла (только имя ROM)',
   AppLocale.hideParentheses: 'Скрывать скобки в имени файла ()',

@@ -81,6 +81,8 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.deleteThemeConfirm: 'Hapus tema impor "%s"?',
 
   AppLocale.generalSettings: 'Pengaturan Umum',
+
+  AppLocale.rommSettings: 'Pengaturan RomM',
   AppLocale.alwaysShowRomName: 'Selalu tampilkan nama ROM',
   AppLocale.hideExtension: 'Sembunyikan ekstensi file (hanya nama ROM)',
   AppLocale.hideParentheses: 'Sembunyikan tanda kurung () di nama file',

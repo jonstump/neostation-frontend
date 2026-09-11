@@ -77,6 +77,8 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.deleteThemeConfirm: 'インポートしたテーマ「%s」を削除しますか？',
 
   AppLocale.generalSettings: '全般設定',
+
+  AppLocale.rommSettings: 'RomM設定',
   AppLocale.alwaysShowRomName: '常にROM名を表示',
   AppLocale.hideExtension: 'ファイル拡張子を非表示 (ROM名のみ)',
   AppLocale.hideParentheses: 'ファイル名の丸括弧 () を非表示',

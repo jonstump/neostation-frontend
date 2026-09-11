@@ -83,6 +83,8 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.deleteThemeConfirm: 'Importiertes Theme „%s“ entfernen?',
 
   AppLocale.generalSettings: 'Allgemeine Einstellungen',
+
+  AppLocale.rommSettings: 'RomM-Einstellungen',
   AppLocale.alwaysShowRomName: 'ROM-Namen immer anzeigen',
   AppLocale.hideExtension: 'Dateiendung ausblenden (nur ROM-Name)',
   AppLocale.hideParentheses: 'Klammern () im Dateinamen ausblenden',

@@ -76,6 +76,8 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.deleteThemeConfirm: '가져온 테마 "%s"를 제거할까요?',
 
   AppLocale.generalSettings: '일반 설정',
+
+  AppLocale.rommSettings: 'RomM 설정',
   AppLocale.alwaysShowRomName: '항상 ROM 파일 이름 표시',
   AppLocale.hideExtension: '파일 확장자 숨기기(ROM 파일명만 표시)',
   AppLocale.hideParentheses: '파일명에서 소괄호 내용 숨기기 ()',
