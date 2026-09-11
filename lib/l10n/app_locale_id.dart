@@ -1308,4 +1308,6 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommLinkFailed: 'Gagal menautkan ke RomM',
   AppLocale.rommUnlinked: 'Tautan ke RomM dilepas',
   AppLocale.rommUnlinkFailed: 'Tidak dapat memutus tautan dari RomM',
+  // Link action on search results
+  AppLocale.searchLinkToRomm: 'Tautkan ke RomM',
 };

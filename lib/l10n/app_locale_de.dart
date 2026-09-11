@@ -1349,4 +1349,6 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.rommUnlinked: 'Verknüpfung mit RomM aufgehoben',
   AppLocale.rommUnlinkFailed:
       'Verknüpfung mit RomM konnte nicht entfernt werden',
+  // Link action on search results
+  AppLocale.searchLinkToRomm: 'Mit RomM verknüpfen',
 };
