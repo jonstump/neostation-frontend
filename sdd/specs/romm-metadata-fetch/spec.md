@@ -26,6 +26,10 @@ The connect-time link pass from SPEC-0001 still fetches nothing. RomM is not add
 
 The system SHALL add a nullable `metadata_source` column to `user_screenscraper_metadata` by a versioned migration, holding one of `screenscraper`, `romm`, `esde`, `steam`, or `manual`. Legacy rows MUST stay null. Every metadata writer MUST set the column: ScreenScraper scrapes write `screenscraper`, RomM writes `romm`, the ES-DE and in-folder importers write `esde`, the Steam scraper writes `steam`, and the manual metadata editor writes `manual`. Fill-gaps writers MUST set the column only when they insert a row; replacing writers MUST set it on every write.
 
+The system SHALL additionally add a nullable `field_sources` column to `user_screenscraper_metadata` by a versioned migration, holding a JSON object mapping each metadata column to the `metadata_source` value that last wrote it. Existing rows MUST NOT be backfilled and MUST read as "nothing known". Fill-gaps writers MUST record exactly the columns they write, carrying forward the entries they did not rewrite. An absent or unparseable value MUST read as empty rather than failing the write — this is provenance, and losing it must never fail a metadata write.
+
+Per-field provenance is maintained on the fill-gaps path only. Whole-row writers — every ScreenScraper scrape, RomM's replace mode, and the Steam upsert — write with `INSERT OR REPLACE`, which deletes the row and reinserts only the columns it was handed, so a whole-row write resets `field_sources` to null. A reader MUST therefore treat "no provenance" as a normal state rather than an error, and MUST NOT infer from an empty map that no source wrote the row. Recording provenance on the whole-row path means turning those writes into a merge, which changes what `all` mode does to a row and is deliberately out of scope here.
+
 #### Scenario: Migration
 
 - **WHEN** the migration runs on a database with existing metadata rows
@@ -40,6 +44,16 @@ The system SHALL add a nullable `metadata_source` column to `user_screenscraper_
 
 - **WHEN** a RomM replace fetch runs on a row written by ScreenScraper
 - **THEN** the row's source becomes `romm`
+
+#### Scenario: Per-field provenance after two writers
+
+- **WHEN** a RomM fill-gaps insert writes genre and players, and a later ScreenScraper fill-gaps write fills developer
+- **THEN** `field_sources` names `romm` for genre and players and `screenscraper` for developer
+
+#### Scenario: Field-sources migration
+
+- **WHEN** the `field_sources` migration runs on a database with existing metadata rows
+- **THEN** the column exists, every existing row is null, and a second run makes no changes
 
 ### Requirement: RomM Metadata Writer With Two Modes
 
@@ -119,11 +133,23 @@ The system SHALL run the writer in fill-gaps mode for the single game when a lin
 
 ### Requirement: Cooperation With ScreenScraper
 
-RomM writes MUST cooperate with ScreenScraper's scrape modes: a fill-gaps write into an existing row MUST NOT change whether ScreenScraper's `new_only` mode considers the game, and a RomM-completed row MUST count as fully scraped so `new_only` skips it. The scrape candidate queries MUST join metadata on both filename and system id so an identically named ROM in another system is not suppressed.
+RomM writes MUST cooperate with ScreenScraper's scrape modes: a fill-gaps write into an existing row MUST NOT change whether ScreenScraper's `new_only` mode considers the game, and a row whose `metadata_source` names a writer other than `screenscraper` MUST remain a `new_only` candidate. `is_fully_scraped` records that *a* source completed the row, not that ScreenScraper has ever written it, and a RomM fetch fills only the columns RomM carries — never `publisher`, never a non-English description. The rule is "any source that is not `screenscraper`", not "romm", so a whole-row writer such as the Steam scraper is treated the same way. A row whose `metadata_source` is `screenscraper` MUST be skipped once `is_fully_scraped` is set, so the predicate terminates. A legacy row whose `metadata_source` is null MUST be treated as complete, so upgrading does not turn the first `new_only` pass into a full re-scrape of the library; `all` mode is the way to revisit those. The scrape candidate queries MUST join metadata on both filename and system id so an identically named ROM in another system is not suppressed.
+
+Offering the row is only half of the behaviour: the chain a candidate runs through offers it to RomM first, and a RomM fetch with nothing left to add MUST NOT end that chain — see SPEC-0006 REQ "Scrape Success Rule". Without that half the row is offered on every pass, costs a RomM request on every pass, and never reaches ScreenScraper.
 
 #### Scenario: New-only after fill gaps
 
 - **WHEN** a game had no row, RomM fill-gaps inserted one, and the user runs a ScreenScraper scrape in new-only mode
+- **THEN** that game is a candidate, so ScreenScraper can fill the columns RomM had nothing for
+
+#### Scenario: New-only after a ScreenScraper pass
+
+- **WHEN** ScreenScraper has completed a row and the user runs new-only again
+- **THEN** that game is skipped
+
+#### Scenario: New-only with a legacy row
+
+- **WHEN** a row predates `metadata_source` and reads null, and the user runs new-only
 - **THEN** that game is skipped
 
 #### Scenario: Same filename in two systems
