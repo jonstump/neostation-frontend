@@ -313,6 +313,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.raFixMatchUseAutomatic: 'Utiliser l’association automatique',
   AppLocale.raFixMatchUpdated: 'Association mise à jour.',
   AppLocale.raFixMatchAchievements: '{count} succès',
+  AppLocale.raHash: 'Empreinte RA',
   AppLocale.notifications: 'Notifications',
   AppLocale.clearAll: 'Tout effacer',
   AppLocale.noActiveNotifications: 'Aucune notification active',
@@ -821,8 +822,6 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.appCount: '{count} app',
   AppLocale.errorSystemNotFound: 'Erreur : Système non trouvé pour ce jeu.',
   AppLocale.errorLaunchingGame: 'Erreur lors du lancement du jeu : {error}',
-  AppLocale.settingsNotAvailableRecent:
-      'Paramètres non disponibles pour les jeux récents ici.',
   AppLocale.allSystems: 'Tous les Systèmes',
   AppLocale.noSystemsFound: 'Aucun système trouvé',
   AppLocale.setupLibrary: 'Configurez votre Bibliothèque',
@@ -1191,6 +1190,10 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.raCouldNotResolveLocalSystem:
       'Impossible de déterminer le système local pour ce jeu',
   AppLocale.raMissable: 'MANQUABLE',
+  AppLocale.raFilterLocked: 'Verrouillés',
+  AppLocale.raFilterMissables: 'Manquables',
+  AppLocale.raNoAchievementsForFilter:
+      'Aucun succès ne correspond à ce filtre.',
   AppLocale.raComments: 'COMMENTAIRES',
   AppLocale.raCommentsCouldNotLoad: 'Impossible de charger les commentaires.',
   AppLocale.raNoCommentsYet: 'Aucun commentaire pour le moment.',

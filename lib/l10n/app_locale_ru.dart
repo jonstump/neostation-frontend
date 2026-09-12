@@ -302,6 +302,7 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.raFixMatchUseAutomatic: 'Использовать автоматическое сопоставление',
   AppLocale.raFixMatchUpdated: 'Сопоставление обновлено.',
   AppLocale.raFixMatchAchievements: 'достижений: {count}',
+  AppLocale.raHash: 'Хеш RA',
   AppLocale.notifications: 'Уведомления',
   AppLocale.clearAll: 'Очистить все',
   AppLocale.noActiveNotifications: 'Нет активных уведомлений',
@@ -798,8 +799,6 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.appCount: 'Приложение: {count}',
   AppLocale.errorSystemNotFound: 'Ошибка: Система для этой игры не найдена.',
   AppLocale.errorLaunchingGame: 'Ошибка запуска игры: {error}',
-  AppLocale.settingsNotAvailableRecent:
-      'Настройки недоступны для недавних игр.',
   AppLocale.allSystems: 'Все системы',
   AppLocale.noSystemsFound: 'Системы не найдены',
   AppLocale.setupLibrary: 'Настройка библиотеки',
@@ -1153,6 +1152,10 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.raCouldNotResolveLocalSystem:
       'Не удалось определить локальную систему для этой игры',
   AppLocale.raMissable: 'МОЖНО ПРОПУСТИТЬ',
+  AppLocale.raFilterLocked: 'Заблокированные',
+  AppLocale.raFilterMissables: 'Пропускаемые',
+  AppLocale.raNoAchievementsForFilter:
+      'Нет достижений, соответствующих этому фильтру.',
   AppLocale.raComments: 'КОММЕНТАРИИ',
   AppLocale.raCommentsCouldNotLoad: 'Не удалось загрузить комментарии.',
   AppLocale.raNoCommentsYet: 'Пока нет комментариев.',

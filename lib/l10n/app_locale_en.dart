@@ -296,6 +296,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.raFixMatchUseAutomatic: 'Use automatic matching',
   AppLocale.raFixMatchUpdated: 'Game match updated.',
   AppLocale.raFixMatchAchievements: '{count} achievements',
+  AppLocale.raHash: 'RA hash',
   AppLocale.notifications: 'Notifications',
   AppLocale.clearAll: 'Clear all',
   AppLocale.noActiveNotifications: 'No active notifications',
@@ -787,8 +788,6 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.appCount: '{count} App',
   AppLocale.errorSystemNotFound: 'Error: System not found for this game.',
   AppLocale.errorLaunchingGame: 'Error launching game: {error}',
-  AppLocale.settingsNotAvailableRecent:
-      'Settings not available for Recent Games here.',
   AppLocale.allSystems: 'All Systems',
   AppLocale.noSystemsFound: 'No systems found',
   AppLocale.setupLibrary: 'Setup Your Library',
@@ -1143,6 +1142,9 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.raCouldNotResolveLocalSystem:
       'Could not resolve the local system for this game',
   AppLocale.raMissable: 'MISSABLE',
+  AppLocale.raFilterLocked: 'Locked',
+  AppLocale.raFilterMissables: 'Missables',
+  AppLocale.raNoAchievementsForFilter: 'No achievements match this filter.',
   AppLocale.raComments: 'COMMENTS',
   AppLocale.raCommentsCouldNotLoad: 'Comments could not be loaded.',
   AppLocale.raNoCommentsYet: 'No comments yet.',
