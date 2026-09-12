@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'package:neostation/services/logger_service.dart';
 import '../models/database_game_model.dart';
@@ -30,6 +31,37 @@ class GameRepository {
   /// capped link pass (500 fingerprints) is one group, small enough that a
   /// larger caller does not build one enormous batch.
   static const int fingerprintBatchSize = 500;
+
+  /// Reads a small text launch descriptor through SAF or the local filesystem.
+  static Future<String> readLaunchDescriptor(String location) async {
+    const limit = 4096;
+    final List<int> bytes;
+    if (location.startsWith('content://')) {
+      final contents = await SafDirectoryService.readRange(
+        location,
+        0,
+        limit + 1,
+      );
+      if (contents == null) {
+        throw FileSystemException('Cannot read launch descriptor', location);
+      }
+      bytes = contents;
+    } else {
+      final file = location.startsWith('file://')
+          ? File.fromUri(Uri.parse(location))
+          : File(location);
+      final handle = await file.open();
+      try {
+        bytes = await handle.read(limit + 1);
+      } finally {
+        await handle.close();
+      }
+    }
+    if (bytes.length > limit) {
+      throw const FormatException('Launch descriptor exceeds 4096 bytes');
+    }
+    return utf8.decode(bytes);
+  }
 
   /// Returns all games grouped by system folder name.
   static Future<Map<String, List<DatabaseGameModel>>> loadDatabase() =>
