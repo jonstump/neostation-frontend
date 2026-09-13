@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show CacheExtentStyle;
 import 'package:flutter/services.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
@@ -335,6 +336,34 @@ void main() {
     });
   });
 
+  group('RommRomGrid.cacheExtentFor', () {
+    test('keeps two rows past each edge, in pixels', () {
+      final extent = RommRomGrid.cacheExtentFor(200);
+      expect(extent.style, CacheExtentStyle.pixel);
+      expect(extent.value, closeTo(RommRomGrid.rowHeightFor(200) * 2, 1e-9));
+    });
+
+    test('does not scale with the viewport, so a taller screen does not keep '
+        'proportionally more live covers', () {
+      expect(
+        RommRomGrid.cacheExtentFor(200).style,
+        isNot(CacheExtentStyle.viewport),
+      );
+    });
+
+    test('stays far below a viewport of rows on a handheld-sized grid', () {
+      // 1280x720 landscape, six columns: a viewport-scaled extent would keep
+      // 720px past each edge; two rows is a fraction of that.
+      const cellWidth = 1280 / 6;
+      expect(RommRomGrid.cacheExtentFor(cellWidth).value, lessThan(720));
+    });
+
+    test('falls back to the Flutter default before the first layout pass', () {
+      expect(RommRomGrid.cacheExtentFor(0).value, 250);
+      expect(RommRomGrid.cacheExtentFor(double.nan).value, 250);
+    });
+  });
+
   group('the tile wires the hint through to the decode', () {
     /// The card drawn at [layout], with the grid's cell size where it has one.
     Future<ResizeImage> pumpCard(
@@ -454,6 +483,19 @@ void main() {
       );
       await tester.pump();
     }
+
+    testWidgets('the scroll view keeps a bounded pixel cache extent, not a '
+        'viewport-scaled one', (tester) async {
+      await pumpGrid(tester);
+      final scrollView = tester.widget<CustomScrollView>(
+        find.byType(CustomScrollView),
+      );
+      final extent = scrollView.scrollCacheExtent;
+      expect(extent, isNotNull);
+      expect(extent!.style, CacheExtentStyle.pixel);
+      // The grid lays 24 cards out across a 1280-wide viewport.
+      expect(extent.value, lessThan(720));
+    });
 
     testWidgets('every tile is told the height it is painted at, not just its '
         'width', (tester) async {

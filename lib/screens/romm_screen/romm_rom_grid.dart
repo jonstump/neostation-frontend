@@ -64,6 +64,29 @@ class RommRomGrid extends StatefulWidget {
   /// Height of a tile (and so of every row, before spacing) for [cellWidth].
   static double rowHeightFor(double cellWidth) => cellWidth * tileRatio;
 
+  /// How far past each edge of the viewport rows stay built, for a grid whose
+  /// cells are [cellWidth] wide.
+  ///
+  /// Two rows, in pixels — deliberately not `ScrollCacheExtent.viewport`, which
+  /// scales with the screen: a viewport on each side keeps three screenfuls of
+  /// rows alive, and every one of those tiles holds a live `Image.network`.
+  /// `NetworkImage` fetches on its own `HttpClient` rather than
+  /// [RommService]'s, with no per-host connection bound, so a flick through a
+  /// large platform would queue far more concurrent requests — and far more
+  /// simultaneous decodes — than the tiles being scrolled towards need. Two
+  /// rows still start the next screenful's covers before they are reached,
+  /// and on a phone-sized viewport that is already close to a full screen.
+  ///
+  /// Falls back to Flutter's 250px default before the first layout pass, when
+  /// there is no cell width yet.
+  static ScrollCacheExtent cacheExtentFor(double cellWidth) {
+    final rows = rowHeightFor(cellWidth) * 2;
+    if (!rows.isFinite || rows <= 0) {
+      return const ScrollCacheExtent.pixels(250);
+    }
+    return ScrollCacheExtent.pixels(rows);
+  }
+
   const RommRomGrid({
     super.key,
     required this.provider,
@@ -718,11 +741,12 @@ class _RommRomGridState extends State<RommRomGrid> {
             },
             child: CustomScrollView(
               controller: _scrollController,
-              // About one viewport of rows past each edge stays built, so the
-              // next screenful's covers are already requested — into Flutter's
-              // in-memory ImageCache, the only cache these tiles use — while
-              // the user is still scrolling towards them.
-              scrollCacheExtent: const ScrollCacheExtent.viewport(1.0),
+              // A couple of rows past each edge stay built, so the next
+              // covers are already requested — into Flutter's in-memory
+              // ImageCache, the only cache these tiles use — while the user is
+              // still scrolling towards them, without the viewport-scaled
+              // multiplier tripling the live image set (see [cacheExtentFor]).
+              scrollCacheExtent: RommRomGrid.cacheExtentFor(_cardWidth),
               slivers: [
                 SliverPadding(
                   padding: const EdgeInsets.only(
