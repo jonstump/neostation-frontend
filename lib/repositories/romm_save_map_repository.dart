@@ -433,21 +433,31 @@ class RommSaveMapRepository {
   /// Deleting a game locally has to unlink it, or the row outlives the file:
   /// save sync would keep targeting that `rom_id`, and a later scan of an
   /// unrelated game that happens to share the name would inherit the link.
-  /// Resolution goes through [getRommRomId] so the extension-stripped callers
-  /// (see [_romIdByStem]) unlink too, then deletes by id within the system —
-  /// matching whichever spelling of the name the row was written with.
+  /// Resolution goes through [_findRow] so the extension-stripped callers (see
+  /// [_romIdByStem]) unlink too, and the delete is keyed by the *stored*
+  /// `(romname, system_folder)` of the row that resolved — the table's primary
+  /// key, so exactly one row goes.
+  ///
+  /// Deliberately not `WHERE romm_rom_id = ?`: two local files may legitimately
+  /// point at one RomM entry (the picker allows it — `Game (USA).zip` and
+  /// `Game (USA) (Rev 1).zip` in one system, or a `.m3u` row beside a
+  /// hand-linked disc file), and deleting by id would unlink the sibling the
+  /// user never touched, silently, since the caller only re-reads its own game.
   ///
   /// Removes the row whatever its [RommLinkSource]: the unlink action is the
   /// user's, and a deleted game's manual link has nothing left to protect.
   static Future<int?> removeMapping(String romname, String systemFolder) async {
     try {
-      final romId = await getRommRomId(romname, systemFolder);
-      if (romId == null) return null;
       final db = await SqliteService.getDatabase();
+      final row = await _findRow(db, romname, systemFolder);
+      if (row == null) return null;
+      final romId = int.tryParse(row['romm_rom_id'].toString());
+      final stored = row['romname']?.toString() ?? '';
+      if (romId == null || stored.isEmpty) return null;
       await db.delete(
         'app_romm_rom_map',
-        where: 'romm_rom_id = ? AND system_folder = ?',
-        whereArgs: [romId, systemFolder],
+        where: 'romname = ? AND system_folder = ?',
+        whereArgs: [stored, systemFolder],
       );
       return romId;
     } catch (e) {

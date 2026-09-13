@@ -574,6 +574,91 @@ void main() {
       expect(await RommSaveMapRepository.getRommRomId('game', 'snes'), 8);
     });
 
+    // The picker makes two local files pointing at one RomM entry legitimate
+    // (a revision beside the original, or a hand-linked disc file beside the
+    // .m3u row a download wrote). Unlinking one of them must not take the
+    // sibling with it: the caller only re-reads its own game, so the loss is
+    // silent.
+    test('removeMapping leaves a sibling linked to the same rom id', () async {
+      await RommSaveMapRepository.putManualMapping(
+        romname: 'Game (USA).zip',
+        systemFolder: 'snes',
+        rommRomId: 4242,
+      );
+      await RommSaveMapRepository.putManualMapping(
+        romname: 'Game (USA) (Rev 1).zip',
+        systemFolder: 'snes',
+        rommRomId: 4242,
+      );
+
+      expect(
+        await RommSaveMapRepository.removeMapping('Game (USA).zip', 'snes'),
+        4242,
+      );
+
+      expect(
+        await RommSaveMapRepository.getRommRomId('Game (USA).zip', 'snes'),
+        isNull,
+        reason: 'the game the user unlinked is gone',
+      );
+      expect(
+        await RommSaveMapRepository.getRommRomId(
+          'Game (USA) (Rev 1).zip',
+          'snes',
+        ),
+        4242,
+        reason: 'the sibling keeps its link',
+      );
+      final rows = await db.query(
+        'app_romm_rom_map',
+        where: 'system_folder = ?',
+        whereArgs: ['snes'],
+      );
+      expect(rows, hasLength(1), reason: 'exactly one row was deleted');
+      expect(rows.single['romname'], 'Game (USA) (Rev 1).zip');
+    });
+
+    // The same shape reached through the stripped-name resolution the delete
+    // path actually uses: a .m3u row a download wrote, beside a disc file the
+    // user linked to the same entry by hand.
+    test(
+      'removeMapping by stripped name deletes only the row that resolved',
+      () async {
+        await RommSaveMapRepository.putMapping(
+          source: RommLinkSource.download,
+          romname: 'Final Fantasy VII.m3u',
+          systemFolder: 'psx',
+          rommRomId: 99,
+        );
+        await RommSaveMapRepository.putManualMapping(
+          romname: 'Final Fantasy VII (Disc 1).chd',
+          systemFolder: 'psx',
+          rommRomId: 99,
+        );
+
+        expect(
+          await RommSaveMapRepository.removeMapping('Final Fantasy VII', 'psx'),
+          99,
+        );
+
+        expect(
+          await RommSaveMapRepository.getRommRomId(
+            'Final Fantasy VII (Disc 1).chd',
+            'psx',
+          ),
+          99,
+          reason: 'the hand-linked disc file keeps its row',
+        );
+        final rows = await db.query(
+          'app_romm_rom_map',
+          where: 'system_folder = ?',
+          whereArgs: ['psx'],
+        );
+        expect(rows, hasLength(1));
+        expect(rows.single['romname'], 'Final Fantasy VII (Disc 1).chd');
+      },
+    );
+
     test(
       'removeMapping returns null for a game that never came from RomM',
       () async {
