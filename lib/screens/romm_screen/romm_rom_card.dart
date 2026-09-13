@@ -30,12 +30,16 @@ class RommRomCard extends StatefulWidget {
   final VoidCallback onTap;
   final RommRomLayout layout;
 
-  /// Logical width of the grid cell this card fills, so the cover can be
-  /// decoded at exactly the size it is drawn. The grid already computes its
-  /// cell width, so it passes that rather than having every card measure
-  /// itself; when absent the card measures its own constraints. Unused by the
-  /// list layout, whose thumbnail is a fixed size.
+  /// Logical size of the grid cell this card fills, so the cover can be
+  /// decoded at exactly the size it is drawn. The grid already computes both,
+  /// so it passes them rather than having every card measure itself; when
+  /// absent the card measures its own constraints. Unused by the list layout,
+  /// whose thumbnail is a fixed size.
+  ///
+  /// Both matter: the tile crops with [BoxFit.cover], so which axis bounds the
+  /// decode depends on the box's shape (see `coverDecodeHint`).
   final double? tileWidth;
+  final double? tileHeight;
 
   const RommRomCard({
     super.key,
@@ -48,6 +52,7 @@ class RommRomCard extends StatefulWidget {
     required this.onTap,
     this.layout = RommRomLayout.grid,
     this.tileWidth,
+    this.tileHeight,
   });
 
   @override
@@ -145,18 +150,27 @@ class RommRomCardState extends State<RommRomCard> {
     );
   }
 
-  /// The art tile's cover at the cell width the grid handed us, or — when no
-  /// width was given — at whatever width the parent lays us out to.
+  /// The art tile's cover at the cell size the grid handed us, or — when no
+  /// size was given — at whatever the parent lays us out to.
   Widget _buildTileCover(ThemeData theme, String? coverUrl) {
     final width = widget.tileWidth;
+    final height = widget.tileHeight;
     if (width != null) {
-      return _buildCover(theme, coverUrl, logicalWidth: width);
+      return _buildCover(
+        theme,
+        coverUrl,
+        logicalWidth: width,
+        logicalHeight: height,
+      );
     }
     return LayoutBuilder(
       builder: (context, constraints) => _buildCover(
         theme,
         coverUrl,
         logicalWidth: constraints.hasBoundedWidth ? constraints.maxWidth : null,
+        logicalHeight: constraints.hasBoundedHeight
+            ? constraints.maxHeight
+            : null,
       ),
     );
   }
@@ -185,7 +199,12 @@ class RommRomCardState extends State<RommRomCard> {
               height: 72.r,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(6.r),
-                child: _buildCover(theme, coverUrl, logicalWidth: 72.r),
+                child: _buildCover(
+                  theme,
+                  coverUrl,
+                  logicalWidth: 72.r,
+                  logicalHeight: 72.r,
+                ),
               ),
             ),
             SizedBox(width: 10.r),
@@ -437,23 +456,33 @@ class RommRomCardState extends State<RommRomCard> {
     });
   }
 
-  /// The cover for [coverUrl], decoded no wider than [logicalWidth] needs on
-  /// this display and cropped (never letterboxed) to the tile.
+  /// The cover for [coverUrl], decoded no larger than the
+  /// [logicalWidth] x [logicalHeight] box needs on this display and cropped
+  /// (never letterboxed) to it.
   ///
-  /// `cacheWidth` makes Flutter wrap the provider in a `ResizeImage`, which
+  /// A decode hint makes Flutter wrap the provider in a `ResizeImage`, which
   /// both bounds decode memory and keys the `ImageCache` by size — so the grid
-  /// and list each keep their own right-sized entry. `gaplessPlayback` keeps
-  /// the previous cover painted while a recycled tile loads its new one,
-  /// instead of flashing the placeholder on every scroll. Nothing is written
-  /// to disk: the `ImageCache` is the only cache.
+  /// and list each keep their own right-sized entry. Which of `cacheWidth` /
+  /// `cacheHeight` carries it is `coverDecodeHint`'s call: under [BoxFit.cover]
+  /// the axis that bounds the paint depends on the box's shape, and hinting
+  /// the wrong one caps an off-ratio cover below the size it is drawn at.
+  /// `gaplessPlayback` keeps the previous cover painted while a recycled tile
+  /// loads its new one, instead of flashing the placeholder on every scroll.
+  /// Nothing is written to disk: the `ImageCache` is the only cache.
   Widget _buildCover(
     ThemeData theme,
     String? coverUrl, {
     required double? logicalWidth,
+    double? logicalHeight,
   }) {
     if (coverUrl == null) {
       return _coverPlaceholder(theme);
     }
+    final hint = coverDecodeHint(
+      logicalWidth: logicalWidth,
+      logicalHeight: logicalHeight,
+      devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
+    );
     // The placeholder sits *under* the image rather than in a loadingBuilder:
     // a loadingBuilder replaces the retained frame with the placeholder for
     // the whole download, which is exactly the flash gaplessPlayback exists
@@ -467,14 +496,10 @@ class RommRomCardState extends State<RommRomCard> {
         Image.network(
           coverUrl,
           fit: BoxFit.cover,
-          // An unknown width (unbounded parent) skips the hint rather than
+          // An unknown size (unbounded parent) skips the hint rather than
           // decoding to a 1-pixel bitmap.
-          cacheWidth: logicalWidth == null
-              ? null
-              : coverDecodeWidth(
-                  logicalWidth: logicalWidth,
-                  devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
-                ),
+          cacheWidth: hint.cacheWidth,
+          cacheHeight: hint.cacheHeight,
           gaplessPlayback: true,
           headers: widget.provider.service.imageHeadersFor(coverUrl),
           errorBuilder: (_, _, _) {
