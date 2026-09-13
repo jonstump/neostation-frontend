@@ -22,6 +22,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'database_test_helper.dart';
 import 'fake_credential_backends.dart';
 
+/// The browse screen's search row: what the controller can reach from it when
+/// a search matches nothing, and what the line under the field reports.
+///
 /// A search that matches nothing must not strand the controller.
 ///
 /// The ROM grid and list are the only widgets that own the ROM view's gamepad
@@ -105,6 +108,26 @@ void main() {
             return json([]);
           case '/api/roms':
             return json({'items': [], 'total': 0});
+        }
+        return http.Response('not found', 404);
+      }),
+    );
+  }
+
+  /// The same server, with its collections endpoint down. The browse screen
+  /// asks for collections on every entry to the tab, so this is an ordinary
+  /// failure to be sitting on — not one belonging to the search.
+  void breakCollections() {
+    RommService.debugUseHttpClient(
+      MockClient((request) async {
+        switch (request.url.path) {
+          case '/api/users/me':
+            return json({'username': 'tester'});
+          case '/api/roms':
+            return json({'items': [], 'total': 0});
+          case '/api/collections':
+          case '/api/collections/virtual':
+            return http.Response('boom', 500);
         }
         return http.Response('not found', 404);
       }),
@@ -235,6 +258,26 @@ void main() {
       );
     });
   }
+
+  testWidgets('a failing collections load is not reported under the search '
+      'field', (tester) async {
+    final provider = await connectedIn(tester, snes);
+    await pumpBrowser(tester, provider);
+
+    // Entering the tab again with the collections endpoint down: the browse
+    // screen refetches both lists, and one of them fails.
+    breakCollections();
+    await tester.runAsync(() => provider.loadCollections(force: true));
+    await settle(tester);
+
+    expect(provider.lastError, isNotNull);
+    expect(
+      find.textContaining(provider.lastError!),
+      findsNothing,
+      reason:
+          'the search caption reports the search, not the provider at large',
+    );
+  });
 
   testWidgets('directions leave the off-screen platform cursor where it was', (
     tester,
