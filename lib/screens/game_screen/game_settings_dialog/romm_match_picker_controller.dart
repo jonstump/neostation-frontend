@@ -54,6 +54,25 @@ class RommMatchSearchException implements Exception {
       'platformIds=$platformIds cause=$cause';
 }
 
+/// What the game's system resolved to on the server.
+enum RommMatchPickerScope {
+  /// Not resolved yet — [RommMatchPickerController.init] has not finished.
+  pending,
+
+  /// The system maps to at least one RomM platform; searches are scoped to
+  /// them.
+  scoped,
+
+  /// The system maps to no RomM platform, or the resolution failed.
+  /// `RommProvider.platformIdsForSystemName` documents its empty answer as
+  /// "this filter excludes every remote result rather than no filter", so the
+  /// picker searches nothing and refuses to write: an unscoped search returns
+  /// every platform's ROMs, and confirming one would write a manual row
+  /// pointing (say) an NES game at a PS2 entry — which then permanently
+  /// overrides the automatic pass, because manual rows are never replaced.
+  unsupported,
+}
+
 /// Where the picker's result list stands.
 enum RommMatchPickerStatus {
   /// Nothing searched yet.
@@ -113,6 +132,7 @@ class RommMatchPickerController extends ChangeNotifier {
   });
 
   List<int> _platformIds = const [];
+  RommMatchPickerScope _scope = RommMatchPickerScope.pending;
   List<RommRom> _results = const [];
   RommMatchPickerStatus _status = RommMatchPickerStatus.idle;
   RommMatchSearchException? _lastError;
@@ -124,9 +144,16 @@ class RommMatchPickerController extends ChangeNotifier {
   /// RomM platform ids the search is scoped to; empty means unscoped.
   List<int> get platformIds => _platformIds;
 
+  /// What the game's system resolved to on the server.
+  RommMatchPickerScope get scope => _scope;
+
   /// False when the game's system resolved to no RomM platform, in which case
-  /// every platform is searched and the rows show theirs.
-  bool get isScoped => _platformIds.isNotEmpty;
+  /// there is nothing on the server this game can legitimately be linked to.
+  bool get isScoped => _scope == RommMatchPickerScope.scoped;
+
+  /// Whether confirming a result is allowed at all. False for a system the
+  /// server does not carry, where every result belongs to another platform.
+  bool get canConfirm => isScoped;
 
   List<RommRom> get results => _results;
   RommMatchPickerStatus get status => _status;
@@ -143,20 +170,27 @@ class RommMatchPickerController extends ChangeNotifier {
   }
 
   /// Resolves the platform scope and the current link, then runs the first
-  /// search for [initialQuery]. Scope resolution failing is logged and leaves
-  /// the search unscoped rather than blocking the picker.
+  /// search for [initialQuery] — unless the system resolved to no RomM
+  /// platform, in which case there is nothing to search (see
+  /// [RommMatchPickerScope.unsupported]) and the picker shows the reason.
   Future<void> init(String initialQuery) async {
     try {
       _platformIds = List.unmodifiable(await platformIdsFor(systemRealName));
     } catch (e, st) {
+      // A failed resolution is not a licence to search every platform: it
+      // leaves the picker in exactly the state it cannot tell a legitimate
+      // match from a cross-platform one.
       _log.e(
-        'RomM link picker: platform scope failed, searching unscoped '
+        'RomM link picker: platform scope failed, nothing can be linked '
         '(system=$systemRealName)',
         error: e,
         stackTrace: st,
       );
       _platformIds = const [];
     }
+    _scope = _platformIds.isEmpty
+        ? RommMatchPickerScope.unsupported
+        : RommMatchPickerScope.scoped;
     try {
       _currentRomId = (await readMapping())?.rommRomId;
     } catch (e, st) {
@@ -183,6 +217,15 @@ class RommMatchPickerController extends ChangeNotifier {
   /// that arrives after a newer search started is dropped.
   Future<void> searchNow(String query) async {
     _debounceTimer?.cancel();
+    if (_scope == RommMatchPickerScope.unsupported) {
+      // Sending no `platform_ids` is "every platform", not "none", so the
+      // request is not made at all.
+      _results = const [];
+      _lastError = null;
+      _status = RommMatchPickerStatus.ready;
+      if (!_disposed) notifyListeners();
+      return;
+    }
     final serial = ++_requestSerial;
     _status = RommMatchPickerStatus.loading;
     if (!_disposed) notifyListeners();
@@ -227,8 +270,16 @@ class RommMatchPickerController extends ChangeNotifier {
 
   /// Writes the manual row for [rom] under [linkKey] and invalidates the
   /// game's sync state exactly once. Returns false — with nothing invalidated
-  /// — when the repository reported the write failed.
+  /// — when the repository reported the write failed, and refuses outright
+  /// while the scope is [RommMatchPickerScope.unsupported].
   Future<bool> confirm(RommRom rom) async {
+    if (!canConfirm) {
+      _log.w(
+        'RomM link picker: refused to link $systemFolder/$linkKey to rom '
+        '${rom.id}: no RomM platform matches this system',
+      );
+      return false;
+    }
     final written = await writeMapping(
       romname: linkKey,
       systemFolder: systemFolder,

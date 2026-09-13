@@ -107,13 +107,90 @@ void main() {
       },
     );
 
-    test('no platform ids searches unscoped and says so', () async {
+    // `platformIdsForSystemName` documents its empty answer as "this filter
+    // excludes every remote result rather than no filter", and sending no
+    // platform_ids is the opposite: every platform's ROMs come back, and
+    // confirming one writes a manual row pointing this game at another
+    // system's entry — which the automatic pass can then never correct.
+    test('no platform ids searches nothing at all', () async {
       final fakes = _Fakes()..platformIds = const [];
       final c = fakes.controller();
       await c.init('ct-final');
 
-      expect(fakes.searches.single.platformIds, isEmpty);
+      expect(fakes.searches, isEmpty, reason: 'no request is made');
+      expect(c.scope, RommMatchPickerScope.unsupported);
       expect(c.isScoped, isFalse);
+      expect(c.results, isEmpty);
+      expect(c.status, RommMatchPickerStatus.ready);
+      c.dispose();
+    });
+
+    test('typing in an unsupported system still searches nothing', () async {
+      final fakes = _Fakes()..platformIds = const [];
+      final c = fakes.controller();
+      await c.init('ct-final');
+
+      await c.searchNow('chrono');
+
+      expect(fakes.searches, isEmpty);
+      expect(c.results, isEmpty);
+      c.dispose();
+    });
+
+    test('an unsupported system cannot be linked by hand', () async {
+      final fakes = _Fakes()..platformIds = const [];
+      final c = fakes.controller();
+      await c.init('ct-final');
+
+      final linked = await c.confirm(_rom(99, 'Some PS2 Game.iso'));
+
+      expect(linked, isFalse);
+      expect(fakes.writes, isEmpty, reason: 'no cross-platform manual row');
+      expect(fakes.invalidations, isEmpty);
+      expect(c.currentRomId, isNull);
+      c.dispose();
+    });
+
+    // A resolution that threw leaves the picker in exactly the state where it
+    // cannot tell a legitimate match from a cross-platform one.
+    test('a failed scope resolution refuses to link too', () async {
+      final fakes = _Fakes();
+      final c = RommMatchPickerController(
+        linkKey: 'ct-final.sfc',
+        syncKey: 'ct-final',
+        systemFolder: 'snes',
+        systemRealName: 'Super Nintendo',
+        searchRoms:
+            ({
+              required String search,
+              required List<int> platformIds,
+              required int limit,
+            }) async => throw UnimplementedError(),
+        platformIdsFor: (_) async => throw StateError('systems table closed'),
+        readMapping: () async => null,
+        writeMapping:
+            ({
+              required String romname,
+              required String systemFolder,
+              required int rommRomId,
+              String? fsName,
+            }) async {
+              fakes.writes.add((
+                romname: romname,
+                systemFolder: systemFolder,
+                rommRomId: rommRomId,
+                fsName: fsName,
+              ));
+              return true;
+            },
+        invalidateSyncState: fakes.invalidations.add,
+      );
+
+      await c.init('ct-final');
+
+      expect(c.scope, RommMatchPickerScope.unsupported);
+      expect(await c.confirm(_rom(99, 'Anything.sfc')), isFalse);
+      expect(fakes.writes, isEmpty);
       c.dispose();
     });
 
@@ -261,7 +338,7 @@ void main() {
       c.dispose();
     });
 
-    test('platform scope failing leaves the search unscoped', () async {
+    test('platform scope failing searches nothing and stays ready', () async {
       final fakes = _Fakes();
       final c = RommMatchPickerController(
         linkKey: 'ct-final.sfc',
@@ -289,7 +366,11 @@ void main() {
       await c.init('ct-final');
 
       expect(c.isScoped, isFalse);
-      expect(fakes.searches.single.platformIds, isEmpty);
+      expect(
+        fakes.searches,
+        isEmpty,
+        reason: 'an unscoped search would offer the ROMs of every platform',
+      );
       expect(c.status, RommMatchPickerStatus.ready);
       c.dispose();
     });

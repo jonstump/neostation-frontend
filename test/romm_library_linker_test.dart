@@ -61,7 +61,10 @@ class _FakeMap {
   final Map<String, RommLinkSource> sources = {};
   final List<List<RommSaveMapEntry>> batches = [];
 
-  static String _key(String folder, String romname) => '$folder\t$romname';
+  /// Keyed exactly as the real index keys itself, so a fake table cannot be
+  /// findable in ways the production one would not be.
+  static String _key(String folder, String romname) =>
+      RommRomIdIndex.keyFor(folder, romname);
 
   /// When true the next batch write fails outright, as a database error does.
   bool failWrites = false;
@@ -80,6 +83,18 @@ class _FakeMap {
       inserted++;
     }
     return (inserted: inserted, failed: false);
+  }
+
+  /// A row already in the table when the pass starts, as a download wrote it.
+  void put(String folder, String filename, int romId) {
+    rows[_key(folder, filename)] = romId;
+    sources[_key(folder, filename)] = RommLinkSource.auto;
+  }
+
+  /// The user unlinked the game from the Manage tab.
+  void remove(String folder, String filename) {
+    rows.remove(_key(folder, filename));
+    sources.remove(_key(folder, filename));
   }
 
   /// A row the user picked by hand, as the picker writes it.
@@ -263,7 +278,7 @@ void main() {
         },
         systemBySlug: {'snes': snes},
       );
-      final map = _FakeMap()..rows['snes\tLinked.sfc'] = 99;
+      final map = _FakeMap()..put('snes', 'Linked.sfc', 99);
 
       final summary = await _linker(server, map, [
         _game('Linked.sfc', 'snes'),
@@ -289,7 +304,7 @@ void main() {
         },
         systemBySlug: {'snes': snes},
       );
-      final map = _FakeMap()..rows['snes\tGame.sfc'] = 12;
+      final map = _FakeMap()..put('snes', 'Game.sfc', 12);
 
       final summary = await _linker(server, map, [
         _game('Game.sfc', 'snes'),
@@ -404,7 +419,7 @@ void main() {
         },
         systemBySlug: {'snes': snes},
       );
-      final map = _FakeMap()..rows['snes\tGame.sfc'] = 12;
+      final map = _FakeMap()..put('snes', 'Game.sfc', 12);
 
       final summary = await _linker(server, map, [
         _game('Game.sfc', 'snes'),
@@ -481,7 +496,7 @@ void main() {
         },
         systemBySlug: {'snes': snes},
       );
-      final map = _FakeMap()..rows['snes\tGame.sfc'] = 10;
+      final map = _FakeMap()..put('snes', 'Game.sfc', 10);
 
       final summary = await _linker(server, map, [
         _game('Game.sfc', 'snes'),
@@ -547,7 +562,7 @@ void main() {
       },
       systemBySlug: {'snes': snes},
     );
-    _FakeMap settledMap() => _FakeMap()..rows['snes\tA.sfc'] = 10;
+    _FakeMap settledMap() => _FakeMap()..put('snes', 'A.sfc', 10);
     List<RommLinkRow> settledGames() => [
       _game('A.sfc', 'snes'),
       _game('Local Only.sfc', 'snes'),
@@ -620,8 +635,7 @@ void main() {
 
       // The user unlinks it, putting the library back exactly as the first
       // pass found it.
-      map.rows.remove('snes\tLocal Only.sfc');
-      map.sources.remove('snes\tLocal Only.sfc');
+      map.remove('snes', 'Local Only.sfc');
       final second = await linker.run();
 
       expect(second.unchanged, isFalse);
@@ -1094,7 +1108,7 @@ void main() {
         },
         systemBySlug: {'snes': snes, 'vectrex': null},
       );
-      final map = _FakeMap()..rows['snes\tB.sfc'] = 11;
+      final map = _FakeMap()..put('snes', 'B.sfc', 11);
       var now = DateTime(2026, 9, 4, 12, 0, 0);
       final linker = RommLibraryLinker(
         listPlatforms: server.listPlatforms,

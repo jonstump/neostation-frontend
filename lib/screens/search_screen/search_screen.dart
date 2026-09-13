@@ -857,12 +857,14 @@ class _SearchScreenState extends State<SearchScreen> {
         return;
 
       case LocalRow(:final game):
+        final canLink = _rommConfigured;
         setState(() {
           _actionTarget = game;
           _actionRemoteTarget = null;
           _actionOptions = searchResultActionsFor(
             isRemote: false,
             hasLocal: true,
+            canLink: canLink,
           );
           _actionIndex = 0;
           _region = _FocusRegion.action;
@@ -940,19 +942,21 @@ class _SearchScreenState extends State<SearchScreen> {
       case SearchResultAction.download:
         if (remote != null) _downloadRemote(remote);
       case SearchResultAction.link:
-        if (target != null && remote != null) _linkRemote(target, remote);
+        // No remote target when the link was started from a local row: the
+        // picker opens on the game's system with nothing pre-selected.
+        if (target != null) _linkRemote(target, remote);
     }
   }
 
-  /// Opens the manual RomM link picker for the local game behind a remote
-  /// result, pre-selected on that result.
+  /// Opens the manual RomM link picker for a local game, pre-selected on the
+  /// remote result it was reached from when there is one.
   ///
   /// A `true` result means a manual row was written and the sync state already
   /// invalidated by the dialog. Nothing on this screen caches the link — the
   /// next selection re-runs [_localGameForRemote] — so only the toast remains,
   /// and it reads the row back because the user may have picked a different
   /// ROM than the one pre-selected.
-  Future<void> _linkRemote(DatabaseGameModel dbGame, RommRom rom) async {
+  Future<void> _linkRemote(DatabaseGameModel dbGame, RommRom? rom) async {
     final folder = dbGame.systemFolderName;
     if (folder == null || folder.isEmpty) return;
 
@@ -979,7 +983,7 @@ class _SearchScreenState extends State<SearchScreen> {
       context,
       AppLocale.rommLinkSaved
           .getString(context)
-          .replaceFirst('{name}', mapping?.fsName ?? rom.name),
+          .replaceFirst('{name}', mapping?.fsName ?? rom?.name ?? game.romname),
       type: NotificationType.success,
     );
   }

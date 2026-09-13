@@ -9,6 +9,11 @@ import '../models/romm_rom.dart';
 /// the link paths that write `app_romm_rom_map` for pre-existing ROMs — goes
 /// through here, so the badge and the link can never disagree about a game.
 ///
+/// Two pieces, and callers compose them: [candidateNames] is every on-disk
+/// name a ROM may have, [normalizeName] is what makes two names equal. The
+/// callers differ in what they compare against — a directory listing, a
+/// key in the scan index — so the composition is theirs; the rule is here.
+///
 /// Pure by design: it compares names and never touches the filesystem, the
 /// database, or the network. Callers that need to know whether a candidate
 /// name actually exists on disk (or in the scan index) do that probing
@@ -43,26 +48,17 @@ class RommLocalMatcher {
     return names;
   }
 
-  /// Whether a local file named [localFilename] is [rom].
-  ///
-  /// The comparison is case-insensitive: a library copied from the server over
-  /// USB may pass through a case-folding filesystem, and the sync layer looks
-  /// games up by the library's own canonical spelling, so case must never be
-  /// the reason a game stays unlinked. The rule compares *names* only — the
-  /// caller has already scoped the question to one local system.
-  static bool matches(String localFilename, RommRom rom) {
-    final wanted = normalizeName(localFilename);
-    if (wanted.isEmpty) return false;
-    for (final candidate in candidateNames(rom)) {
-      if (normalizeName(candidate) == wanted) return true;
-    }
-    return false;
-  }
-
   /// Canonical form of a filename for equivalence comparison.
   ///
-  /// The single definition of "equal" used by [matches], exposed so an index
-  /// keyed by filename (the connect-time link pass builds one from the scan
-  /// index) folds its keys exactly the way the rule compares them.
+  /// The single definition of "equal": two names are the same file when their
+  /// normalized forms are, so every caller compares [candidateNames] against
+  /// its own names through this and an index keyed by filename (the
+  /// connect-time link pass builds one from the scan index) folds its keys the
+  /// same way.
+  ///
+  /// The comparison is case-insensitive because a library copied from the
+  /// server over USB may pass through a case-folding filesystem, and the sync
+  /// layer looks games up by the library's own canonical spelling — case must
+  /// never be the reason a game stays unlinked.
   static String normalizeName(String name) => name.trim().toLowerCase();
 }

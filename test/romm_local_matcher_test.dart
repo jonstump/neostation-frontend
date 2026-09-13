@@ -28,6 +28,19 @@ RommRom _rom(
   files: files,
 );
 
+/// The equivalence production applies, composed the way its callers compose
+/// it: the connect-time pass indexes the library by
+/// [RommLocalMatcher.normalizeName] and looks that index up by each
+/// [RommLocalMatcher.candidateNames] entry, and the "already downloaded" probe
+/// compares the same candidates against the names on disk.
+bool _matches(String localFilename, RommRom rom) {
+  final wanted = RommLocalMatcher.normalizeName(localFilename);
+  if (wanted.isEmpty) return false;
+  return RommLocalMatcher.candidateNames(
+    rom,
+  ).any((c) => RommLocalMatcher.normalizeName(c) == wanted);
+}
+
 void main() {
   group('RommLocalMatcher.candidateNames', () {
     test('a single-file ROM is only ever its fs_name', () {
@@ -79,69 +92,45 @@ void main() {
     });
   });
 
-  group('RommLocalMatcher.matches', () {
+  group('the equivalence rule', () {
     test('exact fs_name matches', () {
       expect(
-        RommLocalMatcher.matches(
-          'Chrono Trigger (USA).sfc',
-          _rom('Chrono Trigger (USA).sfc'),
-        ),
+        _matches('Chrono Trigger (USA).sfc', _rom('Chrono Trigger (USA).sfc')),
         isTrue,
       );
     });
 
     test('case differences do not break the match', () {
       expect(
-        RommLocalMatcher.matches(
-          'chrono trigger (usa).sfc',
-          _rom('Chrono Trigger (USA).sfc'),
-        ),
+        _matches('chrono trigger (usa).sfc', _rom('Chrono Trigger (USA).sfc')),
         isTrue,
       );
       expect(
-        RommLocalMatcher.matches(
-          'CHRONO TRIGGER (USA).SFC',
-          _rom('Chrono Trigger (USA).sfc'),
-        ),
+        _matches('CHRONO TRIGGER (USA).SFC', _rom('Chrono Trigger (USA).sfc')),
         isTrue,
       );
     });
 
     test('a multi-disc playlist matches its multi-file ROM', () {
       final rom = _rom('Final Fantasy VII (USA)', multi: true);
-      expect(
-        RommLocalMatcher.matches('Final Fantasy VII (USA).m3u', rom),
-        isTrue,
-      );
-      expect(
-        RommLocalMatcher.matches('final fantasy vii (usa).M3U', rom),
-        isTrue,
-      );
+      expect(_matches('Final Fantasy VII (USA).m3u', rom), isTrue);
+      expect(_matches('final fantasy vii (usa).M3U', rom), isTrue);
     });
 
     test('the stem playlist matches a multi-file ROM served as a zip', () {
       final rom = _rom('Final Fantasy VII (USA).zip', multi: true);
-      expect(
-        RommLocalMatcher.matches('Final Fantasy VII (USA).m3u', rom),
-        isTrue,
-      );
+      expect(_matches('Final Fantasy VII (USA).m3u', rom), isTrue);
     });
 
     test('a single-file ROM never matches a playlist name', () {
       final rom = _rom('Chrono Trigger (USA).sfc');
-      expect(
-        RommLocalMatcher.matches('Chrono Trigger (USA).sfc.m3u', rom),
-        isFalse,
-      );
-      expect(
-        RommLocalMatcher.matches('Chrono Trigger (USA).m3u', rom),
-        isFalse,
-      );
+      expect(_matches('Chrono Trigger (USA).sfc.m3u', rom), isFalse);
+      expect(_matches('Chrono Trigger (USA).m3u', rom), isFalse);
     });
 
     test('a different name is not a match', () {
       expect(
-        RommLocalMatcher.matches(
+        _matches(
           'Chrono Trigger (Japan).sfc',
           _rom('Chrono Trigger (USA).sfc'),
         ),
@@ -153,17 +142,14 @@ void main() {
       // The rule compares on-disk filenames; a bare stem is a different
       // question (the save map's own stem fallback answers that one).
       expect(
-        RommLocalMatcher.matches(
-          'Chrono Trigger (USA)',
-          _rom('Chrono Trigger (USA).sfc'),
-        ),
+        _matches('Chrono Trigger (USA)', _rom('Chrono Trigger (USA).sfc')),
         isFalse,
       );
     });
 
     test('an empty local name matches nothing', () {
-      expect(RommLocalMatcher.matches('', _rom('Game.sfc')), isFalse);
-      expect(RommLocalMatcher.matches('   ', _rom('Game.sfc')), isFalse);
+      expect(_matches('', _rom('Game.sfc')), isFalse);
+      expect(_matches('   ', _rom('Game.sfc')), isFalse);
     });
   });
 
@@ -176,7 +162,7 @@ void main() {
       expect(RommLocalMatcher.normalizeName('Mr. Do!.nes'), 'mr. do!.nes');
     });
 
-    test('is exactly the equality matches() uses', () {
+    test('is exactly the equality the callers apply', () {
       final rom = _rom('Game (USA).sfc');
       for (final local in [
         'game (usa).sfc',
@@ -184,7 +170,7 @@ void main() {
         ' Game (USA).sfc',
       ]) {
         expect(
-          RommLocalMatcher.matches(local, rom),
+          _matches(local, rom),
           RommLocalMatcher.normalizeName(local) ==
               RommLocalMatcher.normalizeName(rom.fsName),
         );
