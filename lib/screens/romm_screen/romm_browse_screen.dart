@@ -211,7 +211,7 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
       delay: _searchDebounce,
       run: _rommProvider.searchRoms,
       // searchRoms records its own failures on the provider (see
-      // RommProvider.lastError, drawn under the field); this only catches a
+      // RommProvider.romsError, drawn under the field); this only catches a
       // throw that escaped it, so nothing goes unlogged.
       onError: (term, error, _) =>
           _log.w('RomM search failed: term="$term" error=$error'),
@@ -1905,7 +1905,10 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
       hasMore: provider.romsHasMore,
       loading: provider.loadingRoms,
     );
-    final error = provider.lastError;
+    // Scoped to the ROM query, not the provider's global lastError: the
+    // screen re-runs loadPlatforms/loadCollections on every entry, and one of
+    // those failing must not replace the caption of a search that worked.
+    final error = provider.romsError;
     final hint =
         (provider.currentCollection != null
                 ? AppLocale.rommSearchCollectionHint

@@ -93,6 +93,16 @@ class RommProvider extends ChangeNotifier {
   RommConnectionStatus _status = RommConnectionStatus.disconnected;
   String? _lastError;
 
+  /// The failure of the query that produced [roms], or null when that query
+  /// succeeded (or has not run).
+  ///
+  /// Separate from [lastError], which every call on this provider writes:
+  /// [loadPlatforms] and [loadCollections] run on every entry to the browse
+  /// screen, so a global error would put a failing `/api/collections` under
+  /// the search field of a search that worked. Scoped here, the search caption
+  /// only ever reports the search.
+  String? _romsError;
+
   String _serverUrl = '';
   String _username = '';
 
@@ -208,6 +218,7 @@ class RommProvider extends ChangeNotifier {
   RommConnectionStatus get status => _status;
   bool get isConnected => _status == RommConnectionStatus.connected;
   String? get lastError => _lastError;
+  String? get romsError => _romsError;
   String get serverUrl => _serverUrl;
   String get username => _username;
 
@@ -715,6 +726,7 @@ class RommProvider extends ChangeNotifier {
   /// blocked by a request whose answer is about to be discarded.
   void _resetRoms() {
     _roms = [];
+    _romsError = null;
     _romsOffset = 0;
     _romsHasMore = false;
     _loadingRoms = false;
@@ -741,6 +753,7 @@ class RommProvider extends ChangeNotifier {
     final offset = _romsOffset;
     _loadingRoms = true;
     _lastError = null;
+    _romsError = null;
     notifyListeners();
     try {
       final page = await _service.getRoms(
@@ -778,6 +791,7 @@ class RommProvider extends ChangeNotifier {
         return;
       }
       _lastError = e.message;
+      _romsError = e.message;
     } catch (e) {
       if (generation != _romsGeneration) {
         _log.d(
@@ -787,6 +801,7 @@ class RommProvider extends ChangeNotifier {
         return;
       }
       _lastError = 'Failed to load ROMs: $e';
+      _romsError = _lastError;
     } finally {
       // A stale request's loading flag was already released by [_resetRoms];
       // clearing it here would cancel the flag of the load that replaced it.
