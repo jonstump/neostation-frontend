@@ -87,21 +87,32 @@ class RommRomIdIndex {
   const RommRomIdIndex(this._byKey, [this._sourceByKey = const {}]);
 
   /// Composite key for the two-part identity, built in exactly one place so
-  /// that the read and the write cannot drift apart.
+  /// that the read and the write cannot drift apart. Public because anything
+  /// constructing an index (the repository's own read, a test's fake table)
+  /// has to key it the same way a lookup will.
   ///
   /// The separator is a tab rather than a space because both halves can contain
   /// spaces: `("Game Boy", "Tetris")` and `("Game", "Boy Tetris")` would
   /// otherwise collide on one key.
-  static String _keyFor(String systemFolder, String romname) =>
-      '$systemFolder\t$romname';
+  ///
+  /// Both halves are case-folded, matching `RommLocalMatcher.normalizeName`:
+  /// the library's spelling of a file and the mapping row's can differ in case
+  /// (a copy that passed through a case-folding filesystem), and a raw key
+  /// made a row written as `Game.zip` invisible to a library entry indexed
+  /// `game.zip` — so the link pass inserted a second row under the other
+  /// spelling, which is a different primary key and so not caught by
+  /// `INSERT OR IGNORE`. That is also what "a second run adds nothing" rests
+  /// on.
+  static String keyFor(String systemFolder, String romname) =>
+      '${systemFolder.trim().toLowerCase()}\t${romname.trim().toLowerCase()}';
 
   /// The RomM ROM id for a local game, or null when it isn't linked.
   int? lookup(String romname, String systemFolder) =>
-      _byKey[_keyFor(systemFolder, romname)];
+      _byKey[keyFor(systemFolder, romname)];
 
   /// How the local game's row was written, or null when it isn't linked.
   RommLinkSource? sourceFor(String romname, String systemFolder) {
-    final key = _keyFor(systemFolder, romname);
+    final key = keyFor(systemFolder, romname);
     if (!_byKey.containsKey(key)) return null;
     return _sourceByKey[key] ?? RommLinkSource.auto;
   }
@@ -448,10 +459,10 @@ class RommSaveMapRepository {
         final folder = row['system_folder']?.toString() ?? '';
         if (romId == null || stored.isEmpty || folder.isEmpty) continue;
         final source = RommLinkSource.fromDb(row['link_source']);
-        final exactKey = RommRomIdIndex._keyFor(folder, stored);
+        final exactKey = RommRomIdIndex.keyFor(folder, stored);
         index[exactKey] = romId;
         sources[exactKey] = source;
-        final stemKey = RommRomIdIndex._keyFor(folder, _stripExtension(stored));
+        final stemKey = RommRomIdIndex.keyFor(folder, _stripExtension(stored));
         // Only ever *add* the stem spelling: an exact match must win, matching
         // the order the single-game path tries them in. The source follows the
         // id so both describe the same row.

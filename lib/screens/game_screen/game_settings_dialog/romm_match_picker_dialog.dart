@@ -184,12 +184,14 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
 
   /// The game's extension-stripped filename, or the preselected ROM's name
   /// when the caller already knows which entry it means.
+  ///
+  /// `GameModel.romname` is already extension-stripped, so nothing is stripped
+  /// here: a second pass at a trailing dot-and-letters cuts a title at its own
+  /// dot and prefills "Mr.Do" as "Mr".
   String _initialQuery() {
     final pinned = widget.preselectedRom;
     if (pinned != null && pinned.name.isNotEmpty) return pinned.name;
-    return widget.game.romname
-        .replaceAll(RegExp(r'\.[A-Za-z0-9]{1,5}$'), '')
-        .trim();
+    return widget.game.romname.trim();
   }
 
   // ── Gamepad ───────────────────────────────────────────────────────────────
@@ -290,10 +292,6 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
       for (final platform in context.read<RommProvider>().platforms)
         platform.id: platform.name,
     };
-    final showUnscopedHint =
-        !_controller.isScoped &&
-        _controller.status != RommMatchPickerStatus.idle;
-
     return Dialog(
       backgroundColor: theme.cardColor,
       insetPadding: EdgeInsets.symmetric(horizontal: 24.r, vertical: 24.r),
@@ -312,10 +310,6 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildTitle(theme),
-            if (showUnscopedHint) ...[
-              SizedBox(height: 6.r),
-              _buildUnscopedHint(theme),
-            ],
             SizedBox(height: 10.r),
             _buildSearchField(theme),
             SizedBox(height: 8.r),
@@ -350,30 +344,6 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
           style: TextStyle(
             fontSize: 10.r,
             color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildUnscopedHint(ThemeData theme) {
-    return Row(
-      children: [
-        Icon(
-          Symbols.info_rounded,
-          size: 12.r,
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-        ),
-        SizedBox(width: 6.r),
-        Expanded(
-          child: Text(
-            AppLocale.rommLinkPickerUnscoped.getString(context),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              fontSize: 9.r,
-              color: theme.colorScheme.onSurface.withValues(alpha: 0.5),
-            ),
           ),
         ),
       ],
@@ -445,9 +415,16 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
     }
 
     if (results.isEmpty) {
-      final message = status == RommMatchPickerStatus.ready
-          ? AppLocale.rommLinkPickerNoResults.getString(context)
-          : AppLocale.rommLinkPickerLoading.getString(context);
+      // A system the server has no platform for searches nothing at all, so
+      // "no matching ROMs" would blame the query for it.
+      final String message;
+      if (_controller.scope == RommMatchPickerScope.unsupported) {
+        message = AppLocale.rommLinkPickerUnscoped.getString(context);
+      } else {
+        message = status == RommMatchPickerStatus.ready
+            ? AppLocale.rommLinkPickerNoResults.getString(context)
+            : AppLocale.rommLinkPickerLoading.getString(context);
+      }
       return Padding(
         padding: EdgeInsets.symmetric(vertical: 20.r),
         child: Center(

@@ -1170,9 +1170,34 @@ void main() {
     );
 
     test('an index built from ids alone reads every row as auto', () {
-      const index = RommRomIdIndex({'snes\tGame.sfc': 12});
+      final index = RommRomIdIndex({
+        RommRomIdIndex.keyFor('snes', 'Game.sfc'): 12,
+      });
       expect(index.sourceFor('Game.sfc', 'snes'), RommLinkSource.auto);
       expect(index.sourceFor('Other.sfc', 'snes'), isNull);
+    });
+
+    // A library copied from the server can pass through a case-folding
+    // filesystem, so the row's spelling and the library's can differ. A raw
+    // key made the row invisible to the pass, which then inserted a second one
+    // under the other spelling — a different primary key, so INSERT OR IGNORE
+    // did not catch it.
+    test('the index finds a row whose spelling differs only in case', () async {
+      await RommSaveMapRepository.putMapping(
+        source: RommLinkSource.download,
+        romname: 'Chrono Trigger (USA).sfc',
+        systemFolder: 'snes',
+        rommRomId: 12,
+      );
+
+      final index = await RommSaveMapRepository.getRomIdIndex();
+
+      expect(index.lookup('chrono trigger (usa).sfc', 'SNES'), 12);
+      expect(
+        index.sourceFor('CHRONO TRIGGER (USA).SFC', 'snes'),
+        RommLinkSource.download,
+      );
+      expect(index.mappedGames, 1);
     });
 
     test('removeMapping unlinks a manual row too', () async {
