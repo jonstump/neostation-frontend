@@ -1098,7 +1098,7 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.rommSyncConfirmPlan:
       'Baixa {count} jogos ({size}). Pode demorar bastante.',
   AppLocale.rommSyncConfirmSkipped: '{count} já estão neste dispositivo.',
-  AppLocale.rommSyncConfirmLinked: '{count} vinculados ao RomM.',
+  AppLocale.rommSyncConfirmLinked: '{count} serão vinculados ao RomM.',
   AppLocale.rommSyncConfirmFree: '{free} livres.',
   AppLocale.rommSyncConfirmNoSpace:
       'Espaço insuficiente: precisa de {size} e há apenas {free} livres.',
@@ -1316,7 +1316,7 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.rommLinkPickerError:
       'A pesquisa falhou. Selecione para tentar novamente.',
   AppLocale.rommLinkPickerUnscoped:
-      'Nenhuma plataforma do RomM corresponde a este sistema, então todas as plataformas são pesquisadas.',
+      'Nenhuma plataforma do RomM corresponde a este sistema, portanto não há nada para vincular.',
   AppLocale.rommLinkSaved: 'Vinculado a {name}',
   AppLocale.rommLinkFailed: 'Falha ao vincular ao RomM',
   AppLocale.rommUnlinked: 'Desvinculado do RomM',

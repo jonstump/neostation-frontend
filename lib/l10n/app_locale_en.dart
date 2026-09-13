@@ -1079,7 +1079,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rommSyncConfirmPlan:
       'Downloads {count} games ({size}). This can take a long time.',
   AppLocale.rommSyncConfirmSkipped: '{count} already on this device.',
-  AppLocale.rommSyncConfirmLinked: '{count} linked to RomM.',
+  AppLocale.rommSyncConfirmLinked: '{count} will be linked to RomM.',
   AppLocale.rommSyncConfirmFree: '{free} free.',
   AppLocale.rommSyncConfirmNoSpace:
       'Not enough space: needs {size}, only {free} free.',
@@ -1287,7 +1287,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rommLinkPickerNoResults: 'No matching ROMs found.',
   AppLocale.rommLinkPickerError: 'Search failed. Select to retry.',
   AppLocale.rommLinkPickerUnscoped:
-      'No RomM platform matches this system, so every platform is searched.',
+      'No RomM platform matches this system, so there is nothing here to link to.',
   AppLocale.rommLinkSaved: 'Linked to {name}',
   AppLocale.rommLinkFailed: 'Linking to RomM failed',
   AppLocale.rommUnlinked: 'Unlinked from RomM',

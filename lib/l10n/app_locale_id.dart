@@ -1088,7 +1088,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommSyncConfirmPlan:
       'Mengunduh {count} gim ({size}). Ini bisa memakan waktu lama.',
   AppLocale.rommSyncConfirmSkipped: '{count} sudah ada di perangkat ini.',
-  AppLocale.rommSyncConfirmLinked: '{count} tertaut ke RomM.',
+  AppLocale.rommSyncConfirmLinked: '{count} akan ditautkan ke RomM.',
   AppLocale.rommSyncConfirmFree: '{free} tersedia.',
   AppLocale.rommSyncConfirmNoSpace:
       'Penyimpanan tidak cukup: perlu {size}, hanya {free} tersedia.',
@@ -1303,7 +1303,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommLinkPickerNoResults: 'Tidak ada ROM yang cocok.',
   AppLocale.rommLinkPickerError: 'Pencarian gagal. Pilih untuk mencoba lagi.',
   AppLocale.rommLinkPickerUnscoped:
-      'Tidak ada platform RomM yang cocok dengan sistem ini, jadi semua platform dicari.',
+      'Tidak ada platform RomM yang cocok dengan sistem ini, jadi tidak ada yang bisa ditautkan.',
   AppLocale.rommLinkSaved: 'Tertaut ke {name}',
   AppLocale.rommLinkFailed: 'Gagal menautkan ke RomM',
   AppLocale.rommUnlinked: 'Tautan ke RomM dilepas',
