@@ -794,6 +794,7 @@ class _RommRomGridState extends State<RommRomGrid> {
       romFolders: widget.romFolders,
       isFocused: false, // The in-cell cursor above draws the selection.
       tileWidth: _cardWidth,
+      tileHeight: RommRomGrid.rowHeightFor(_cardWidth),
       onDownload: () => widget.onConfirm(rom),
       onCancel: () => widget.onCancel(rom),
       onTap: () {
