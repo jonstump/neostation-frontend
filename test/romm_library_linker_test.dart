@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:neostation/models/database_game_model.dart';
+import 'package:neostation/models/romm_link_row.dart';
 import 'package:neostation/models/romm_platform.dart';
 import 'package:neostation/models/romm_rom.dart';
 import 'package:neostation/models/romm_rom_page.dart';
@@ -49,11 +49,8 @@ SystemModel _system(String folder, {List<String> aliases = const []}) =>
       folders: [folder, ...aliases],
     );
 
-DatabaseGameModel _game(String filename, String folder) => DatabaseGameModel(
-  filename: filename,
-  romPath: '/roms/$folder/$filename',
-  systemFolderName: folder,
-);
+RommLinkRow _game(String filename, String folder) =>
+    rommLinkRow(filename: filename, systemFolder: folder);
 
 /// The mapping table: `(systemFolder, filename)` → rom id, insert-if-absent.
 class _FakeMap {
@@ -66,8 +63,14 @@ class _FakeMap {
 
   static String _key(String folder, String romname) => '$folder\t$romname';
 
-  Future<int> putIfAbsent(List<RommSaveMapEntry> entries) async {
+  /// When true the next batch write fails outright, as a database error does.
+  bool failWrites = false;
+
+  Future<RommMappingBatchResult> putIfAbsent(
+    List<RommSaveMapEntry> entries,
+  ) async {
     batches.add(entries);
+    if (failWrites) return (inserted: 0, failed: true);
     var inserted = 0;
     for (final e in entries) {
       final key = _key(e.systemFolder, e.romname);
@@ -76,7 +79,7 @@ class _FakeMap {
       sources[key] = RommLinkSource.auto;
       inserted++;
     }
-    return inserted;
+    return (inserted: inserted, failed: false);
   }
 
   /// A row the user picked by hand, as the picker writes it.
@@ -113,8 +116,8 @@ class _FakeServer {
     required this.platforms,
     required this.romsByPlatform,
     required this.systemBySlug,
-    this.failingPlatforms = const {},
-  });
+    Set<int> failingPlatforms = const {},
+  }) : failingPlatforms = {...failingPlatforms};
 
   Future<List<RommPlatform>> listPlatforms() async => platforms;
 
@@ -143,7 +146,7 @@ class _FakeServer {
 RommLibraryLinker _linker(
   _FakeServer server,
   _FakeMap map,
-  List<DatabaseGameModel> games, {
+  List<RommLinkRow> games, {
   bool Function()? shouldStop,
 }) => RommLibraryLinker(
   listPlatforms: server.listPlatforms,
@@ -530,6 +533,199 @@ void main() {
     });
   });
 
+  // The connect-time pass runs on every connect transition. A mixed library
+  // (most games local-only, a few on the server) never reaches "everything is
+  // linked", so without a marker every reconnect pages every platform.
+  group('unchanged since the last pass', () {
+    // One game on the server and already linked, one local-only game that no
+    // platform carries: a steady state with work that can never be finished,
+    // which is exactly where the unlinkedCount short-circuit never fires.
+    _FakeServer settledServer() => _FakeServer(
+      platforms: [_platform(1, 'snes')],
+      romsByPlatform: {
+        1: [_rom(10, platformId: 1, fsName: 'A.sfc')],
+      },
+      systemBySlug: {'snes': snes},
+    );
+    _FakeMap settledMap() => _FakeMap()..rows['snes\tA.sfc'] = 10;
+    List<RommLinkRow> settledGames() => [
+      _game('A.sfc', 'snes'),
+      _game('Local Only.sfc', 'snes'),
+    ];
+
+    test('a second pass over unchanged inputs walks no platform', () async {
+      final server = settledServer();
+      final linker = _linker(server, settledMap(), settledGames());
+
+      final first = await linker.run();
+      final afterFirst = server.requests.length;
+      final second = await linker.run();
+
+      expect(first.unchanged, isFalse);
+      expect(first.rowsAdded, 0);
+      expect(afterFirst, greaterThan(0), reason: 'the first pass walked');
+      expect(second.unchanged, isTrue);
+      expect(
+        server.requests,
+        hasLength(afterFirst),
+        reason: 'the second pass asked the server for no page at all',
+      );
+      expect(_summaryLines().last, contains('nothing changed'));
+    });
+
+    test('a pass that wrote rows does not license skipping', () async {
+      // Its own writes changed the library half of the fingerprint, so the
+      // state it measured will not recur; the pass after it is the one that
+      // proves there is nothing left.
+      final server = settledServer();
+      server.romsByPlatform[1]!.add(
+        _rom(11, platformId: 1, fsName: 'Local Only.sfc'),
+      );
+      // A game no platform will ever carry, so the "everything is linked"
+      // short-circuit cannot stand in for the marker here.
+      final linker = _linker(server, settledMap(), [
+        ...settledGames(),
+        _game('Never.sfc', 'snes'),
+      ]);
+
+      final first = await linker.run();
+      final second = await linker.run();
+      final afterSecond = server.requests.length;
+      final third = await linker.run();
+
+      expect(first.rowsAdded, 1);
+      expect(second.unchanged, isFalse, reason: 'the pass after a write walks');
+      expect(second.rowsAdded, 0);
+      expect(third.unchanged, isTrue);
+      expect(server.requests, hasLength(afterSecond));
+    });
+
+    test('a ROM added to the server re-walks it', () async {
+      final server = settledServer();
+      final map = settledMap();
+      final linker = _linker(server, map, settledGames());
+
+      await linker.run();
+      final before = server.requests.length;
+      // The server gained the game that was local-only, which shows up as a
+      // higher rom_count on the platform the list already reports.
+      server.platforms[0] = RommPlatform(
+        id: 1,
+        name: 'SNES',
+        slug: 'snes',
+        romCount: 2,
+      );
+      server.romsByPlatform[1]!.add(
+        _rom(11, platformId: 1, fsName: 'Local Only.sfc'),
+      );
+      final second = await linker.run();
+
+      expect(second.unchanged, isFalse);
+      expect(server.requests.length, greaterThan(before));
+      expect(map.romIdFor('snes', 'Local Only.sfc'), 11);
+    });
+
+    test('a ROM added locally re-walks the server', () async {
+      final server = settledServer();
+      server.romsByPlatform[1]!.add(_rom(11, platformId: 1, fsName: 'B.sfc'));
+      final map = settledMap();
+      final games = settledGames();
+      final linker = _linker(server, map, games);
+
+      await linker.run();
+      final before = server.requests.length;
+      games.add(_game('B.sfc', 'snes'));
+      final second = await linker.run();
+
+      expect(second.unchanged, isFalse);
+      expect(server.requests.length, greaterThan(before));
+      expect(map.romIdFor('snes', 'B.sfc'), 11);
+    });
+
+    // The systems table is a third input: a platform that starts resolving
+    // (an alias arriving with a systems update) has ROMs to match that the
+    // previous pass could not see.
+    test('a platform that starts resolving re-walks the server', () async {
+      final server = settledServer();
+      server.platforms.add(_platform(2, 'vectrex'));
+      server.romsByPlatform[2] = [
+        _rom(20, platformId: 2, fsName: 'Local Only.sfc', slug: 'vectrex'),
+      ];
+      server.systemBySlug['vectrex'] = null;
+      final map = settledMap();
+      final linker = _linker(server, map, settledGames());
+
+      await linker.run();
+      final before = server.requests.length;
+      server.systemBySlug['vectrex'] = snes;
+      final second = await linker.run();
+
+      expect(second.unchanged, isFalse);
+      expect(server.requests.length, greaterThan(before));
+    });
+
+    test('a platform that failed does not license skipping', () async {
+      final server = settledServer();
+      server.failingPlatforms.add(1);
+      final linker = _linker(server, settledMap(), settledGames());
+
+      final first = await linker.run();
+      final before = server.requests.length;
+      final second = await linker.run();
+
+      expect(first.platformFailures, 1);
+      expect(second.unchanged, isFalse);
+      expect(server.requests.length, greaterThan(before));
+    });
+
+    test('a stopped pass does not license skipping', () async {
+      final server = settledServer();
+      var stop = true;
+      final linker = _linker(
+        server,
+        settledMap(),
+        settledGames(),
+        shouldStop: () => stop,
+      );
+
+      final first = await linker.run();
+      stop = false;
+      final second = await linker.run();
+
+      expect(first.stoppedEarly, isTrue);
+      expect(second.unchanged, isFalse);
+    });
+
+    test('a failed write does not license skipping', () async {
+      final server = settledServer();
+      server.romsByPlatform[1]!.add(
+        _rom(11, platformId: 1, fsName: 'Local Only.sfc'),
+      );
+      final map = settledMap()..failWrites = true;
+      final linker = _linker(server, map, settledGames());
+
+      final first = await linker.run();
+      map.failWrites = false;
+      final second = await linker.run();
+
+      expect(first.rowsFailed, 1);
+      expect(
+        first.rowsAlreadyPresent,
+        1,
+        reason:
+            'only A.sfc, which really had a row: the lost write is counted '
+            'as unwritten, never as already present',
+      );
+      expect(first.rowsAdded, 0);
+      expect(second.unchanged, isFalse);
+      expect(
+        second.rowsAdded,
+        1,
+        reason: 'the next pass retries what could not be written',
+      );
+    });
+  });
+
   group('platforms', () {
     test('an unresolved platform is counted and yields no rows', () async {
       final server = _FakeServer(
@@ -743,7 +939,7 @@ void main() {
             throw UnimplementedError(),
         listGames: () async => [_game('A.sfc', 'snes')],
         loadRomIdIndex: () async => const RommRomIdIndex({}),
-        putMappingsIfAbsent: (_) async => 0,
+        putMappingsIfAbsent: (_) async => (inserted: 0, failed: false),
       );
 
       await expectLater(
@@ -770,7 +966,7 @@ void main() {
             throw UnimplementedError(),
         listGames: () async => [_game('A.sfc', 'snes')],
         loadRomIdIndex: () async => const RommRomIdIndex({}),
-        putMappingsIfAbsent: (_) async => 0,
+        putMappingsIfAbsent: (_) async => (inserted: 0, failed: false),
       );
 
       await expectLater(
@@ -891,7 +1087,10 @@ void main() {
 
       final summary = await linker.run();
 
-      expect(summary.elapsed, const Duration(milliseconds: 250));
+      // Two ticks: one stamped after the library read, one at the end.
+      expect(summary.elapsed, const Duration(milliseconds: 500));
+      expect(summary.libraryRows, 3);
+      expect(summary.libraryReadMs, 250);
       final lines = _summaryLines();
       expect(lines, hasLength(1));
       expect(
@@ -901,12 +1100,14 @@ void main() {
           contains('1 unresolved'),
           contains('0 failed'),
           contains('0 systems skipped after a failure'),
+          contains('3 local games read in 250 ms'),
           contains('3 ROMs enumerated'),
           contains('1 rows added'),
           contains('1 already present'),
+          contains('0 unwritten'),
           contains('0 ambiguous skipped'),
           contains('0 conflicting'),
-          contains('250 ms'),
+          contains('500 ms'),
         ]),
       );
     });

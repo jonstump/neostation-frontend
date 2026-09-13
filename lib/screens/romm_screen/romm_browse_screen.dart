@@ -13,6 +13,7 @@ import '../../providers/file_provider.dart';
 import '../../providers/romm_bulk_sync.dart';
 import '../../providers/romm_provider.dart';
 import '../../providers/sqlite_config_provider.dart';
+import '../../repositories/romm_save_map_repository.dart';
 import '../../services/game_service.dart';
 import '../../services/logger_service.dart';
 import '../../services/romm_service.dart';
@@ -377,9 +378,22 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
     final fileProvider = context.read<FileProvider>();
     final linked = await _rommProvider.linkLocalCopy(rom, copy);
     if (!mounted) return;
-    if (!linked) {
-      _showDownloadedToast();
-      return;
+    switch (linked) {
+      case RommMappingWriteResult.written:
+        break;
+      case RommMappingWriteResult.kept:
+        _showDownloadedToast();
+        return;
+      case RommMappingWriteResult.failed:
+        // A failed write is not "already downloaded": the row the whole
+        // feature hangs off is missing, and saying so is the only way the
+        // user learns the link they asked for did not happen.
+        AppNotification.showNotification(
+          context,
+          AppLocale.rommLinkFailed.getString(context),
+          type: NotificationType.error,
+        );
+        return;
     }
     AppNotification.showNotification(
       context,

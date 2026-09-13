@@ -25,6 +25,10 @@ enum RommLinkOutcome {
   /// No local copy was found after all (it vanished between the downloaded
   /// check and the link, or its platform resolves to no local system).
   notLocal,
+
+  /// The write failed. Deliberately not [alreadyLinked]: there is no row, so
+  /// the game is unlinked and the counts must not claim otherwise.
+  failed,
 }
 
 /// Links a ROM the downloaded check found on disk to its RomM entry, writing
@@ -261,6 +265,7 @@ class RommBulkSync extends ChangeNotifier {
   int _skipped = 0;
   int _linked = 0;
   int _alreadyLinked = 0;
+  int _linkFailures = 0;
   int _cancelled = 0;
   int _doneBytes = 0;
   int _queuedBytes = 0;
@@ -324,6 +329,11 @@ class RommBulkSync extends ChangeNotifier {
 
   /// Of [skipped], ROMs that were already linked when the pass reached them.
   int get alreadyLinked => _alreadyLinked;
+
+  /// Of [skipped], ROMs whose link could not be written (a failed database
+  /// write, or a linker that threw). Counted apart from [alreadyLinked]
+  /// because they have no row at all; the connect-time pass retries them.
+  int get linkFailed => _linkFailures;
 
   /// Queue items abandoned because the sync was cancelled mid-flight.
   int get cancelled => _cancelled;
@@ -560,6 +570,7 @@ class RommBulkSync extends ChangeNotifier {
     _skipped = 0;
     _linked = 0;
     _alreadyLinked = 0;
+    _linkFailures = 0;
     _cancelled = 0;
     _doneBytes = 0;
     _queuedBytes = 0;
@@ -569,9 +580,9 @@ class RommBulkSync extends ChangeNotifier {
 
   /// Runs [link] for one on-disk ROM and books the outcome.
   ///
-  /// A linker failure is logged and leaves the ROM counted only as skipped:
-  /// the sync is about downloads first, and a mapping that couldn't be
-  /// written now is picked up by the next connect-time link pass.
+  /// A linker failure is logged and counted as [linkFailed], never as
+  /// [alreadyLinked]: the sync is about downloads first, and a mapping that
+  /// couldn't be written now is picked up by the next connect-time link pass.
   Future<void> _link(RommLocalLinker link, RommRom rom) async {
     try {
       switch (await link(rom)) {
@@ -579,10 +590,13 @@ class RommBulkSync extends ChangeNotifier {
           _linked++;
         case RommLinkOutcome.alreadyLinked:
           _alreadyLinked++;
+        case RommLinkOutcome.failed:
+          _linkFailures++;
         case RommLinkOutcome.notLocal:
           break;
       }
     } catch (e) {
+      _linkFailures++;
       _log.e(
         'RomM bulk sync: linking ${rom.fsName} (rom ${rom.id}) failed: $e',
       );
