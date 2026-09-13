@@ -600,6 +600,35 @@ void main() {
       expect(server.requests, hasLength(afterSecond));
     });
 
+    // The state a writing pass measured is the state its own writes ended,
+    // so remembering it would skip a pass that has work to do the moment the
+    // library returns to it — which one unlink from the Manage tab does.
+    test('a game unlinked after the pass linked it is linked again', () async {
+      final server = settledServer();
+      server.romsByPlatform[1]!.add(
+        _rom(11, platformId: 1, fsName: 'Local Only.sfc'),
+      );
+      final map = settledMap();
+      final linker = _linker(server, map, [
+        ...settledGames(),
+        _game('Never.sfc', 'snes'),
+      ]);
+
+      final first = await linker.run();
+      expect(first.rowsAdded, 1);
+      expect(map.romIdFor('snes', 'Local Only.sfc'), 11);
+
+      // The user unlinks it, putting the library back exactly as the first
+      // pass found it.
+      map.rows.remove('snes\tLocal Only.sfc');
+      map.sources.remove('snes\tLocal Only.sfc');
+      final second = await linker.run();
+
+      expect(second.unchanged, isFalse);
+      expect(second.rowsAdded, 1);
+      expect(map.romIdFor('snes', 'Local Only.sfc'), 11);
+    });
+
     test('a ROM added to the server re-walks it', () async {
       final server = settledServer();
       final map = settledMap();
