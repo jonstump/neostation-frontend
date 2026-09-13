@@ -998,7 +998,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommSyncConfirmPlan:
       '{count} 本のゲームをダウンロードします（{size}）。時間がかかる場合があります。',
   AppLocale.rommSyncConfirmSkipped: '{count} 本はすでにこのデバイスにあります。',
-  AppLocale.rommSyncConfirmLinked: '{count} 本を RomM にリンクしました。',
+  AppLocale.rommSyncConfirmLinked: '{count} 本を RomM にリンクします。',
   AppLocale.rommSyncConfirmFree: '空き容量 {free}。',
   AppLocale.rommSyncConfirmNoSpace: '空き容量が足りません: {size} 必要ですが、空きは {free} だけです。',
   AppLocale.rommSyncConfirmVolumeFree: '{volume}: {size} 必要、空き容量 {free}。',
@@ -1194,7 +1194,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommLinkPickerNoResults: '一致する ROM が見つかりません。',
   AppLocale.rommLinkPickerError: '検索に失敗しました。選択して再試行してください。',
   AppLocale.rommLinkPickerUnscoped:
-      'このシステムに一致する RomM プラットフォームがないため、すべてのプラットフォームを検索します。',
+      'このシステムに一致する RomM プラットフォームがないため、リンクできるものがありません。',
   AppLocale.rommLinkSaved: '{name} にリンクしました',
   AppLocale.rommLinkFailed: 'RomM へのリンクに失敗しました',
   AppLocale.rommUnlinked: 'RomM とのリンクを解除しました',

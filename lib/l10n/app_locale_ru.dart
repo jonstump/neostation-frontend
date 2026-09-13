@@ -1098,7 +1098,7 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommSyncConfirmPlan:
       'Загрузит {count} игр ({size}). Это может занять много времени.',
   AppLocale.rommSyncConfirmSkipped: '{count} уже есть на устройстве.',
-  AppLocale.rommSyncConfirmLinked: 'Связано с RomM: {count}.',
+  AppLocale.rommSyncConfirmLinked: 'Будет связано с RomM: {count}.',
   AppLocale.rommSyncConfirmFree: 'Свободно {free}.',
   AppLocale.rommSyncConfirmNoSpace:
       'Недостаточно места: нужно {size}, свободно только {free}.',
@@ -1312,7 +1312,7 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommLinkPickerNoResults: 'Подходящих ROM не найдено.',
   AppLocale.rommLinkPickerError: 'Поиск не удался. Выберите, чтобы повторить.',
   AppLocale.rommLinkPickerUnscoped:
-      'Ни одна платформа RomM не соответствует этой системе, поэтому поиск идёт по всем платформам.',
+      'Ни одна платформа RomM не соответствует этой системе, поэтому связывать не с чем.',
   AppLocale.rommLinkSaved: 'Связано с {name}',
   AppLocale.rommLinkFailed: 'Не удалось связать с RomM',
   AppLocale.rommUnlinked: 'Связь с RomM удалена',

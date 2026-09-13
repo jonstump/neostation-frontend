@@ -1008,7 +1008,7 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommSyncConfirmPlan:
       '게임 {count}개를 내려받습니다 ({size}). 시간이 오래 걸릴 수 있습니다.',
   AppLocale.rommSyncConfirmSkipped: '{count}개는 이미 이 기기에 있습니다.',
-  AppLocale.rommSyncConfirmLinked: '{count}개를 RomM에 연결했습니다.',
+  AppLocale.rommSyncConfirmLinked: '{count}개를 RomM에 연결합니다.',
   AppLocale.rommSyncConfirmFree: '여유 공간 {free}.',
   AppLocale.rommSyncConfirmNoSpace:
       '공간이 부족합니다: {size}이(가) 필요하지만 {free}만 남았습니다.',
@@ -1202,7 +1202,7 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommLinkPickerLoading: '검색 중…',
   AppLocale.rommLinkPickerNoResults: '일치하는 ROM이 없습니다.',
   AppLocale.rommLinkPickerError: '검색에 실패했습니다. 선택하여 다시 시도하세요.',
-  AppLocale.rommLinkPickerUnscoped: '이 시스템과 일치하는 RomM 플랫폼이 없어 모든 플랫폼을 검색합니다.',
+  AppLocale.rommLinkPickerUnscoped: '이 시스템과 일치하는 RomM 플랫폼이 없어 연결할 대상이 없습니다.',
   AppLocale.rommLinkSaved: '{name}에 연결됨',
   AppLocale.rommLinkFailed: 'RomM 연결에 실패했습니다',
   AppLocale.rommUnlinked: 'RomM 연결이 해제되었습니다',

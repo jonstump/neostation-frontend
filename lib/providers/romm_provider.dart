@@ -1730,10 +1730,12 @@ class RommProvider extends ChangeNotifier {
   /// only so tests and non-interactive callers can skip it; the UI always
   /// passes one.
   ///
-  /// ROMs the enumeration finds already on disk are linked to their RomM
-  /// entry rather than queued (see [linkLocalCopy]); [onLinked] is told the
-  /// extension-stripped name of each game that gained a link, so the caller
-  /// can refresh its sync state.
+  /// ROMs the enumeration finds already on disk are matched to their RomM
+  /// entry rather than queued, and the rows are written once [confirm] has
+  /// approved the plan — never during the enumeration, which runs before the
+  /// user has agreed to anything. [onLinked] is told the extension-stripped
+  /// name of each game that gained a link, so the caller can refresh its sync
+  /// state.
   ///
   /// Progress and cancellation live on [bulkSync]. Returns when the queue is
   /// drained; no-op while another sync is running.
@@ -1761,6 +1763,10 @@ class RommProvider extends ChangeNotifier {
     }
     if (target == null && source == null) return;
 
+    // Read once, on the first ROM that needs it, and reused for the whole
+    // enumeration: the alternative is a query per already-downloaded ROM.
+    RommRomIdIndex? mapIndex;
+
     await bulkSync.run(
       sourceLabel: target?.name ?? source?.name ?? '',
       fetchPage: ({required int limit, required int offset}) =>
@@ -1777,22 +1783,22 @@ class RommProvider extends ChangeNotifier {
             offset: offset,
           ),
       isDownloaded: (rom) => isDownloadedCached(rom, romFolders),
-      // A ROM already on disk is linked instead of fetched. Rows only, never
-      // media: a sync can touch thousands of ROMs, and the metadata import is
-      // reserved for the single, user-initiated browser action.
-      link: (rom) async {
+      // A ROM already on disk is matched instead of fetched — matched only:
+      // the row is written after the confirmation, by the writer below.
+      // Whether it is already linked is answered from one read of the mapping
+      // table rather than a query per ROM, since a sync can touch thousands.
+      resolveLink: (rom) async {
         final copy = await findLocalCopy(rom, romFolders);
-        if (copy == null) return RommLinkOutcome.notLocal;
-        switch (await linkLocalCopy(rom, copy)) {
-          case RommMappingWriteResult.written:
-            onLinked?.call(copy.romname);
-            return RommLinkOutcome.linked;
-          case RommMappingWriteResult.kept:
-            return RommLinkOutcome.alreadyLinked;
-          case RommMappingWriteResult.failed:
-            return RommLinkOutcome.failed;
-        }
+        if (copy == null) return null;
+        final index = mapIndex ??= await RommSaveMapRepository.getRomIdIndex();
+        return RommPendingLink(
+          rom: rom,
+          romname: copy.romname,
+          alreadyLinked:
+              index.lookup(copy.filename, copy.system.folderName) != null,
+        );
       },
+      writeLinks: (pending) => _writeBulkLinks(pending, romFolders, onLinked),
       download: (rom) =>
           downloadRom(rom, romFolders: romFolders, fileProvider: fileProvider),
       cancelDownload: cancelDownload,
@@ -1803,6 +1809,74 @@ class RommProvider extends ChangeNotifier {
     // whatever the last one ended up with.
     await _persistRefreshedTokens();
   }
+
+  /// Writes the mapping rows for the matches a bulk sync's plan was approved
+  /// with, batched rather than one transaction per ROM.
+  ///
+  /// Rows only — never metadata or media: a sync can touch thousands of ROMs,
+  /// and the metadata import is reserved for the single, user-initiated
+  /// browser action. Insert-if-absent, like every link path for a pre-existing
+  /// ROM, so a row somebody else wrote (the picker, a download that finished
+  /// first) is never replaced.
+  ///
+  /// Split into chunks so one failure costs a chunk rather than every link in
+  /// the run: each batch is a single transaction, all-or-nothing by design.
+  Future<RommLinkWriteResult> _writeBulkLinks(
+    List<RommPendingLink> pending,
+    List<String> romFolders,
+    void Function(String romname)? onLinked,
+  ) async {
+    final entries = <RommSaveMapEntry>[];
+    final romnames = <String>[];
+    for (final match in pending) {
+      // Memoized by [findLocalCopy] during the enumeration, so this is a map
+      // lookup rather than a second disk probe.
+      final copy = await findLocalCopy(match.rom, romFolders);
+      if (copy == null) continue;
+      entries.add((
+        romname: copy.filename,
+        systemFolder: copy.system.folderName,
+        rommRomId: match.rom.id,
+        fsName: match.rom.fsName,
+      ));
+      romnames.add(copy.romname);
+    }
+    if (entries.isEmpty) return (written: 0, failed: 0);
+
+    var written = 0;
+    var failed = 0;
+    for (var start = 0; start < entries.length; start += _linkWriteChunk) {
+      final end = (start + _linkWriteChunk).clamp(0, entries.length);
+      final chunk = entries.sublist(start, end);
+      final result = await RommSaveMapRepository.putMappingsIfAbsent(chunk);
+      if (result.failed) {
+        failed += chunk.length;
+        continue;
+      }
+      written += result.inserted;
+      if (result.inserted > 0) {
+        // Which rows within a chunk were skipped isn't reported, so every game
+        // in a chunk that wrote something is invalidated. Harmless: a game
+        // that was linked by a download meanwhile needs its badge refreshed
+        // just the same.
+        for (final romname in romnames.sublist(start, end)) {
+          onLinked?.call(romname);
+        }
+      }
+    }
+    if (written > 0) {
+      _log.i('RomM: bulk sync linked $written local ROM(s) to RomM');
+    }
+    if (failed > 0) {
+      _log.e(
+        'RomM: bulk sync could not write $failed link(s); they stay unlinked',
+      );
+    }
+    return (written: written, failed: failed);
+  }
+
+  /// Mapping rows per transaction in [_writeBulkLinks].
+  static const int _linkWriteChunk = 200;
 
   /// Unpacks a downloaded multi-disc zip ([zipPath]) into NeoStation's native
   /// multi-disc layout under [destDir]: the `.m3u` playlist and the disc images
