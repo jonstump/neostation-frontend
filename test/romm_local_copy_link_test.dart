@@ -190,7 +190,10 @@ void main() {
         final rom = _rom(42, 'a.sfc');
         final copy = (await provider.findLocalCopy(rom, romFolders))!;
 
-        expect(await provider.linkLocalCopy(rom, copy), isTrue);
+        expect(
+          await provider.linkLocalCopy(rom, copy),
+          RommMappingWriteResult.written,
+        );
         expect(await RommSaveMapRepository.getRommRomId('a.sfc', 'snes'), 42);
         expect(
           await RommSaveMapRepository.getRommRomId('a', 'snes'),
@@ -201,7 +204,7 @@ void main() {
 
         expect(
           await provider.linkLocalCopy(rom, copy),
-          isFalse,
+          RommMappingWriteResult.kept,
           reason: 'a second confirm is "already downloaded", not a rewrite',
         );
       },
@@ -219,7 +222,10 @@ void main() {
       final rom = _rom(2, 'a.sfc');
       final copy = (await provider.findLocalCopy(rom, romFolders))!;
 
-      expect(await provider.linkLocalCopy(rom, copy), isFalse);
+      expect(
+        await provider.linkLocalCopy(rom, copy),
+        RommMappingWriteResult.kept,
+      );
       expect(await RommSaveMapRepository.getRommRomId('a.sfc', 'snes'), 1);
     });
   });

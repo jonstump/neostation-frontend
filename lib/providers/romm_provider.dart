@@ -1321,28 +1321,41 @@ class RommProvider extends ChangeNotifier {
   }
 
   /// Writes the `app_romm_rom_map` row linking [copy] to [rom], unless one
-  /// already exists for that file. Returns true only when a new row was
-  /// written; an existing row — whatever it points at — is left alone.
+  /// already exists for that file — which is left alone, whatever it points
+  /// at. Reports the three outcomes apart: a row written, an existing row
+  /// kept, and a write that failed (which is *not* a link and must not be
+  /// counted as one).
   ///
   /// The row is keyed the way the download path keys its own: the on-disk
   /// filename the scan indexes as `user_roms.filename`, within the system's
   /// canonical folder. That is the shape `RommSaveMapRepository.getRommRomId`
   /// resolves from a `GameModel` (exact, then extension-stripped), so save
   /// sync, playtime and the cloud badge all find the link.
-  Future<bool> linkLocalCopy(RommRom rom, RommLocalCopy copy) async {
-    final written = await RommSaveMapRepository.putMappingIfAbsent(
+  Future<RommMappingWriteResult> linkLocalCopy(
+    RommRom rom,
+    RommLocalCopy copy,
+  ) async {
+    final result = await RommSaveMapRepository.putMappingIfAbsent(
       romname: copy.filename,
       systemFolder: copy.system.folderName,
       rommRomId: rom.id,
       fsName: rom.fsName,
     );
-    if (written) {
-      _log.i(
-        'RomM: linked ${copy.system.folderName}/${copy.filename} '
-        'to rom ${rom.id}',
-      );
+    switch (result) {
+      case RommMappingWriteResult.written:
+        _log.i(
+          'RomM: linked ${copy.system.folderName}/${copy.filename} '
+          'to rom ${rom.id}',
+        );
+      case RommMappingWriteResult.kept:
+        break;
+      case RommMappingWriteResult.failed:
+        _log.e(
+          'RomM: linking ${copy.system.folderName}/${copy.filename} '
+          'to rom ${rom.id} failed; it stays unlinked',
+        );
     }
-    return written;
+    return result;
   }
 
   /// Imports RomM's metadata and artwork for a linked [copy] of [rom], but
@@ -1599,12 +1612,15 @@ class RommProvider extends ChangeNotifier {
     // matches at sync time. Tagged as a download so a later manual pick can
     // replace it; a row the user already picked by hand is kept as-is and the
     // download still completes (the repository refuses the replace).
+    // `romm_fs_name` is the *server's* name for the entry, as every other
+    // writer records it — the Manage tab renders it as the RomM entry a game
+    // is linked to, so writing the local filename there named the wrong side.
     final linked = await RommSaveMapRepository.putMapping(
       romname: indexedName,
       systemFolder: system.folderName,
       rommRomId: rom.id,
       source: RommLinkSource.download,
-      fsName: indexedName,
+      fsName: rom.fsName,
     );
     _completedPendingIndex[rom.id] = _CompletedRommDownload(
       rom: rom,
@@ -1612,11 +1628,22 @@ class RommProvider extends ChangeNotifier {
       indexedName: indexedName,
       tracker: tracker,
     );
-    if (!linked) {
-      _log.i(
-        'RomM: ${system.folderName}/$indexedName keeps its manual link; '
-        'downloaded rom ${rom.id} was not re-linked',
-      );
+    switch (linked) {
+      case RommMappingWriteResult.written:
+        break;
+      case RommMappingWriteResult.kept:
+        _log.i(
+          'RomM: ${system.folderName}/$indexedName keeps its manual link; '
+          'downloaded rom ${rom.id} was not re-linked',
+        );
+      case RommMappingWriteResult.failed:
+        // Not a refusal: the row is missing, so save sync, playtime and the
+        // cloud badge have nothing to key on for a ROM that did land on disk.
+        // The connect-time link pass is what picks it up again.
+        _log.e(
+          'RomM: ${system.folderName}/$indexedName was downloaded but its '
+          'link to rom ${rom.id} could not be written',
+        );
     }
     _notifyDownloadState();
     // Arm the debounced rescan so this ROM (and any others finishing around the
@@ -1699,11 +1726,15 @@ class RommProvider extends ChangeNotifier {
       link: (rom) async {
         final copy = await findLocalCopy(rom, romFolders);
         if (copy == null) return RommLinkOutcome.notLocal;
-        if (!await linkLocalCopy(rom, copy)) {
-          return RommLinkOutcome.alreadyLinked;
+        switch (await linkLocalCopy(rom, copy)) {
+          case RommMappingWriteResult.written:
+            onLinked?.call(copy.romname);
+            return RommLinkOutcome.linked;
+          case RommMappingWriteResult.kept:
+            return RommLinkOutcome.alreadyLinked;
+          case RommMappingWriteResult.failed:
+            return RommLinkOutcome.failed;
         }
-        onLinked?.call(copy.romname);
-        return RommLinkOutcome.linked;
       },
       download: (rom) =>
           downloadRom(rom, romFolders: romFolders, fileProvider: fileProvider),

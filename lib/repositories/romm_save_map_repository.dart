@@ -34,6 +34,33 @@ enum RommLinkSource {
   }
 }
 
+/// What a write to `app_romm_rom_map` came to.
+///
+/// A boolean conflated two opposite outcomes: a row deliberately left alone
+/// (a manual link the download path must not replace, or an existing row an
+/// insert-if-absent write leaves as it is) and a write that failed. Callers
+/// book the first as "already linked" and must not book the second that way —
+/// a lost write means the game has no row, nothing retries it, and the counts
+/// shown to the user say everything is fine.
+enum RommMappingWriteResult {
+  /// The row was written.
+  written,
+
+  /// Nothing was written, on purpose: an existing row was kept.
+  kept,
+
+  /// The write failed and was logged. No row exists for this game.
+  failed,
+}
+
+/// Counts for a batch insert-if-absent.
+///
+/// [failed] is the batch-level counterpart of [RommMappingWriteResult.failed]:
+/// when it is true nothing was written at all (the whole batch is one
+/// transaction) and [inserted] is 0, which must not be read as "every row was
+/// already present".
+typedef RommMappingBatchResult = ({int inserted, bool failed});
+
 /// A mapping row as read back by [RommSaveMapRepository.getMapping].
 typedef RommSaveMapping = ({
   int rommRomId,
@@ -129,14 +156,12 @@ class RommSaveMapRepository {
   /// row to the ROM that was just fetched — except when the row is
   /// [RommLinkSource.manual], which stays exactly as the user picked it and
   /// the download still completes. The guard is the upsert's `WHERE`, so the
-  /// check and the write are one parameterized statement. Returns true when
-  /// the row was written, false when a manual row was kept (or on error,
-  /// which is logged).
+  /// check and the write are one parameterized statement.
   ///
   /// Only [RommLinkSource.download] replaces; [RommLinkSource.auto] is
   /// routed to [putMappingIfAbsent] and [RommLinkSource.manual] to
   /// [putManualMapping], which has no guard.
-  static Future<bool> putMapping({
+  static Future<RommMappingWriteResult> putMapping({
     required String romname,
     required String systemFolder,
     required int rommRomId,
@@ -144,12 +169,15 @@ class RommSaveMapRepository {
     String? fsName,
   }) async {
     if (source == RommLinkSource.manual) {
-      return putManualMapping(
+      final written = await putManualMapping(
         romname: romname,
         systemFolder: systemFolder,
         rommRomId: rommRomId,
         fsName: fsName,
       );
+      return written
+          ? RommMappingWriteResult.written
+          : RommMappingWriteResult.failed;
     }
     // An automatic writer never replaces anything; only the download path
     // re-targets a non-manual row. Route `auto` to the insert-if-absent write so a future
@@ -178,11 +206,12 @@ class RommSaveMapRepository {
           'RomM rom map kept the manual link for $systemFolder/$romname; '
           'a ${source.dbValue} write to rom $rommRomId was not applied',
         );
+        return RommMappingWriteResult.kept;
       }
-      return changed > 0;
+      return RommMappingWriteResult.written;
     } catch (e) {
       _log.e('Error saving RomM rom map ($romname/$systemFolder): $e');
-      return false;
+      return RommMappingWriteResult.failed;
     }
   }
 
@@ -219,21 +248,24 @@ class RommSaveMapRepository {
 
   /// Links a local game to a RomM ROM only when no row exists for it yet.
   ///
-  /// Returns true when a row was written, false when the `(romname,
-  /// systemFolder)` key already held a mapping — which is left exactly as it
-  /// was, even if it points at a different ROM. This is the write the link
+  /// Returns [RommMappingWriteResult.written] when a row was written and
+  /// [RommMappingWriteResult.kept] when the `(romname, systemFolder)` key
+  /// already held a mapping — which is left exactly as it was, even if it
+  /// points at a different ROM. A failed write reports
+  /// [RommMappingWriteResult.failed] rather than passing for "already
+  /// linked". This is the write the link
   /// paths for pre-existing ROMs use: unlike [putMapping], which the download
   /// path legitimately uses to re-target a re-downloaded ROM, a link inferred
   /// from a filename must never clobber a row somebody else wrote (the manual
-  /// picker, or a download that finished first). The boolean is what gives
+  /// picker, or a download that finished first). The result is what gives
   /// callers their "linked" versus "already linked" counts.
-  static Future<bool> putMappingIfAbsent({
+  static Future<RommMappingWriteResult> putMappingIfAbsent({
     required String romname,
     required String systemFolder,
     required int rommRomId,
     String? fsName,
   }) async {
-    final inserted = await putMappingsIfAbsent([
+    final result = await putMappingsIfAbsent([
       (
         romname: romname,
         systemFolder: systemFolder,
@@ -241,10 +273,14 @@ class RommSaveMapRepository {
         fsName: fsName,
       ),
     ]);
-    return inserted == 1;
+    if (result.failed) return RommMappingWriteResult.failed;
+    return result.inserted == 1
+        ? RommMappingWriteResult.written
+        : RommMappingWriteResult.kept;
   }
 
-  /// Batch form of [putMappingIfAbsent]; returns how many rows were inserted.
+  /// Batch form of [putMappingIfAbsent]; reports how many rows were inserted
+  /// and whether the batch failed outright.
   ///
   /// For the connect-time link pass, which has a page's worth of matches for
   /// one platform and wants them written in one round trip. All inserts run in
@@ -260,9 +296,13 @@ class RommSaveMapRepository {
   /// written one. The adapter's `rawUpdate` reads that counter immediately
   /// after executing the statement, which is why the insert goes through it.
   ///
-  /// Returns 0 on error (logged), which reads as "nothing linked" to callers.
-  static Future<int> putMappingsIfAbsent(List<RommSaveMapEntry> entries) async {
-    if (entries.isEmpty) return 0;
+  /// A failure is logged and reported as `failed: true` with `inserted: 0`,
+  /// which callers must read as "nothing was written and nothing is known
+  /// about these rows" rather than as "they were all already present".
+  static Future<RommMappingBatchResult> putMappingsIfAbsent(
+    List<RommSaveMapEntry> entries,
+  ) async {
+    if (entries.isEmpty) return (inserted: 0, failed: false);
     try {
       final db = await SqliteService.getDatabase();
       final now = DateTime.now().toIso8601String();
@@ -283,14 +323,14 @@ class RommSaveMapRepository {
         for (final changed in results) {
           if (changed is int && changed > 0) inserted++;
         }
-        return inserted;
+        return (inserted: inserted, failed: false);
       });
     } catch (e) {
       _log.e(
         'Error linking ${entries.length} RomM rom map row(s) '
         '(first: ${entries.first.romname}/${entries.first.systemFolder}): $e',
       );
-      return 0;
+      return (inserted: 0, failed: true);
     }
   }
 

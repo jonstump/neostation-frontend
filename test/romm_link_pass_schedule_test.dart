@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
-import 'package:neostation/models/database_game_model.dart';
+import 'package:neostation/models/romm_link_row.dart';
 import 'package:neostation/models/romm_platform.dart';
 import 'package:neostation/models/romm_rom.dart';
 import 'package:neostation/models/romm_rom_page.dart';
@@ -95,7 +95,7 @@ class _FakeLinker extends RommLibraryLinker {
             throw UnimplementedError(),
         listGames: () async => const [],
         loadRomIdIndex: () async => const RommRomIdIndex({}),
-        putMappingsIfAbsent: (_) async => 0,
+        putMappingsIfAbsent: (_) async => (inserted: 0, failed: false),
       );
 
   void hold() => _gate = Completer<void>();
@@ -179,14 +179,11 @@ void main() {
           total: 1,
         ),
     listGames: () async => [
-      DatabaseGameModel(
-        filename: 'Game.sfc',
-        romPath: '/roms/snes/Game.sfc',
-        systemFolderName: 'snes',
-      ),
+      rommLinkRow(filename: 'Game.sfc', systemFolder: 'snes'),
     ],
     loadRomIdIndex: () async => const RommRomIdIndex({}),
-    putMappingsIfAbsent: (entries) async => entries.length,
+    putMappingsIfAbsent: (entries) async =>
+        (inserted: entries.length, failed: false),
   );
 
   setUp(() async {

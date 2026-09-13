@@ -1707,7 +1707,7 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
     resolveSystem: _browse.systemForPlatform,
     fetchPage: ({required platformId, required limit, required offset}) => _svc
         .getRomsPage(platformIds: [platformId], limit: limit, offset: offset),
-    listGames: GameRepository.getAllGames,
+    listGames: GameRepository.getRommLinkRows,
     loadRomIdIndex: RommSaveMapRepository.getRomIdIndex,
     putMappingsIfAbsent: RommSaveMapRepository.putMappingsIfAbsent,
     shouldStop: () => _disposed || !_browse.isConnected,
