@@ -111,7 +111,7 @@ void main() {
         systemFolder: 'snes',
         rommRomId: 7,
       ),
-      isTrue,
+      RommMappingWriteResult.written,
     );
     // ...and, on its own, that changes nothing the badge can see.
     expect(
