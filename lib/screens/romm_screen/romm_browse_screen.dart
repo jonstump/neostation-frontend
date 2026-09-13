@@ -729,6 +729,17 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   /// [fn] (one of the [GridNavUtils] directional helpers), then scrolls the new
   /// cell into view. Column count comes from the grid's last layout pass.
   void _moveTopSelection(_GridNavFn fn) {
+    // The ROM view's grid or list owns the top layer whenever it is mounted,
+    // so a direction reaching this screen's own handlers while a platform or
+    // collection is open means nothing is mounted to own it — the ROM body is
+    // standing in for an empty result set (a search that matched nothing, or
+    // an empty platform). The only thing still on screen is the search row, so
+    // take the cursor up to it. Moving the platform/collection cursor instead
+    // would be invisible, and would quietly change what B backs out to.
+    if (_inRomGrid) {
+      _selectSearchField();
+      return;
+    }
     final n = _activeCount;
     if (n == 0) return;
     final next = fn(
