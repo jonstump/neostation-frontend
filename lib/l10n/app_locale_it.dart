@@ -291,6 +291,17 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.cleanOrphanedMetadataFailed:
       'Impossibile pulire i metadati orfani: {error}',
   AppLocale.rematchAchievements: 'Abbina i giochi RetroAchievements',
+  AppLocale.rommLinkLibrary: 'Collega la libreria a RomM',
+  AppLocale.rommLinkLibrarySubtitle:
+      'Confronta le ROM locali con il tuo server RomM e collegale',
+  AppLocale.rommLinkLibraryWarning:
+      'Questa operazione percorre ogni piattaforma del tuo server RomM e collega le ROM locali riconosciute.\n\nI giochi collegati diventano idonei alla sincronizzazione dei salvataggi, che verranno quindi caricati su RomM. Su una libreria grande può richiedere diversi minuti.',
+  AppLocale.rommLinkLibraryPreparing: 'Preparazione…',
+  AppLocale.rommLinkLibraryProgress: '{done} di {total} — {system}',
+  AppLocale.rommLinkLibraryDone: '{count} giochi collegati',
+  AppLocale.rommLinkLibraryNothingToDo: 'Nulla di nuovo da collegare',
+  AppLocale.rommLinkLibraryFailed: 'Collegamento non riuscito',
+  AppLocale.rommLinkLibraryUnavailable: 'Non disponibile al momento',
   AppLocale.rematchAchievementsSubtitle:
       'Controlla l\'intera libreria alla ricerca di set di obiettivi, invece di un gioco alla volta',
   AppLocale.rematchAchievementsWarning:

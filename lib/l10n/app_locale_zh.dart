@@ -234,6 +234,16 @@ const Map<String, dynamic> appLocaleZh = {
       '保留了 {count} 条从 ES-DE 导入的条目。',
   AppLocale.cleanOrphanedMetadataFailed: '清理孤立元数据失败：{error}',
   AppLocale.rematchAchievements: '匹配 RetroAchievements 游戏',
+  AppLocale.rommLinkLibrary: '将库链接到 RomM',
+  AppLocale.rommLinkLibrarySubtitle: '将本地 ROM 与你的 RomM 服务器匹配并链接',
+  AppLocale.rommLinkLibraryWarning:
+      '此操作会遍历 RomM 服务器上的每个平台，并链接识别到的本地 ROM。\n\n已链接的游戏将纳入存档同步，其存档会上传到 RomM。库较大时可能需要几分钟。',
+  AppLocale.rommLinkLibraryPreparing: '准备中…',
+  AppLocale.rommLinkLibraryProgress: '{total} 中的 {done} — {system}',
+  AppLocale.rommLinkLibraryDone: '已链接 {count} 个游戏',
+  AppLocale.rommLinkLibraryNothingToDo: '没有新的可链接项',
+  AppLocale.rommLinkLibraryFailed: '链接失败',
+  AppLocale.rommLinkLibraryUnavailable: '当前不可用',
   AppLocale.rematchAchievementsSubtitle: '扫描整个库来查找成就集，而不是逐个打开游戏',
   AppLocale.rematchAchievementsWarning:
       '这会读取每个未匹配的 ROM 以识别它，在大型库上可能需要一些时间。再次选择即可暂停：已匹配的内容会保留，再次运行会从中断处继续。光盘镜像也会读取，但每个只读取少量扇区。不会移动或删除任何文件。',

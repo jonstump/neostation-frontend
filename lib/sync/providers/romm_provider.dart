@@ -1630,19 +1630,6 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
         }
         if (_disposed || !_browse.isConnected) return;
 
-        // Link pre-existing ROMs before the sweep, so games linked here are
-        // swept in this same connect. Like playtime, not behind the
-        // active-provider gate: a link is what makes the badge, playtime and
-        // the browse grid's "downloaded" state right, whoever owns saves.
-        try {
-          await linkLibrary();
-        } catch (e) {
-          // linkLibrary is documented not to throw; belt-and-braces so an
-          // unawaited future can't go unhandled.
-          _log.w('RomM link pass failed: $e');
-        }
-        if (_disposed || !_browse.isConnected) return;
-
         if (SyncManager.instance.activeProviderId != kProviderId) {
           _log.i('RomM upload sweep: skipped, RomM is not the save provider');
           return;
@@ -1658,7 +1645,25 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
     );
   }
 
-  /// Runs the connect-time link pass once, under the sweep's guards.
+  /// Runs the library-wide link pass once, under the sweep's guards.
+  ///
+  /// Called from Settings > Tools, not from the connect path. It used to run 30
+  /// seconds after every connect transition and outside the active-provider
+  /// gate, which meant someone running NeoSync for saves, who never opened the
+  /// RomM screen, still paid a full server walk on every launch — measured at
+  /// 201 seconds over 34 platforms and 9,902 ROMs on a real device, with the
+  /// JSON decoded on the platform thread, where a long frame is an ANR rather
+  /// than a dropped frame.
+  ///
+  /// The consent half mattered more than the cost. A mapping row is the gate
+  /// for save sync, so an unattended pass that wrote 6,774 rows also enrolled
+  /// 25 games whose saves then uploaded unasked. A row existing only for games
+  /// the user downloaded is what made save sync opt-in, which is what the doc
+  /// at the top of this file describes; the pass widened that silently. Behind
+  /// a button with a confirmation, it does not.
+  ///
+  /// Linking on download, the A press on a browse tile and the Manage tab's
+  /// picker are all unchanged — each is cheap and already user-initiated.
   ///
   /// Skipped — with a log line saying why — when disconnected, when a bulk
   /// ROM sync is running (its enumeration is walking the same server and its
@@ -1671,7 +1676,9 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
   /// platform-to-system resolution unreadable) are logged here and read as
   /// "nothing linked". Returns the pass summary, or null when the pass was
   /// skipped.
-  Future<RommLinkPassSummary?> linkLibrary() async {
+  Future<RommLinkPassSummary?> linkLibrary({
+    void Function(int done, int total, String system)? onProgress,
+  }) async {
     if (!_browse.isConnected) {
       _log.i('RomM link pass skipped: disconnected');
       return null;
@@ -1686,7 +1693,7 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
     }
     _linking = true;
     try {
-      final summary = await _linker.run();
+      final summary = await _linker.run(onProgress: onProgress);
       if (summary.linkedRomnames.isNotEmpty) {
         invalidateGameSyncStates(summary.linkedRomnames);
       }

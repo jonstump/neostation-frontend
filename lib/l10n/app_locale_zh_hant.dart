@@ -234,6 +234,16 @@ const Map<String, dynamic> appLocaleZhHant = {
       '保留了 {count} 筆從 ES-DE 匯入的項目。',
   AppLocale.cleanOrphanedMetadataFailed: '清理孤立中介資料失敗：{error}',
   AppLocale.rematchAchievements: '比對 RetroAchievements 遊戲',
+  AppLocale.rommLinkLibrary: '將library連結至 RomM',
+  AppLocale.rommLinkLibrarySubtitle: '將本機 ROM 與你的 RomM 伺服器比對並連結',
+  AppLocale.rommLinkLibraryWarning:
+      '此操作會走訪 RomM 伺服器上的每個平台，並連結辨識到的本機 ROM。\n\n已連結的遊戲將納入存檔同步，其存檔會上傳至 RomM。library較大時可能需要幾分鐘。',
+  AppLocale.rommLinkLibraryPreparing: '準備中…',
+  AppLocale.rommLinkLibraryProgress: '{total} 中的 {done} — {system}',
+  AppLocale.rommLinkLibraryDone: '已連結 {count} 個遊戲',
+  AppLocale.rommLinkLibraryNothingToDo: '沒有新的可連結項目',
+  AppLocale.rommLinkLibraryFailed: '連結失敗',
+  AppLocale.rommLinkLibraryUnavailable: '目前無法使用',
   AppLocale.rematchAchievementsSubtitle: '掃描整個遊戲庫尋找成就組合，不必逐一開啟遊戲',
   AppLocale.rematchAchievementsWarning:
       '這會讀取每個未比對的 ROM 以識別它，在大型收藏中可能需要一些時間。再次選擇即可暫停：已比對的內容會保留，再次執行會從中斷處繼續。光碟映像也會讀取，但每個只讀取少量磁區。不會移動或刪除任何檔案。',

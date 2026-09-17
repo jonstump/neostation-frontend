@@ -831,10 +831,23 @@ class RommProvider extends ChangeNotifier {
   /// should treat as "this filter excludes every remote result" rather than
   /// "no filter".
   Future<List<int>> platformIdsForSystemName(String realName) async {
-    final index = _platformIdsBySystemName ??= await _buildPlatformIdIndex();
+    final index = _platformIdsBySystemName ?? await _buildPlatformIdIndex();
     return index[realName] ?? const [];
   }
 
+  /// Builds the index, and caches it **only when it found something**.
+  ///
+  /// [loadPlatforms] swallows a failure into `_lastError` and leaves
+  /// `_platforms` empty, so a transient blip at first call would otherwise pin
+  /// an empty index for the life of the session: every system would report "not
+  /// on the server", the picker would say so, and only a disconnect would clear
+  /// it. [systemForPlatform] below already refuses to cache a null for exactly
+  /// this reason; this follows the same rule one level up.
+  ///
+  /// An empty result is therefore recomputed next call, which costs one
+  /// `loadPlatforms` — and that is itself short-circuited once `_platforms` is
+  /// populated, so a server that genuinely has no platforms is asked again
+  /// rather than being remembered wrongly.
   Future<Map<String, List<int>>> _buildPlatformIdIndex() async {
     await loadPlatforms();
     final index = <String, List<int>>{};
@@ -843,6 +856,7 @@ class RommProvider extends ChangeNotifier {
       if (system == null) continue;
       (index[system.realName] ??= <int>[]).add(platform.id);
     }
+    if (index.isNotEmpty) _platformIdsBySystemName = index;
     return index;
   }
 
@@ -1379,8 +1393,22 @@ class RommProvider extends ChangeNotifier {
       sysId,
       copy.filename,
     );
-    if (existing != null) return false;
-    await _importMetadata(rom, copy.system, fileProvider, copy.filename);
+    // Two halves, two gates. Metadata is a row that either exists or does not;
+    // artwork is files on disk, and importing it overwrites what is there and
+    // deletes the other extensions of the same asset. A game scraped by
+    // ScreenScraper but carrying no metadata row — an ES-DE import, a hand
+    // edit — used to lose its art to an A press because the single gate read
+    // "no row" and ran both.
+    final hasArt = await _hasLocalArt(copy.system, copy.filename, fileProvider);
+    if (existing != null && hasArt) return false;
+    await _importMetadata(
+      rom,
+      copy.system,
+      fileProvider,
+      copy.filename,
+      importMetadata: existing == null,
+      importMedia: !hasArt,
+    );
     _downloadedSystems[copy.system.folderName] = copy.system;
     _scheduleSettle();
     return true;
@@ -2014,12 +2042,27 @@ class RommProvider extends ChangeNotifier {
   /// [indexedName] is the on-disk filename the scan will record (the playlist
   /// for an unpacked multi-disc ROM, otherwise the fsName). The metadata row is
   /// matched to the scanned game by exact filename, so it must use this name.
+  /// The two halves are switchable independently, because they overwrite
+  /// different things and a caller can need one without the other.
+  ///
+  /// [importMetadata] false skips the row write, which is
+  /// [ScraperRepository.saveGameMetadata] — a **whole-row** writer with
+  /// `isFullyScraped: true`, so it replaces a hand-curated row rather than
+  /// filling its gaps. [importMedia] false skips the artwork, which
+  /// [_saveRommMedia] writes by overwriting the destination and deleting the
+  /// other extensions of the same asset.
+  ///
+  /// Both are right for a download, which is placing a game that was not here
+  /// before. Neither is right unconditionally for [importMetadataIfMissing],
+  /// which runs on a game the user already had.
   Future<void> _importMetadata(
     RommRom rom,
     SystemModel system,
     FileProvider fileProvider,
-    String indexedName,
-  ) async {
+    String indexedName, {
+    bool importMetadata = true,
+    bool importMedia = true,
+  }) async {
     try {
       final detail = await _service.getRomDetail(rom.id);
       if (detail == null) return;
@@ -2068,13 +2111,15 @@ class RommProvider extends ChangeNotifier {
         _log.w(
           'RomM metadata import: no system id for ${rom.fsName}, skipping',
         );
-      } else {
+      } else if (importMetadata) {
         await ScraperRepository.saveGameMetadata(
           metadata,
           sysId,
           isFullyScraped: true,
         );
       }
+
+      if (!importMedia) return;
 
       // Artwork import. RomM caches ScreenScraper's media set per ROM; each type
       // maps onto the media folder the library UI reads it from. The library
@@ -2199,6 +2244,30 @@ class RommProvider extends ChangeNotifier {
   /// Failures are contained here rather than at the call site: the media types
   /// are independent, and a single unwritable folder or dead URL must not cost
   /// the caller every type queued behind it.
+  /// Whether box art already exists on disk for [indexedName].
+  ///
+  /// Box art stands in for "this game has artwork": it is the one asset every
+  /// scrape path writes, and the library card falls back to it for the
+  /// background when there is no fanart. Checked across the same extensions
+  /// [_saveRommMedia] would delete, so the probe and the destruction agree on
+  /// what counts as present.
+  Future<bool> _hasLocalArt(
+    SystemModel system,
+    String indexedName,
+    FileProvider fileProvider,
+  ) async {
+    for (final ext in const ['png', 'jpg', 'webp']) {
+      final path = fileProvider.getMediaPath(
+        system.folderName,
+        'box2d',
+        indexedName,
+        ext,
+      );
+      if (await File(path).exists()) return true;
+    }
+    return false;
+  }
+
   Future<void> _saveRommMedia(
     List<String?> sources,
     String folder,

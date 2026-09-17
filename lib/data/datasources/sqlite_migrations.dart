@@ -7038,9 +7038,9 @@ class SqliteMigrations {
       } else {
         _log.i('Column link_source already exists');
       }
-      _log.i('Migration v157 completed');
+      _log.i('Migration v158 completed');
     } catch (e, stackTrace) {
-      _log.e('Error in migration v157: $e');
+      _log.e('Error in migration v158: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }
