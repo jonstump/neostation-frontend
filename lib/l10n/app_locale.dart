@@ -283,6 +283,26 @@ mixin AppLocale {
       'clean_orphaned_metadata_failed';
 
   static const String rematchAchievements = 'rematch_achievements';
+
+  static const String rommLinkLibrary = 'romm_link_library';
+
+  static const String rommLinkLibrarySubtitle = 'romm_link_library_subtitle';
+
+  static const String rommLinkLibraryWarning = 'romm_link_library_warning';
+
+  static const String rommLinkLibraryPreparing = 'romm_link_library_preparing';
+
+  static const String rommLinkLibraryProgress = 'romm_link_library_progress';
+
+  static const String rommLinkLibraryDone = 'romm_link_library_done';
+
+  static const String rommLinkLibraryNothingToDo =
+      'romm_link_library_nothing_to_do';
+
+  static const String rommLinkLibraryFailed = 'romm_link_library_failed';
+
+  static const String rommLinkLibraryUnavailable =
+      'romm_link_library_unavailable';
   static const String rematchAchievementsSubtitle =
       'rematch_achievements_subtitle';
   static const String rematchAchievementsWarning =

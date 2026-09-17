@@ -241,6 +241,16 @@ const Map<String, dynamic> appLocaleJa = {
       '{count} 件の ES-DE からインポートしたエントリはそのまま残されています。',
   AppLocale.cleanOrphanedMetadataFailed: '孤立したメタデータの削除に失敗しました: {error}',
   AppLocale.rematchAchievements: 'RetroAchievements のゲームを照合',
+  AppLocale.rommLinkLibrary: 'ライブラリをRomMにリンク',
+  AppLocale.rommLinkLibrarySubtitle: 'ローカルROMをRomMサーバーと照合してリンクします',
+  AppLocale.rommLinkLibraryWarning:
+      'RomMサーバー上のすべてのプラットフォームを走査し、認識できたローカルROMをリンクします。\n\nリンクされたゲームはセーブ同期の対象になるため、セーブデータがRomMへアップロードされます。大きなライブラリでは数分かかることがあります。',
+  AppLocale.rommLinkLibraryPreparing: '準備中…',
+  AppLocale.rommLinkLibraryProgress: '{total}件中{done}件 — {system}',
+  AppLocale.rommLinkLibraryDone: '{count}件のゲームをリンクしました',
+  AppLocale.rommLinkLibraryNothingToDo: '新しくリンクするものはありません',
+  AppLocale.rommLinkLibraryFailed: 'リンクに失敗しました',
+  AppLocale.rommLinkLibraryUnavailable: '現在利用できません',
   AppLocale.rematchAchievementsSubtitle: 'ゲームを1本ずつ開かずに、ライブラリ全体から実績セットを探します',
   AppLocale.rematchAchievementsWarning:
       '一致していない ROM をすべて読み込んで識別します。大きなライブラリでは時間がかかることがあります。もう一度選択すると一時停止します。それまでに一致したものはすべて保持され、再実行すると中断した所から続きます。ディスクイメージも読み込みますが、各イメージの一部のセクターのみです。ファイルの移動や削除は行いません。',

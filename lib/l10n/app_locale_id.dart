@@ -280,6 +280,17 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.cleanOrphanedMetadataFailed:
       'Gagal membersihkan metadata yatim: {error}',
   AppLocale.rematchAchievements: 'Cocokkan Game RetroAchievements',
+  AppLocale.rommLinkLibrary: 'Tautkan pustaka ke RomM',
+  AppLocale.rommLinkLibrarySubtitle:
+      'Cocokkan ROM lokal dengan server RomM Anda lalu tautkan',
+  AppLocale.rommLinkLibraryWarning:
+      'Ini menelusuri setiap platform di server RomM Anda dan menautkan ROM lokal yang dikenali.\n\nGim yang tertaut menjadi memenuhi syarat untuk sinkronisasi simpanan, sehingga data simpanannya akan diunggah ke RomM. Pada pustaka besar ini bisa memakan waktu beberapa menit.',
+  AppLocale.rommLinkLibraryPreparing: 'Menyiapkan…',
+  AppLocale.rommLinkLibraryProgress: '{done} dari {total} — {system}',
+  AppLocale.rommLinkLibraryDone: '{count} gim tertaut',
+  AppLocale.rommLinkLibraryNothingToDo: 'Tidak ada yang baru untuk ditautkan',
+  AppLocale.rommLinkLibraryFailed: 'Gagal menautkan',
+  AppLocale.rommLinkLibraryUnavailable: 'Tidak tersedia saat ini',
   AppLocale.rematchAchievementsSubtitle:
       'Memeriksa seluruh pustaka untuk set prestasi, bukan satu game per satu',
   AppLocale.rematchAchievementsWarning:

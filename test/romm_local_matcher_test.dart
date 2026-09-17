@@ -29,7 +29,7 @@ RommRom _rom(
 );
 
 /// The equivalence production applies, composed the way its callers compose
-/// it: the connect-time pass indexes the library by
+/// it: the library link pass indexes the library by
 /// [RommLocalMatcher.normalizeName] and looks that index up by each
 /// [RommLocalMatcher.candidateNames] entry, and the "already downloaded" probe
 /// compares the same candidates against the names on disk.

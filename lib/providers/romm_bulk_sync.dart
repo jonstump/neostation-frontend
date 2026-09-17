@@ -364,7 +364,7 @@ class RommBulkSync extends ChangeNotifier {
 
   /// Of [skipped], ROMs whose link could not be written (a failed database
   /// write, or a linker that threw). Counted apart from [alreadyLinked]
-  /// because they have no row at all; the connect-time pass retries them.
+  /// because they have no row at all; the library link pass retries them.
   int get linkFailed => _linkFailures;
 
   /// Queue items abandoned because the sync was cancelled mid-flight.
@@ -439,14 +439,18 @@ class RommBulkSync extends ChangeNotifier {
       // A cancel during the enumeration stops everything, links included:
       // nothing has been written yet, which is the point.
       if (_cancelRequested) return;
-      if (_queue.isEmpty) {
-        // Nothing to download means no confirmation is asked for — there is no
-        // size to approve — so the links the user's sync found are written
-        // straight away. They are the only work this run has.
-        await _writeLinks(writeLinks);
-        return;
-      }
+      // Nothing to download and nothing to link: a genuine no-op, and there is
+      // nothing to put in front of the user.
+      if (_queue.isEmpty && _pendingLinks.isEmpty) return;
 
+      // A run with nothing to download but rows to write is still asked for.
+      // It used to write them straight through on the reasoning that there was
+      // no size to approve — but the size was never the only thing being
+      // approved. A mapping row is what makes a game eligible for save sync,
+      // so syncing a platform already held entirely would silently enrol every
+      // ROM on it, with no dialog and no cancel. The plan already reports
+      // `linked` as work that has *not* happened yet, so a queue of zero and a
+      // link count of N is a proposal the dialog can state as it stands.
       if (confirm != null) {
         _phase = RommBulkSyncPhase.confirming;
         _notify();

@@ -165,12 +165,6 @@ class RommLinkPassSummary {
   /// True when the stop check ended the pass before every platform was seen.
   final bool stoppedEarly;
 
-  /// True when the pass returned without walking the server because neither
-  /// the unlinked half of the library nor the server's platforms had changed
-  /// since the last complete pass (see [RommLibraryLinker]). Everything else
-  /// on the summary is zero.
-  final bool unchanged;
-
   /// Wall-clock time of the run.
   final Duration elapsed;
 
@@ -193,7 +187,6 @@ class RommLinkPassSummary {
     this.conflicts = const [],
     this.unresolvedSlugs = const [],
     this.stoppedEarly = false,
-    this.unchanged = false,
     this.elapsed = Duration.zero,
     this.linkedRomnames = const [],
   });
@@ -203,8 +196,8 @@ class RommLinkPassSummary {
   int get conflictCount => conflicts.length;
 }
 
-/// The connect-time pass that links a pre-existing local library to the RomM
-/// server by filename.
+/// The library-wide pass that links a pre-existing local library to the RomM
+/// server by filename, run from Settings > Tools.
 ///
 /// Every RomM feature for a game hangs off one `app_romm_rom_map` row, and
 /// until this pass the only writer was the download path, so a library copied
@@ -225,17 +218,23 @@ class RommLinkPassSummary {
 /// group, after every platform in it has been paged, so the ambiguity check
 /// sees the whole picture before anything is committed.
 ///
-/// A reconnect does not re-walk the server for nothing. The only short-circuit
-/// used to be "every local game is linked", which a mixed library (9,800 local
-/// ROMs, 500 of them on the server) never reaches, so every connect transition
-/// paged every platform. A pass that completes cleanly remembers a fingerprint
-/// of its two inputs — the unlinked half of the local library, and the
-/// server's platforms with their ROM counts — and a later pass that computes
-/// the same fingerprint returns without paging anything. Both halves are
-/// needed: ROMs added to the server change the counts, ROMs added locally
-/// change the library digest. The fingerprint lives for the life of the
-/// provider, not on disk: one full pass per app launch is the honest price of
-/// not knowing what happened while the app was closed.
+/// The pass is **user-initiated**, from Settings > Tools, and walks the whole
+/// server every time it is asked to. It used to run automatically 30 seconds
+/// after every connect, which needed a fingerprint of its own inputs to avoid
+/// re-walking — and that could not settle: the marker only armed after a pass
+/// that wrote nothing, and it lived in memory, so the first launch walked and
+/// wrote, the second walked again, and a cold start reset it. Every launch paid
+/// at least one full walk by design.
+///
+/// A button does not need any of that. A run the user asked for is allowed to
+/// take as long as it takes, which is why the ANR risk of decoding megabytes of
+/// JSON on the platform thread stopped being something to mitigate, and why the
+/// only short-circuit left is the honest one: every local game already linked.
+///
+/// It also fixes what the automatic pass could not. A mapping row is the gate
+/// for save sync, so a pass that wrote thousands of rows unattended enrolled
+/// games the user had never offered to the server. The confirmation dialog is
+/// where that is now stated, before anything is written.
 class RommLibraryLinker {
   static final _defaultLog = LoggerService.instance;
 
@@ -287,35 +286,6 @@ class RommLibraryLinker {
 
   static bool _neverStop() => false;
 
-  /// Fingerprint of the inputs the last *clean* pass ran against, or null when
-  /// there has not been one this session. See the class doc.
-  String? _lastCleanFingerprint;
-
-  /// Everything a pass would act on, reduced to one comparable string: the
-  /// unlinked half of the local library, the server's platforms with their ROM
-  /// counts, and what each platform resolved to locally.
-  ///
-  /// All three are needed. ROMs added locally change the library digest, ROMs
-  /// added to the server change a platform's count, and a platform that starts
-  /// resolving to a system changes the resolutions — miss any one and a pass
-  /// would be skipped with work left to do.
-  ///
-  /// The local half is order-insensitive (a sum of key hashes) because the
-  /// narrow library query is deliberately unordered; the platform half is
-  /// sorted by id so the server's own ordering cannot make two identical
-  /// libraries look different.
-  static String _fingerprint(
-    _LocalIndex index,
-    List<RommPlatform> platforms,
-    List<String> resolutions,
-  ) {
-    final ids = [for (final p in platforms) '${p.id}:${p.romCount}']..sort();
-    final resolved = [...resolutions]..sort();
-    return 'l${index.unlinkedCount}/${index.unlinkedDigest}'
-        '|p${ids.join(',')}'
-        '|s${resolved.join(',')}';
-  }
-
   /// True while [run] is in progress.
   bool get isRunning => _running;
 
@@ -328,7 +298,15 @@ class RommLibraryLinker {
   /// the platforms, or to resolve a platform to a system ends the run, since
   /// nothing can be matched without them, and is rethrown wrapped with
   /// context for the scheduler to log.
-  Future<RommLinkPassSummary> run() async {
+  /// Reports progress as `(platformsDone, platformsTotal, systemName)`.
+  ///
+  /// Called once per platform, after it has been paged. The pass is now
+  /// user-initiated and can run for minutes, so the caller needs something to
+  /// put on a progress row; [run] itself stays UI-free and simply hands out
+  /// the numbers it already has.
+  Future<RommLinkPassSummary> run({
+    void Function(int done, int total, String system)? onProgress,
+  }) async {
     if (_running) {
       _log.w('RomM link pass skipped: a pass is already running');
       return const RommLinkPassSummary();
@@ -336,7 +314,7 @@ class RommLibraryLinker {
     _running = true;
     final started = _clock();
     try {
-      final summary = await _run(started);
+      final summary = await _run(started, onProgress);
       _logSummary(summary);
       return summary;
     } finally {
@@ -344,7 +322,10 @@ class RommLibraryLinker {
     }
   }
 
-  Future<RommLinkPassSummary> _run(DateTime started) async {
+  Future<RommLinkPassSummary> _run(
+    DateTime started,
+    void Function(int done, int total, String system)? onProgress,
+  ) async {
     final _LocalIndex index;
     try {
       index = _LocalIndex.build(await _listGames(), await _loadRomIdIndex());
@@ -366,16 +347,11 @@ class RommLibraryLinker {
     }
 
     // Group platforms by the local system they resolve to, in server order.
-    // Resolution is a local, cached lookup — it costs no request — so it runs
-    // before the unchanged check and feeds it: a platform that resolves
-    // differently than last time (an alias arriving with a systems update, a
-    // systems table that was briefly unreadable) is a changed input.
+    // Resolution is a local, cached lookup, so it costs no request.
     final groups = <String, _SystemGroup>{};
     final unresolvedSlugs = <String>[];
-    final resolutions = <String>[];
     for (final platform in platforms) {
       final system = await _resolveOrThrow(platform);
-      resolutions.add('${platform.id}:${system?.folderName ?? '-'}');
       if (system == null) {
         unresolvedSlugs.add(platform.slug);
         continue;
@@ -384,26 +360,6 @@ class RommLibraryLinker {
           .putIfAbsent(system.folderName, () => _SystemGroup(system))
           .platforms
           .add(platform);
-    }
-
-    // Nothing has moved since the last pass that finished cleanly, so a walk
-    // would ask every platform the same question and write nothing. This is
-    // the check that makes a reconnect cheap on a mixed library, where the
-    // "every local game is linked" short-circuit above never fires.
-    final fingerprint = _fingerprint(index, platforms, resolutions);
-    if (fingerprint == _lastCleanFingerprint) {
-      _log.i(
-        'RomM link pass skipped: nothing changed since the last complete '
-        'pass (${index.unlinkedCount} unlinked of ${index.size} local games, '
-        '${platforms.length} platforms, library read in '
-        '${indexRead.inMilliseconds} ms)',
-      );
-      return RommLinkPassSummary(
-        libraryRows: index.size,
-        libraryReadMs: indexRead.inMilliseconds,
-        unchanged: true,
-        elapsed: _clock().difference(started),
-      );
     }
 
     var processed = 0, failures = 0, enumerated = 0;
@@ -443,6 +399,11 @@ class RommLibraryLinker {
         switch (result) {
           case _PageResult.completed:
             processed++;
+            onProgress?.call(
+              processed,
+              platforms.length,
+              group.system.realName,
+            );
             for (final entry in platformClaims.entries) {
               claims.putIfAbsent(entry.key, () => {}).addAll(entry.value);
             }
@@ -553,21 +514,6 @@ class RommLibraryLinker {
       }
     }
 
-    // Only a pass that saw the whole server and found nothing to write may
-    // license skipping the next one. A stop, a platform that threw, a group
-    // held back or a failed write all leave work for the next connect — and a
-    // pass that *did* write rows has changed its own inputs, so the
-    // fingerprint it computed describes a state that will not recur. The
-    // steady state is therefore reached one pass after the last one that
-    // linked anything, which is the pass that proves there is nothing left.
-    final clean =
-        !stopped &&
-        failures == 0 &&
-        groupsSkipped == 0 &&
-        writeFailures == 0 &&
-        added == 0;
-    _lastCleanFingerprint = clean ? fingerprint : null;
-
     return RommLinkPassSummary(
       libraryRows: index.size,
       libraryReadMs: indexRead.inMilliseconds,
@@ -668,10 +614,6 @@ class RommLibraryLinker {
   /// `link pass: skipped` because the log redactor treats `pass:` as a
   /// credential key and blanks whatever follows it.
   void _logSummary(RommLinkPassSummary s) {
-    // A pass that short-circuited on the unchanged check has already said so,
-    // with the numbers that decided it; a second line of zeroes would only
-    // read as a pass that walked the server and found nothing.
-    if (s.unchanged) return;
     final buffer = StringBuffer(
       'RomM link pass ${s.stoppedEarly ? 'stopped early' : 'complete'}: '
       '${s.platformsProcessed} platforms processed, '
@@ -791,13 +733,7 @@ class _LocalIndex {
   final Map<String, _LocalGame> _byKey;
   final int unlinkedCount;
 
-  /// Order-insensitive digest of the *unlinked* games' keys, for the
-  /// unchanged-since-last-pass fingerprint. Order-insensitive because the
-  /// narrow library query is unordered; unlinked-only because a game that
-  /// already has a row cannot change what a pass would write.
-  final int unlinkedDigest;
-
-  const _LocalIndex._(this._byKey, this.unlinkedCount, this.unlinkedDigest);
+  const _LocalIndex._(this._byKey, this.unlinkedCount);
 
   /// Distinct local files indexed, for the summary log.
   int get size => _byKey.length;
@@ -808,7 +744,6 @@ class _LocalIndex {
   static _LocalIndex build(List<RommLinkRow> games, RommRomIdIndex romIds) {
     final byKey = <String, _LocalGame>{};
     var unlinked = 0;
-    var digest = 0;
     for (final game in games) {
       final folder = game.systemFolder;
       final filename = game.filename;
@@ -830,9 +765,6 @@ class _LocalIndex {
       }
       if (existingRomId == null) {
         unlinked++;
-        // Sum rather than combine: addition is commutative, so the digest does
-        // not depend on the order the rows came back in.
-        digest = (digest + key.hashCode) & 0x3fffffff;
       }
       byKey[key] = _LocalGame(
         filename: filename,
@@ -844,7 +776,7 @@ class _LocalIndex {
             : romIds.sourceFor(spelling, folder),
       );
     }
-    return _LocalIndex._(byKey, unlinked, digest);
+    return _LocalIndex._(byKey, unlinked);
   }
 
   /// The indexed file named [normalizedName] under [normalizedFolder].

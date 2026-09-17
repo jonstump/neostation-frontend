@@ -231,7 +231,13 @@ void main() {
   });
 
   group('importMetadataIfMissing', () {
-    test('does nothing when the game already has metadata', () async {
+    // Renamed: there are two gates now, not one. The row write and the artwork
+    // import overwrite different things — `saveGameMetadata` is a whole-row
+    // writer that replaces a curated row, and `_saveRommMedia` overwrites the
+    // asset and deletes its other extensions — so a single "has a metadata
+    // row" gate ran both or neither. A game scraped by ScreenScraper but
+    // carrying no metadata row used to lose its art to an A press.
+    test('leaves curated metadata alone when a row already exists', () async {
       await put('snes', 'a.sfc');
       await ScraperRepository.saveGameMetadata({
         'filename': 'a.sfc',
@@ -241,14 +247,17 @@ void main() {
       final rom = _rom(1, 'a.sfc');
       final copy = (await provider.findLocalCopy(rom, romFolders))!;
 
-      // No file provider is needed on this path — nothing is fetched, which
-      // is also why the test can run without a server.
-      expect(
-        await provider.importMetadataIfMissing(rom, copy, FileProvider()),
-        isFalse,
-      );
+      // The call may still run the media half — this fixture has no artwork on
+      // disk — so the return value is not what is under test here. What must
+      // hold is that the row is untouched.
+      await provider.importMetadataIfMissing(rom, copy, FileProvider());
+
       final row = await ScraperRepository.getGameMetadata('snes', 'a.sfc');
-      expect(row?['real_name'], 'Curated by hand');
+      expect(
+        row?['real_name'],
+        'Curated by hand',
+        reason: 'the metadata gate is the row, and the row exists',
+      );
     });
   });
 }

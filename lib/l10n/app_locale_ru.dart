@@ -287,6 +287,17 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.cleanOrphanedMetadataFailed:
       'Не удалось очистить потерянные метаданные: {error}',
   AppLocale.rematchAchievements: 'Сопоставить игры RetroAchievements',
+  AppLocale.rommLinkLibrary: 'Связать библиотеку с RomM',
+  AppLocale.rommLinkLibrarySubtitle:
+      'Сопоставить локальные ROM с сервером RomM и связать их',
+  AppLocale.rommLinkLibraryWarning:
+      'Действие обходит каждую платформу на вашем сервере RomM и связывает распознанные локальные ROM.\n\nСвязанные игры становятся доступны для синхронизации сохранений, поэтому их сохранения начнут выгружаться в RomM. На большой библиотеке это может занять несколько минут.',
+  AppLocale.rommLinkLibraryPreparing: 'Подготовка…',
+  AppLocale.rommLinkLibraryProgress: '{done} из {total} — {system}',
+  AppLocale.rommLinkLibraryDone: 'Связано игр: {count}',
+  AppLocale.rommLinkLibraryNothingToDo: 'Нечего связывать',
+  AppLocale.rommLinkLibraryFailed: 'Не удалось связать',
+  AppLocale.rommLinkLibraryUnavailable: 'Сейчас недоступно',
   AppLocale.rematchAchievementsSubtitle:
       'Проверяет всю библиотеку на наличие наборов достижений, а не по одной игре',
   AppLocale.rematchAchievementsWarning:
