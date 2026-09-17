@@ -281,6 +281,17 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.cleanOrphanedMetadataFailed:
       'Failed to clean orphaned metadata: {error}',
   AppLocale.rematchAchievements: 'Match RetroAchievements Games',
+  AppLocale.rommLinkLibrary: 'Link library to RomM',
+  AppLocale.rommLinkLibrarySubtitle:
+      'Match local ROMs against your RomM server and link them',
+  AppLocale.rommLinkLibraryWarning:
+      'This walks every platform on your RomM server and links local ROMs it recognises.\n\nLinked games become eligible for save sync, so their saves will begin uploading to RomM. On a large library this can take several minutes.',
+  AppLocale.rommLinkLibraryPreparing: 'Preparing…',
+  AppLocale.rommLinkLibraryProgress: '{done} of {total} — {system}',
+  AppLocale.rommLinkLibraryDone: 'Linked {count} games',
+  AppLocale.rommLinkLibraryNothingToDo: 'Nothing new to link',
+  AppLocale.rommLinkLibraryFailed: 'Linking failed',
+  AppLocale.rommLinkLibraryUnavailable: 'Not available right now',
   AppLocale.rematchAchievementsSubtitle:
       'Check your whole library for achievement sets, instead of one game at a time',
   AppLocale.rematchAchievementsWarning:

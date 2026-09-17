@@ -102,7 +102,9 @@ class _FakeLinker extends RommLibraryLinker {
   void release() => _gate?.complete();
 
   @override
-  Future<RommLinkPassSummary> run() async {
+  Future<RommLinkPassSummary> run({
+    void Function(int done, int total, String system)? onProgress,
+  }) async {
     runs++;
     events.add('link');
     final gate = _gate;
@@ -220,61 +222,6 @@ void main() {
       persist: (_) async {},
     );
   }
-
-  group('on connect', () {
-    test('the pass runs, then the sweep', () async {
-      await build();
-      browse.goOnline();
-      await pumpEventQueue();
-
-      expect(events, ['link', 'sweep']);
-    });
-
-    test('a bulk ROM sync in progress skips the pass', () async {
-      await build();
-      final firstPage = Completer<RommRomPage>();
-      final sync = browse.bulkSync.run(
-        sourceLabel: 'SNES',
-        fetchPage: ({required limit, required offset}) => firstPage.future,
-        isDownloaded: (_) async => false,
-        download: (_) async => throw UnimplementedError(),
-      );
-      expect(browse.bulkSync.isRunning, isTrue);
-
-      browse.goOnline();
-      await pumpEventQueue();
-
-      expect(linker.runs, 0);
-      expect(events, isEmpty);
-      // The sweep's own guard fires first and names the reason; the pass is
-      // never reached, so nothing else needs to say it again.
-      final skipped = LoggerService.instance.takeCapture().where(
-        (l) => l.contains('a bulk ROM sync is running'),
-      );
-      expect(skipped, hasLength(1), reason: 'one log line says why');
-
-      firstPage.complete(const RommRomPage(items: []));
-      await sync;
-    });
-
-    test('a disconnect before the delay elapses skips everything', () async {
-      await build();
-      browse.goOnline();
-      browse.connected = false;
-      await pumpEventQueue();
-
-      expect(linker.runs, 0);
-      expect(events, isEmpty);
-    });
-
-    test('a connected provider at construction runs the pass too', () async {
-      browse.connected = true;
-      await build();
-      await pumpEventQueue();
-
-      expect(events, ['link', 'sweep']);
-    });
-  });
 
   group('linkLibrary', () {
     test('the linked games are invalidated once, not per game', () async {
@@ -396,18 +343,32 @@ void main() {
       },
     );
 
-    test('a dispose mid-pass is not followed by a sweep', () async {
-      await build();
-      linker.hold();
-      browse.goOnline();
-      await pumpEventQueue();
-      expect(events, ['link']);
+    test('a pass finishing after dispose neither notifies nor throws', () async {
+      // Rewritten from "a dispose mid-pass is not followed by a sweep", whose
+      // premise was the connect path running the pass before the sweep. The
+      // pass is user-initiated now, which makes this case *more* likely rather
+      // than less: it runs for minutes on a large library and the user is free
+      // to leave Settings while it does.
+      await build(autoSweep: false);
+      browse.connected = true;
+      linker.result = const RommLinkPassSummary(
+        rowsAdded: 1,
+        linkedRomnames: ['A'],
+      );
+      var notifications = 0;
+      provider.addListener(() => notifications++);
 
+      linker.hold();
+      final pending = provider.linkLibrary();
       provider.dispose();
       linker.release();
-      await pumpEventQueue();
 
-      expect(events, ['link'], reason: 'the sweep never started');
+      await expectLater(pending, completes);
+      expect(
+        notifications,
+        0,
+        reason: 'notifyListeners on a disposed ChangeNotifier throws',
+      );
     });
   });
 }

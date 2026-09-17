@@ -13,7 +13,7 @@ enum RommLinkSource {
   /// Written when the ROM was downloaded from RomM.
   download('download'),
 
-  /// Written by the "already downloaded" paths and the connect-time pass.
+  /// Written by the "already downloaded" paths and the library link pass.
   auto('auto'),
 
   /// Written by the per-game picker; protected from every other writer.
@@ -79,7 +79,7 @@ class RommRomIdIndex {
   final Map<String, int> _byKey;
 
   /// Provenance per key, for callers that need to tell a manual row apart
-  /// (the connect-time pass reports them as conflicts). Keys missing here
+  /// (the library link pass reports them as conflicts). Keys missing here
   /// read as [RommLinkSource.auto], so an index built from ids alone — the
   /// shape tests construct — behaves like a table of legacy null rows.
   final Map<String, RommLinkSource> _sourceByKey;

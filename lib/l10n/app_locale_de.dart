@@ -292,6 +292,17 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.cleanOrphanedMetadataFailed:
       'Fehler beim Bereinigen verwaister Metadaten: {error}',
   AppLocale.rematchAchievements: 'RetroAchievements-Spiele zuordnen',
+  AppLocale.rommLinkLibrary: 'Bibliothek mit RomM verknüpfen',
+  AppLocale.rommLinkLibrarySubtitle:
+      'Lokale ROMs mit deinem RomM-Server abgleichen und verknüpfen',
+  AppLocale.rommLinkLibraryWarning:
+      'Dies durchsucht jede Plattform auf deinem RomM-Server und verknüpft erkannte lokale ROMs.\n\nVerknüpfte Spiele werden für die Spielstand-Synchronisierung freigegeben, ihre Spielstände werden also zu RomM hochgeladen. Bei einer großen Bibliothek kann das mehrere Minuten dauern.',
+  AppLocale.rommLinkLibraryPreparing: 'Wird vorbereitet…',
+  AppLocale.rommLinkLibraryProgress: '{done} von {total} — {system}',
+  AppLocale.rommLinkLibraryDone: '{count} Spiele verknüpft',
+  AppLocale.rommLinkLibraryNothingToDo: 'Nichts Neues zu verknüpfen',
+  AppLocale.rommLinkLibraryFailed: 'Verknüpfen fehlgeschlagen',
+  AppLocale.rommLinkLibraryUnavailable: 'Derzeit nicht verfügbar',
   AppLocale.rematchAchievementsSubtitle:
       'Durchsucht die gesamte Bibliothek nach Achievement-Sets, statt Spiel für Spiel',
   AppLocale.rematchAchievementsWarning:

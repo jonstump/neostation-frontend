@@ -383,9 +383,13 @@ void main() {
       expect(sync.linked, 0);
     });
 
-    // A source with nothing to fetch asks no question — there is no size to
-    // approve — so the links the user's sync found are the whole job.
-    test('with nothing to download the links are still written', () async {
+    // Inverted, with its reasoning. It used to assert the links were written
+    // straight through on the grounds that there was no size to approve — but
+    // the size was never the only thing being approved. A mapping row is the
+    // gate for save sync, so syncing a platform already held entirely would
+    // enrol every ROM on it with no dialog and no cancel. It was the one path
+    // that wrote rows with no preview at all.
+    test('with nothing to download the links are still confirmed', () async {
       final all = [_rom(1), _rom(2)];
       final writer = _FakeLinkWriter();
       var confirmed = false;
@@ -405,12 +409,39 @@ void main() {
         concurrency: 1,
       );
 
-      expect(confirmed, isFalse, reason: 'nothing to price');
+      expect(
+        confirmed,
+        isTrue,
+        reason: 'rows that gate save sync are a proposal, not a side effect',
+      );
       expect(sync.linked, 2);
     });
 
+    test('with nothing to download, declining writes nothing', () async {
+      // The half that matters. Asking is only worth anything if "no" is
+      // honoured, and a row written here would have enrolled the game for save
+      // sync on the strength of a dialog the user rejected.
+      final writer = _FakeLinkWriter();
+      final sync = RommBulkSync();
+
+      await sync.run(
+        sourceLabel: 'SNES',
+        fetchPage: _pagesOver([_rom(1), _rom(2)]),
+        isDownloaded: (_) async => true,
+        resolveLink: (rom) async => _pending(rom),
+        writeLinks: writer.write,
+        download: (rom) async => _completed(rom),
+        confirm: (_) async => false,
+        concurrency: 1,
+      );
+
+      expect(writer.calls, isEmpty);
+      expect(sync.linked, 0);
+      expect(sync.declined, isTrue);
+    });
+
     // One transaction per ROM in the phase the confirmation is waiting on is
-    // what the connect-time pass already avoids by batching.
+    // what the library link pass already avoids by batching.
     test('every approved link is written in one call', () async {
       final all = [for (var i = 0; i < 25; i++) _rom(i)];
       final writer = _FakeLinkWriter();
