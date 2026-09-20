@@ -300,6 +300,7 @@ void main() {
         romname: 'game.sfc',
         systemFolder: 'snes',
         rommRomId: 7,
+        source: RommLinkSource.download,
       );
 
       // Half an hour of play, then the device slept overnight before exit.
