@@ -30,6 +30,27 @@ The RomM tab draws ROM tiles from the server's small cached cover, decoded at ti
 - **WHEN** a ROM has only `url_cover`
 - **THEN** the tile requests the provider URL and nothing else
 
+### Requirement: Bounded Cover Fetching
+
+Tile covers MUST be fetched through `RommService`'s own HTTP client under a shared concurrency bound, not through Flutter's process-wide `HttpClient` by way of `Image.network`/`NetworkImage`, which has no per-host connection limit and no production hook to give it one. A screenful of tiles MUST NOT be able to open one connection per tile to the RomM server, because those connections compete with the API request fetching the next page of games on the same host.
+
+`RommService` SHALL remember, for the current server only, cover URLs that answered with nothing, and tiles MUST skip a remembered dead URL rather than re-request it. The memory MUST be cleared when the service is reconfigured, so a different server — or a reconnect after the server has filled the gaps — is asked again. It MUST live in memory only, leaving REQ "In-Memory Cache Only" intact.
+
+#### Scenario: A screenful of tiles
+
+- **WHEN** forty tiles ask for their covers at once
+- **THEN** no more than the bound are in flight at any moment, and every one of them still completes
+
+#### Scenario: Scrolling back to a coverless ROM
+
+- **WHEN** a ROM whose first cover source 404s is scrolled past, disposed, and scrolled back to
+- **THEN** the tile goes straight to the next source instead of re-requesting the dead one
+
+#### Scenario: Pointing at a different server
+
+- **WHEN** the service is reconfigured for another RomM instance
+- **THEN** URLs remembered as dead on the previous server are forgotten
+
 ### Requirement: Decode At Tile Size
 
 Tiles MUST request the cover with a decode width equal to the tile's logical width times the device pixel ratio, rounded up, so the decoded bitmap is no larger than what is drawn, and MUST keep the previous image on screen while a recycled tile loads a new one. The calculation MUST be a pure function with a test.
