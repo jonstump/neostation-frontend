@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart' show visibleForTesting;
+import 'package:flutter/foundation.dart' show immutable, visibleForTesting;
 import 'package:http/http.dart' as http;
 import 'package:http/io_client.dart';
 import 'package:path/path.dart' as path;
@@ -297,6 +297,48 @@ class _RommUnreadableResponse implements Exception {
   String toString() =>
       'the server answered $statusCode but the response could not be read: '
       '$message';
+}
+
+/// Why [RommService.fetchImage] came back without bytes.
+///
+/// The distinction exists because the cover grid *acts* on it: an [absent]
+/// source is remembered and never asked for again this session, while an
+/// [unreachable] one stays retryable. Collapsing the two — which is what a
+/// bare `null` return does — means one Wi-Fi blip or one server restart
+/// blacklists every cover that happened to be in flight, and the grid stays on
+/// grey placeholders until the app is restarted.
+// Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Bounded Cover Fetching"
+enum RommImageMiss {
+  /// The server answered, and there is nothing behind this URL: a `404`/`410`,
+  /// or a `200` whose body is not an image (RomM falls through to its SPA
+  /// shell for a resource path it no longer has a file for). Asking again
+  /// cannot change the answer until the server itself changes.
+  absent,
+
+  /// No usable answer arrived: a timeout, a socket or TLS failure, a `5xx`, a
+  /// `401`/`403`. Says nothing about whether the image exists, so it must stay
+  /// retryable.
+  unreachable,
+}
+
+/// The result of [RommService.fetchImage]: the bytes, or why there are none.
+@immutable
+class RommImageFetch {
+  /// A successful fetch.
+  const RommImageFetch.found(Uint8List this.bytes) : miss = null;
+
+  /// A fetch that produced nothing, and why.
+  const RommImageFetch.missing(RommImageMiss this.miss) : bytes = null;
+
+  /// The image bytes, or null when [miss] is set.
+  final Uint8List? bytes;
+
+  /// Why there are no [bytes], or null on success.
+  final RommImageMiss? miss;
+
+  /// Whether the server gave a definite negative answer — the only case a
+  /// caller may treat as permanent.
+  bool get isAbsent => miss == RommImageMiss.absent;
 }
 
 /// HTTP client for a remote RomM server (library browse + ROM download).
@@ -608,6 +650,47 @@ class RommService {
   String? get refreshToken => _refreshToken;
   int? get tokenExpiresMs => _tokenExpiresMs;
 
+  /// Cover URLs this server answered nothing for, so a tile does not re-ask
+  /// for a dead end every time it is rebuilt.
+  ///
+  /// The grid keeps two rows either side of the viewport built and disposes
+  /// the rest, so scrolling away and back gives a tile a fresh `State` with
+  /// its candidate index at zero. For a library where RomM never cached small
+  /// thumbnails that meant re-requesting the same 404 on every scrollback.
+  ///
+  /// Only a [RommImageMiss.absent] answer belongs here — see [markDeadCover].
+  ///
+  /// On the service rather than in a static because it is a fact about *this
+  /// server*: [configure] clears it, so pointing at a different RomM — or
+  /// reconnecting after a rescan that filled the gaps — asks again. In memory
+  /// only; nothing is written to disk, so the memory-only cover policy holds.
+  // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Bounded Cover Fetching"
+  final Set<String> _deadCovers = <String>{};
+
+  /// Ceiling on [_deadCovers], so the set cannot grow with the library.
+  ///
+  /// Worst case is one entry per candidate per ROM — three times the library
+  /// size on a server that cached no covers at all — which is megabytes of
+  /// strings on a handheld for a purely advisory optimisation. Past the cap we
+  /// simply stop remembering; the overflow behaves the way everything did
+  /// before this existed, which is a slower grid rather than a broken one.
+  static const int maxRememberedDeadCovers = 4096;
+
+  /// Whether [url] already answered with nothing for the current server.
+  bool isDeadCover(String url) => _deadCovers.contains(url);
+
+  /// Records that [url] has no image behind it on this server.
+  ///
+  /// Callers MUST only pass a [RommImageMiss.absent] outcome. A timeout, a
+  /// socket/TLS failure or a `5xx` is the server being unreachable, not the
+  /// cover being missing, and remembering those would turn a Wi-Fi blip into a
+  /// permanently grey grid.
+  // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Bounded Cover Fetching"
+  void markDeadCover(String url) {
+    if (_deadCovers.length >= maxRememberedDeadCovers) return;
+    _deadCovers.add(url);
+  }
+
   /// Configures the connection. [serverUrl] may include or omit a scheme and
   /// trailing slash; it is normalized to `scheme://host[:port]` with no
   /// trailing slash.
@@ -616,27 +699,6 @@ class RommService {
   /// both are somehow given, and puts the service in API-key mode where the
   /// [accessToken]/[refreshToken]/[tokenExpiresMs] restore arguments are
   /// meaningless and ignored.
-  /// Cover URLs this server answered with nothing, so a tile does not re-ask
-  /// for a dead end every time it is rebuilt.
-  ///
-  /// The grid keeps two rows either side of the viewport built and disposes
-  /// the rest, so scrolling away and back gives a tile a fresh `State` with
-  /// its candidate index at zero. For a library where RomM never cached small
-  /// thumbnails that meant re-requesting the same 404 on every scrollback.
-  ///
-  /// On the service rather than in a static because it is a fact about *this
-  /// server*: [configure] clears it, so pointing at a different RomM — or
-  /// reconnecting after a rescan that filled the gaps — asks again. In memory
-  /// only; nothing is written to disk, so the memory-only cover policy holds.
-  // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Tile Cover Source Order"
-  final Set<String> _deadCovers = <String>{};
-
-  /// Whether [url] already answered with nothing for the current server.
-  bool isDeadCover(String url) => _deadCovers.contains(url);
-
-  /// Records that [url] had no usable image behind it.
-  void markDeadCover(String url) => _deadCovers.add(url);
-
   void configure({
     required String serverUrl,
     String username = '',
@@ -2454,15 +2516,37 @@ class RommService {
   /// but renders as nothing — and would hide the miss from any caller trying a
   /// second source. Video fetches pass `requireImage: false`.
   ///
-  /// With [quiet] a miss is logged at debug rather than warning: the cover
-  /// cache walks a candidate list where a 404 on the first entry is the
-  /// expected way to reach the second, and retries on the next render.
+  /// With [quiet] an *expected* miss is logged at debug rather than warning:
+  /// the cover cache walks a candidate list where a 404 on the first entry is
+  /// the documented way to reach the second. [quiet] never applies to a
+  /// [RommImageMiss.unreachable] outcome — the production logger runs at
+  /// `Level.info` with a level-gating filter, so a debug line is dropped
+  /// outright and a TLS error or a timeout on a cover would leave no trace at
+  /// all in a support log.
   Future<Uint8List?> fetchImageBytes(
     String pathOrUrl, {
     bool requireImage = true,
     bool quiet = false,
+  }) async => (await fetchImage(
+    pathOrUrl,
+    requireImage: requireImage,
+    quiet: quiet,
+  )).bytes;
+
+  /// [fetchImageBytes], but saying *why* there are no bytes.
+  ///
+  /// Callers that cache a negative answer need the distinction: only a
+  /// [RommImageMiss.absent] result means "the server answered and there is
+  /// nothing here". Everything else is the server being out of reach, and a
+  /// caller that treats those alike turns a roaming handheld's momentary
+  /// blackout into a permanent one.
+  // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Bounded Cover Fetching"
+  Future<RommImageFetch> fetchImage(
+    String pathOrUrl, {
+    bool requireImage = true,
+    bool quiet = false,
   }) async {
-    void miss(String message) => quiet ? _log.d(message) : _log.w(message);
+    void absent(String message) => quiet ? _log.d(message) : _log.w(message);
     try {
       final url = pathOrUrl.startsWith('http')
           ? pathOrUrl
@@ -2471,22 +2555,36 @@ class RommService {
           .get(Uri.parse(url), headers: imageHeadersFor(url))
           .timeout(const Duration(seconds: 30));
       if (resp.statusCode != 200) {
-        miss('RomM image fetch: HTTP ${resp.statusCode} for $url');
-        return null;
+        // 404/410 are the server saying the file is not there. Anything else
+        // — 5xx while it restarts, 401/403 before a token refresh, a proxy's
+        // 502 — says nothing about the image, so it stays retryable.
+        final gone = resp.statusCode == 404 || resp.statusCode == 410;
+        final message = 'RomM image fetch: HTTP ${resp.statusCode} for $url';
+        if (gone) {
+          absent(message);
+          return const RommImageFetch.missing(RommImageMiss.absent);
+        }
+        _log.w(message);
+        return const RommImageFetch.missing(RommImageMiss.unreachable);
       }
       final bytes = resp.bodyBytes;
       if (requireImage && !looksLikeImage(bytes)) {
-        miss('RomM image fetch: non-image body for $url');
-        return null;
+        // A 200 that isn't an image is still a definite answer: RomM served
+        // its SPA shell because it has no file for this path.
+        absent('RomM image fetch: non-image body for $url');
+        return const RommImageFetch.missing(RommImageMiss.absent);
       }
-      return bytes;
+      return RommImageFetch.found(bytes);
     } catch (e) {
+      // Timeouts, SocketException, TLS handshake failures. Never demoted to
+      // debug: `quiet` exists to mute expected candidate misses, not to hide
+      // transport failures from the support log.
       if (quiet) {
-        _log.d('RomM image fetch failed: $e');
+        _log.w('RomM image fetch failed: $e');
       } else {
         _log.e('RomM image fetch failed: $e');
       }
-      return null;
+      return const RommImageFetch.missing(RommImageMiss.unreachable);
     }
   }
 

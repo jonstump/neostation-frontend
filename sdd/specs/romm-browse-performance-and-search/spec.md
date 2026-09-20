@@ -34,7 +34,7 @@ The RomM tab draws ROM tiles from the server's small cached cover, decoded at ti
 
 Tile covers MUST be fetched through `RommService`'s own HTTP client under a shared concurrency bound, not through Flutter's process-wide `HttpClient` by way of `Image.network`/`NetworkImage`, which has no per-host connection limit and no production hook to give it one. A screenful of tiles MUST NOT be able to open one connection per tile to the RomM server, because those connections compete with the API request fetching the next page of games on the same host.
 
-`RommService` SHALL remember, for the current server only, cover URLs that answered with nothing, and tiles MUST skip a remembered dead URL rather than re-request it. The memory MUST be cleared when the service is reconfigured, so a different server — or a reconnect after the server has filled the gaps — is asked again. It MUST live in memory only, leaving REQ "In-Memory Cache Only" intact.
+`RommService` SHALL remember, for the current server only, cover URLs the server **answered with nothing** — a `404`/`410`, or a `200` whose body is not an image — and tiles MUST skip a remembered dead URL rather than re-request it. A request that got no such answer — a timeout, a socket or TLS failure, a `5xx`, an auth rejection — MUST NOT be remembered, because it says nothing about whether the cover exists: treating the two alike lets one roamed Wi-Fi connection or one server restart blacklist every cover in flight and leave the grid grey for the rest of the session. The fetch SHALL therefore report *why* it produced no bytes, not merely that it did. The memory MUST be cleared when the service is reconfigured, so a different server — or a reconnect after the server has filled the gaps — is asked again, MUST be bounded so it cannot grow with the library, and MUST live in memory only, leaving REQ "In-Memory Cache Only" intact.
 
 #### Scenario: A screenful of tiles
 
@@ -45,6 +45,11 @@ Tile covers MUST be fetched through `RommService`'s own HTTP client under a shar
 
 - **WHEN** a ROM whose first cover source 404s is scrolled past, disposed, and scrolled back to
 - **THEN** the tile goes straight to the next source instead of re-requesting the dead one
+
+#### Scenario: A blip while the grid loads
+
+- **WHEN** a cover request times out, drops its socket, or comes back `5xx`
+- **THEN** the URL stays retryable and the next scrollback asks for it again
 
 #### Scenario: Pointing at a different server
 

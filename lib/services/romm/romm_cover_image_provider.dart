@@ -75,17 +75,27 @@ class RommCoverImage extends ImageProvider<RommCoverImage> {
     ImageDecoderCallback decode,
   ) async {
     await _gate.acquire();
-    Uint8List? bytes;
+    final RommImageFetch result;
     try {
       // `quiet: true`: a 404 on the first candidate is the documented way to
       // reach the second (see `tileCoverUrlCandidates`), so a miss here is
       // expected traffic rather than something to warn about once per tile.
-      bytes = await key.service.fetchImageBytes(key.url, quiet: true);
+      // It does not mute transport failures — see `fetchImage`.
+      result = await key.service.fetchImage(key.url, quiet: true);
     } finally {
+      // `fetchImage` is written to be total, but "total" is a property of the
+      // callee that nothing here enforces; a slot leaked from this block wedges
+      // every cover in the app after `maxConcurrent` of them, permanently.
       _gate.release();
     }
+    final bytes = result.bytes;
     if (bytes == null || bytes.isEmpty) {
-      key.service.markDeadCover(key.url);
+      // Only a definite negative is remembered. A timeout, a dropped socket or
+      // a 5xx must stay retryable: a handheld that roams Wi-Fi mid-scroll
+      // would otherwise blacklist every cover that was in flight and leave the
+      // grid grey for the rest of the session.
+      // Governing: SPEC-0008 REQ "Bounded Cover Fetching"
+      if (result.isAbsent) key.service.markDeadCover(key.url);
       // The same shape `NetworkImage` fails with, so the card's existing
       // `errorBuilder` keeps working and still advances to the next candidate.
       throw NetworkImageLoadException(statusCode: 404, uri: Uri.parse(key.url));
@@ -93,6 +103,15 @@ class RommCoverImage extends ImageProvider<RommCoverImage> {
     return decode(await ui.ImmutableBuffer.fromUint8List(bytes));
   }
 
+  /// Equality is over [url] and [scale] only — deliberately *not* [service],
+  /// even though [_load] reads `key.service`.
+  ///
+  /// Including it would make two tiles pointing at the same URL two
+  /// `ImageCache` entries and two downloads. Excluding it is safe only because
+  /// `lib/` constructs exactly one [RommService] (`RommProvider._service`), so
+  /// every key for a given URL carries the same instance. If a second instance
+  /// ever appears, a cached completer could serve the first service's fetch —
+  /// fold `service` into `==`/`hashCode` at that point.
   @override
   bool operator ==(Object other) =>
       other is RommCoverImage && other.url == url && other.scale == scale;
