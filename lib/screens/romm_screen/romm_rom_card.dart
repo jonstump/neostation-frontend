@@ -103,7 +103,6 @@ class RommRomCardState extends State<RommRomCard> {
     // State, so a tile disposed by the grid's cache extent and scrolled back
     // to starts again at zero — without this it re-requests the same dead
     // URL on every scrollback, for the life of the library.
-    // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Tile Cover Source Order"
     var attempt = _coverAttempt;
     while (attempt < covers.length &&
         widget.provider.service.isDeadCover(covers[attempt])) {
@@ -453,17 +452,16 @@ class RommRomCardState extends State<RommRomCard> {
     );
   }
 
-  /// Advances to the next cover source after a failed load, on the next frame
-  /// — `errorBuilder` runs *during* build, where `setState` is illegal. Guarded
+  /// Advances past the candidate that just failed, on the next frame —
+  /// `errorBuilder` runs *during* build, where `setState` is illegal. Guarded
   /// on the attempt that failed so repeated error frames for the same source
   /// only skip it once.
-  /// Advances past the candidate that just failed.
   ///
   /// This moves [_coverAttempt] on by one rather than to the index actually
-  /// drawn, which can be further along when the skip loop in `build` stepped
-  /// over dead sources. That still converges: the failure is recorded in
-  /// the service's dead-cover set first, so the next build's skip loop walks
-  /// past it and every other known-dead entry in one go.
+  /// drawn, which can be further along when the skip loop in [build] stepped
+  /// over dead sources. That still converges: an absent cover is recorded in
+  /// the service's dead-cover set before the error frame, so the next build's
+  /// skip loop walks past it and every other known-dead entry in one go.
   void _tryNextCover() {
     final failed = _coverAttempt;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -534,7 +532,6 @@ class RommRomCardState extends State<RommRomCard> {
   /// the decode bound and the size-keyed `ImageCache` entry are unchanged — an
   /// unknown width (unbounded parent) skips the hint rather than decoding to a
   /// one-pixel bitmap, exactly as before.
-  // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Decode At Tile Size", REQ "Concurrency Safety"
   ImageProvider _coverProvider(
     String coverUrl,
     ({int? cacheWidth, int? cacheHeight}) hint,
