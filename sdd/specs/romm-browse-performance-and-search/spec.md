@@ -40,8 +40,13 @@ The bound MUST admit the most recently requested cover first. A scroll asks for 
 
 #### Scenario: A screenful of tiles
 
-- **WHEN** forty tiles ask for their covers at once
+- **WHEN** forty tiles ask for their covers at once and nothing further is requested
 - **THEN** no more than the bound are in flight at any moment, and every one of them still completes
+
+  (A bounded burst drains completely. Under an arrival stream that never stops — a
+  continuous scroll — newest-first admits the newest waiter, so an early one may wait
+  indefinitely; that is the deliberate trade of the ordering rule below, not a
+  violation of this scenario.)
 
 #### Scenario: Scrolling while the bound is saturated
 

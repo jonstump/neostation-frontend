@@ -15,10 +15,21 @@ import 'dart:async';
 /// what the user is looking at now.
 ///
 /// The trade is starvation: with a queue that never drains, an early waiter may
-/// wait indefinitely. That is acceptable *only* because a stale cover request
-/// losing its place costs nothing — the tile that wanted it is gone, and if it
-/// returns it simply asks again and goes to the front. Do not reach for this
-/// class for work that must complete.
+/// wait indefinitely. That is acceptable *only* because the waiters here are
+/// discardable — a browse tile that has scrolled away costs nothing by losing
+/// its place.
+///
+/// Note it does *not* self-correct by re-asking. A tile returning to a cover
+/// whose fetch is queued-but-unstarted does not acquire again and does not move
+/// to the front: `ImageCache.putIfAbsent` returns the pending completer without
+/// calling its loader (`image_cache.dart`, the `_pendingImages[key]` branch), so
+/// the original waiter keeps its place at the bottom of the stack. Scrolling
+/// down fast and back up can therefore leave the upper rows served after the
+/// whole backlog — the case FIFO would have handled better. Forward scrolling
+/// dominates and finished covers are cache hits, so this stays a clear win, but
+/// it is the shape of the loss rather than an absence of one.
+///
+/// Do not reach for this class for work that must complete.
 // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Bounded Cover Fetching"
 class LifoSemaphore {
   /// How many holders may be inside the guarded section at once.

@@ -18,6 +18,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'database_test_helper.dart';
 
+const _png = {'content-type': 'image/png'};
+
 /// Cover fetches are bounded and do not re-ask for dead sources.
 ///
 /// `Image.network` ran on Flutter's own process-wide `HttpClient`, separate
@@ -25,7 +27,6 @@ import 'database_test_helper.dart';
 /// grid tiles opened a socket each against the RomM server — competing with
 /// the request fetching the next page of games on the same host. On a large
 /// platform that is how the page request came to time out. Issue #531.
-const _png = {'content-type': 'image/png'};
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

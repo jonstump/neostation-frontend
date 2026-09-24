@@ -42,6 +42,14 @@ import '../romm_service.dart';
 /// `ImageCache` exactly as it did before, so SPEC-0008 REQ "In-Memory Cache
 /// Only" is unaffected — what changes is how the bytes are fetched, not where
 /// they are kept.
+///
+/// **Discardable surfaces only.** The gate below is newest-first, which trades
+/// away any guarantee that an early waiter is ever admitted — see
+/// [LifoSemaphore]. That is only safe because every caller today is a browse
+/// tile that can scroll away and be forgotten. A surface that must show its
+/// cover — a details screen's hero art, a picker the user is waiting on —
+/// should fetch through [RommService] directly rather than routing through
+/// this provider, as the other cover paths already do.
 // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Tile Cover Source Order", REQ "Concurrency Safety"
 @immutable
 class RommCoverImage extends ImageProvider<RommCoverImage> {
