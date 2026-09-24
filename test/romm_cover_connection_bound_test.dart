@@ -25,6 +25,8 @@ import 'database_test_helper.dart';
 /// grid tiles opened a socket each against the RomM server — competing with
 /// the request fetching the next page of games on the same host. On a large
 /// platform that is how the page request came to time out. Issue #531.
+const _png = {'content-type': 'image/png'};
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -192,6 +194,61 @@ void main() {
       await resolve(
         'https://romm.local/after-the-throws.png',
       ).timeout(const Duration(seconds: 5), onTimeout: () => fail('gate held'));
+    });
+  });
+
+  group('the queue serves what is on screen', () {
+    test('covers requested last are fetched first', () async {
+      // The symptom this guards: a fast scroll asks for every tile it passes,
+      // and under a fair FIFO queue the rows now on screen wait behind all of
+      // them. With a 30s timeout per fetch that is minutes of waiting for
+      // images nobody will look at.
+      final fetched = <String>[];
+      final gateOpen = Completer<void>();
+
+      RommService.debugUseHttpClient(
+        MockClient((request) async {
+          fetched.add(request.url.path);
+          // Hold every fetch open until the whole burst has queued, so the
+          // order below is the queue's doing and not a race on the network.
+          await gateOpen.future;
+          return http.Response.bytes(pngBytes, 200, headers: _png);
+        }),
+      );
+
+      // Saturate the gate, then queue more behind it — oldest first, the way
+      // a grid builds tiles as it scrolls.
+      final burst = <Future<void>>[];
+      for (var i = 0; i < RommCoverImage.maxConcurrent; i++) {
+        burst.add(resolve('https://romm.local/holder$i.png'));
+      }
+      await pumpEventQueue();
+      expect(
+        fetched.length,
+        RommCoverImage.maxConcurrent,
+        reason: 'the gate should be full before anything queues',
+      );
+
+      for (final name in ['scrolled-past', 'nearly-visible', 'on-screen']) {
+        burst.add(resolve('https://romm.local/$name.png'));
+      }
+      await pumpEventQueue();
+      expect(
+        fetched.length,
+        RommCoverImage.maxConcurrent,
+        reason: 'the three extra tiles must be waiting, not fetching',
+      );
+
+      gateOpen.complete();
+      await Future.wait(burst);
+
+      // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Bounded Cover Fetching"
+      final queued = fetched.sublist(RommCoverImage.maxConcurrent);
+      expect(queued, [
+        '/on-screen.png',
+        '/nearly-visible.png',
+        '/scrolled-past.png',
+      ]);
     });
   });
 

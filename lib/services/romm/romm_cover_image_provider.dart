@@ -4,7 +4,7 @@ import 'dart:ui' as ui;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 
-import '../../utils/semaphore.dart';
+import '../../utils/lifo_semaphore.dart';
 import '../romm_service.dart';
 
 /// An [ImageProvider] for a RomM cover, fetched through [RommService] under a
@@ -25,6 +25,19 @@ import '../romm_service.dart';
 /// paints the visible rows sooner than a burst that starts everything at once
 /// and finishes nothing.
 ///
+/// The queue is newest-first ([LifoSemaphore]), which matters as much as the
+/// bound. A scroll asks for every tile it passes, so under a fair FIFO queue
+/// the covers on screen would wait behind every tile already scrolled by — on
+/// a slow server, minutes of waiting for images nobody will look at. Serving
+/// the newest request first means the queue is always headed by whatever the
+/// user is looking at now.
+///
+/// Flutter gives no way to *cancel* the stale ones. `ImageCache` keeps its own
+/// listener on a pending completer for the whole load (`image_cache.dart`,
+/// `putIfAbsent`), so `addOnLastListenerRemovedCallback` cannot fire while a
+/// fetch is in flight and there is no supported signal for "no tile wants this
+/// any more". They therefore still run — just last, behind everything visible.
+///
 /// This writes nothing to disk. The decoded frame lives in Flutter's
 /// `ImageCache` exactly as it did before, so SPEC-0008 REQ "In-Memory Cache
 /// Only" is unaffected — what changes is how the bytes are fetched, not where
@@ -39,7 +52,7 @@ class RommCoverImage extends ImageProvider<RommCoverImage> {
   /// screen needs to keep working while covers load.
   static const int maxConcurrent = 5;
 
-  static final Semaphore _gate = Semaphore(maxConcurrent);
+  static final LifoSemaphore _gate = LifoSemaphore(maxConcurrent);
 
   /// The absolute cover URL, already resolved by
   /// [RommService.tileCoverUrlCandidates].

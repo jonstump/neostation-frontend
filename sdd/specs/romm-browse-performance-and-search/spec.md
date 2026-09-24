@@ -36,10 +36,17 @@ Tile covers MUST be fetched through `RommService`'s own HTTP client under a shar
 
 `RommService` SHALL remember, for the current server only, cover URLs the server **answered with nothing** — a `404`/`410`, or a `200` whose body is not an image — and tiles MUST skip a remembered dead URL rather than re-request it. A request that got no such answer — a timeout, a socket or TLS failure, a `5xx`, an auth rejection — MUST NOT be remembered, because it says nothing about whether the cover exists: treating the two alike lets one roamed Wi-Fi connection or one server restart blacklist every cover in flight and leave the grid grey for the rest of the session. The fetch SHALL therefore report *why* it produced no bytes, not merely that it did. The memory MUST be cleared when the service is reconfigured, so a different server — or a reconnect after the server has filled the gaps — is asked again, MUST be bounded so it cannot grow with the library, and MUST live in memory only, leaving REQ "In-Memory Cache Only" intact.
 
+The bound MUST admit the most recently requested cover first. A scroll asks for every tile it passes, so a fair FIFO queue puts the covers on screen behind every tile already scrolled by; with a 30-second fetch timeout that is minutes of waiting for images no longer being looked at.
+
 #### Scenario: A screenful of tiles
 
 - **WHEN** forty tiles ask for their covers at once
 - **THEN** no more than the bound are in flight at any moment, and every one of them still completes
+
+#### Scenario: Scrolling while the bound is saturated
+
+- **WHEN** more covers are requested than the bound allows in flight
+- **THEN** the ones requested most recently are fetched first
 
 #### Scenario: Scrolling back to a coverless ROM
 
