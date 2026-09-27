@@ -341,6 +341,28 @@ void main() {
       expect(service.isDeadCover('https://romm.local/present.png'), isFalse);
     });
 
+    test('a transient failure is re-fetched once the server is back', () async {
+      // Not remembering the miss is only half of it: `ImageCache` keeps a
+      // failed completer too, and would serve that error for the same URL on
+      // every later resolve unless the provider evicts it.
+      var calls = 0;
+      var up = false;
+      RommService.debugUseHttpClient(
+        MockClient((request) async {
+          calls++;
+          if (!up) throw const SocketException('down');
+          return http.Response.bytes(pngBytes, 200, headers: _png);
+        }),
+      );
+
+      await resolve('https://romm.local/back.png');
+      await pumpEventQueue();
+      up = true;
+      await resolve('https://romm.local/back.png');
+
+      expect(calls, 2, reason: 'the second resolve must reach the server');
+    });
+
     test('a different server forgets the last one\'s dead covers', () async {
       // The reason this lives on the service. A RomM that gains covers after a
       // rescan, or a switch to a different server, must not inherit the old
