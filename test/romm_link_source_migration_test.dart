@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:neostation/data/datasources/sqlite_migrations.dart';
 
-/// Tests for migration v158, which adds `app_romm_rom_map.link_source` — the
+/// Tests for migration v161, which adds `app_romm_rom_map.link_source` — the
 /// column that records which writer produced a RomM link row so a link the
 /// user picked by hand is never replaced by a download or the automatic pass.
 ///
@@ -31,18 +31,18 @@ void main() {
     db.close();
   });
 
-  Future<void> runV158() => SqliteMigrations.migrateToVersion(db, 158);
+  Future<void> runV161() => SqliteMigrations.migrateToVersion(db, 161);
 
   List<String> mapColumns() => db
       .select('PRAGMA table_info(app_romm_rom_map)')
       .map((c) => c['name'].toString())
       .toList();
 
-  group('migration v158', () {
+  group('migration v161', () {
     test('adds link_source when the column is missing', () async {
       expect(mapColumns(), isNot(contains('link_source')));
 
-      await runV158();
+      await runV161();
 
       expect(mapColumns(), contains('link_source'));
     });
@@ -55,7 +55,7 @@ void main() {
         "('Other.bin', 'megadrive', 40, NULL)",
       );
 
-      await runV158();
+      await runV161();
 
       final rows = db.select(
         'SELECT romname, system_folder, romm_rom_id, romm_fs_name, link_source '
@@ -88,7 +88,7 @@ void main() {
     test(
       'a row inserted after the migration defaults to a null source',
       () async {
-        await runV158();
+        await runV161();
         db.execute(
           "INSERT INTO app_romm_rom_map (romname, system_folder, romm_rom_id) "
           "VALUES ('Game.sfc', 'snes', 12)",
@@ -102,7 +102,7 @@ void main() {
     );
 
     test('stores each of the three sources', () async {
-      await runV158();
+      await runV161();
       db.execute(
         "INSERT INTO app_romm_rom_map "
         "(romname, system_folder, romm_rom_id, link_source) VALUES "
@@ -129,7 +129,7 @@ void main() {
         "VALUES ('Game.sfc', 'snes', 12, 'manual')",
       );
 
-      await runV158();
+      await runV161();
 
       // A device that already has the column keeps the recorded source.
       final rows = db.select(
@@ -149,9 +149,9 @@ void main() {
         "VALUES ('Game.sfc', 'snes', 12)",
       );
 
-      await runV158();
+      await runV161();
       final after = db.select('SELECT * FROM app_romm_rom_map');
-      await runV158();
+      await runV161();
 
       expect(mapColumns(), contains('link_source'));
       expect(mapColumns().where((c) => c == 'link_source').length, 1);
@@ -167,7 +167,7 @@ void main() {
       () async {
         db.execute('DROP TABLE app_romm_rom_map');
 
-        await runV158();
+        await runV161();
 
         expect(mapColumns(), contains('link_source'));
         expect(

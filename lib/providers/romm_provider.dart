@@ -2286,21 +2286,6 @@ class RommProvider extends ChangeNotifier {
     return '/assets/romm/resources/$s';
   }
 
-  /// Fetches the first of [sources] that yields usable bytes and writes it into
-  /// the [folder] media folder keyed by [indexedName], picking the on-disk
-  /// extension from the actual bytes (RomM serves JPEG even from `*.png` paths
-  /// and the library's lookup is extension-sensitive) unless [forcedExt] is
-  /// given. Removes stale variants in [siblingExts] so
-  /// `getImagePath`/`getVideoPath` resolve this one. No-op when every source is
-  /// empty or fetches nothing.
-  ///
-  /// Sources are tried in order because RomM's cached copy and the metadata
-  /// provider's original are the same artwork from two places, and a given
-  /// library may only have one of them.
-  ///
-  /// Failures are contained here rather than at the call site: the media types
-  /// are independent, and a single unwritable folder or dead URL must not cost
-  /// the caller every type queued behind it.
   /// Whether box art already exists on disk for [indexedName].
   ///
   /// Box art stands in for "this game has artwork": it is the one asset every
@@ -2325,6 +2310,21 @@ class RommProvider extends ChangeNotifier {
     return false;
   }
 
+  /// Fetches the first of [sources] that yields usable bytes and writes it into
+  /// the [folder] media folder keyed by [indexedName], picking the on-disk
+  /// extension from the actual bytes (RomM serves JPEG even from `*.png` paths
+  /// and the library's lookup is extension-sensitive) unless [forcedExt] is
+  /// given. Removes stale variants in [siblingExts] so
+  /// `getImagePath`/`getVideoPath` resolve this one. No-op when every source is
+  /// empty or fetches nothing.
+  ///
+  /// Sources are tried in order because RomM's cached copy and the metadata
+  /// provider's original are the same artwork from two places, and a given
+  /// library may only have one of them.
+  ///
+  /// Failures are contained here rather than at the call site: the media types
+  /// are independent, and a single unwritable folder or dead URL must not cost
+  /// the caller every type queued behind it.
   Future<void> _saveRommMedia(
     List<String?> sources,
     String folder,
