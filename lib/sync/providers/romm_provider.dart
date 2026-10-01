@@ -1671,10 +1671,16 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
   /// linked have their cached sync state dropped in one go, so the badge and
   /// the browse grid see the links without a restart.
   ///
-  /// Never throws: the linker's own failures (library, platform list, or
-  /// platform-to-system resolution unreadable) are logged here and read as
-  /// "nothing linked". Returns the pass summary, or null when the pass was
-  /// skipped.
+  /// Returns the pass summary, or null when the pass was **skipped** — one of
+  /// the three guards above, and nothing else. A null therefore means "not run,
+  /// and that is fine", which is what the caller reports.
+  ///
+  /// The linker's own failures (library, platform list or platform-to-system
+  /// resolution unreadable) are [RommLinkPassException] and propagate. They
+  /// used to be caught here and turned into a null, which made a real server
+  /// error indistinguishable from a deliberate skip: the Tools run reported
+  /// "unavailable" for a failed library read, sending anyone who saw it looking
+  /// for a connection problem that was not there.
   Future<RommLinkPassSummary?> linkLibrary({
     void Function(int done, int total, String system)? onProgress,
   }) async {
@@ -1697,9 +1703,6 @@ class RomMSyncProvider extends ChangeNotifier implements ISyncProvider {
         invalidateGameSyncStates(summary.linkedRomnames);
       }
       return summary;
-    } on RommLinkPassException catch (e) {
-      _log.w(e.toString());
-      return null;
     } finally {
       _linking = false;
     }

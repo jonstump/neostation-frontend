@@ -362,7 +362,17 @@ class RommLibraryLinker {
           .add(platform);
     }
 
+    // Platforms the pass will actually page. `platforms.length` counted the
+    // unresolved ones too, which are skipped above and never reached, so the
+    // progress row stopped short of its own total on any server carrying a
+    // platform this install has no system for.
+    final progressTotal = groups.values.fold<int>(
+      0,
+      (sum, group) => sum + group.platforms.length,
+    );
+
     var processed = 0, failures = 0, enumerated = 0;
+    var reported = 0;
     var added = 0, alreadyPresent = 0, groupsSkipped = 0, writeFailures = 0;
     var stopped = false;
     final ambiguities = <RommLinkAmbiguity>[];
@@ -399,11 +409,6 @@ class RommLibraryLinker {
         switch (result) {
           case _PageResult.completed:
             processed++;
-            onProgress?.call(
-              processed,
-              platforms.length,
-              group.system.realName,
-            );
             for (final entry in platformClaims.entries) {
               claims.putIfAbsent(entry.key, () => {}).addAll(entry.value);
             }
@@ -415,6 +420,15 @@ class RommLibraryLinker {
             groupFailed = true;
           case _PageResult.stopped:
             stopped = true;
+        }
+        // Progress counts platforms the pass is *finished with*, which is not
+        // the same as `processed` — that is the summary's count of platforms
+        // successfully paged, which the log line and the caller read. Driving
+        // the bar from it left it short of its own total on any server with a
+        // platform that failed.
+        if (result != _PageResult.stopped) {
+          reported++;
+          onProgress?.call(reported, progressTotal, group.system.realName);
         }
         if (stopped) break;
       }

@@ -306,6 +306,8 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.rommLinkLibraryNothingToDo: 'Nada de novo para vincular',
   AppLocale.rommLinkLibraryFailed: 'Falha ao vincular',
   AppLocale.rommLinkLibraryUnavailable: 'Indisponível de momento',
+  AppLocale.rommLinkLibraryStoppedEarly:
+      'Interrompido antes do fim — {count} jogos vinculados até agora',
   AppLocale.rematchAchievementsSubtitle:
       'Verifica toda a biblioteca à procura de conjuntos de conquistas, em vez de um jogo de cada vez',
   AppLocale.rematchAchievementsWarning:

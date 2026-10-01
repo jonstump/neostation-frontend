@@ -296,6 +296,8 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommLinkLibraryNothingToDo: 'Tidak ada yang baru untuk ditautkan',
   AppLocale.rommLinkLibraryFailed: 'Gagal menautkan',
   AppLocale.rommLinkLibraryUnavailable: 'Tidak tersedia saat ini',
+  AppLocale.rommLinkLibraryStoppedEarly:
+      'Berhenti lebih awal — {count} gim tertaut sejauh ini',
   AppLocale.rematchAchievementsSubtitle:
       'Memeriksa seluruh pustaka untuk set prestasi, bukan satu game per satu',
   AppLocale.rematchAchievementsWarning:

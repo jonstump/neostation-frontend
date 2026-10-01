@@ -122,6 +122,9 @@ class ToolsSettingsContentState extends State<ToolsSettingsContent> {
       nothingToDo: AppLocale.rommLinkLibraryNothingToDo.getString(context),
       failed: AppLocale.rommLinkLibraryFailed.getString(context),
       unavailable: AppLocale.rommLinkLibraryUnavailable.getString(context),
+      stoppedEarlyTemplate: AppLocale.rommLinkLibraryStoppedEarly.getString(
+        context,
+      ),
     );
 
     final confirmed = await ConfirmActionDialog.show(

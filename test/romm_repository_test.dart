@@ -271,6 +271,42 @@ void main() {
       );
     });
 
+    test('a row stored in another case is still found', () async {
+      // `RommRomIdIndex.keyFor` folds case, so the link pass and bulk sync read
+      // a row stored `Game.zip` as the link for a library entry indexed
+      // `game.zip`. The row lookup did not, so `getRommRomId` answered null for
+      // the same pair — the game counted as linked everywhere except where save
+      // sync asks, and nothing existed to repair it.
+      await RommSaveMapRepository.putMapping(
+        source: RommLinkSource.download,
+        romname: 'Game.zip',
+        systemFolder: 'SNES',
+        rommRomId: 99,
+      );
+
+      expect(await RommSaveMapRepository.getRommRomId('game.zip', 'snes'), 99);
+      expect(await RommSaveMapRepository.getRommRomId('game', 'snes'), 99);
+      expect(await RommSaveMapRepository.getRommRomId('GAME', 'SnEs'), 99);
+    });
+
+    test('folding case does not collapse different games', () async {
+      // The fold is on spelling, not on identity: two genuinely different
+      // stems must stay apart.
+      await RommSaveMapRepository.putMapping(
+        source: RommLinkSource.download,
+        romname: 'Game.zip',
+        systemFolder: 'snes',
+        rommRomId: 99,
+      );
+
+      expect(await RommSaveMapRepository.getRommRomId('gamed', 'snes'), isNull);
+      expect(
+        await RommSaveMapRepository.getRommRomId('game.bin', 'snes'),
+        isNull,
+      );
+      expect(await RommSaveMapRepository.getRommRomId('game', 'nes'), isNull);
+    });
+
     test('stem matching stays scoped to the system folder', () async {
       await RommSaveMapRepository.putMapping(
         source: RommLinkSource.download,

@@ -310,6 +310,9 @@ mixin AppLocale {
 
   static const String rommLinkLibraryUnavailable =
       'romm_link_library_unavailable';
+
+  static const String rommLinkLibraryStoppedEarly =
+      'romm_link_library_stopped_early';
   static const String rematchAchievementsSubtitle =
       'rematch_achievements_subtitle';
   static const String rematchAchievementsWarning =

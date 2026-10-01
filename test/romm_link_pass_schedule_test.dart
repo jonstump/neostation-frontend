@@ -325,23 +325,49 @@ void main() {
     });
 
     test(
-      'a list still loading after the wait fails the pass by name',
+      'a list still loading fails the pass by name rather than skipping it',
       () async {
         await build(autoSweep: false, withLinker: realLinker());
         browse.connected = true;
         browse.stuckLoading = true;
 
-        expect(await provider.linkLibrary(), isNull);
-
-        expect(
-          LoggerService.instance.takeCapture(),
-          contains(
-            'w|RomM link pass failed: platform enumeration failed: '
-            'Bad state: the platform list is still loading',
+        // Propagates rather than returning null. A null is reserved for the
+        // three guards, which the runner reports as "unavailable"; flattening a
+        // failed platform read into one told the user the pass had been skipped
+        // when the server had actually errored.
+        await expectLater(
+          provider.linkLibrary(),
+          throwsA(
+            isA<RommLinkPassException>().having(
+              (e) => e.toString(),
+              'toString',
+              'RomM link pass failed: platform enumeration failed: '
+                  'Bad state: the platform list is still loading',
+            ),
           ),
         );
       },
     );
+
+    test('the lock is released after a failed pass', () async {
+      // The `finally` is what guarantees this now that the exception is not
+      // swallowed on the way out: a pass that throws must not leave `_linking`
+      // set, or every later run reports "unavailable" forever.
+      await build(autoSweep: false, withLinker: realLinker());
+      browse.connected = true;
+      browse.stuckLoading = true;
+
+      await expectLater(
+        provider.linkLibrary(),
+        throwsA(isA<RommLinkPassException>()),
+      );
+      await expectLater(
+        provider.linkLibrary(),
+        throwsA(isA<RommLinkPassException>()),
+        reason:
+            'a second attempt must reach the linker, not the in-flight guard',
+      );
+    });
 
     test('a pass finishing after dispose neither notifies nor throws', () async {
       // Rewritten from "a dispose mid-pass is not followed by a sweep", whose

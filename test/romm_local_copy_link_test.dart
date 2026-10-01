@@ -131,10 +131,35 @@ void main() {
       expect(copy?.filename, 'Game (USA).m3u');
     });
 
-    test('a copy the badge probe found is not probed for again', () async {
-      // The disk is the witness: once isDownloadedCached has looked, deleting
-      // the file must not change what findLocalCopy hands the link path —
-      // a second probe would notice, a memoised copy does not.
+    test('a memoised copy is reused while the file is still there', () async {
+      final file = await put('snes', 'a.sfc');
+      final provider = _PinnedSystem(_snes);
+      final rom = _rom(1, 'a.sfc');
+
+      expect(await provider.isDownloadedCached(rom, romFolders), isTrue);
+      final copy = await provider.findLocalCopy(rom, romFolders);
+      expect(copy, isNotNull);
+      expect(copy!.filename, 'a.sfc');
+      expect(file.existsSync(), isTrue);
+
+      provider.invalidateDownloadedCache();
+      await file.delete();
+      expect(
+        await provider.findLocalCopy(rom, romFolders),
+        isNull,
+        reason: 'invalidation drops the copy along with the flag',
+      );
+      expect(await provider.isDownloadedCached(rom, romFolders), isFalse);
+    });
+
+    test('a memoised copy whose file has gone is not handed out', () async {
+      // This test used to assert the opposite — that the memo wins over the
+      // disk — on the reasoning that the second look must not cost a probe.
+      // That is how a game deleted in NeoStation between its tile rendering
+      // and A being pressed got a permanent `auto` mapping row pointing at a
+      // file that was not there, and a "linked" toast instead of a download.
+      // Confirming a known path costs one stat; a wrong row nothing repairs
+      // costs more.
       final file = await put('snes', 'a.sfc');
       final provider = _PinnedSystem(_snes);
       final rom = _rom(1, 'a.sfc');
@@ -142,18 +167,27 @@ void main() {
       expect(await provider.isDownloadedCached(rom, romFolders), isTrue);
       await file.delete();
 
-      final copy = await provider.findLocalCopy(rom, romFolders);
-      expect(copy, isNotNull, reason: 'served from the memo, not the disk');
-      expect(copy!.filename, 'a.sfc');
-      expect(await provider.isDownloadedCached(rom, romFolders), isTrue);
-
-      provider.invalidateDownloadedCache();
+      expect(await provider.findLocalCopy(rom, romFolders), isNull);
       expect(
-        await provider.findLocalCopy(rom, romFolders),
-        isNull,
-        reason: 'invalidation drops the copy along with the flag',
+        await provider.isDownloadedCached(rom, romFolders),
+        isFalse,
+        reason: 'the stale badge goes with the stale copy',
       );
-      expect(await provider.isDownloadedCached(rom, romFolders), isFalse);
+    });
+
+    test('forgetting an unlinked local file drops its memo', () async {
+      // `forgetLocalDownload` learns the rom id from the mapping row it
+      // removes, so a local file the grid spotted but never linked has none —
+      // and the early return on a null id left the memo in place.
+      final file = await put('snes', 'a.sfc');
+      final provider = _PinnedSystem(_snes);
+      final rom = _rom(1, 'a.sfc');
+
+      expect(await provider.isDownloadedCached(rom, romFolders), isTrue);
+      await file.delete();
+      await provider.forgetLocalDownload(romname: 'a', systemFolder: 'snes');
+
+      expect(await provider.findLocalCopy(rom, romFolders), isNull);
     });
 
     test('a miss is not memoised as a copy', () async {

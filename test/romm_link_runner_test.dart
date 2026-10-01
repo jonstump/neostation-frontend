@@ -6,8 +6,8 @@ import 'package:neostation/services/romm/romm_link_runner.dart';
 ///
 /// The pass moved off the connect path and behind a button, so what the user
 /// sees is now the whole interface to it: a progress row while it walks, and
-/// one terminal row that says which of linked / nothing-to-do / failed /
-/// unavailable happened.
+/// one terminal row that says which of linked / nothing-to-do / stopped-early /
+/// failed / unavailable happened.
 void main() {
   const strings = RommLinkStrings(
     title: 'Link library',
@@ -17,6 +17,7 @@ void main() {
     nothingToDo: 'Nothing new to link',
     failed: 'Linking failed',
     unavailable: 'Not available right now',
+    stoppedEarlyTemplate: 'Stopped early — linked {count} games so far',
   );
 
   setUp(() => GlobalNotificationService().notifier.value = []);
@@ -29,6 +30,13 @@ void main() {
 
     test('done fills the count', () {
       expect(strings.done(1234), 'Linked 1234 games');
+    });
+
+    test('stoppedEarly fills the count', () {
+      expect(
+        strings.stoppedEarly(12),
+        'Stopped early — linked 12 games so far',
+      );
     });
   });
 

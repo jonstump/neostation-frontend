@@ -28,6 +28,10 @@ class RommLinkStrings {
   /// is walking the same server.
   final String unavailable;
 
+  /// Terminal row when the pass stopped before reaching the end of the server,
+  /// because RomM went away mid-pass. `{count}` substituted.
+  final String stoppedEarlyTemplate;
+
   const RommLinkStrings({
     required this.title,
     required this.preparing,
@@ -36,6 +40,7 @@ class RommLinkStrings {
     required this.nothingToDo,
     required this.failed,
     required this.unavailable,
+    required this.stoppedEarlyTemplate,
   });
 
   String progress(int done, int total, String system) => progressTemplate
@@ -44,6 +49,9 @@ class RommLinkStrings {
       .replaceFirst('{system}', system);
 
   String done(int count) => doneTemplate.replaceFirst('{count}', '$count');
+
+  String stoppedEarly(int count) =>
+      stoppedEarlyTemplate.replaceFirst('{count}', '$count');
 }
 
 /// Runs the library-wide RomM link pass as a user-initiated Tools action, and
@@ -51,9 +59,9 @@ class RommLinkStrings {
 ///
 /// The pass itself used to run automatically after every connect. It walks the
 /// whole server, which on a real device with a large library takes minutes, and
-/// a mapping row is the gate for save sync — so running it unattended both
-/// cost every launch a full walk and enrolled games the user had never offered
-/// to the server. As a button it is allowed to take as long as it takes, and
+/// a mapping row is the gate for save sync — so running it unattended both cost
+/// every launch a full walk and enrolled games the user had never offered to
+/// the server. As a button it is allowed to take as long as it takes, and
 /// the confirmation is where the consequence is stated.
 ///
 /// Shaped after `RaLibraryMatchRunner`, which is the same thing for
@@ -131,12 +139,30 @@ class RommLinkRunner {
       );
 
       // Null means the pass was refused by one of `linkLibrary`'s guards —
-      // disconnected, or a bulk ROM sync already walking the same server. That
-      // is not a failure, and saying "failed" for it would send someone
-      // looking for a fault that is not there.
+      // disconnected, a bulk ROM sync already walking the same server, or a
+      // pass already in flight. That is not a failure, and saying "failed" for
+      // it would send someone looking for a fault that is not there. A real
+      // failure is a `RommLinkPassException` and lands in the catch below.
       if (summary == null) {
         finish(strings.unavailable, GlobalNotificationType.info);
         return null;
+      }
+
+      // A pass that stopped when the server went away has not seen the rest of
+      // the library, so neither "done" nor "nothing new to link" is true of it
+      // — both claim the whole server was checked, and the user would have no
+      // reason to run it again.
+      //
+      // Reported as `info`, not `error`: the rows it did write are good, and
+      // `GlobalNotificationType` has no warning tier. Adding one would mean
+      // touching the shared notification widget's colour and icon mapping,
+      // which is a bigger change than this needs.
+      if (summary.stoppedEarly) {
+        finish(
+          strings.stoppedEarly(summary.rowsAdded),
+          GlobalNotificationType.info,
+        );
+        return summary.rowsAdded;
       }
 
       if (summary.rowsAdded == 0) {

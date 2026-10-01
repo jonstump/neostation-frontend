@@ -595,7 +595,8 @@ class RommSaveMapRepository {
     return await _romIdByStem(db, romname, systemFolder);
   }
 
-  /// Second pass for [_findRow], matching on the extension-stripped name.
+  /// Second pass for [_findRow], matching case-insensitively and on the
+  /// extension-stripped name.
   ///
   /// Callers disagree about what a "romname" is. The mapping is written with
   /// the on-disk filename (`Game.zip`) — and [getIndexedNameForRomId] depends
@@ -604,8 +605,15 @@ class RommSaveMapRepository {
   /// game launched normally, and since an unresolved id reads as "not a RomM
   /// game", save sync and playtime both went quietly nowhere.
   ///
-  /// Scoped to one system folder, which the table's index covers, and only
-  /// reached when the exact match fails.
+  /// It also folds case, which [keyFor] has always done. Without that the two
+  /// disagreed: [getRomIdIndex] treated a row stored `Game.zip` as the link for
+  /// a library entry indexed `game.zip`, so the link pass and bulk sync both
+  /// saw the game as linked, while `getRommRomId('game', folder)` returned null
+  /// and left save sync off with nothing to repair it.
+  ///
+  /// Scoped to one system folder and only reached when the exact match above
+  /// fails, so the folded comparison costs nothing on the hot path — that
+  /// match still uses the table's `(romname, system_folder)` primary key.
   static Future<Map<String, Object?>?> _romIdByStem(
     dynamic db,
     String romname,
@@ -614,16 +622,18 @@ class RommSaveMapRepository {
     final rows = await db.query(
       'app_romm_rom_map',
       columns: _rowColumns,
-      where: 'system_folder = ?',
-      whereArgs: [systemFolder],
+      where: 'LOWER(system_folder) = ?',
+      whereArgs: [systemFolder.trim().toLowerCase()],
     );
     // Only the stored name is stripped. [romname] arrives already extensionless
     // here (the exact match above covers callers that pass a full filename),
     // and stripping it again would cut a title at its own dot — "Mr. Do"
     // becoming "Mr", matching the wrong ROM or nothing at all.
+    final wanted = romname.trim().toLowerCase();
     for (final row in rows) {
       final stored = row['romname']?.toString() ?? '';
-      if (_stripExtension(stored) == romname) return row;
+      final folded = stored.trim().toLowerCase();
+      if (folded == wanted || _stripExtension(folded) == wanted) return row;
     }
     return null;
   }

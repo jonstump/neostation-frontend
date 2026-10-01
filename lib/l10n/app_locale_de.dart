@@ -308,6 +308,8 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.rommLinkLibraryNothingToDo: 'Nichts Neues zu verknüpfen',
   AppLocale.rommLinkLibraryFailed: 'Verknüpfen fehlgeschlagen',
   AppLocale.rommLinkLibraryUnavailable: 'Derzeit nicht verfügbar',
+  AppLocale.rommLinkLibraryStoppedEarly:
+      'Vorzeitig beendet — bisher {count} Spiele verknüpft',
   AppLocale.rematchAchievementsSubtitle:
       'Durchsucht die gesamte Bibliothek nach Achievement-Sets, statt Spiel für Spiel',
   AppLocale.rematchAchievementsWarning:

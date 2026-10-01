@@ -250,6 +250,7 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.rommLinkLibraryNothingToDo: '沒有新的可連結項目',
   AppLocale.rommLinkLibraryFailed: '連結失敗',
   AppLocale.rommLinkLibraryUnavailable: '目前無法使用',
+  AppLocale.rommLinkLibraryStoppedEarly: '提前停止 — 目前已關聯 {count} 個遊戲',
   AppLocale.rematchAchievementsSubtitle: '掃描整個遊戲庫尋找成就組合，不必逐一開啟遊戲',
   AppLocale.rematchAchievementsWarning:
       '這會讀取每個未比對的 ROM 以識別它，在大型收藏中可能需要一些時間。再次選擇即可暫停：已比對的內容會保留，再次執行會從中斷處繼續。光碟映像也會讀取，但每個只讀取少量磁區。不會移動或刪除任何檔案。',

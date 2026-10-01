@@ -1379,11 +1379,24 @@ class RommProvider extends ChangeNotifier {
     RommRom rom,
     List<String> romFolders,
   ) async {
-    // A copy the badge probe already found is handed back as-is: bulk sync
-    // asks [isDownloadedCached] and then this for every on-disk ROM, and the
-    // second look must not be a second disk probe.
+    // A copy the badge probe already found is reused rather than re-derived:
+    // bulk sync asks [isDownloadedCached] and then this for every on-disk ROM,
+    // and the second look must not repeat `_existingRomFile`'s folder walk.
+    //
+    // It is still confirmed to exist. The cache is filled while tiles render
+    // and nothing invalidates it when a file goes away — a game deleted in
+    // NeoStation between the tile appearing and A being pressed used to link a
+    // file that was no longer there, writing a permanent `auto` row and
+    // reporting "linked" instead of downloading. One `stat` of a known path is
+    // a small price next to a wrong row that nothing repairs.
     final cached = _localCopyByRomId[rom.id];
-    if (cached != null) return cached;
+    if (cached != null) {
+      if (await File(p.join(cached.directory, cached.filename)).exists()) {
+        return cached;
+      }
+      _localCopyByRomId.remove(rom.id);
+      _downloadedByRomId.remove(rom.id);
+    }
     final system = await resolveSystem(rom);
     if (system == null) return null;
     final copy = await _existingRomFile(system, rom, romFolders);
@@ -1456,7 +1469,7 @@ class RommProvider extends ChangeNotifier {
     // ScreenScraper but carrying no metadata row — an ES-DE import, a hand
     // edit — used to lose its art to an A press because the single gate read
     // "no row" and ran both.
-    final hasArt = await _hasLocalArt(copy.system, copy.filename, fileProvider);
+    final hasArt = await hasLocalArt(copy.system, copy.filename, fileProvider);
     if (existing != null && hasArt) return false;
     await _importMetadata(
       rom,
@@ -1549,7 +1562,20 @@ class RommProvider extends ChangeNotifier {
       romname,
       systemFolder,
     );
-    if (romId == null) return;
+    // A local file the browse grid spotted but never linked has no mapping
+    // row, so `removeMapping` answers null and there is no rom id to key the
+    // caches by. Returning here left `_localCopyByRomId` pointing at the
+    // deleted file, which [findLocalCopy] would then hand to the link path.
+    // Drop any entry for this file by value instead.
+    if (romId == null) {
+      _localCopyByRomId.removeWhere(
+        (id, copy) =>
+            copy.system.folderName == systemFolder &&
+            copy.romname.toLowerCase() == romname.toLowerCase(),
+      );
+      _notifyDownloadState();
+      return;
+    }
     _downloadedByRomId.remove(romId);
     _localCopyByRomId.remove(romId);
     // A transfer still running owns its own entry: dropping it here would
@@ -2286,26 +2312,47 @@ class RommProvider extends ChangeNotifier {
     return '/assets/romm/resources/$s';
   }
 
-  /// Whether box art already exists on disk for [indexedName].
+  /// Media folders [_importMetadata] writes into, paired with the extensions
+  /// [_saveRommMedia] deletes as stale siblings when it writes one.
   ///
-  /// Box art stands in for "this game has artwork": it is the one asset every
-  /// scrape path writes, and the library card falls back to it for the
-  /// background when there is no fanart. Checked across the same extensions
-  /// [_saveRommMedia] would delete, so the probe and the destruction agree on
-  /// what counts as present.
-  Future<bool> _hasLocalArt(
+  /// The probe and the destruction have to agree on what counts as present, so
+  /// this is the single list both read: miss a folder here and an import
+  /// silently replaces artwork the user already has.
+  static const Map<String, List<String>> _rommMediaFolders = {
+    'box2d': ['png', 'jpg', 'webp'],
+    'fanarts': ['png', 'jpg', 'webp'],
+    'wheels': ['png', 'jpg', 'webp'],
+    'screenshots': ['png', 'jpg', 'webp'],
+    'videos': ['mp4', 'webm'],
+  };
+
+  /// Whether any artwork [_importMetadata] would write already exists on disk
+  /// for [indexedName].
+  ///
+  /// Every media type, not just box art. Box art alone was the original test,
+  /// on the reasoning that it is the one asset every scrape path writes — but
+  /// a game scraped from a source that had no box art, or one the user gave
+  /// fanart and a video by hand, then read as having no artwork at all, and a
+  /// single A press on the browse tile overwrote every type it did have and
+  /// deleted their other extensions. Any one hit is enough to leave the whole
+  /// set alone: this is a "has the user already got art here?" question, and
+  /// [_saveRommMedia] has no per-type granularity to offer.
+  @visibleForTesting
+  Future<bool> hasLocalArt(
     SystemModel system,
     String indexedName,
     FileProvider fileProvider,
   ) async {
-    for (final ext in const ['png', 'jpg', 'webp']) {
-      final path = fileProvider.getMediaPath(
-        system.folderName,
-        'box2d',
-        indexedName,
-        ext,
-      );
-      if (await File(path).exists()) return true;
+    for (final entry in _rommMediaFolders.entries) {
+      for (final ext in entry.value) {
+        final path = fileProvider.getMediaPath(
+          system.folderName,
+          entry.key,
+          indexedName,
+          ext,
+        );
+        if (await File(path).exists()) return true;
+      }
     }
     return false;
   }
