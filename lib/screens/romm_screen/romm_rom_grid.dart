@@ -77,13 +77,15 @@ class RommRomGrid extends StatefulWidget {
   ///
   /// Two rows, in pixels — deliberately not `ScrollCacheExtent.viewport`, which
   /// scales with the screen: a viewport on each side keeps three screenfuls of
-  /// rows alive, and every one of those tiles holds a live `Image.network`.
-  /// `NetworkImage` fetches on its own `HttpClient` rather than
-  /// [RommService]'s, with no per-host connection bound, so a flick through a
-  /// large platform would queue far more concurrent requests — and far more
-  /// simultaneous decodes — than the tiles being scrolled towards need. Two
-  /// rows still start the next screenful's covers before they are reached,
-  /// and on a phone-sized viewport that is already close to a full screen.
+  /// rows alive, and every one of those tiles holds a live cover image.
+  /// Covers load through `RommCoverImage` on [RommService]'s client, so the
+  /// connection count is bounded either way; what the wider extent costs is
+  /// the queue behind that bound and the decodes. A flick through a large
+  /// platform would line up far more fetches — and far more simultaneous
+  /// decodes — than the tiles being scrolled towards need, and the covers
+  /// actually on screen would wait behind them. Two rows still start the next
+  /// screenful's covers before they are reached, and on a phone-sized
+  /// viewport that is already close to a full screen.
   ///
   /// Falls back to Flutter's 250px default before the first layout pass, when
   /// there is no cell width yet.

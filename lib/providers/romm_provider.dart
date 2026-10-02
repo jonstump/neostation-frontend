@@ -1464,7 +1464,6 @@ class RommProvider extends ChangeNotifier {
     _currentCollection = null;
     _librarySearch = false;
     _filters = RommRomFilters.none;
-    _resetRoms();
     _searchTerm = '';
     _resetRoms();
     _downloads.clear();

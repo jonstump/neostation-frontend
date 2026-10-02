@@ -346,12 +346,12 @@ class SqliteConfigService {
             ) ??
             200,
         // Missing column/row => 0 => logos shown (the default).
-        hideSystemLogos:
-            (int.tryParse(
-                  userConfig?['hide_system_logos']?.toString() ?? '0',
-                ) ??
-                0) ==
-            1,
+        hideSystemLogos: ConfigModel.readBool(
+          userConfig,
+          'hideSystemLogos',
+          'hide_system_logos',
+          false,
+        ),
         // Missing column/row => 0 => blur off (the default). The frosted blur
         // is only smooth on a powerful GPU, so it starts disabled.
         neoglassBlur:

@@ -138,7 +138,6 @@ class ScreenScraperSettingsContentState
           context,
           listen: listen,
         ).isConnected,
-        loginRequested: false,
       ) ==
       ScraperEntry.options;
 
