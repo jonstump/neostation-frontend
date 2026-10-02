@@ -184,6 +184,84 @@ void main() {
       expect(fetcher.requests, hasLength(1));
     });
 
+    // Governing: SPEC-0019 REQ "Concurrency Safety" — a screenful of cards
+    // must not become a screenful of requests.
+    test('many ensures at once fetch only a few at a time', () async {
+      const count = 40;
+      for (var id = 100; id < 100 + count; id++) {
+        fetcher.bodies[smallUrl(id)] = _jpeg(10);
+      }
+      fetcher.gate = Completer<void>();
+      final cache = build();
+      await cache.initialize();
+
+      final fills = [
+        for (var id = 100; id < 100 + count; id++)
+          cache.ensure(_server, _row(id)),
+      ];
+      await pumpEventQueue();
+
+      expect(fetcher.inFlight, RommCoverCache.maxConcurrentFills);
+      expect(cache.fillsInFlight, RommCoverCache.maxConcurrentFills);
+
+      fetcher.gate!.complete();
+      final paths = await Future.wait(fills);
+
+      expect(paths, everyElement(isNotNull), reason: 'every card is served');
+      expect(fetcher.maxInFlight, RommCoverCache.maxConcurrentFills);
+      expect(cache.fillsInFlight, 0);
+    });
+
+    test('lazy fills and a prefetch share the one bound', () async {
+      for (var id = 200; id < 220; id++) {
+        fetcher.bodies[smallUrl(id)] = _jpeg(10);
+      }
+      fetcher.gate = Completer<void>();
+      final cache = build();
+      await cache.initialize();
+
+      final lazy = [
+        for (var id = 200; id < 210; id++) cache.ensure(_server, _row(id)),
+      ];
+      final prefetch = cache.prefetch([
+        for (var id = 210; id < 220; id++) _row(id),
+      ], concurrency: 3);
+      await pumpEventQueue();
+
+      expect(fetcher.inFlight, RommCoverCache.maxConcurrentFills);
+
+      fetcher.gate!.complete();
+      await Future.wait([...lazy, prefetch]);
+      expect(fetcher.maxInFlight, RommCoverCache.maxConcurrentFills);
+    });
+
+    test(
+      'a fill still waiting when its server is cleared fetches nothing',
+      () async {
+        for (var id = 300; id < 310; id++) {
+          fetcher.bodies[smallUrl(id)] = _jpeg(10);
+        }
+        fetcher.gate = Completer<void>();
+        final cache = build();
+        await cache.initialize();
+
+        final fills = [
+          for (var id = 300; id < 310; id++) cache.ensure(_server, _row(id)),
+        ];
+        await pumpEventQueue();
+        final started = fetcher.requests.length;
+        await cache.clear(_server);
+        fetcher.gate!.complete();
+        await Future.wait(fills);
+
+        expect(
+          fetcher.requests,
+          hasLength(started),
+          reason: 'the queued fills belong to a cache that is gone',
+        );
+      },
+    );
+
     // Governing: SPEC-0019 REQ "Error Handling Standards" — debug, retried
     test(
       'a failed fill returns null, logs at debug, and retries next time',
