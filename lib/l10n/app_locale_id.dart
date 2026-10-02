@@ -1748,4 +1748,11 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommUploadFailBusy: 'unggahan lain sedang berjalan',
   AppLocale.rommUploadFailGated: 'server tidak dapat menerima unggahan',
   AppLocale.rommUploadFailOther: 'unggahan gagal',
+
+  // Setup wizard: RomM step (ADR-0021, SPEC-0020)
+  AppLocale.wizardRommStepTitle: 'Hubungkan ke RomM',
+  AppLocale.wizardRommStepDesc:
+      'Menyimpan pustaka di server RomM? Hubungkan sekarang dan NeoStation akan menautkan game yang sudah ada serta dapat menampilkan sisanya. Anda juga bisa melakukannya nanti dari tab RomM.',
+  AppLocale.wizardRommStepConnectedDesc:
+      'Terhubung. Game Anda sedang ditautkan ke server di latar belakang.',
 };

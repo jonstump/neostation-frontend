@@ -255,4 +255,56 @@ void main() {
       }
     });
   });
+
+  // Governing: ADR-0021 (RomM in first-run setup), SPEC-0020 REQ "Gamepad Navigation"
+  group('rommConnectBackFor', () {
+    RommConnectBack back({
+      bool fieldFocused = false,
+      bool connected = false,
+      bool busy = false,
+      bool hasBrowse = false,
+      bool hasExit = false,
+    }) => rommConnectBackFor(
+      fieldFocused: fieldFocused,
+      connected: connected,
+      busy: busy,
+      hasBrowse: hasBrowse,
+      hasExit: hasExit,
+    );
+
+    test('a focused field takes B first, whatever else is true', () {
+      for (final connected in [true, false]) {
+        expect(
+          back(
+            fieldFocused: true,
+            connected: connected,
+            busy: true,
+            hasBrowse: true,
+            hasExit: true,
+          ),
+          RommConnectBack.leaveField,
+        );
+      }
+    });
+
+    test('the tab, disconnected: B has nowhere to go', () {
+      expect(back(), RommConnectBack.none);
+    });
+
+    test('the tab, connected: B goes back to the library', () {
+      expect(back(connected: true, hasBrowse: true), RommConnectBack.browse);
+    });
+
+    test('the wizard, disconnected: B hands control to the host', () {
+      expect(back(hasExit: true), RommConnectBack.exit);
+    });
+
+    test('a connect in flight holds the form', () {
+      expect(back(busy: true, hasExit: true), RommConnectBack.none);
+    });
+
+    test('the host exit is not the connected panel\'s back', () {
+      expect(back(connected: true, hasExit: true), RommConnectBack.none);
+    });
+  });
 }

@@ -1802,4 +1802,11 @@ const Map<String, dynamic> appLocaleIt = {
   AppLocale.rommUploadFailBusy: 'era in corso un altro caricamento',
   AppLocale.rommUploadFailGated: 'il server non può ricevere caricamenti',
   AppLocale.rommUploadFailOther: 'caricamento fallito',
+
+  // Setup wizard: RomM step (ADR-0021, SPEC-0020)
+  AppLocale.wizardRommStepTitle: 'Connetti a RomM',
+  AppLocale.wizardRommStepDesc:
+      'La tua libreria è su un server RomM? Connettiti ora: NeoStation collega i giochi che hai già e può mostrare gli altri. Puoi farlo anche più tardi dalla scheda RomM.',
+  AppLocale.wizardRommStepConnectedDesc:
+      'Connesso. I tuoi giochi vengono collegati al server in background.',
 };

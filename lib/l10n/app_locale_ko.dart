@@ -1592,4 +1592,10 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.rommUploadFailBusy: '다른 업로드가 진행 중이었습니다',
   AppLocale.rommUploadFailGated: '서버가 업로드를 받을 수 없습니다',
   AppLocale.rommUploadFailOther: '업로드 실패',
+
+  // Setup wizard: RomM step (ADR-0021, SPEC-0020)
+  AppLocale.wizardRommStepTitle: 'RomM에 연결',
+  AppLocale.wizardRommStepDesc:
+      '라이브러리를 RomM 서버에 두고 계신가요? 지금 연결하면 NeoStation이 이미 있는 게임을 연결하고 나머지도 표시할 수 있습니다. 나중에 RomM 탭에서 할 수도 있습니다.',
+  AppLocale.wizardRommStepConnectedDesc: '연결되었습니다. 게임을 백그라운드에서 서버와 연결하고 있습니다.',
 };

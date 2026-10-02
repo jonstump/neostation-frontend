@@ -1515,4 +1515,10 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.rommUploadFailBusy: '另一个上传正在进行',
   AppLocale.rommUploadFailGated: '服务器无法接收上传',
   AppLocale.rommUploadFailOther: '上传失败',
+
+  // Setup wizard: RomM step (ADR-0021, SPEC-0020)
+  AppLocale.wizardRommStepTitle: '连接到 RomM',
+  AppLocale.wizardRommStepDesc:
+      '游戏库放在 RomM 服务器上？现在连接，NeoStation 会关联你已有的游戏，并可显示其余游戏。也可以稍后在 RomM 标签页中设置。',
+  AppLocale.wizardRommStepConnectedDesc: '已连接。正在后台将你的游戏与服务器关联。',
 };

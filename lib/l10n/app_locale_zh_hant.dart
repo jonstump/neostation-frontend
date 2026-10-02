@@ -1517,4 +1517,10 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.rommUploadFailBusy: '另一個上傳正在進行',
   AppLocale.rommUploadFailGated: '伺服器無法接收上傳',
   AppLocale.rommUploadFailOther: '上傳失敗',
+
+  // Setup wizard: RomM step (ADR-0021, SPEC-0020)
+  AppLocale.wizardRommStepTitle: '連線至 RomM',
+  AppLocale.wizardRommStepDesc:
+      '遊戲庫放在 RomM 伺服器上？現在連線，NeoStation 會關聯你已有的遊戲，並可顯示其餘遊戲。也可以稍後在 RomM 分頁中設定。',
+  AppLocale.wizardRommStepConnectedDesc: '已連線。正在背景將你的遊戲與伺服器關聯。',
 };
