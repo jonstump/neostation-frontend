@@ -37,6 +37,7 @@ import '../services/romm/romm_collection_outbox_service.dart';
 import '../services/romm/romm_cover_cache.dart';
 import '../services/romm/romm_metadata_fetch.dart';
 import '../services/romm/romm_metadata_push.dart';
+import '../services/romm/romm_paging.dart';
 import '../services/romm/romm_library_linker.dart';
 import '../services/romm/romm_props_outbox_service.dart';
 import '../services/romm/rom_upload_source.dart';
@@ -47,6 +48,7 @@ import '../services/user_data_location_service.dart';
 import '../utils/dir_writability.dart';
 import '../utils/romm_local_matcher.dart';
 import '../utils/romm_pair_error_message.dart';
+import '../utils/semaphore.dart';
 import 'file_provider.dart';
 import 'romm_bulk_sync.dart';
 import 'romm_rom_upload.dart';
@@ -3181,6 +3183,10 @@ class RommProvider extends ChangeNotifier {
     );
   }
 
+  /// RomM metadata fetches a bulk scrape keeps in flight at once — the same
+  /// pool size the per-system metadata pass and bulk sync use.
+  static const int bulkScrapeConcurrency = RommPaging.concurrency;
+
   /// [scrapeStep] for a bulk run: reads the link map once, up front, and
   /// resolves every target from that index, so a 300-game run makes no
   /// per-game mapping query. Systems are resolved once per id as well.
@@ -3190,15 +3196,25 @@ class RommProvider extends ChangeNotifier {
   /// on-disk filename first, then its extension-stripped spelling — and the
   /// metadata row is keyed by the target's filename, exactly as that pass
   /// keys it.
+  ///
+  /// The run's workers are sized by ScreenScraper's `maxthreads`, which says
+  /// what ScreenScraper will accept and nothing about the RomM host. So the
+  /// fetches this step makes are held to [bulkScrapeConcurrency] here, whatever
+  /// the worker count: RomM does not push back on a client that asks too
+  /// much, it just tries to serve it. Only the server fetch waits; a game
+  /// that is not linked answers at once and moves on to ScreenScraper.
   // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "RomM Scrape Step"
+  // Governing: ADR-0006 (RomM-first scrape), SPEC-0006 REQ "Concurrency Safety"
   Future<RommScrapeStep?> bulkScrapeStep(FileProvider fileProvider) async {
     if (!isConnected) return null;
     final index = await RommSaveMapRepository.getRomIdIndex();
     final systems = <String, SystemModel?>{};
+    final gate = Semaphore(bulkScrapeConcurrency);
     return (RommScrapeTarget target) => _runScrapeStep(
       target,
       fileProvider,
       systems,
+      gate: gate,
       resolveRomId: () async {
         final romId = _romIdFromIndex(
           index,
@@ -3219,6 +3235,7 @@ class RommProvider extends ChangeNotifier {
     FileProvider fileProvider,
     Map<String, SystemModel?> systems, {
     required Future<({int romId, String indexedName})?> Function() resolveRomId,
+    Semaphore? gate,
   }) async {
     int? romId;
     try {
@@ -3250,13 +3267,19 @@ class RommProvider extends ChangeNotifier {
         return RommScrapeStepResult.failed(error);
       }
 
-      final outcome = await fetchMetadataForRomId(
-        romId: romId,
-        system: system,
-        fileProvider: fileProvider,
-        indexedName: link.indexedName,
-        mode: RommScrapeStepResult.modeFor(target.forceOverwrite),
-      );
+      final RommMetadataOutcome outcome;
+      await gate?.acquire();
+      try {
+        outcome = await fetchMetadataForRomId(
+          romId: romId,
+          system: system,
+          fileProvider: fileProvider,
+          indexedName: link.indexedName,
+          mode: RommScrapeStepResult.modeFor(target.forceOverwrite),
+        );
+      } finally {
+        gate?.release();
+      }
       final result = RommScrapeStepResult.fromOutcome(outcome);
       _log.i(
         'RomM scrape step: ${result.status.name} '

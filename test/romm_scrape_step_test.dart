@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -80,11 +81,24 @@ class _FakeRommService extends RommService {
   bool detailThrows = false;
   final List<int> detailRequests = [];
 
+  /// When set, every detail request waits on it, so a test can hold the
+  /// server open and count how many requests are in flight.
+  Completer<void>? detailGate;
+  int detailInFlight = 0;
+  int maxDetailInFlight = 0;
+
   @override
   Future<Map<String, dynamic>?> getRomDetail(int id) async {
     detailRequests.add(id);
-    if (detailThrows) throw const SocketException('timeout');
-    return detail;
+    detailInFlight++;
+    if (detailInFlight > maxDetailInFlight) maxDetailInFlight = detailInFlight;
+    try {
+      await detailGate?.future;
+      if (detailThrows) throw const SocketException('timeout');
+      return detail;
+    } finally {
+      detailInFlight--;
+    }
   }
 
   @override
@@ -555,6 +569,75 @@ void main() {
           expect(await row('c.sfc'), isNotNull);
         },
       );
+
+      // Governing: SPEC-0006 REQ "Concurrency Safety" — the run's worker
+      // count comes from ScreenScraper and must not set RomM's load.
+      test(
+        'holds RomM fetches to its own bound, whatever the worker count',
+        () async {
+          const workers = 12;
+          for (var id = 1; id <= workers; id++) {
+            await link(romId: id, romname: 'g$id.sfc');
+          }
+          svc.detailGate = Completer<void>();
+          final step = (await provider.bulkScrapeStep(media))!;
+
+          final running = [
+            for (var id = 1; id <= workers; id++)
+              step(
+                RommScrapeTarget(
+                  appSystemId: 'snes',
+                  filename: 'g$id.sfc',
+                  systemFolder: 'snes',
+                ),
+              ),
+          ];
+          await pumpEventQueue();
+
+          expect(svc.detailInFlight, RommProvider.bulkScrapeConcurrency);
+
+          svc.detailGate!.complete();
+          final results = await Future.wait(running);
+
+          expect(
+            results.map((r) => r.status),
+            everyElement(RommScrapeStepStatus.scraped),
+          );
+          expect(svc.maxDetailInFlight, RommProvider.bulkScrapeConcurrency);
+        },
+      );
+
+      test('an unlinked game does not wait behind the bound', () async {
+        for (var id = 1; id <= 3; id++) {
+          await link(romId: id, romname: 'g$id.sfc');
+        }
+        svc.detailGate = Completer<void>();
+        final step = (await provider.bulkScrapeStep(media))!;
+        final held = [
+          for (var id = 1; id <= 3; id++)
+            step(
+              RommScrapeTarget(
+                appSystemId: 'snes',
+                filename: 'g$id.sfc',
+                systemFolder: 'snes',
+              ),
+            ),
+        ];
+        await pumpEventQueue();
+
+        // Every slot is taken, and this one still answers.
+        final unlinked = await step(
+          const RommScrapeTarget(
+            appSystemId: 'snes',
+            filename: 'nope.sfc',
+            systemFolder: 'snes',
+          ),
+        );
+        expect(unlinked.status, RommScrapeStepStatus.notLinked);
+
+        svc.detailGate!.complete();
+        await Future.wait(held);
+      });
 
       test('a per-game step sees the row the bulk step missed', () async {
         final bulk = (await provider.bulkScrapeStep(media))!;

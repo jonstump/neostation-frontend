@@ -9,6 +9,7 @@ import 'package:path/path.dart' as p;
 import '../../models/romm_catalog_row.dart';
 import '../../repositories/config_repository.dart';
 import '../../utils/bounded_concurrency.dart';
+import '../../utils/lifo_semaphore.dart';
 import '../config_service.dart';
 import '../logger_service.dart';
 import '../romm_service.dart';
@@ -88,6 +89,16 @@ class RommCoverCache {
   /// Default number of concurrent fetches in a [prefetch].
   static const int defaultPrefetchConcurrency = 3;
 
+  /// Cover fetches in flight at once, across every caller of [ensure].
+  ///
+  /// A remote card that renders without a cached cover asks for a fill, and a
+  /// fast scroll through a large library renders hundreds of them. Unbounded,
+  /// each opened its own request, and RomM has nothing that pushes back: it
+  /// tries to serve them all, which is how a handheld stalls a small server.
+  /// [prefetch] goes through the same gate, so the two never add up.
+  // Governing: ADR-0020 (unified library), SPEC-0019 REQ "Concurrency Safety"
+  static const int maxConcurrentFills = 3;
+
   /// Fills between the periodic size checks lazy fills trigger.
   static const int fillsPerEvictionCheck = 100;
 
@@ -107,6 +118,16 @@ class RommCoverCache {
   /// Fills in flight, keyed by `serverHash/romId`, so two cards asking for the
   /// same cover share one fetch.
   final Map<String, Future<String?>> _inFlight = {};
+
+  /// Bounds the fetches behind [ensure] to [maxConcurrentFills]. Newest
+  /// first: the card the user just scrolled to is the one on screen, and the
+  /// ones it passed on the way can wait. Every fill is still served — a card
+  /// asks once, so the queue is finite and drains when the scroll stops.
+  final LifoSemaphore _fillGate = LifoSemaphore(maxConcurrentFills);
+
+  /// Fills fetching right now. Test seam.
+  @visibleForTesting
+  int get fillsInFlight => _fillGate.inFlight;
 
   /// `serverUrl -> serverHash`, so [pathFor] does not hash on every build.
   final Map<String, String> _hashes = {};
@@ -251,12 +272,30 @@ class RommCoverCache {
     final inFlight = _inFlight[key];
     if (inFlight != null) return inFlight;
 
-    final fill = _fill(root, serverHash, serverUrl, row);
+    final fill = _gatedFill(root, serverHash, serverUrl, row);
     _inFlight[key] = fill;
     try {
       return await fill;
     } finally {
       _inFlight.remove(key);
+    }
+  }
+
+  /// [_fill] behind [_fillGate]. A fill that waited is checked again once it
+  /// is admitted: the wait can outlast a stop or a clear of this server.
+  Future<String?> _gatedFill(
+    String root,
+    String serverHash,
+    String serverUrl,
+    RommCatalogRow row,
+  ) async {
+    final generation = _generationOf(serverHash);
+    await _fillGate.acquire();
+    try {
+      if (_shouldStop() || _stale(serverHash, generation)) return null;
+      return await _fill(root, serverHash, serverUrl, row);
+    } finally {
+      _fillGate.release();
     }
   }
 
