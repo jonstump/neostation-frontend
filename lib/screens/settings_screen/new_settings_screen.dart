@@ -17,6 +17,7 @@ import 'new_settings_options/about_settings_content.dart';
 import 'new_settings_options/exit_settings_content.dart';
 import 'new_settings_options/themes_settings_content.dart';
 import 'new_settings_options/system_art_settings_content.dart';
+import 'new_settings_options/screenscraper/screenscraper_settings_content.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/services/logger_service.dart';
@@ -82,6 +83,8 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
       GlobalKey<ThemesSettingsContentState>();
   final GlobalKey<SystemArtSettingsContentState> _systemArtSettingsKey =
       GlobalKey<SystemArtSettingsContentState>();
+  final GlobalKey<ScreenScraperSettingsContentState> _screenScraperKey =
+      GlobalKey<ScreenScraperSettingsContentState>();
   final GlobalKey<DirectoriesSettingsContentState> _directoriesSettingsKey =
       GlobalKey<DirectoriesSettingsContentState>();
   final GlobalKey<RommSettingsContentState> _rommSettingsKey =
@@ -160,6 +163,15 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
         title: '',
         localeKey: AppLocale.tools,
         icon: Symbols.build_rounded,
+        isVisible: true,
+      ),
+    );
+
+    _menuItems.add(
+      SettingsMenuItem(
+        title: '',
+        localeKey: AppLocale.metadata,
+        icon: Symbols.manage_search_rounded,
         isVisible: true,
       ),
     );
@@ -260,6 +272,9 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
       _systemArtSettingsKey.currentState?.navigateUp();
       return true;
     }
+    if (selectedKey == AppLocale.metadata) {
+      return _screenScraperKey.currentState?.navigateUp() ?? false;
+    }
 
     // Generic linear navigation within content lists.
     final previousIndex = _selectedContentIndex;
@@ -317,6 +332,9 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
       _systemArtSettingsKey.currentState?.navigateDown();
       return true;
     }
+    if (selectedKey == AppLocale.metadata) {
+      return _screenScraperKey.currentState?.navigateDown() ?? false;
+    }
 
     final previousIndex = _selectedContentIndex;
     setState(() {
@@ -355,6 +373,10 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
       final returnToMenu =
           _systemArtSettingsKey.currentState?.navigateLeft() ?? true;
       if (returnToMenu) _returnFocusToMenu();
+    } else if (selectedKey == AppLocale.metadata) {
+      final returnToMenu =
+          _screenScraperKey.currentState?.navigateLeft() ?? true;
+      if (returnToMenu) _returnFocusToMenu();
     } else {
       _returnFocusToMenu();
     }
@@ -376,6 +398,8 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
       _themesSettingsKey.currentState?.navigateRight();
     } else if (selectedKey == AppLocale.systemArt) {
       _systemArtSettingsKey.currentState?.navigateRight();
+    } else if (selectedKey == AppLocale.metadata) {
+      _screenScraperKey.currentState?.navigateRight();
     }
   }
 
@@ -400,9 +424,15 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
   /// It deliberately does not reuse [_navigateLeft]: in the grid-based
   /// categories (Themes, System Art) Left is a cell move, so delegating there
   /// would make B walk the row instead of backing out. On the menu itself B is
-  /// a no-op, as elsewhere at the root of a tab.
+  /// a no-op, as elsewhere at the root of a tab. The one exception is a
+  /// ScreenScraper region picked up for reordering: B drops it first.
   void _navigateBack() {
     if (_focusOnMenu) return;
+    final selectedKey = _menuItems[_selectedMenuIndex].localeKey;
+    if (selectedKey == AppLocale.metadata &&
+        (_screenScraperKey.currentState?.navigateBack() ?? false)) {
+      return;
+    }
     _returnFocusToMenu();
   }
 
@@ -431,6 +461,8 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
       return _themesSettingsKey.currentState?.getItemCount(context) ?? 0;
     } else if (selectedKey == AppLocale.systemArt) {
       return _systemArtSettingsKey.currentState?.getItemCount() ?? 0;
+    } else if (selectedKey == AppLocale.metadata) {
+      return _screenScraperKey.currentState?.getItemCount() ?? 0;
     } else if (selectedKey == AppLocale.directories) {
       return _directoriesSettingsKey.currentState?.getItemCount() ?? 0;
     } else if (selectedKey == AppLocale.tools) {
@@ -458,6 +490,8 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
       _themesSettingsKey.currentState?.selectItem(_selectedContentIndex);
     } else if (selectedKey == AppLocale.systemArt) {
       _systemArtSettingsKey.currentState?.selectItem(_selectedContentIndex);
+    } else if (selectedKey == AppLocale.metadata) {
+      _screenScraperKey.currentState?.selectItem();
     } else if (selectedKey == AppLocale.directories) {
       _directoriesSettingsKey.currentState?.selectItem(_selectedContentIndex);
     } else if (selectedKey == AppLocale.tools) {
@@ -688,6 +722,11 @@ class _NewSettingsScreenState extends State<NewSettingsScreen> {
             _selectedContentIndex = newIndex;
           });
         },
+      );
+    } else if (selectedKey == AppLocale.metadata) {
+      return ScreenScraperSettingsContent(
+        key: _screenScraperKey,
+        isContentFocused: !_focusOnMenu,
       );
     } else if (selectedKey == AppLocale.launcher) {
       return LauncherSettingsContent(

@@ -31,12 +31,16 @@ class RommRomCard extends StatefulWidget {
   final VoidCallback onTap;
   final RommRomLayout layout;
 
-  /// Logical width of the grid cell this card fills, so the cover can be
-  /// decoded at exactly the size it is drawn. The grid already computes its
-  /// cell width, so it passes that rather than having every card measure
-  /// itself; when absent the card measures its own constraints. Unused by the
-  /// list layout, whose thumbnail is a fixed size.
+  /// Logical size of the grid cell this card fills, so the cover can be
+  /// decoded at exactly the size it is drawn. The grid already computes both,
+  /// so it passes them rather than having every card measure itself; when
+  /// absent the card measures its own constraints. Unused by the list layout,
+  /// whose thumbnail is a fixed size.
+  ///
+  /// Both matter: the tile crops with [BoxFit.cover], so which axis bounds the
+  /// decode depends on the box's shape (see `coverDecodeHint`).
   final double? tileWidth;
+  final double? tileHeight;
 
   const RommRomCard({
     super.key,
@@ -49,6 +53,7 @@ class RommRomCard extends StatefulWidget {
     required this.onTap,
     this.layout = RommRomLayout.grid,
     this.tileWidth,
+    this.tileHeight,
   });
 
   @override
@@ -97,8 +102,8 @@ class RommRomCardState extends State<RommRomCard> {
     final covers = widget.provider.service.tileCoverUrlCandidates(widget.rom);
     // Skip sources already known to answer with nothing. `_coverAttempt` is
     // State, so a tile disposed by the grid's cache extent and scrolled back
-    // to starts again at zero — without this it re-requests the same dead URL
-    // on every scrollback, for the life of the library.
+    // to starts again at zero — without this it re-requests the same dead
+    // URL on every scrollback, for the life of the library.
     var attempt = _coverAttempt;
     while (attempt < covers.length &&
         widget.provider.service.isDeadCover(covers[attempt])) {
@@ -154,18 +159,27 @@ class RommRomCardState extends State<RommRomCard> {
     );
   }
 
-  /// The art tile's cover at the cell width the grid handed us, or — when no
-  /// width was given — at whatever width the parent lays us out to.
+  /// The art tile's cover at the cell size the grid handed us, or — when no
+  /// size was given — at whatever the parent lays us out to.
   Widget _buildTileCover(ThemeData theme, String? coverUrl) {
     final width = widget.tileWidth;
+    final height = widget.tileHeight;
     if (width != null) {
-      return _buildCover(theme, coverUrl, logicalWidth: width);
+      return _buildCover(
+        theme,
+        coverUrl,
+        logicalWidth: width,
+        logicalHeight: height,
+      );
     }
     return LayoutBuilder(
       builder: (context, constraints) => _buildCover(
         theme,
         coverUrl,
         logicalWidth: constraints.hasBoundedWidth ? constraints.maxWidth : null,
+        logicalHeight: constraints.hasBoundedHeight
+            ? constraints.maxHeight
+            : null,
       ),
     );
   }
@@ -194,7 +208,12 @@ class RommRomCardState extends State<RommRomCard> {
               height: 72.r,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(6.r),
-                child: _buildCover(theme, coverUrl, logicalWidth: 72.r),
+                child: _buildCover(
+                  theme,
+                  coverUrl,
+                  logicalWidth: 72.r,
+                  logicalHeight: 72.r,
+                ),
               ),
             ),
             SizedBox(width: 10.r),
@@ -434,16 +453,16 @@ class RommRomCardState extends State<RommRomCard> {
     );
   }
 
-  /// Advances to the next cover source after a failed load, on the next frame
-  /// — `errorBuilder` runs *during* build, where `setState` is illegal. Guarded
+  /// Advances past the candidate that just failed, on the next frame —
+  /// `errorBuilder` runs *during* build, where `setState` is illegal. Guarded
   /// on the attempt that failed so repeated error frames for the same source
   /// only skip it once.
   ///
   /// This moves [_coverAttempt] on by one rather than to the index actually
   /// drawn, which can be further along when the skip loop in [build] stepped
-  /// over dead sources. That still converges: the failure was recorded in the
-  /// service's dead-cover set before the error frame, so the next build's skip
-  /// loop walks past it and every other known-dead entry in one go.
+  /// over dead sources. That still converges: an absent cover is recorded in
+  /// the service's dead-cover set before the error frame, so the next build's
+  /// skip loop walks past it and every other known-dead entry in one go.
   void _tryNextCover() {
     final failed = _coverAttempt;
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -452,32 +471,34 @@ class RommRomCardState extends State<RommRomCard> {
     });
   }
 
-  /// The cover for [coverUrl], decoded no wider than [logicalWidth] needs on
-  /// this display and cropped (never letterboxed) to the tile.
+  /// The cover for [coverUrl], decoded no larger than the
+  /// [logicalWidth] x [logicalHeight] box needs on this display and cropped
+  /// (never letterboxed) to it.
   ///
   /// A decode hint makes Flutter wrap the provider in a `ResizeImage`, which
   /// both bounds decode memory and keys the `ImageCache` by size — so the grid
-  /// and list each keep their own right-sized entry. `gaplessPlayback` keeps
-  /// the previous cover painted while a recycled tile loads its new one,
-  /// instead of flashing the placeholder on every scroll. Nothing is written
-  /// to disk: the `ImageCache` is the only cache.
+  /// and list each keep their own right-sized entry. Which of `cacheWidth` /
+  /// `cacheHeight` carries it is `coverDecodeHint`'s call: under [BoxFit.cover]
+  /// the axis that bounds the paint depends on the box's shape, and hinting
+  /// the wrong one caps an off-ratio cover below the size it is drawn at.
+  /// `gaplessPlayback` keeps the previous cover painted while a recycled tile
+  /// loads its new one, instead of flashing the placeholder on every scroll.
+  /// Nothing is written to disk: the `ImageCache` is the only cache.
   // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Decode At Tile Size"
   Widget _buildCover(
     ThemeData theme,
     String? coverUrl, {
     required double? logicalWidth,
+    double? logicalHeight,
   }) {
     if (coverUrl == null) {
       return _coverPlaceholder(theme);
     }
-    // An unknown width (unbounded parent) skips the hint rather than decoding
-    // to a 1-pixel bitmap.
-    final cacheWidth = logicalWidth == null
-        ? null
-        : coverDecodeWidth(
-            logicalWidth: logicalWidth,
-            devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
-          );
+    final hint = coverDecodeHint(
+      logicalWidth: logicalWidth,
+      logicalHeight: logicalHeight,
+      devicePixelRatio: MediaQuery.devicePixelRatioOf(context),
+    );
     // The placeholder sits *under* the image rather than in a loadingBuilder:
     // a loadingBuilder replaces the retained frame with the placeholder for
     // the whole download, which is exactly the flash gaplessPlayback exists
@@ -489,7 +510,7 @@ class RommRomCardState extends State<RommRomCard> {
       children: [
         _coverPlaceholder(theme),
         Image(
-          image: _coverProvider(coverUrl, cacheWidth),
+          image: _coverProvider(coverUrl, hint),
           fit: BoxFit.cover,
           gaplessPlayback: true,
           errorBuilder: (_, _, _) {
@@ -501,22 +522,30 @@ class RommRomCardState extends State<RommRomCard> {
     );
   }
 
-  /// The provider for [coverUrl], decoded no wider than [cacheWidth] pixels.
+  /// The provider for [coverUrl], decoded no wider than the tile needs.
   ///
   /// [RommCoverImage] rather than `NetworkImage` so the fetch goes through
   /// [RommService]'s client under a concurrency bound. `NetworkImage` runs on
-  /// Flutter's own process-wide `HttpClient`, which has no per-host connection
+  /// Flutter's own process-wide `HttpClient` with no per-host connection
   /// limit, so a screenful of tiles opened a socket each and starved the
-  /// request fetching the next page of games on the same host. It also carries
-  /// the auth headers itself, so the call site no longer passes `headers`.
+  /// request fetching the next page of games on the same host.
   ///
   /// [ResizeImage] is what `Image.network`'s `cacheWidth` does internally, so
-  /// the decode bound and the size-keyed `ImageCache` entry are unchanged.
+  /// the decode bound and the size-keyed `ImageCache` entry are unchanged — an
+  /// unknown width (unbounded parent) skips the hint rather than decoding to a
+  /// one-pixel bitmap, exactly as before.
   // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Decode At Tile Size"
-  ImageProvider _coverProvider(String coverUrl, int? cacheWidth) {
+  ImageProvider _coverProvider(
+    String coverUrl,
+    ({int? cacheWidth, int? cacheHeight}) hint,
+  ) {
     final provider = RommCoverImage(coverUrl, widget.provider.service);
-    if (cacheWidth == null) return provider;
-    return ResizeImage(provider, width: cacheWidth);
+    if (hint.cacheWidth == null && hint.cacheHeight == null) return provider;
+    return ResizeImage(
+      provider,
+      width: hint.cacheWidth,
+      height: hint.cacheHeight,
+    );
   }
 
   Widget _coverPlaceholder(ThemeData theme) {

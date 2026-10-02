@@ -227,11 +227,12 @@ class SqliteConfigService {
           'hide_tab_romm',
           false,
         ),
-        hideTabSearch: ConfigModel.readBool(
+        // Unset reads as hidden: the card is opt-in (see migration v171).
+        hideSearchCard: ConfigModel.readBool(
           userConfig,
-          'hideTabSearch',
-          'hide_tab_search',
-          false,
+          'hideSearchCard',
+          'hide_search_card',
+          true,
         ),
         activeSyncProvider:
             userConfig?['active_sync_provider']?.toString() ?? 'neosync',
@@ -344,6 +345,32 @@ class SqliteConfigService {
               userConfig?['romm_cover_cache_mb']?.toString() ?? '200',
             ) ??
             200,
+        // Missing column/row => 0 => logos shown (the default).
+        hideSystemLogos:
+            (int.tryParse(
+                  userConfig?['hide_system_logos']?.toString() ?? '0',
+                ) ??
+                0) ==
+            1,
+        // Missing column/row => 0 => blur off (the default). The frosted blur
+        // is only smooth on a powerful GPU, so it starts disabled.
+        neoglassBlur:
+            (int.tryParse(userConfig?['neoglass_blur']?.toString() ?? '0') ?? 0)
+                .clamp(0, 2),
+        // Missing column/row => 10 => the default transparency (0–30 scale).
+        neoglassTransparency:
+            (int.tryParse(
+                      userConfig?['neoglass_transparency']?.toString() ?? '10',
+                    ) ??
+                    10)
+                .clamp(0, 30),
+        // Missing column/row => 2 => the feature's default rim stroke width.
+        neoglassBorderWidth:
+            (double.tryParse(
+                      userConfig?['neoglass_border_width']?.toString() ?? '2',
+                    ) ??
+                    2)
+                .clamp(0.0, 8.0),
       );
     } catch (e) {
       _log.e('Error applying configuration in loadConfig: $e');
@@ -392,7 +419,7 @@ class SqliteConfigService {
         hideTabAchievements: config.hideTabAchievements ? 1 : 0,
         hideTabScraper: config.hideTabScraper ? 1 : 0,
         hideTabRomm: config.hideTabRomm ? 1 : 0,
-        hideTabSearch: config.hideTabSearch ? 1 : 0,
+        hideSearchCard: config.hideSearchCard ? 1 : 0,
         activeSyncProvider: config.activeSyncProvider,
         autoUpdateApp: config.autoUpdateApp ? 1 : 0,
         autoUpdateSystems: config.autoUpdateSystems ? 1 : 0,
@@ -415,6 +442,10 @@ class SqliteConfigService {
         rommShowLibrary: config.rommShowLibrary ? 1 : 0,
         rommLibraryDefaultScope: config.rommLibraryDefaultScope,
         rommCoverCacheMb: config.rommCoverCacheMb,
+        hideSystemLogos: config.hideSystemLogos ? 1 : 0,
+        neoglassBlur: config.neoglassBlur,
+        neoglassTransparency: config.neoglassTransparency,
+        neoglassBorderWidth: config.neoglassBorderWidth,
       );
 
       await SqliteService.saveUserRomFolders(config.romFolders);

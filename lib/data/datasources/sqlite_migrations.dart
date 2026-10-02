@@ -878,6 +878,21 @@ class SqliteMigrations {
       case 168:
         await _migrateToVersion168(db);
         break;
+      // Upstream's v157, v159 and v160 collided with slots this fork had
+      // already used, so they run here under the next free numbers. Each is
+      // guarded per column, so the number it runs under does not matter.
+      case 169:
+        await _migrateToVersion169(db);
+        break;
+      case 170:
+        await _migrateToVersion170(db);
+        break;
+      case 171:
+        await _migrateToVersion171(db);
+        break;
+      case 172:
+        await _migrateToVersion172(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -7750,5 +7765,131 @@ class SqliteMigrations {
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }
+  }
+
+  /// Migration v169: Adds the NeoGlass frosted-glass appearance columns to
+  /// `user_config`: `neoglass_blur` (0–2), `neoglass_transparency` (0–30) and
+  /// `neoglass_border_width` (0.0–8.0).
+  ///
+  /// Defaults match the [ConfigModel] defaults (blur 0, transparency 10, border
+  /// 2) so a config written before these columns existed keeps the feature's
+  /// out-of-the-box look instead of being reset to a different value.
+  ///
+  /// Idempotent — each column is added only when absent. Upstream ships this
+  /// as v157; that slot was already taken here, so it runs as v169.
+  static Future<void> _migrateToVersion169(Database db) async {
+    _log.i('Migration v169: Adding NeoGlass columns to user_config');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('neoglass_blur')) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN neoglass_blur INTEGER DEFAULT 0',
+        );
+        _log.i('Column neoglass_blur added via v169');
+      } else {
+        _log.i('Column neoglass_blur already exists');
+      }
+      if (!columns.contains('neoglass_transparency')) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN neoglass_transparency '
+          'INTEGER DEFAULT 10',
+        );
+        _log.i('Column neoglass_transparency added via v169');
+      } else {
+        _log.i('Column neoglass_transparency already exists');
+      }
+      if (!columns.contains('neoglass_border_width')) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN neoglass_border_width '
+          'REAL DEFAULT 2',
+        );
+        _log.i('Column neoglass_border_width added via v169');
+      } else {
+        _log.i('Column neoglass_border_width already exists');
+      }
+      _log.i('Migration v169 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v169: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v170: adds `hide_system_logos` to `user_config`.
+  ///
+  /// When enabled, the systems grid/carousel hide each card's logo footer and
+  /// render square (1:1) cards, for packs whose backgrounds already carry the
+  /// console logo. Upstream ships this as v159; that slot was already taken
+  /// here, so it runs as v170.
+  static Future<void> _migrateToVersion170(Database db) async {
+    _log.i('Migration v170: Adding hide_system_logos to user_config');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('hide_system_logos')) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN hide_system_logos '
+          'INTEGER DEFAULT 0',
+        );
+        _log.i('Column hide_system_logos added via v170');
+      } else {
+        _log.i('Column hide_system_logos already exists');
+      }
+      _log.i('Migration v170 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v170: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v171: adds `user_config.hide_search_card`, defaulting to hidden.
+  ///
+  /// Search moved from a navigation tab to a card on the systems screen, and
+  /// the card starts hidden. The old `hide_tab_search` column cannot carry
+  /// that: it defaults to 0 and nearly every row holds that default, so an
+  /// unset preference and "shown" read the same. A new column whose default is
+  /// 1 hides the card on every existing row too, since SQLite fills the default
+  /// into rows that predate the column. `hide_tab_search` is left in place,
+  /// unread. Upstream ships this as v160; that slot was already taken here, so
+  /// it runs as v171.
+  static Future<void> _migrateToVersion171(Database db) async {
+    _log.i('Migration v171: Adding hide_search_card to user_config');
+    try {
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('hide_search_card')) {
+        db.execute(
+          'ALTER TABLE user_config ADD COLUMN hide_search_card INTEGER DEFAULT 1',
+        );
+        _log.i('Column hide_search_card added via v171');
+      } else {
+        _log.i('Column hide_search_card already exists');
+      }
+      _log.i('Migration v171 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v171: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
+  }
+
+  /// Migration v172: backfill for a database that an upstream build migrated.
+  ///
+  /// Upstream and this fork both used slots 157 to 160 for different columns.
+  /// A database an upstream build left at 157 or later is already past those
+  /// slots when it first meets this binary, so this fork's v157 to v160 would
+  /// never run on it and every query naming their columns would fail with
+  /// "no such column". Running them again here closes that gap. All four are
+  /// guarded with `PRAGMA table_info`, so on a database that did run them this
+  /// is a no-op.
+  static Future<void> _migrateToVersion172(Database db) async {
+    _log.i('Migration v172: Backfilling v157 to v160 for upstream databases');
+    await _migrateToVersion157(db);
+    await _migrateToVersion158(db);
+    await _migrateToVersion159(db);
+    await _migrateToVersion160(db);
+    _log.i('Migration v172 completed');
   }
 }

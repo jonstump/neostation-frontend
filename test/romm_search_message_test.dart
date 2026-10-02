@@ -34,6 +34,7 @@ const _keys = {
   AppLocale.rommSearchResultCountOne: <String>[],
   AppLocale.rommSearchResultCountMore: ['{count}'],
   AppLocale.rommSearchNoResults: ['{term}'],
+  AppLocale.rommSearchClear: <String>[],
 };
 
 RommSearchMessage? _message({

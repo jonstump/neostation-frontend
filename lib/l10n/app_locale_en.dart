@@ -44,7 +44,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.themes: 'Themes',
   AppLocale.systemArt: 'System Art',
   AppLocale.systemArtSubtitle:
-      'Customize system card backgrounds and logos with System Art packs',
+      'Customize system card backgrounds with System Art packs',
   AppLocale.systemArtNone: 'None',
   AppLocale.systemArtNoneSubtitle: 'Default appearance',
   AppLocale.systemArtLoading: 'Loading System Art...',
@@ -56,6 +56,15 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.systemArtRedownloadBody:
       'The cached pack will be deleted and downloaded again. Use this if some system backgrounds are missing.',
   AppLocale.systemArtDownloading: 'Downloading System Art pack...',
+  AppLocale.systemArtByAuthor: 'by {author}',
+  AppLocale.systemArtVersion: 'v{version}',
+  AppLocale.systemArtDownloads: '{count} downloads',
+  AppLocale.systemArtSystemsCovered: '{count} systems',
+  AppLocale.systemArtSupport: 'Support',
+  AppLocale.systemArtApplied: 'Applied',
+  AppLocale.systemArtHideLogos: 'Hide system logos',
+  AppLocale.systemArtHideLogosSubtitle:
+      'Hide the logo on system cards when the background already includes one',
   AppLocale.about: 'About',
   AppLocale.exit: 'Exit',
   AppLocale.launcher: 'Launcher',
@@ -72,6 +81,17 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.recentCardSizeDefault: 'Default',
   AppLocale.recentCardSize2x1: 'Compact',
   AppLocale.themesSubtitle: 'Personalize the appearance of your NeoStation',
+  AppLocale.neoglassGroup: 'NeoGlass',
+  AppLocale.neoglassBlur: 'Glass Blur',
+  AppLocale.neoglassBlurSubtitle: 'Frost strength: Off, 1 or 2',
+  AppLocale.neoglassBlurOff: 'Off',
+  AppLocale.neoglassBlurGpuWarning:
+      'Only enable on a powerful GPU — on low-end hardware the frosted blur may not stay smooth.',
+  AppLocale.neoglassTransparency: 'Glass Transparency',
+  AppLocale.neoglassTransparencySubtitle:
+      '0 = no transparency, 30 = 50% transparency',
+  AppLocale.neoglassBorderWidth: 'Glass Border',
+  AppLocale.neoglassBorderWidthSubtitle: 'Width of the glass edge',
   AppLocale.systemTheme: 'System',
   AppLocale.importTheme: 'Import Theme',
   AppLocale.importThemeSuccess: 'Imported "%s"',
@@ -214,14 +234,10 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.showAchievementsTab: 'Show Achievements tab',
   AppLocale.showAchievementsTabSubtitle:
       'Display the RetroAchievements tab in the navigation bar',
-  AppLocale.showScraperTab: 'Show Scraper tab',
-  AppLocale.showScraperTabSubtitle:
-      'Display the Scraping tab in the navigation bar',
   AppLocale.showRommTab: 'Show RomM tab',
   AppLocale.showRommTabSubtitle: 'Display the RomM tab in the navigation bar',
-  AppLocale.showSearchTab: 'Show Search tab',
-  AppLocale.showSearchTabSubtitle:
-      'Display the Search tab in the navigation bar',
+  AppLocale.searchCard: 'Search Card',
+  AppLocale.searchCardSubtitle: 'Show the Search card in the systems grid',
 
   AppLocale.configureDirectories: 'Directories',
   AppLocale.configureRomsFolder: 'Configure ROMs folder',
@@ -310,6 +326,11 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.thankYou: 'Thank you for using NeoStation!',
   AppLocale.visitWebsite: 'Visit our official website',
   AppLocale.joinCommunity: 'Join our community and get support',
+  AppLocale.exportLogs: 'Export logs',
+  AppLocale.exportLogsDesc:
+      'For bug reports. Includes file paths and game names.',
+  AppLocale.exportLogsSaved: 'Logs saved to {path}',
+  AppLocale.exportLogsFailed: 'Couldn\'t export the logs',
   AppLocale.specialThanks: 'Special Thanks',
   AppLocale.forInvaluableContributions: 'For invaluable contributions',
   AppLocale.supportOnKofi: 'Support us on Ko-fi',
@@ -494,16 +515,12 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.applyToAll: 'Apply to all conflicts',
   AppLocale.applyToAllDesc: 'Use this choice for remaining conflicts',
 
-  AppLocale.account: 'Account',
   AppLocale.scraping: 'Scraping',
   AppLocale.scrapeMode: 'Scrape Mode',
-  AppLocale.scrapeModeSub: 'Choose what content to scrape',
   AppLocale.media: 'Media',
-  AppLocale.mediaSub: 'Choose what content types to download',
   AppLocale.language: 'Language',
   AppLocale.languageSub: 'Select preferred language for game metadata',
   AppLocale.preferredLanguage: 'Preferred Language',
-  AppLocale.region: 'Region',
   AppLocale.regionSub: 'Set region priority for scraping',
   AppLocale.regionPriority: 'Region Priority',
   AppLocale.regionPrioritySub:
@@ -521,9 +538,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.logoutError: 'Error during logout',
   AppLocale.newContentOnly: 'New content only',
   AppLocale.allContent: 'All content',
-  AppLocale.scrapeModeUpdated: 'Scrape mode updated to:',
   AppLocale.scrapeModeError: 'Error updating scrape mode',
-  AppLocale.languageUpdated: 'Language updated successfully',
   AppLocale.languageError: 'Error updating language',
   AppLocale.mediaSettingsError: 'Error saving media settings',
   AppLocale.newContentOnlyDesc:
@@ -699,7 +714,8 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.cancelScan: 'Cancel Scan',
   AppLocale.progress: 'Progress',
   AppLocale.raLogin: 'RetroAchievements Login',
-  AppLocale.raOfflineBanner: 'Offline — showing your last synced achievements',
+  AppLocale.raOfflineBanner:
+      'Offline — showing your last synced achievements. Retrying…',
   AppLocale.raWhatIs: 'What is RetroAchievements?',
   AppLocale.raDescription:
       'RetroAchievements is a community effort to provide achievements for classic games using emulators.',
@@ -745,6 +761,8 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.requiresFreeAccount: 'Requires a free account',
   AppLocale.createAccountAt: 'Create an account at ',
   AppLocale.toGetCredentials: ' to get your Account credentials.',
+  AppLocale.screenScraperTitle: 'ScreenScraper',
+  AppLocale.metadata: 'Metadata',
   AppLocale.screenScraperLogin: 'ScreenScraper Login',
   AppLocale.scanningSystemsRoms: 'Scanning systems and ROMs...',
   AppLocale.ofSystems: '{scanned} of {total} systems',
@@ -987,6 +1005,10 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.folderNotEmptyBody:
       'This folder already contains {count} item(s). NeoStation will store its own data here, alongside the existing contents.',
   AppLocale.folderNotEmptyUseAnyway: 'Use Anyway',
+  AppLocale.userDataFolderNotWritable:
+      "Can't write to this folder. Pick another one, or keep the default location.",
+  AppLocale.userDataFolderGrantAllFiles:
+      "To use this folder, allow All files access for NeoStation in Android Settings → Apps → Special app access → All files access, then pick it again.",
   AppLocale.moveUserDataTitle: 'Move User Data?',
   AppLocale.moveUserDataBody:
       'NeoStation will move its own data — database, scraped media, and settings — from the current folder to the new one. Files not created by NeoStation are left untouched.',
@@ -1051,6 +1073,13 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rommNoRoms: 'No ROMs found',
   AppLocale.rommSearch: 'Search',
   AppLocale.rommSearching: 'Searching RomM...',
+  AppLocale.rommSearchHint: 'Search this platform',
+  AppLocale.rommSearchCollectionHint: 'Search this collection',
+  AppLocale.rommSearchResultCount: '{count} results',
+  AppLocale.rommSearchResultCountOne: '1 result',
+  AppLocale.rommSearchResultCountMore: '{count}+ results',
+  AppLocale.rommSearchNoResults: 'No results for {term}',
+  AppLocale.rommSearchClear: 'Clear search',
   AppLocale.rommDownloading: 'Downloading...',
   AppLocale.rommDownloaded: 'Downloaded',
   AppLocale.rommLinked: 'Linked to RomM',
@@ -1100,17 +1129,12 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.filterGenre: 'Genre',
   AppLocale.filterRating: 'Rating',
   AppLocale.filterYear: 'Year',
-  AppLocale.filterAchievements: 'Achievements',
-  AppLocale.raCoverageMatched: 'Yes',
-  AppLocale.raCoverageNoSet: 'No',
   AppLocale.raCoverageUnknown: 'Unknown',
   AppLocale.filterAny: 'Any',
   AppLocale.filterSource: 'Source',
   AppLocale.sourceLocal: 'On this device',
   AppLocale.searchRatingLocalOnly:
       'The rating filter applies to local games only',
-  AppLocale.searchAchievementsLocalOnly:
-      'The achievements filter applies to local games only',
   AppLocale.searchNoRommEquivalent: 'RomM has nothing filed under “{value}”',
   AppLocale.resetPlayTimeConfirm: 'Reset Play Time',
   AppLocale.resetPlayTimeConfirmBody:
@@ -1173,6 +1197,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.raAotwOpenLocalGame: 'Open local game',
   AppLocale.raAotwDownloadFromRomm: 'Download from RomM',
   AppLocale.raGamesPlayed: '{count} games played',
+  AppLocale.raGamesBeaten: '{count} games beaten',
   AppLocale.raAchievementProgress: '{earned}/{total} achievements',
   AppLocale.raRecent30Days: '30 days',
 
@@ -1244,17 +1269,17 @@ const Map<String, dynamic> appLocaleEn = {
       'Already using ES-DE? Import your game metadata and artwork. Select the '
       'main ES-DE folder containing your "gamelists" and "downloaded_media" '
       'folders. Optional; you can run it later from Settings.',
-  AppLocale.wizardArtPackTitle: 'Get the NeoStation Art Pack',
+  AppLocale.wizardArtPackTitle: 'Get a System Art Pack',
   AppLocale.wizardArtPackDesc:
-      'We strongly recommend downloading the NeoStation system art pack for '
-      'beautiful console backgrounds across your library. It can be changed '
-      'later in Settings.',
-  AppLocale.wizardDownloadArtPack: 'Download Art Pack',
+      'We strongly recommend downloading a System Art Pack (SAP) for beautiful '
+      'console backgrounds across your library. You can change it later in '
+      'Settings.',
+  AppLocale.wizardDownloadArtPack: 'Download System Art Pack',
   AppLocale.wizardArtPackInstalled:
-      'Art pack installed! You can explore more themes later in Settings.',
+      'System Art Pack installed! You can explore more packs later in Settings.',
   AppLocale.wizardArtPackUnavailable:
-      'The art pack couldn\'t be reached right now. You can install it later '
-      'from Settings once you\'re online.',
+      'The System Art Pack couldn\'t be reached right now. You can install it '
+      'later from Settings once you\'re online.',
 
   // Hide / unhide games
   AppLocale.hideGame: 'Hide Game',
@@ -1417,12 +1442,6 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.scraperScreenscraperOptional:
       'RomM is connected and is used first for scraping. Log in to ScreenScraper to add it as a fallback source.',
   AppLocale.scraperLoginToScreenscraper: 'Log in to ScreenScraper',
-  AppLocale.rommSearchHint: 'Search this platform',
-  AppLocale.rommSearchCollectionHint: 'Search this collection',
-  AppLocale.rommSearchResultCount: '{count} results',
-  AppLocale.rommSearchResultCountOne: '1 result',
-  AppLocale.rommSearchResultCountMore: '{count}+ results',
-  AppLocale.rommSearchNoResults: 'No results for {term}',
   AppLocale.scraperSubtitleRomm: 'Download game metadata from RomM',
   AppLocale.scraperSubtitleBoth:
       'Download game metadata from RomM, with ScreenScraper for anything RomM lacks',

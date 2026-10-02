@@ -106,6 +106,12 @@ class GamesGrid extends StatefulWidget {
   final VoidCallback? onToggleLibraryScope;
   final bool libraryOffline;
 
+  /// Id this view registers its gamepad layer under. The host passes one per
+  /// instance: a games list can appear twice on the route stack (search's "Go
+  /// to game" opens one over another), and a shared id lets the top copy's pop
+  /// unregister the bottom copy's layer instead of its own.
+  final String navLayerId;
+
   const GamesGrid({
     super.key,
     required this.system,
@@ -132,6 +138,7 @@ class GamesGrid extends StatefulWidget {
     this.libraryScope,
     this.onToggleLibraryScope,
     this.libraryOffline = false,
+    this.navLayerId = 'games_grid',
   });
 
   @override
@@ -626,7 +633,7 @@ class _GamesGridState extends State<GamesGrid> {
       if (mounted) {
         _gamepadNav.initialize();
         GamepadNavigationManager.pushLayer(
-          'games_grid',
+          widget.navLayerId,
           onActivate: () => _gamepadNav.activate(),
           onDeactivate: () => _gamepadNav.deactivate(),
         );
@@ -859,7 +866,7 @@ class _GamesGridState extends State<GamesGrid> {
     _achievementsDebounce?.cancel();
     _settleTimer?.cancel();
     _cardSizeLabel.dispose();
-    GamepadNavigationManager.popLayer('games_grid');
+    GamepadNavigationManager.popLayer(widget.navLayerId);
     _gamepadNav.dispose();
     _scrollController.dispose();
     super.dispose();

@@ -42,9 +42,9 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.secondaryDisplay: 'Pantalla secundaria',
   AppLocale.directories: 'Directorios',
   AppLocale.themes: 'Themes',
-  AppLocale.systemArt: 'System Art',
+  AppLocale.systemArt: 'Arte de sistemas',
   AppLocale.systemArtSubtitle:
-      'Personaliza fondos y logos de las cards de sistemas con paquetes de System Art',
+      'Personaliza los fondos de las cards de sistemas con paquetes de System Art',
   AppLocale.systemArtNone: 'Ninguno',
   AppLocale.systemArtNoneSubtitle: 'Apariencia predeterminada',
   AppLocale.systemArtLoading: 'Cargando System Art...',
@@ -56,6 +56,15 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.systemArtRedownloadBody:
       'El paquete en caché se eliminará y se descargará de nuevo. Usa esta opción si faltan algunos fondos de sistemas.',
   AppLocale.systemArtDownloading: 'Descargando el paquete de System Art...',
+  AppLocale.systemArtByAuthor: 'por {author}',
+  AppLocale.systemArtVersion: 'v{version}',
+  AppLocale.systemArtDownloads: '{count} descargas',
+  AppLocale.systemArtSystemsCovered: '{count} sistemas',
+  AppLocale.systemArtSupport: 'Apoyar',
+  AppLocale.systemArtApplied: 'Aplicado',
+  AppLocale.systemArtHideLogos: 'Ocultar logos de sistemas',
+  AppLocale.systemArtHideLogosSubtitle:
+      'Oculta el logo de las cards de sistemas cuando el fondo ya lo incluye',
   AppLocale.about: 'Acerca de',
   AppLocale.exit: 'Salir',
   AppLocale.launcher: 'Lanzador',
@@ -73,6 +82,17 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.recentCardSizeDefault: 'Predeterminado',
   AppLocale.recentCardSize2x1: 'Compacto',
   AppLocale.themesSubtitle: 'Personaliza la apariencia de tu NeoStation',
+  AppLocale.neoglassGroup: 'NeoGlass',
+  AppLocale.neoglassBlur: 'Desenfoque de cristal',
+  AppLocale.neoglassBlurSubtitle: 'Intensidad del desenfoque: Apagado, 1 o 2',
+  AppLocale.neoglassBlurOff: 'Apagado',
+  AppLocale.neoglassBlurGpuWarning:
+      'Actívalo solo en una GPU potente: en hardware de gama baja el desenfoque esmerilado puede no mantenerse fluido.',
+  AppLocale.neoglassTransparency: 'Transparencia del cristal',
+  AppLocale.neoglassTransparencySubtitle:
+      '0 = sin transparencia, 30 = 50% de transparencia',
+  AppLocale.neoglassBorderWidth: 'Borde del cristal',
+  AppLocale.neoglassBorderWidthSubtitle: 'Grosor del borde del cristal',
   AppLocale.systemTheme: 'Sistema',
   AppLocale.importTheme: 'Importar tema',
   AppLocale.importThemeSuccess: 'Tema "%s" importado',
@@ -222,15 +242,11 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.showAchievementsTab: 'Mostrar pestaña Logros',
   AppLocale.showAchievementsTabSubtitle:
       'Muestra la pestaña de RetroAchievements en la barra de navegación',
-  AppLocale.showScraperTab: 'Mostrar pestaña Scraper',
-  AppLocale.showScraperTabSubtitle:
-      'Muestra la pestaña de scraping en la barra de navegación',
   AppLocale.showRommTab: 'Mostrar pestaña RomM',
   AppLocale.showRommTabSubtitle:
       'Muestra la pestaña de RomM en la barra de navegación',
-  AppLocale.showSearchTab: 'Mostrar pestaña Buscar',
-  AppLocale.showSearchTabSubtitle:
-      'Muestra la pestaña de búsqueda en la barra de navegación',
+  AppLocale.searchCard: 'Tarjeta de Búsqueda',
+  AppLocale.searchCardSubtitle: 'Muestra la tarjeta de búsqueda en la grilla',
 
   AppLocale.configureDirectories: 'Directorios',
   AppLocale.configureRomsFolder: 'Configurar carpeta de ROMs',
@@ -323,6 +339,11 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.thankYou: '¡Gracias por usar NeoStation!',
   AppLocale.visitWebsite: 'Visita nuestro sitio oficial',
   AppLocale.joinCommunity: 'Únete a nuestra comunidad y obtén soporte',
+  AppLocale.exportLogs: 'Exportar registros',
+  AppLocale.exportLogsDesc:
+      'Para reportar errores. Incluye rutas de archivos y nombres de juegos.',
+  AppLocale.exportLogsSaved: 'Registros guardados en {path}',
+  AppLocale.exportLogsFailed: 'No se pudieron exportar los registros',
   AppLocale.specialThanks: 'Agradecimientos Especiales',
   AppLocale.forInvaluableContributions: 'Por sus invaluables contribuciones',
   AppLocale.supportOnKofi: 'Apóyanos en Ko-fi',
@@ -511,16 +532,12 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.applyToAll: 'Aplicar a todos los conflictos',
   AppLocale.applyToAllDesc: 'Usar esta elección para los conflictos restantes',
 
-  AppLocale.account: 'Cuenta',
   AppLocale.scraping: 'Scraping',
   AppLocale.scrapeMode: 'Modo de Scraping',
-  AppLocale.scrapeModeSub: 'Elige qué contenido descargar',
   AppLocale.media: 'Multimedia',
-  AppLocale.mediaSub: 'Elige qué tipos de contenido descargar',
   AppLocale.language: 'Idioma',
   AppLocale.languageSub: 'Selecciona el idioma preferido para los metadatos',
   AppLocale.preferredLanguage: 'Idioma Preferido',
-  AppLocale.region: 'Región',
   AppLocale.regionSub: 'Configura la prioridad de región para el scraping',
   AppLocale.regionPriority: 'Prioridad de Región',
   AppLocale.regionPrioritySub:
@@ -538,9 +555,7 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.logoutError: 'Error al cerrar sesión',
   AppLocale.newContentOnly: 'Solo contenido nuevo',
   AppLocale.allContent: 'Todo el contenido',
-  AppLocale.scrapeModeUpdated: 'Modo de scraping actualizado a:',
   AppLocale.scrapeModeError: 'Error al actualizar el modo de scraping',
-  AppLocale.languageUpdated: 'Idioma actualizado con éxito',
   AppLocale.languageError: 'Error al actualizar el idioma',
   AppLocale.mediaSettingsError: 'Error al guardar los ajustes multimedia',
   AppLocale.newContentOnlyDesc:
@@ -721,7 +736,7 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.progress: 'Progreso',
   AppLocale.raLogin: 'Login de RetroAchievements',
   AppLocale.raOfflineBanner:
-      'Sin conexión: mostrando tus últimos logros sincronizados',
+      'Sin conexión: mostrando tus últimos logros sincronizados. Reintentando…',
   AppLocale.raWhatIs: '¿Qué es RetroAchievements?',
   AppLocale.raDescription:
       'RetroAchievements es un esfuerzo comunitario para proporcionar logros en juegos clásicos mediante emuladores.',
@@ -769,6 +784,8 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.requiresFreeAccount: 'Requiere una cuenta gratuita',
   AppLocale.createAccountAt: 'Crea una cuenta en ',
   AppLocale.toGetCredentials: ' para obtener tus credenciales de cuenta.',
+  AppLocale.screenScraperTitle: 'ScreenScraper',
+  AppLocale.metadata: 'Metadatos',
   AppLocale.screenScraperLogin: 'Login de ScreenScraper',
   AppLocale.scanningSystemsRoms: 'Escaneando sistemas y ROMs...',
   AppLocale.ofSystems: '{scanned} de {total} sistemas',
@@ -1019,6 +1036,10 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.folderNotEmptyBody:
       'Esta carpeta ya contiene {count} elemento(s). NeoStation almacenará sus propios datos aquí, junto con el contenido existente.',
   AppLocale.folderNotEmptyUseAnyway: 'Usar de todos modos',
+  AppLocale.userDataFolderNotWritable:
+      "No se puede escribir en esta carpeta. Elige otra o mantén la ubicación predeterminada.",
+  AppLocale.userDataFolderGrantAllFiles:
+      "Para usar esta carpeta, permite el acceso a todos los archivos para NeoStation en Ajustes de Android → Aplicaciones → Acceso especial de aplicaciones → Acceso a todos los archivos y vuelve a elegirla.",
   AppLocale.moveUserDataTitle: '¿Mover datos de usuario?',
   AppLocale.moveUserDataBody:
       'NeoStation moverá sus propios datos (base de datos, medios extraídos y ajustes) de la carpeta actual a la nueva. Los archivos no creados por NeoStation permanecen intactos.',
@@ -1087,6 +1108,13 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.rommNoRoms: 'No se encontraron ROMs',
   AppLocale.rommSearch: 'Buscar',
   AppLocale.rommSearching: 'Buscando en RomM...',
+  AppLocale.rommSearchHint: 'Buscar en esta plataforma',
+  AppLocale.rommSearchCollectionHint: 'Buscar en esta colección',
+  AppLocale.rommSearchResultCount: '{count} resultados',
+  AppLocale.rommSearchResultCountOne: '1 resultado',
+  AppLocale.rommSearchResultCountMore: '{count}+ resultados',
+  AppLocale.rommSearchNoResults: 'Sin resultados para {term}',
+  AppLocale.rommSearchClear: 'Borrar búsqueda',
   AppLocale.rommDownloading: 'Descargando...',
   AppLocale.rommDownloaded: 'Descargado',
   AppLocale.rommLinked: 'Vinculado a RomM',
@@ -1138,17 +1166,12 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.filterGenre: 'Género',
   AppLocale.filterRating: 'Valoración',
   AppLocale.filterYear: 'Año',
-  AppLocale.filterAchievements: 'Logros',
-  AppLocale.raCoverageMatched: 'Sí',
-  AppLocale.raCoverageNoSet: 'No',
   AppLocale.raCoverageUnknown: 'Desconocido',
   AppLocale.filterAny: 'Cualquiera',
   AppLocale.filterSource: 'Origen',
   AppLocale.sourceLocal: 'En este dispositivo',
   AppLocale.searchRatingLocalOnly:
       'El filtro de valoración solo se aplica a los juegos locales',
-  AppLocale.searchAchievementsLocalOnly:
-      'El filtro de logros solo se aplica a los juegos locales',
   AppLocale.searchNoRommEquivalent:
       'RomM no tiene nada clasificado como «{value}»',
   AppLocale.resetPlayTimeConfirm: 'Restablecer tiempo de juego',
@@ -1215,6 +1238,7 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.raAotwOpenLocalGame: 'Abrir juego local',
   AppLocale.raAotwDownloadFromRomm: 'Descargar desde RomM',
   AppLocale.raGamesPlayed: '{count} juegos jugados',
+  AppLocale.raGamesBeaten: '{count} juegos completados',
   AppLocale.raAchievementProgress: '{earned}/{total} logros',
   AppLocale.raRecent30Days: '30 días',
 
@@ -1291,17 +1315,17 @@ const Map<String, dynamic> appLocaleEs = {
       'Selecciona la carpeta principal de ES-DE que contiene tus carpetas '
       '"gamelists" y "downloaded_media". Opcional; puedes ejecutarlo más tarde '
       'desde Ajustes.',
-  AppLocale.wizardArtPackTitle: 'Consigue el paquete de arte de NeoStation',
+  AppLocale.wizardArtPackTitle: 'Consigue un System Art Pack',
   AppLocale.wizardArtPackDesc:
-      'Recomendamos encarecidamente descargar el paquete de arte de sistemas de '
-      'NeoStation para tener bonitos fondos de consola en toda tu biblioteca. '
-      'Se puede cambiar más tarde en Ajustes.',
-  AppLocale.wizardDownloadArtPack: 'Descargar paquete de arte',
+      'Recomendamos encarecidamente descargar un System Art Pack (SAP) para '
+      'tener bonitos fondos de consola en toda tu biblioteca. Puedes cambiarlo '
+      'más tarde en Ajustes.',
+  AppLocale.wizardDownloadArtPack: 'Descargar System Art Pack',
   AppLocale.wizardArtPackInstalled:
-      '¡Paquete de arte instalado! Puedes explorar más temas más tarde en '
+      '¡System Art Pack instalado! Puedes explorar más packs más tarde en '
       'Ajustes.',
   AppLocale.wizardArtPackUnavailable:
-      'No se pudo acceder al paquete de arte en este momento. Puedes instalarlo '
+      'No se pudo acceder al System Art Pack en este momento. Puedes instalarlo '
       'más tarde desde Ajustes cuando estés en línea.',
 
   // Hide / unhide games
@@ -1470,12 +1494,6 @@ const Map<String, dynamic> appLocaleEs = {
   AppLocale.scraperScreenscraperOptional:
       'RomM está conectado y se usa primero para el scraping. Inicia sesión en ScreenScraper para añadirlo como fuente de respaldo.',
   AppLocale.scraperLoginToScreenscraper: 'Iniciar sesión en ScreenScraper',
-  AppLocale.rommSearchHint: 'Buscar en esta plataforma',
-  AppLocale.rommSearchCollectionHint: 'Buscar en esta colección',
-  AppLocale.rommSearchResultCount: '{count} resultados',
-  AppLocale.rommSearchResultCountOne: '1 resultado',
-  AppLocale.rommSearchResultCountMore: '{count}+ resultados',
-  AppLocale.rommSearchNoResults: 'Sin resultados para {term}',
   AppLocale.scraperSubtitleRomm: 'Descargar metadatos de juegos desde RomM',
   AppLocale.scraperSubtitleBoth:
       'Descargar metadatos de juegos desde RomM; ScreenScraper completa lo que falte en RomM',

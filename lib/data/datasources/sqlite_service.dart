@@ -459,7 +459,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 168;
+  static const int _databaseVersion = 172;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -1934,6 +1934,7 @@ class SqliteService {
         hide_tab_scraper INTEGER DEFAULT 0,
         hide_tab_romm INTEGER DEFAULT 0,
         hide_tab_search INTEGER DEFAULT 0,
+        hide_search_card INTEGER DEFAULT 1,
         active_sync_provider TEXT DEFAULT 'neosync',
         systems_version TEXT DEFAULT '',
         -- Generation stamp of the bundled RA seed asset that is currently
@@ -1978,7 +1979,11 @@ class SqliteService {
         -- for linked games (migration v166). On by default; only read while
         -- RomM is connected and the game has a link row.
         -- Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Push Toggle"
-        romm_push_play_state INTEGER DEFAULT 1
+        romm_push_play_state INTEGER DEFAULT 1,
+        hide_system_logos INTEGER DEFAULT 0,
+        neoglass_blur INTEGER DEFAULT 0,
+        neoglass_transparency INTEGER DEFAULT 10,
+        neoglass_border_width REAL DEFAULT 2
       );
       ''',
       '''
@@ -2752,6 +2757,22 @@ class SqliteService {
     );
   }
 
+  /// Whether any `user_roms` row lives under the ROM root [folderPath].
+  ///
+  /// Compares prefixes with `substr` rather than `LIKE`: SAF tree URIs are
+  /// full of `%` escapes, which `LIKE` would read as wildcards.
+  static Future<bool> hasRomsUnderFolder(String folderPath) async {
+    final base = folderPath.replaceFirst(RegExp(r'[/\\]+$'), '');
+    if (base.isEmpty) return false;
+    final db = await instance.database;
+    final rows = await db.rawQuery(
+      'SELECT EXISTS(SELECT 1 FROM user_roms WHERE rom_path = ? '
+      'OR substr(rom_path, 1, ?) IN (?, ?)) AS present',
+      [base, base.length + 1, '$base/', '$base\\'],
+    );
+    return rows.isNotEmpty && rows.first['present'] == 1;
+  }
+
   /// Permanently deletes a single game and its metadata from the database.
   static Future<void> deleteGame(String appSystemId, String filename) async {
     final db = await instance.database;
@@ -2797,7 +2818,7 @@ class SqliteService {
     int? hideTabAchievements,
     int? hideTabScraper,
     int? hideTabRomm,
-    int? hideTabSearch,
+    int? hideSearchCard,
     String? activeSyncProvider,
     String? systemsVersion,
     String? raSeedStamp,
@@ -2828,6 +2849,10 @@ class SqliteService {
     int? rommCoverCacheMb,
     // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Push Toggle"
     int? rommPushPlayState,
+    int? hideSystemLogos,
+    int? neoglassBlur,
+    int? neoglassTransparency,
+    double? neoglassBorderWidth,
   }) async {
     final db = await instance.database;
 
@@ -2914,8 +2939,8 @@ class SqliteService {
     if (hideTabRomm != null) {
       updates['hide_tab_romm'] = hideTabRomm;
     }
-    if (hideTabSearch != null) {
-      updates['hide_tab_search'] = hideTabSearch;
+    if (hideSearchCard != null) {
+      updates['hide_search_card'] = hideSearchCard;
     }
     if (activeSyncProvider != null) {
       updates['active_sync_provider'] = activeSyncProvider;
@@ -2990,6 +3015,18 @@ class SqliteService {
     // Governing: ADR-0013 (push play state to RomM), SPEC-0013 REQ "Push Toggle"
     if (rommPushPlayState != null) {
       updates['romm_push_play_state'] = rommPushPlayState;
+    }
+    if (hideSystemLogos != null) {
+      updates['hide_system_logos'] = hideSystemLogos;
+    }
+    if (neoglassBlur != null) {
+      updates['neoglass_blur'] = neoglassBlur;
+    }
+    if (neoglassTransparency != null) {
+      updates['neoglass_transparency'] = neoglassTransparency;
+    }
+    if (neoglassBorderWidth != null) {
+      updates['neoglass_border_width'] = neoglassBorderWidth;
     }
 
     if (showAchievementsBadge != null) {
@@ -3288,7 +3325,7 @@ class SqliteService {
     return config?['theme_name']?.toString() ?? 'system';
   }
 
-  /// Retrieves the active asset theme (neostation-assets).
+  /// Retrieves the active System Art pack folder.
   static Future<String> getActiveTheme() async {
     final config = await getUserConfig();
     return config?['active_theme']?.toString() ?? '';

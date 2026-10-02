@@ -149,6 +149,7 @@ class DatabaseTestHelper {
         hide_tab_scraper INTEGER DEFAULT 0,
         hide_tab_romm INTEGER DEFAULT 0,
         hide_tab_search INTEGER DEFAULT 0,
+        hide_search_card INTEGER DEFAULT 1,
         game_grid_columns TEXT DEFAULT 'M',
         game_carousel_card_style TEXT DEFAULT 'fanart',
         dock_apps TEXT,
@@ -170,7 +171,11 @@ class DatabaseTestHelper {
         romm_cover_cache_mb INTEGER DEFAULT 200,
         -- Migration v166 (ADR-0013): "Push play state to RomM", on by
         -- default. Same reason as romm_upload_screenshots above.
-        romm_push_play_state INTEGER DEFAULT 1
+        romm_push_play_state INTEGER DEFAULT 1,
+        hide_system_logos INTEGER DEFAULT 0,
+        neoglass_blur INTEGER DEFAULT 0,
+        neoglass_transparency INTEGER DEFAULT 10,
+        neoglass_border_width REAL DEFAULT 2
       )
     ''');
 

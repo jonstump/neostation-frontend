@@ -45,6 +45,7 @@ const String _randomId = 'random';
 const String _downloadId = 'download';
 const String _cancelDownloadId = 'cancel_download';
 const String _uploadToRommId = 'upload_to_romm';
+const String _searchId = 'search';
 const String _togglePrefix = 'toggle:';
 
 /// Opens the per-game Y menu anchored to [anchorKey]'s widget.
@@ -78,6 +79,9 @@ const String _togglePrefix = 'toggle:';
 /// the vertical action rail. They are grouped below the membership row,
 /// separated from it, and each is omitted when the host has nothing to bind —
 /// the menu is the only route to them for a user without a gamepad.
+///
+/// [onSearch] opens the library search from the same view-level group. It
+/// leads the group because it is the one row there that leaves this view.
 ///
 /// Library scope is deliberately **not** here. It is a view-level filter on a
 /// per-game menu, which reads as acting on the highlighted game, and the
@@ -114,6 +118,7 @@ Future<void> showGameContextMenu({
   String? downloadLabel,
   VoidCallback? onCancelDownload,
   VoidCallback? onUploadToRomm,
+  VoidCallback? onSearch,
 }) async {
   assert(
     onCreateTarget == null || createTargetLabel != null,
@@ -180,19 +185,26 @@ Future<void> showGameContextMenu({
       ),
     // View-level actions. The hairline marks where the menu stops acting on
     // this one game and starts acting on the whole view.
+    if (onSearch != null)
+      ContextMenuItem(
+        id: _searchId,
+        label: AppLocale.searchTitle.getString(context),
+        icon: Symbols.search_rounded,
+        separatorBefore: true,
+      ),
     if (onViewMode != null)
       ContextMenuItem(
         id: _viewModeId,
         label: AppLocale.viewMode.getString(context),
         icon: Symbols.grid_view_rounded,
-        separatorBefore: true,
+        separatorBefore: onSearch == null,
       ),
     if (onRandom != null)
       ContextMenuItem(
         id: _randomId,
         label: AppLocale.randomGame.getString(context),
         icon: Symbols.casino_rounded,
-        separatorBefore: onViewMode == null,
+        separatorBefore: onSearch == null && onViewMode == null,
       ),
   ];
 
@@ -240,6 +252,10 @@ Future<void> showGameContextMenu({
   }
   if (result == _createId) {
     await onCreateTarget?.call();
+    return;
+  }
+  if (result == _searchId) {
+    onSearch?.call();
     return;
   }
   if (result == _viewModeId) {

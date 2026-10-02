@@ -4,21 +4,23 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 
-class AccountContent extends StatelessWidget {
-  final bool isContentFocused;
-  final int selectedContentIndex;
+/// The signed-in ScreenScraper member: name, contribution tier, thread
+/// allowance, daily request quota, and the logout control.
+class ScreenScraperAccountCard extends StatelessWidget {
+  /// Whether the gamepad cursor is on the logout control.
+  final bool logoutFocused;
   final Map<String, String>? userInfo;
   final VoidCallback onLogout;
 
-  /// False when RomM alone opened the scraper options: the pane then offers
-  /// the ScreenScraper login as its one selectable item.
+  /// False when RomM alone opened the scraper options: the card then offers
+  /// the ScreenScraper sign-in as its one selectable item, and
+  /// [logoutFocused] marks that item instead.
   final bool loggedIn;
   final VoidCallback? onLogin;
 
-  const AccountContent({
+  const ScreenScraperAccountCard({
     super.key,
-    required this.isContentFocused,
-    required this.selectedContentIndex,
+    required this.logoutFocused,
     required this.userInfo,
     required this.onLogout,
     this.loggedIn = true,
@@ -73,29 +75,24 @@ class AccountContent extends StatelessWidget {
       return const Center(child: CircularProgressIndicator());
     }
 
-    return SingleChildScrollView(
-      physics: const BouncingScrollPhysics(),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Full-width member header pill (avatar + name + chips + logout)
-          _buildMemberHeader(context, theme),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Full-width member header pill (avatar + name + chips + logout)
+        _buildMemberHeader(context, theme),
 
-          SizedBox(height: 12.h),
-
-          // Total Requests Section (Below, smaller)
-          if (hasExtendedInfo) ...[
-            _buildSmallQuotaCard(
-              theme,
-              AppLocale.dailyTotalRequests.getString(context),
-              int.tryParse(userInfo!['requests_today'] ?? '0') ?? 0,
-              int.tryParse(userInfo!['max_requests_per_day'] ?? '0') ?? 1,
-              theme.colorScheme.primary,
-            ),
-            SizedBox(height: 16.h),
-          ],
+        // Total Requests Section (Below, smaller)
+        if (hasExtendedInfo) ...[
+          SizedBox(height: 8.r),
+          _buildSmallQuotaCard(
+            theme,
+            AppLocale.dailyTotalRequests.getString(context),
+            int.tryParse(userInfo!['requests_today'] ?? '0') ?? 0,
+            int.tryParse(userInfo!['max_requests_per_day'] ?? '0') ?? 1,
+            theme.colorScheme.primary,
+          ),
         ],
-      ),
+      ],
     );
   }
 
@@ -169,9 +166,9 @@ class AccountContent extends StatelessWidget {
 
   /// Shown instead of the account card when only RomM is connected: one
   /// sentence on why ScreenScraper is optional and a single selectable
-  /// login action at content index 0.
+  /// login action.
   Widget _buildLoginPrompt(BuildContext context, ThemeData theme) {
-    final selected = isContentFocused && selectedContentIndex == 0;
+    final selected = logoutFocused;
     return Padding(
       padding: EdgeInsets.all(16.r),
       child: Column(
@@ -214,7 +211,7 @@ class AccountContent extends StatelessWidget {
   /// RA dashboard's logout, so a destructive slot reads the same way on both
   /// accounts.
   Widget _buildLogoutButton(BuildContext context, ThemeData theme) {
-    final selected = isContentFocused && selectedContentIndex == 0;
+    final selected = logoutFocused;
     return Container(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(8.r),

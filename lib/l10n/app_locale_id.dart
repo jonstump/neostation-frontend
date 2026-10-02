@@ -42,9 +42,9 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.secondaryDisplay: 'Layar Sekunder',
   AppLocale.directories: 'Direktori',
   AppLocale.themes: 'Tema',
-  AppLocale.systemArt: 'System Art',
+  AppLocale.systemArt: 'Seni Sistem',
   AppLocale.systemArtSubtitle:
-      'Sesuaikan latar belakang dan logo kartu sistem dengan paket System Art',
+      'Sesuaikan latar belakang kartu sistem dengan paket System Art',
   AppLocale.systemArtNone: 'Tidak Ada',
   AppLocale.systemArtNoneSubtitle: 'Tampilan default',
   AppLocale.systemArtLoading: 'Memuat System Art...',
@@ -56,6 +56,15 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.systemArtRedownloadBody:
       'Paket yang tersimpan akan dihapus dan diunduh ulang. Gunakan ini jika beberapa latar belakang sistem tidak muncul.',
   AppLocale.systemArtDownloading: 'Mengunduh paket System Art...',
+  AppLocale.systemArtByAuthor: 'oleh {author}',
+  AppLocale.systemArtVersion: 'v{version}',
+  AppLocale.systemArtDownloads: '{count} unduhan',
+  AppLocale.systemArtSystemsCovered: '{count} sistem',
+  AppLocale.systemArtSupport: 'Dukung',
+  AppLocale.systemArtApplied: 'Diterapkan',
+  AppLocale.systemArtHideLogos: 'Sembunyikan logo sistem',
+  AppLocale.systemArtHideLogosSubtitle:
+      'Sembunyikan logo pada kartu sistem jika latar belakangnya sudah memuatnya',
   AppLocale.about: 'Tentang',
   AppLocale.exit: 'Keluar',
   AppLocale.launcher: 'Launcher',
@@ -72,6 +81,17 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.recentCardSizeDefault: 'Bawaan',
   AppLocale.recentCardSize2x1: 'Ringkas',
   AppLocale.themesSubtitle: 'Personalisasi tampilan NeoStation',
+  AppLocale.neoglassGroup: 'NeoGlass',
+  AppLocale.neoglassBlur: 'Blur Kaca',
+  AppLocale.neoglassBlurSubtitle: 'Kekuatan buram: Mati, 1 atau 2',
+  AppLocale.neoglassBlurOff: 'Mati',
+  AppLocale.neoglassBlurGpuWarning:
+      'Aktifkan hanya pada GPU yang kuat — pada perangkat kelas bawah, blur buram mungkin tidak tetap halus.',
+  AppLocale.neoglassTransparency: 'Transparansi Kaca',
+  AppLocale.neoglassTransparencySubtitle:
+      '0 = tanpa transparansi, 30 = 50% transparansi',
+  AppLocale.neoglassBorderWidth: 'Bingkai Kaca',
+  AppLocale.neoglassBorderWidthSubtitle: 'Ketebalan tepi kaca',
   AppLocale.systemTheme: 'Tema Sistem',
   AppLocale.importTheme: 'Impor Tema',
   AppLocale.importThemeSuccess: 'Tema "%s" diimpor',
@@ -213,14 +233,10 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.showAchievementsTab: 'Tampilkan tab Pencapaian',
   AppLocale.showAchievementsTabSubtitle:
       'Menampilkan tab RetroAchievements di bilah navigasi',
-  AppLocale.showScraperTab: 'Tampilkan tab Scraper',
-  AppLocale.showScraperTabSubtitle:
-      'Menampilkan tab scraping di bilah navigasi',
   AppLocale.showRommTab: 'Tampilkan tab RomM',
   AppLocale.showRommTabSubtitle: 'Menampilkan tab RomM di bilah navigasi',
-  AppLocale.showSearchTab: 'Tampilkan tab Cari',
-  AppLocale.showSearchTabSubtitle:
-      'Menampilkan tab pencarian di bilah navigasi',
+  AppLocale.searchCard: 'Kartu Cari',
+  AppLocale.searchCardSubtitle: 'Tampilkan kartu pencarian di grid sistem',
 
   AppLocale.configureDirectories: 'Konfigurasi Direktori',
   AppLocale.configureRomsFolder: 'Konfigurasi Folder ROM',
@@ -310,6 +326,11 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.visitWebsite: 'Kunjungi situs web resmi kami',
   AppLocale.joinCommunity:
       'Bergabunglah dengan komunitas kami untuk mendapatkan dukungan',
+  AppLocale.exportLogs: 'Ekspor log',
+  AppLocale.exportLogsDesc:
+      'Untuk laporan bug. Berisi jalur file dan nama game.',
+  AppLocale.exportLogsSaved: 'Log disimpan di {path}',
+  AppLocale.exportLogsFailed: 'Gagal mengekspor log',
   AppLocale.specialThanks: 'Terima Kasih Khusus',
   AppLocale.forInvaluableContributions: 'atas kontribusi yang sangat berharga',
   AppLocale.supportOnKofi: 'Dukung kami di Ko-fi',
@@ -494,16 +515,12 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.applyToAll: 'Terapkan ke semua konflik',
   AppLocale.applyToAllDesc: 'Gunakan pilihan ini untuk konflik yang tersisa',
 
-  AppLocale.account: 'Akun',
   AppLocale.scraping: 'Scraping',
   AppLocale.scrapeMode: 'Mode Scraping',
-  AppLocale.scrapeModeSub: 'Pilih apa yang akan dicari',
   AppLocale.media: 'Media',
-  AppLocale.mediaSub: 'Pilih jenis media yang akan diunduh',
   AppLocale.language: 'Bahasa',
   AppLocale.languageSub: 'Bahasa pilihan untuk metadata',
   AppLocale.preferredLanguage: 'Bahasa Pilihan',
-  AppLocale.region: 'Wilayah',
   AppLocale.regionSub: 'Atur prioritas wilayah untuk scraping',
   AppLocale.regionPriority: 'Prioritas Wilayah',
   AppLocale.regionPrioritySub:
@@ -521,9 +538,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.logoutError: 'Kesalahan saat keluar',
   AppLocale.newContentOnly: 'Hanya konten baru',
   AppLocale.allContent: 'Semua konten',
-  AppLocale.scrapeModeUpdated: 'Mode scraping diperbarui ke:',
   AppLocale.scrapeModeError: 'Kesalahan saat memperbarui mode scraping',
-  AppLocale.languageUpdated: 'Bahasa berhasil diperbarui',
   AppLocale.languageError: 'Kesalahan saat memperbarui bahasa',
   AppLocale.mediaSettingsError: 'Kesalahan saat menyimpan pengaturan media',
   AppLocale.newContentOnlyDesc: 'Hanya cari game yang belum pernah di-scrape',
@@ -703,7 +718,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.progress: 'Kemajuan',
   AppLocale.raLogin: 'Login RetroAchievements',
   AppLocale.raOfflineBanner:
-      'Offline — menampilkan pencapaian terakhir yang disinkronkan',
+      'Offline — menampilkan pencapaian terakhir yang disinkronkan. Mencoba lagi…',
   AppLocale.raWhatIs: 'Apa itu RetroAchievements?',
   AppLocale.raDescription:
       'RetroAchievements adalah komunitas yang menawarkan pencapaian untuk game klasik melalui emulasi.',
@@ -749,6 +764,8 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.requiresFreeAccount: 'Memerlukan akun gratis',
   AppLocale.createAccountAt: 'Buat akun di',
   AppLocale.toGetCredentials: ' untuk mendapatkan kredensial Anda.',
+  AppLocale.screenScraperTitle: 'ScreenScraper',
+  AppLocale.metadata: 'Metadata',
   AppLocale.screenScraperLogin: 'Login ScreenScraper',
   AppLocale.scanningSystemsRoms: 'Memindai sistem dan ROM...',
   AppLocale.ofSystems: '{scanned} dari {total} sistem',
@@ -991,6 +1008,10 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.folderNotEmptyBody:
       'Folder ini sudah berisi {count} item. NeoStation akan menyimpan datanya sendiri di sini, bersama konten yang sudah ada.',
   AppLocale.folderNotEmptyUseAnyway: 'Tetap Gunakan',
+  AppLocale.userDataFolderNotWritable:
+      "Tidak dapat menulis ke folder ini. Pilih folder lain, atau gunakan lokasi default.",
+  AppLocale.userDataFolderGrantAllFiles:
+      "Untuk memakai folder ini, izinkan akses semua file untuk NeoStation di Setelan Android → Aplikasi → Akses aplikasi khusus → Akses semua file, lalu pilih lagi.",
   AppLocale.moveUserDataTitle: 'Pindahkan Data Pengguna?',
   AppLocale.moveUserDataBody:
       'NeoStation akan memindahkan datanya sendiri — basis data, media hasil scrape, dan pengaturan — dari folder saat ini ke folder baru. Berkas yang tidak dibuat oleh NeoStation tidak akan diubah.',
@@ -1058,6 +1079,13 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommNoRoms: 'Tidak ada ROM ditemukan',
   AppLocale.rommSearch: 'Cari',
   AppLocale.rommSearching: 'Mencari di RomM...',
+  AppLocale.rommSearchHint: 'Cari di platform ini',
+  AppLocale.rommSearchCollectionHint: 'Cari di koleksi ini',
+  AppLocale.rommSearchResultCount: '{count} hasil',
+  AppLocale.rommSearchResultCountOne: '1 hasil',
+  AppLocale.rommSearchResultCountMore: '{count}+ hasil',
+  AppLocale.rommSearchNoResults: 'Tidak ada hasil untuk {term}',
+  AppLocale.rommSearchClear: 'Hapus pencarian',
   AppLocale.rommDownloading: 'Mengunduh...',
   AppLocale.rommDownloaded: 'Terunduh',
   AppLocale.rommLinked: 'Tertaut ke RomM',
@@ -1110,17 +1138,12 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.filterGenre: 'Genre',
   AppLocale.filterRating: 'Peringkat',
   AppLocale.filterYear: 'Tahun',
-  AppLocale.filterAchievements: 'Prestasi',
-  AppLocale.raCoverageMatched: 'Ya',
-  AppLocale.raCoverageNoSet: 'Tidak',
   AppLocale.raCoverageUnknown: 'Tidak diketahui',
   AppLocale.filterAny: 'Semua',
   AppLocale.filterSource: 'Sumber',
   AppLocale.sourceLocal: 'Di perangkat ini',
   AppLocale.searchRatingLocalOnly:
       'Filter peringkat hanya berlaku untuk gim lokal',
-  AppLocale.searchAchievementsLocalOnly:
-      'Filter prestasi hanya berlaku untuk gim lokal',
   AppLocale.searchNoRommEquivalent:
       'RomM tidak punya apa pun dengan nama “{value}”',
   AppLocale.resetPlayTimeConfirm: 'Atur Ulang Waktu Bermain',
@@ -1187,6 +1210,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.raAotwOpenLocalGame: 'Buka game lokal',
   AppLocale.raAotwDownloadFromRomm: 'Unduh dari RomM',
   AppLocale.raGamesPlayed: '{count} game dimainkan',
+  AppLocale.raGamesBeaten: '{count} game ditamatkan',
   AppLocale.raAchievementProgress: '{earned}/{total} pencapaian',
   AppLocale.raRecent30Days: '30 hari',
 
@@ -1259,17 +1283,17 @@ const Map<String, dynamic> appLocaleId = {
       'Sudah menggunakan ES-DE? Impor metadata dan gambar game Anda. Pilih '
       'folder utama ES-DE yang berisi folder "gamelists" dan "downloaded_media" '
       'Anda. Opsional; Anda dapat menjalankannya nanti dari Pengaturan.',
-  AppLocale.wizardArtPackTitle: 'Dapatkan Paket Gambar NeoStation',
+  AppLocale.wizardArtPackTitle: 'Dapatkan System Art Pack',
   AppLocale.wizardArtPackDesc:
-      'Kami sangat menyarankan untuk mengunduh paket gambar sistem NeoStation '
-      'agar latar belakang konsol tampil indah di seluruh koleksi Anda. Ini '
-      'dapat diubah nanti di Pengaturan.',
-  AppLocale.wizardDownloadArtPack: 'Unduh Paket Gambar',
+      'Kami sangat menyarankan untuk mengunduh System Art Pack (SAP) agar latar '
+      'belakang konsol tampil indah di seluruh koleksi Anda. Ini dapat diubah '
+      'nanti di Pengaturan.',
+  AppLocale.wizardDownloadArtPack: 'Unduh System Art Pack',
   AppLocale.wizardArtPackInstalled:
-      'Paket gambar terpasang! Anda dapat menjelajahi lebih banyak tema nanti '
+      'System Art Pack terpasang! Anda dapat menjelajahi lebih banyak pack nanti '
       'di Pengaturan.',
   AppLocale.wizardArtPackUnavailable:
-      'Paket gambar tidak dapat dijangkau saat ini. Anda dapat memasangnya '
+      'System Art Pack tidak dapat dijangkau saat ini. Anda dapat memasangnya '
       'nanti dari Pengaturan setelah online.',
 
   // Hide / unhide games
@@ -1433,12 +1457,6 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.scraperScreenscraperOptional:
       'RomM terhubung dan digunakan lebih dulu untuk scraping. Masuk ke ScreenScraper untuk menambahkannya sebagai sumber cadangan.',
   AppLocale.scraperLoginToScreenscraper: 'Masuk ke ScreenScraper',
-  AppLocale.rommSearchHint: 'Cari di platform ini',
-  AppLocale.rommSearchCollectionHint: 'Cari di koleksi ini',
-  AppLocale.rommSearchResultCount: '{count} hasil',
-  AppLocale.rommSearchResultCountOne: '1 hasil',
-  AppLocale.rommSearchResultCountMore: '{count}+ hasil',
-  AppLocale.rommSearchNoResults: 'Tidak ada hasil untuk {term}',
   AppLocale.scraperSubtitleRomm: 'Unduh metadata game dari RomM',
   AppLocale.scraperSubtitleBoth:
       'Unduh metadata game dari RomM, dengan ScreenScraper untuk yang tidak ada di RomM',

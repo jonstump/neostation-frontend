@@ -11,7 +11,7 @@ import 'package:neostation/services/user_data_location_service.dart';
 import 'package:neostation/services/screenshot_service.dart';
 import 'package:neostation/providers/theme_provider.dart';
 import 'package:neostation/providers/neo_assets_provider.dart';
-import 'package:neostation/services/neo_assets_service.dart';
+import 'package:neostation/widgets/system_art_pack_tile.dart';
 import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/services/esde_import_service.dart';
 import 'package:neostation/services/global_notification_service.dart';
@@ -21,6 +21,7 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import '../widgets/tv_directory_picker.dart';
 import '../widgets/folder_not_empty_dialog.dart';
+import 'core_footer.dart';
 import '../models/secondary_display_state.dart';
 
 /// Initial configuration wizard for the first time the app is opened
@@ -50,8 +51,22 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
   // --- Art-pack step state (optional final step) ---
   bool _isDownloadingArt = false;
 
+  /// Folder of the pack selected in the art-pack list. Empty means "use the
+  /// recommended pack" (first non-AI), resolved when the list is built.
+  String _selectedArtPackFolder = '';
+
+  /// Scrolls the art-pack list so the D-pad selection stays on screen.
+  final ScrollController _artPackScrollController = ScrollController();
+  final List<GlobalKey> _artPackKeys = [];
+
   /// Whether All-Files (storage) access is currently granted.
   bool _storageGranted = false;
+
+  /// Set whenever the app leaves the foreground, so the permissions step can
+  /// tell "a system Settings screen actually opened" from "the grant never
+  /// launched at all". Only the latter may re-arm gamepad input on a timer —
+  /// see [_handlePermissionAction].
+  bool _leftForegroundDuringGrant = false;
 
   /// Whether the screenshot/return accessibility service is currently granted.
   /// Both are re-checked whenever the app resumes (the user grants them in
@@ -137,7 +152,15 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && Platform.isAndroid) {
+    if (state != AppLifecycleState.resumed) {
+      // Something came to the front (the Settings screen we just asked for,
+      // most likely), so the safety re-arm in _handlePermissionAction must
+      // stand down: re-enabling gamepad input while backgrounded is the exact
+      // key leakage that deactivate() is there to prevent.
+      _leftForegroundDuringGrant = true;
+      return;
+    }
+    if (Platform.isAndroid) {
       _refreshPermissionStates();
       // The gamepad was deactivated before we sent the user to Settings; bring
       // it back now that we have focus again on the Permissions step.
@@ -180,9 +203,43 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
       onBack: () {
         _handleSkip();
       },
+      onNavigateUp: () => _moveArtPackSelection(-1),
+      onNavigateDown: () => _moveArtPackSelection(1),
     );
     _gamepadNav?.initialize();
     _gamepadNav?.activate();
+  }
+
+  /// Moves the art-pack list selection by [delta] (D-pad up/down). A no-op on
+  /// every other wizard step.
+  void _moveArtPackSelection(int delta) {
+    if (_currentStep != _stepArtPack) return;
+    final neoAssets = context.read<NeoAssetsProvider>();
+    final themes = neoAssets.themes;
+    if (themes.isEmpty) return;
+    final current = _effectiveArtPackFolder(neoAssets);
+    final index = themes.indexWhere((t) => t.folder == current);
+    final next = (index + delta).clamp(0, themes.length - 1);
+    if (next == index) return;
+    setState(() => _selectedArtPackFolder = themes[next].folder);
+    _ensureArtPackVisible(next);
+  }
+
+  /// Scrolls the art-pack list so the tile at [index] is visible. Runs after
+  /// the frame so the newly selected tile's key has a context to scroll to.
+  void _ensureArtPackVisible(int index) {
+    if (index < 0 || index >= _artPackKeys.length) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final tileContext = _artPackKeys[index].currentContext;
+      if (tileContext == null) return;
+      Scrollable.ensureVisible(
+        tileContext,
+        alignment: 0.5,
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOut,
+      );
+    });
   }
 
   @override
@@ -190,6 +247,7 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     WidgetsBinding.instance.removeObserver(this);
     _secondaryDisplayState?.removeListener(_onSecondaryStateChanged);
     _gamepadNav?.dispose();
+    _artPackScrollController.dispose();
     // Shared singleton — never dispose the instance.
     super.dispose();
   }
@@ -217,12 +275,13 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
   }
 
   void _handleSkip() {
-    // Permissions step: the accessibility grant is optional, so once storage
-    // is granted the user can skip past it to folder selection.
-    if (_currentStep == _stepPermissions &&
-        _storageGranted &&
-        _needsAccessibility &&
-        !_accessibilityGranted) {
+    // Permissions step: neither grant is a hard requirement. ROM access goes
+    // through SAF, and UserDataLocationService already falls back to the
+    // app-specific external dir without All-Files access. The skip is
+    // deliberately unconditional — gating it on `_storageGranted` walled users
+    // in at this step on ROMs where the All-Files grant can't be launched at
+    // all (reported on Lenovo tablets), with no Next, no Skip and no way out.
+    if (_currentStep == _stepPermissions) {
       setState(() => _currentStep = _stepFolder);
       return;
     }
@@ -257,9 +316,38 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
 
   void _initializeSteps() {
     // Load the current user-data path for display in step 0.
-    ConfigService.getUserDataPath().then((p) {
-      if (mounted) setState(() => _selectedUserDataPath = p);
-    });
+    _loadUserDataPath();
+  }
+
+  Future<void> _loadUserDataPath() async {
+    try {
+      await _resetUnwritableUserDataPath();
+    } catch (e) {
+      _log.e('Wizard: user-data path check failed: $e');
+    }
+    final p = await ConfigService.getUserDataPath();
+    if (mounted) setState(() => _selectedUserDataPath = p);
+  }
+
+  Future<void> _resetUnwritableUserDataPath() async {
+    final p = await ConfigService.getUserDataPath();
+    // Earlier builds saved a folder the database couldn't be created in, and
+    // the wizard reopens on every launch because setup never completed. Drop
+    // that path so Next doesn't carry it forward. Safe here: the wizard only
+    // runs before setup completes, so there is no library at that path yet.
+    final custom = await UserDataLocationService.getCustomPath();
+    if (!mounted) return;
+    if (custom != null &&
+        custom == p &&
+        !context.read<SqliteConfigProvider>().databaseOpened &&
+        !await UserDataLocationService.canWriteDirectory(custom)) {
+      _log.w('Wizard: saved user-data path $custom is not writable, resetting');
+      await UserDataLocationService.clearCustomPath();
+      if (!mounted) return;
+      await context.read<SqliteConfigProvider>().reinitialize();
+      if (!mounted) return;
+      await context.read<NeoAssetsProvider>().reinitialize();
+    }
   }
 
   // Step layout:
@@ -701,38 +789,30 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
           SizedBox(height: isLandscape ? 12.r : 20.r),
 
           // "Change Location" inline button
-          OutlinedButton(
-            onPressed: _isSelectingUserDataFolder
+          GamepadControl(
+            icon: Symbols.folder_rounded,
+            label: AppLocale.selectUserDataFolder.getString(context),
+            onTap: _isSelectingUserDataFolder
                 ? null
                 : () => _selectUserDataLocationWizard(),
-            style: OutlinedButton.styleFrom(
-              padding: EdgeInsets.symmetric(horizontal: 16.r, vertical: 10.r),
-              side: BorderSide(
-                color: theme.colorScheme.primary.withValues(alpha: 0.5),
-              ),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12.r),
-              ),
-            ),
-            child: _isSelectingUserDataFolder
-                ? SizedBox(
-                    width: 18.r,
-                    height: 18.r,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2.r,
-                      color: theme.colorScheme.primary,
-                    ),
-                  )
-                : Text(
-                    AppLocale.selectUserDataFolder.getString(context),
-                    style: TextStyle(
-                      fontSize: textSize,
-                      color: theme.colorScheme.primary,
-                    ),
-                  ),
+            busy: _isSelectingUserDataFolder,
+            textColor: theme.colorScheme.primary,
           ),
         ],
       ),
+    );
+  }
+
+  void _showUserDataNotWritable() {
+    var message = AppLocale.userDataFolderNotWritable.getString(context);
+    if (Platform.isAndroid) {
+      message +=
+          '\n${AppLocale.userDataFolderGrantAllFiles.getString(context)}';
+    }
+    GlobalNotificationService().show(
+      id: 'wizard_user_data_not_writable',
+      message: message,
+      type: GlobalNotificationType.error,
     );
   }
 
@@ -781,6 +861,16 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
 
       if (selected == _selectedUserDataPath) return;
 
+      // Refuse a folder the database can't be created in. On Android this
+      // step runs before the permissions step, so without All-Files access a
+      // folder like /storage/emulated/0/Emulation lists fine but can't be
+      // written. Saving it anyway left SQLite failing with code 14 on every
+      // launch, stuck on an empty library.
+      if (!await UserDataLocationService.canWriteDirectory(selected)) {
+        if (mounted) _showUserDataNotWritable();
+        return;
+      }
+
       // Warn if the chosen folder already contains files, so the user doesn't
       // unknowingly store NeoStation's data inside an existing library.
       final entryCount = await UserDataLocationService.countDirectoryEntries(
@@ -796,6 +886,7 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
         if (!proceed || !mounted) return;
       }
 
+      final previousCustomPath = await UserDataLocationService.getCustomPath();
       await UserDataLocationService.setCustomPath(selected);
 
       // Reinitialize the DB at the new path (no data yet on first launch).
@@ -805,6 +896,26 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
         listen: false,
       );
       await configProvider.reinitialize();
+
+      // The provider swallows its own init errors, so ask whether the database
+      // itself opened. Not `error`: that also catches unrelated startup steps,
+      // and reverting on those would undo a folder that works. A folder that
+      // passed the probe can still refuse the database; put the previous
+      // location back rather than persist one that never opens.
+      if (!configProvider.databaseOpened) {
+        _log.e(
+          'Wizard: database failed to open at $selected, restoring '
+          '${previousCustomPath ?? 'default location'}',
+        );
+        if (previousCustomPath != null) {
+          await UserDataLocationService.setCustomPath(previousCustomPath);
+        } else {
+          await UserDataLocationService.clearCustomPath();
+        }
+        await configProvider.reinitialize();
+        if (mounted) _showUserDataNotWritable();
+        selected = await ConfigService.getUserDataPath();
+      }
 
       // The database is now open at the new path, but this provider resolved
       // its cache directory and active theme against the old one at launch.
@@ -1288,7 +1399,23 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
       builder: (context, neoAssets, child) {
         final hasTheme = neoAssets.hasActiveTheme;
         final unavailable = neoAssets.themes.isEmpty;
+        final themes = neoAssets.themes;
+        // The selected pack: the user's choice, or the recommended (first
+        // non-AI) pack until they pick one.
+        final selectedFolder = _selectedArtPackFolder.isNotEmpty
+            ? _selectedArtPackFolder
+            : (themes.isEmpty
+                  ? ''
+                  : themes
+                        .firstWhere((t) => !t.isAi, orElse: () => themes.first)
+                        .folder);
+        if (_artPackKeys.length != themes.length) {
+          _artPackKeys
+            ..clear()
+            ..addAll(List.generate(themes.length, (_) => GlobalKey()));
+        }
         return SingleChildScrollView(
+          controller: _artPackScrollController,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -1328,60 +1455,21 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
                 textAlign: TextAlign.center,
               ),
 
-              // Small preview thumbnail of the recommended pack.
-              if (!hasTheme && !unavailable && !neoAssets.downloading) ...[
-                Builder(
-                  builder: (context) {
-                    final recommended = neoAssets.themes.firstWhere(
-                      (t) => !t.isAi,
-                      orElse: () => neoAssets.themes.first,
-                    );
-                    final previewUrl = NeoAssetsTheme.normalizePreviewUrl(
-                      recommended.previewUrl,
-                    );
-                    if (previewUrl.isEmpty) return const SizedBox.shrink();
-                    final thumbWidth = isLandscape ? 120.r : 150.r;
-                    return Padding(
-                      padding: EdgeInsets.only(top: isLandscape ? 10.r : 16.r),
-                      child: Container(
-                        width: thumbWidth,
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(10.r),
-                          border: Border.all(
-                            color: theme.colorScheme.primary.withValues(
-                              alpha: 0.3,
-                            ),
-                            width: 1.r,
-                          ),
-                        ),
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(9.r),
-                          child: AspectRatio(
-                            aspectRatio: 4 / 3,
-                            child: Image.network(
-                              previewUrl,
-                              fit: BoxFit.cover,
-                              loadingBuilder: (_, child, progress) =>
-                                  progress == null
-                                  ? child
-                                  : Container(color: theme.colorScheme.surface),
-                              errorBuilder: (_, _, _) => Container(
-                                color: theme.colorScheme.surface,
-                                child: Icon(
-                                  Symbols.image_rounded,
-                                  size: 24.r,
-                                  color: theme.colorScheme.onSurface.withValues(
-                                    alpha: 0.3,
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
+              // The pack list. Tapping a row selects it; the main button
+              // downloads the selected pack.
+              if (!unavailable && !neoAssets.downloading) ...[
+                SizedBox(height: isLandscape ? 10.r : 16.r),
+                for (int i = 0; i < themes.length; i++)
+                  SystemArtPackTile(
+                    key: _artPackKeys[i],
+                    pack: themes[i],
+                    mosaicSize: isLandscape ? 48 : 56,
+                    isSelected: themes[i].folder == selectedFolder,
+                    isActive: neoAssets.isThemeActive(themes[i].folder),
+                    onTap: () => setState(
+                      () => _selectedArtPackFolder = themes[i].folder,
+                    ),
+                  ),
               ],
 
               // Live download progress.
@@ -1591,9 +1679,11 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     final themes = neoAssets.themes;
     if (themes.isEmpty) return;
 
-    // Recommended pack: first non-AI theme, falling back to the first theme.
-    final recommended = themes.firstWhere(
-      (t) => !t.isAi,
+    // The pack the user selected in the list, or the recommended (first non-AI)
+    // pack until they pick one.
+    final selectedFolder = _effectiveArtPackFolder(neoAssets);
+    final selected = themes.firstWhere(
+      (t) => t.folder == selectedFolder,
       orElse: () => themes.first,
     );
 
@@ -1608,7 +1698,7 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     bool applied = false;
     try {
       applied = await neoAssets.downloadAndApplyTheme(
-        recommended.folder,
+        selected.folder,
         systemFolders,
       );
     } catch (e) {
@@ -1642,45 +1732,14 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               // Next button only when scan completes
-              ElevatedButton(
-                onPressed: provider.scanCompleted
+              GamepadControl(
+                iconPath: 'assets/images/gamepad/Xbox_A_button.png',
+                label: AppLocale.next.getString(context),
+                onTap: provider.scanCompleted
                     ? () => _handleMainAction()
                     : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: theme.colorScheme.primary,
-                  foregroundColor: theme.colorScheme.onPrimary,
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 20.r,
-                    vertical: 12.r,
-                  ),
-                  elevation: 4,
-                  shadowColor: theme.colorScheme.primary.withValues(alpha: 0.4),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16.r),
-                  ),
-                  disabledBackgroundColor: theme.colorScheme.primary.withValues(
-                    alpha: 0.3,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Image.asset(
-                      'assets/images/gamepad/Xbox_A_button.png',
-                      width: 20.r,
-                      height: 20.r,
-                      color: theme.colorScheme.onPrimary,
-                    ),
-                    SizedBox(width: 8.r),
-                    Text(
-                      AppLocale.next.getString(context),
-                      style: TextStyle(
-                        fontSize: 14.r,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
+                backgroundColor: theme.colorScheme.primary,
+                textColor: theme.colorScheme.onPrimary,
               ),
             ],
           );
@@ -1689,18 +1748,15 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     }
 
     // For other steps, use normal logic.
-    // Skip is offered on the optional steps: the folder step and the
-    // permissions step once storage is granted (Android only), plus the two
-    // trailing optional steps (ES-DE import, art pack) on every platform.
+    // Skip is offered on the optional steps: the folder and permissions steps
+    // (Android only), plus the two trailing optional steps (ES-DE import, art
+    // pack) on every platform. The permissions step always offers it — see
+    // _handleSkip for why it must never be gated on a grant succeeding.
     final showSkip =
         _currentStep == _stepEsde ||
         _currentStep == _stepArtPack ||
         (Platform.isAndroid &&
-            (_currentStep == _stepFolder ||
-                (_currentStep == _stepPermissions &&
-                    _storageGranted &&
-                    _needsAccessibility &&
-                    !_accessibilityGranted)));
+            (_currentStep == _stepFolder || _currentStep == _stepPermissions));
     // Wrapped in a NeoAssets consumer so the art-pack step's button label
     // (Download vs Finish) stays in sync with the live theme/download state —
     // otherwise a non-reactive read can show "Finish" while the action still
@@ -1720,91 +1776,29 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             if (showSkip)
-              TextButton(
-                onPressed: () => _handleSkip(),
-                style: TextButton.styleFrom(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: 16.r,
-                    vertical: 8.r,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Image.asset(
-                      'assets/images/gamepad/Xbox_B_button.png',
-                      width: 20.r,
-                      height: 20.r,
-                      color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
-                    ),
-                    SizedBox(width: 8.r),
-                    Text(
-                      AppLocale.skipForNow.getString(context),
-                      style: TextStyle(
-                        fontSize: 12.r,
-                        color: theme.colorScheme.onSurface.withValues(
-                          alpha: 0.6,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
+              GamepadControl(
+                iconPath: 'assets/images/gamepad/Xbox_B_button.png',
+                label: AppLocale.skipForNow.getString(context),
+                onTap: () => _handleSkip(),
+                textColor: theme.colorScheme.onSurface.withValues(alpha: 0.6),
               )
             else
               SizedBox(width: 64.r),
 
             // Main action button
-            ElevatedButton(
-              onPressed:
+            GamepadControl(
+              iconPath: 'assets/images/gamepad/Xbox_A_button.png',
+              label: _getButtonText(),
+              onTap:
                   (_isSelectingFolder ||
                       _isImportingEsde ||
                       _isDownloadingArt ||
                       artLoading)
                   ? null
                   : () => _handleMainAction(),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: theme.colorScheme.primary,
-                foregroundColor: theme.colorScheme.onPrimary,
-                padding: EdgeInsets.symmetric(horizontal: 20.r, vertical: 12.r),
-                elevation: 4,
-                shadowColor: theme.colorScheme.primary.withValues(alpha: 0.4),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(16.r),
-                ),
-                disabledBackgroundColor: theme.colorScheme.primary.withValues(
-                  alpha: 0.3,
-                ),
-              ),
-              child: (_isSelectingFolder || artLoading)
-                  ? SizedBox(
-                      width: 20.r,
-                      height: 20.r,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2.r,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          theme.colorScheme.onPrimary,
-                        ),
-                      ),
-                    )
-                  : Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Image.asset(
-                          'assets/images/gamepad/Xbox_A_button.png',
-                          width: 20.r,
-                          height: 20.r,
-                          color: theme.colorScheme.onPrimary,
-                        ),
-                        SizedBox(width: 8.r),
-                        Text(
-                          _getButtonText(),
-                          style: TextStyle(
-                            fontSize: 14.r,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
+              busy: _isSelectingFolder || artLoading,
+              backgroundColor: theme.colorScheme.primary,
+              textColor: theme.colorScheme.onPrimary,
             ),
           ],
         );
@@ -1831,16 +1825,26 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
           : AppLocale.esdeRunImport.getString(context);
     }
     if (_currentStep == _stepArtPack) {
-      // Offer download until a theme is installed (or none are available),
-      // then the primary action finishes setup.
+      // Offer download until the selected pack is installed (or none are
+      // available), then the primary action finishes setup.
       final neoAssets = context.read<NeoAssetsProvider>();
       final canDownload =
-          !neoAssets.hasActiveTheme && neoAssets.themes.isNotEmpty;
+          neoAssets.themes.isNotEmpty &&
+          _effectiveArtPackFolder(neoAssets) != neoAssets.activeThemeFolder;
       return canDownload
-          ? AppLocale.wizardDownloadArtPack.getString(context)
+          ? AppLocale.download.getString(context)
           : AppLocale.finish.getString(context);
     }
     return AppLocale.next.getString(context);
+  }
+
+  /// The pack the wizard would download: the user's selection, or the
+  /// recommended (first non-AI) pack until they pick one.
+  String _effectiveArtPackFolder(NeoAssetsProvider neoAssets) {
+    final themes = neoAssets.themes;
+    if (themes.isEmpty) return '';
+    if (_selectedArtPackFolder.isNotEmpty) return _selectedArtPackFolder;
+    return themes.firstWhere((t) => !t.isAi, orElse: () => themes.first).folder;
   }
 
   Future<void> _handleMainAction() async {
@@ -1890,7 +1894,8 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     if (_currentStep == _stepArtPack) {
       final neoAssets = context.read<NeoAssetsProvider>();
       final canDownload =
-          !neoAssets.hasActiveTheme && neoAssets.themes.isNotEmpty;
+          neoAssets.themes.isNotEmpty &&
+          _effectiveArtPackFolder(neoAssets) != neoAssets.activeThemeFolder;
       if (canDownload) {
         await _downloadWizardArtPack();
       } else {
@@ -1913,6 +1918,20 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     // Deactivate gamepad before opening system settings to prevent key event
     // leakage when the app regains focus after the user grants the permission.
     _gamepadNav?.deactivate();
+    // Safety re-arm. The request below can fail to open anything at all on
+    // some ROMs, and with no Settings screen there is no resume to re-activate
+    // on either — which left the wizard permanently deaf to the controller,
+    // B (skip) included. Only fires while we still hold the foreground, so a
+    // Settings screen that did open keeps input suspended as intended.
+    _leftForegroundDuringGrant = false;
+    // Deliberately not gated on still being the permissions step: a touch
+    // user can tap Skip inside this window, and bailing out there would strand
+    // the folder step with dead input. Holding the foreground is the only
+    // condition that matters, and every route that opens another activity
+    // (including the SAF picker) trips the flag first.
+    Future.delayed(const Duration(seconds: 3), () {
+      if (mounted && !_leftForegroundDuringGrant) _gamepadNav?.activate();
+    });
     try {
       if (!_storageGranted) {
         final success = await PermissionService.requestAllFilesAccess();

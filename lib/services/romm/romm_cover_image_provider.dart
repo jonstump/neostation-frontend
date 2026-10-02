@@ -95,6 +95,22 @@ class RommCoverImage extends ImageProvider<RommCoverImage> {
     RommCoverImage key,
     ImageDecoderCallback decode,
   ) async {
+    try {
+      return await _fetchAndDecode(key, decode);
+    } catch (_) {
+      // `ImageCache` keeps a failed completer as a pending entry forever, so
+      // without this a transient failure would be served from the cache on
+      // every later resolve of the same URL and never re-fetched. Same evict
+      // `NetworkImage` does; a microtask so the cache has tracked the key.
+      scheduleMicrotask(() => PaintingBinding.instance.imageCache.evict(key));
+      rethrow;
+    }
+  }
+
+  Future<ui.Codec> _fetchAndDecode(
+    RommCoverImage key,
+    ImageDecoderCallback decode,
+  ) async {
     await _gate.acquire();
     final RommImageFetch result;
     try {

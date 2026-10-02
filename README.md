@@ -253,14 +253,12 @@ work; they are not involved in it and are not a contact point for anything here.
 ### Lead
 
 - **@misobadev**
-  - Ko-fi: https://ko-fi.com/neostation
 
 ### Official Co-Maintainers
 
 - **@androosio**
-  - Ko-fi: https://ko-fi.com/androosio
 
-### Official Collaborators
+### Official Community Manager
 
 - **@ItsRetroPup**
   - Ko-fi: https://ko-fi.com/retropup84752

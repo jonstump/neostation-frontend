@@ -355,6 +355,21 @@ class RommProvider extends ChangeNotifier {
   String? _pairedTokenName;
   DateTime? _pairedTokenExpiresAt;
 
+  /// The failure of the query that produced [roms], or null when that query
+  /// succeeded (or has not run).
+  ///
+  /// Separate from [lastError], which every call on this provider writes:
+  /// [loadPlatforms] and [loadCollections] run on every entry to the browse
+  /// screen, so a global error would put a failing `/api/collections` under
+  /// the search field of a search that worked. Scoped here, the search caption
+  /// only ever reports the search.
+  String? _romsError;
+
+  /// [_romsError] as a translatable key, when the provider worded the failure
+  /// itself — the scoped counterpart of [_lastErrorLocalized].
+  // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "Localized User-Facing Text"
+  RommLocalizedError? _romsErrorLocalized;
+
   String _serverUrl = '';
   String _username = '';
 
@@ -573,6 +588,11 @@ class RommProvider extends ChangeNotifier {
   /// When the paired client token expires; null for a token that never
   /// expires and for connections not made by pairing.
   DateTime? get pairedTokenExpiresAt => _pairedTokenExpiresAt;
+  String? get romsError => _romsError;
+
+  /// [romsError] as something the widget layer can translate; null when the
+  /// message came from [RommException.message] or when there is no error.
+  RommLocalizedError? get romsErrorLocalized => _romsErrorLocalized;
   String get serverUrl => _serverUrl;
   String get username => _username;
 
@@ -1446,6 +1466,7 @@ class RommProvider extends ChangeNotifier {
     _filters = RommRomFilters.none;
     _resetRoms();
     _searchTerm = '';
+    _resetRoms();
     _downloads.clear();
     _raGameLookupCache.clear();
     _raEarnedByGameId = {};
@@ -2379,6 +2400,8 @@ class RommProvider extends ChangeNotifier {
   // Governing: ADR-0008 (faster RomM browsing), SPEC-0008 REQ "Concurrency Safety"
   void _resetRoms() {
     _roms = [];
+    _romsError = null;
+    _romsErrorLocalized = null;
     _romsOffset = 0;
     _romsHasMore = false;
     _loadingRoms = false;
@@ -2411,6 +2434,8 @@ class RommProvider extends ChangeNotifier {
     final filters = _filters;
     _loadingRoms = true;
     _lastError = null;
+    _romsError = null;
+    _romsErrorLocalized = null;
     notifyListeners();
     try {
       final page = await _service.getRoms(
@@ -2450,6 +2475,8 @@ class RommProvider extends ChangeNotifier {
         return;
       }
       _lastError = e.message;
+      _romsError = e.message;
+      _romsErrorLocalized = null;
     } catch (e) {
       if (generation != _romsGeneration) {
         _log.d(
@@ -2466,6 +2493,8 @@ class RommProvider extends ChangeNotifier {
         fallback: 'Failed to load ROMs: $e',
         detail: '$e',
       );
+      _romsError = _lastError;
+      _romsErrorLocalized = _lastErrorLocalized;
     } finally {
       // A stale request's loading flag was already released by [_resetRoms];
       // clearing it here would cancel the flag of the load that replaced it.

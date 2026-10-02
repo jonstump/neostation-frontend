@@ -530,9 +530,10 @@ extension NeoSyncCore on NeoSyncProvider {
           continue;
         }
 
-        // Find the matching cloud file by name (relativePath is already the namespace)
+        // Find the matching cloud file (canonical comparison, independent of
+        // the OS: no saves/states prefix, case-insensitive)
         final cloudFile = cloudFiles.firstWhere(
-          (cf) => cf.fileName == localFile.relativePath,
+          (cf) => _cloudMatchesLocal(cf, localFile),
           orElse: () => NeoSyncFile(
             id: '',
             fileName: '',
@@ -618,7 +619,7 @@ extension NeoSyncCore on NeoSyncProvider {
         }
 
         final existsLocally = localSaveFiles.any(
-          (lf) => lf.relativePath == cloudFile.fileName,
+          (lf) => _cloudMatchesLocal(cloudFile, lf),
         );
 
         if (!existsLocally) {
@@ -734,6 +735,7 @@ extension NeoSyncCore on NeoSyncProvider {
         gameHash: await _resolveGameHashForUpload(game),
         isState: isState,
         scope: parsed?.scope,
+        type: _syncTypeForFile(file, isState: isState),
       );
 
       if (result['success']) {
@@ -828,6 +830,28 @@ extension NeoSyncCore on NeoSyncProvider {
     return c.endsWith('/$g');
   }
 
+  /// Canonical, OS-independent key for a save path used to match a local file
+  /// with its cloud counterpart. Drops the `saves/`/`states/` root and
+  /// normalizes separators and case, so Windows/macOS (case-insensitive) and
+  /// Android/Linux (case-sensitive) agree on the identity of a save.
+  String _canonicalSaveKey(String rawPath) =>
+      CloudPathBuilder.canonicalSaveKey(rawPath);
+
+  /// Whether [cloudFile] is the cloud copy of the local [localFile].
+  ///
+  /// The `type` is cross-checked against the local `saves/`/`states/` root so a
+  /// save and a save state that share a basename never match each other.
+  bool _cloudMatchesLocal(NeoSyncFile cloudFile, LocalSaveFile localFile) {
+    final cloudPath = cloudFile.filePath.isNotEmpty
+        ? cloudFile.filePath
+        : cloudFile.fileName;
+    return CloudPathBuilder.cloudMatchesLocalPath(
+      cloudPath,
+      localFile.relativePath,
+      cloudType: cloudFile.type,
+    );
+  }
+
   Future<List<LocalSaveFile>> _findGameSaveFiles(GameModel game) async {
     try {
       // 1. Get the system so its JSON paths can be resolved
@@ -854,6 +878,10 @@ extension NeoSyncCore on NeoSyncProvider {
             final files = dir.listSync(recursive: true).whereType<File>().where(
               (file) {
                 try {
+                  // NeoSync recovery backups are never synced.
+                  if (file.path.toLowerCase().endsWith('.neosync.bak')) {
+                    return false;
+                  }
                   final size = file.lengthSync();
                   return size <= maxFileSize;
                 } catch (e) {
@@ -988,18 +1016,10 @@ extension NeoSyncCore on NeoSyncProvider {
   Future<List<String>> resolveLocalTargetPaths(
     GameModel game,
     String relativeName,
-  ) {
-    final synthetic = NeoSyncFile(
-      id: '',
-      fileName: relativeName,
-      filePath: relativeName,
-      fileSize: 0,
-      gameName: game.name,
-      uploadedAt: DateTime.now(),
-      userId: '',
-    );
-    return resolveCloudFileToLocalPath(game, synthetic);
-  }
+  ) => resolveCloudFileToLocalPath(
+    game,
+    localTargetCloudFile(game, relativeName),
+  );
 
   /// Gets ALL cloud save files for a specific game
   Future<List<NeoSyncFile>> _getCloudSaveFilesForGame(GameModel game) async {
@@ -1059,7 +1079,26 @@ extension NeoSyncCore on NeoSyncProvider {
         }
       }
 
-      return matchingFiles;
+      // Collapse legacy duplicates (same canonical path + kind) keeping the
+      // newest content, then order newest-content first so callers that take the
+      // first match always get the most recent version of the save.
+      final byKey = <String, NeoSyncFile>{};
+      for (final file in matchingFiles) {
+        final key = '${_canonicalSaveKey(file.filePath)}|${file.type}';
+        final current = byKey[key];
+        if (current == null ||
+            (file.fileModifiedAtTimestamp ?? 0) >
+                (current.fileModifiedAtTimestamp ?? 0)) {
+          byKey[key] = file;
+        }
+      }
+      final deduped = byKey.values.toList()
+        ..sort(
+          (a, b) => (b.fileModifiedAtTimestamp ?? 0).compareTo(
+            a.fileModifiedAtTimestamp ?? 0,
+          ),
+        );
+      return deduped;
     } catch (e) {
       NeoSyncProvider._log.e(
         'Error getting cloud save files for ${game.name}: $e',
@@ -1433,4 +1472,31 @@ extension NeoSyncCore on NeoSyncProvider {
       rethrow;
     }
   }
+}
+
+/// Builds the [NeoSyncFile] that [NeoSyncCore.resolveLocalTargetPaths]
+/// hands to the resolver for a provider-relative name like `saves/<core>/<file>`
+/// or `states/<file>`.
+///
+/// The resolver places by [NeoSyncFile.type] and joins [NeoSyncFile.filePath]
+/// onto the save or state directory, because NeoSync's backend stores the path
+/// relative to that directory. A caller-supplied name still carries its
+/// `saves/`/`states/` root, so that root becomes the type and is stripped here;
+/// passing it through wrote RomM saves to `<saves>/saves/<core>/` and states
+/// under the saves directory (issue #511).
+@visibleForTesting
+NeoSyncFile localTargetCloudFile(GameModel game, String relativeName) {
+  final match = RegExp(r'^(saves|states)[/\\](.+)$').firstMatch(relativeName);
+  final isState = match?.group(1) == 'states';
+  final rest = match?.group(2) ?? relativeName;
+  return NeoSyncFile(
+    id: '',
+    fileName: rest,
+    filePath: rest,
+    fileSize: 0,
+    gameName: game.name,
+    uploadedAt: DateTime.now(),
+    userId: '',
+    type: isState ? 'state' : 'save',
+  );
 }

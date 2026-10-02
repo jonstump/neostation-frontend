@@ -303,7 +303,7 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
       delay: _searchDebounce,
       run: _rommProvider.searchRoms,
       // searchRoms records its own failures on the provider (see
-      // RommProvider.lastError, drawn under the field); this only catches a
+      // RommProvider.romsError, drawn under the field); this only catches a
       // throw that escaped it, so nothing goes unlogged.
       onError: (term, error, _) =>
           _log.w('RomM search failed: term="$term" error=$error'),
@@ -936,6 +936,17 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   /// [fn] (one of the [GridNavUtils] directional helpers), then scrolls the new
   /// cell into view. Column count comes from the grid's last layout pass.
   void _moveTopSelection(_GridNavFn fn) {
+    // The ROM view's grid or list owns the top layer whenever it is mounted,
+    // so a direction reaching this screen's own handlers while a platform or
+    // collection is open means nothing is mounted to own it — the ROM body is
+    // standing in for an empty result set (a search that matched nothing, or
+    // an empty platform). The only thing still on screen is the search row, so
+    // take the cursor up to it. Moving the platform/collection cursor instead
+    // would be invisible, and would quietly change what B backs out to.
+    if (_inRomGrid) {
+      _selectSearchField();
+      return;
+    }
     final n = _activeCount;
     if (n == 0) return;
     final next = fn(
@@ -1085,6 +1096,7 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
     _search.cancel();
     _leaveSearchField();
     setState(() {
+      _searchController.clear();
       _romIndex = 0;
       _searchController.clear();
       _view = wasCollection
@@ -2423,15 +2435,19 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
       hasMore: provider.romsHasMore,
       loading: provider.loadingRoms,
     );
+    // Scoped to the ROM query, not the provider's global lastError: the
+    // screen re-runs loadPlatforms/loadCollections on every entry, and one of
+    // those failing must not replace the caption of a search that worked.
+    //
     // The provider has no BuildContext, so a failure it worded itself arrives
-    // as an AppLocale key rather than as text; resolve that here. [lastError]
-    // is only shown when it came from RommException.message, which the server
-    // already worded for the user.
+    // as an AppLocale key rather than as text; resolve that here. The raw
+    // text is only shown when it came from RommException.message, which the
+    // server already worded for the user.
     // Governing: ADR-0007 (RomM pairing login),
     // SPEC-0007 REQ "Localized User-Facing Text"
-    final localizedError = provider.lastErrorLocalized;
+    final localizedError = provider.romsErrorLocalized;
     final error = localizedError == null
-        ? provider.lastError
+        ? provider.romsError
         : rommLocalizedErrorText(context, localizedError);
     final hint =
         (provider.currentCollection != null

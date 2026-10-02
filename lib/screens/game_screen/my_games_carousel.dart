@@ -104,6 +104,12 @@ class GamesCarousel extends StatefulWidget {
   final VoidCallback? onToggleLibraryScope;
   final bool libraryOffline;
 
+  /// Id this view registers its gamepad layer under. The host passes one per
+  /// instance: a games list can appear twice on the route stack (search's "Go
+  /// to game" opens one over another), and a shared id lets the top copy's pop
+  /// unregister the bottom copy's layer instead of its own.
+  final String navLayerId;
+
   const GamesCarousel({
     super.key,
     required this.system,
@@ -130,6 +136,7 @@ class GamesCarousel extends StatefulWidget {
     this.libraryScope,
     this.onToggleLibraryScope,
     this.libraryOffline = false,
+    this.navLayerId = 'games_carousel',
   });
 
   @override
@@ -460,7 +467,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _gamepadNav.initialize();
       GamepadNavigationManager.pushLayer(
-        'games_carousel',
+        widget.navLayerId,
         onActivate: () => _gamepadNav.activate(),
         onDeactivate: () => _gamepadNav.deactivate(),
       );
@@ -498,7 +505,7 @@ class _GamesCarouselState extends State<GamesCarousel> {
   }
 
   void _cleanupGamepad() {
-    GamepadNavigationManager.popLayer('games_carousel');
+    GamepadNavigationManager.popLayer(widget.navLayerId);
     _gamepadNav.dispose();
   }
 
@@ -535,25 +542,34 @@ class _GamesCarouselState extends State<GamesCarousel> {
     _scheduleAchievementsLoad();
     _scheduleChromeSettle();
     _scrollToCurrentLetter();
-    _updateBackground();
   }
 
-  /// Advances the footer/legend's settled selection. A single (slow) page
-  /// change updates it immediately; during a fast-swipe burst it is deferred
-  /// until navigation settles, so the chrome isn't rebuilt every frame.
+  /// Advances the footer/legend's settled selection, and with it the
+  /// full-screen background. A single (slow) page change updates them
+  /// immediately; during a fast-swipe burst they are deferred until navigation
+  /// settles, so the chrome isn't rebuilt every frame.
   void _scheduleChromeSettle() {
     _settleTimer?.cancel();
     if (!_isNavigatingFast) {
-      if (_settledIndex != _currentIndex) {
-        setState(() => _settledIndex = _currentIndex);
-      }
+      _commitSettledSelection();
       return;
     }
     _settleTimer = Timer(_chromeSettleDelay, () {
-      if (mounted && _settledIndex != _currentIndex) {
-        setState(() => _settledIndex = _currentIndex);
-      }
+      if (mounted) _commitSettledSelection();
     });
+  }
+
+  /// The background rides with the chrome rather than with the selection.
+  ///
+  /// A page change is published the moment a D-pad step starts, so the card
+  /// the buttons act on is never behind what is on screen. That cadence is
+  /// wrong for a full-screen image: a held D-pad through a 9,000-game library
+  /// would queue a decode for every card it passes, to display none of them.
+  void _commitSettledSelection() {
+    if (_settledIndex != _currentIndex) {
+      setState(() => _settledIndex = _currentIndex);
+    }
+    _updateBackground();
   }
 
   /// (Re)builds the footer pill + action-button legend only when the settled

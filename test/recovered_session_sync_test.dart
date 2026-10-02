@@ -85,6 +85,9 @@ void main() {
       filename: 'zelda.smc',
       startTimestamp: start.millisecondsSinceEpoch,
     );
+    // The recovery floor reads the playtime the session checkpointed while it
+    // ran, not the gap since launch (which would count a device asleep).
+    await GameSessionPersistence.savePlayedSeconds(ago.inSeconds);
     return start;
   }
 

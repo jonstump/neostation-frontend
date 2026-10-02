@@ -75,10 +75,30 @@ mixin AppLocale {
   static const String systemArtRedownloadTitle = 'system_art_redownload_title';
   static const String systemArtRedownloadBody = 'system_art_redownload_body';
   static const String systemArtDownloading = 'system_art_downloading';
+  static const String systemArtByAuthor = 'system_art_by_author';
+  static const String systemArtVersion = 'system_art_version';
+  static const String systemArtDownloads = 'system_art_downloads';
+  static const String systemArtSystemsCovered = 'system_art_systems_covered';
+  static const String systemArtSupport = 'system_art_support';
+  static const String systemArtApplied = 'system_art_applied';
+  static const String systemArtHideLogos = 'system_art_hide_logos';
+  static const String systemArtHideLogosSubtitle =
+      'system_art_hide_logos_subtitle';
   static const String about = 'about';
   static const String exit = 'exit';
   static const String launcher = 'launcher';
   static const String themesSubtitle = 'themes_subtitle';
+  static const String neoglassGroup = 'neoglass_group';
+  static const String neoglassBlur = 'neoglass_blur';
+  static const String neoglassBlurSubtitle = 'neoglass_blur_subtitle';
+  static const String neoglassBlurOff = 'neoglass_blur_off';
+  static const String neoglassBlurGpuWarning = 'neoglass_blur_gpu_warning';
+  static const String neoglassTransparency = 'neoglass_transparency';
+  static const String neoglassTransparencySubtitle =
+      'neoglass_transparency_subtitle';
+  static const String neoglassBorderWidth = 'neoglass_border_width';
+  static const String neoglassBorderWidthSubtitle =
+      'neoglass_border_width_subtitle';
   static const String systemTheme = 'system_theme';
   static const String importTheme = 'import_theme';
   static const String importThemeSuccess = 'import_theme_success';
@@ -94,6 +114,8 @@ mixin AppLocale {
   static const String hideRecentCardSubtitle = 'hide_recent_card_subtitle';
   static const String recentCardSize = 'recent_card_size';
   static const String recentCardSizeSubtitle = 'recent_card_size_subtitle';
+  static const String searchCard = 'search_card';
+  static const String searchCardSubtitle = 'search_card_subtitle';
   static const String recentCardSizeDefault = 'recent_card_size_default';
   static const String recentCardSize2x1 = 'recent_card_size_2x1';
 
@@ -218,12 +240,8 @@ mixin AppLocale {
   static const String showAchievementsTab = 'show_achievements_tab';
   static const String showAchievementsTabSubtitle =
       'show_achievements_tab_subtitle';
-  static const String showScraperTab = 'show_scraper_tab';
-  static const String showScraperTabSubtitle = 'show_scraper_tab_subtitle';
   static const String showRommTab = 'show_romm_tab';
   static const String showRommTabSubtitle = 'show_romm_tab_subtitle';
-  static const String showSearchTab = 'show_search_tab';
-  static const String showSearchTabSubtitle = 'show_search_tab_subtitle';
 
   // ---------------------------------------------------------------------------
   // Directories
@@ -329,6 +347,10 @@ mixin AppLocale {
   static const String thankYou = 'thank_you';
   static const String visitWebsite = 'visit_website';
   static const String joinCommunity = 'join_community';
+  static const String exportLogs = 'export_logs';
+  static const String exportLogsDesc = 'export_logs_desc';
+  static const String exportLogsSaved = 'export_logs_saved';
+  static const String exportLogsFailed = 'export_logs_failed';
   static const String specialThanks = 'special_thanks';
   static const String forInvaluableContributions =
       'for_invaluable_contributions';
@@ -523,18 +545,14 @@ mixin AppLocale {
   // ---------------------------------------------------------------------------
   // Scraper
   // ---------------------------------------------------------------------------
-  static const String account = 'account';
   static const String scraping = 'scraping';
   static const String scrapingData = 'scraping_data';
   static const String scrapingMedia = 'scraping_media';
   static const String scrapeMode = 'scrape_mode';
-  static const String scrapeModeSub = 'scrape_mode_sub';
   static const String media = 'media';
-  static const String mediaSub = 'media_sub';
   static const String language = 'language';
   static const String languageSub = 'language_sub';
   static const String preferredLanguage = 'preferred_language';
-  static const String region = 'region';
   static const String regionSub = 'region_sub';
   static const String regionPriority = 'region_priority';
   static const String regionPrioritySub = 'region_priority_sub';
@@ -550,9 +568,7 @@ mixin AppLocale {
   static const String logoutError = 'logout_error';
   static const String newContentOnly = 'new_content_only';
   static const String allContent = 'all_content';
-  static const String scrapeModeUpdated = 'scrape_mode_updated';
   static const String scrapeModeError = 'scrape_mode_error';
-  static const String languageUpdated = 'language_updated';
   static const String languageError = 'language_error';
   static const String mediaSettingsError = 'media_settings_error';
   static const String newContentOnlyDesc = 'new_content_only_desc';
@@ -718,6 +734,8 @@ mixin AppLocale {
   static const String requiresFreeAccount = 'requires_free_account';
   static const String createAccountAt = 'create_account_at';
   static const String toGetCredentials = 'to_get_credentials';
+  static const String screenScraperTitle = 'screenscraper_title';
+  static const String metadata = 'metadata';
   static const String screenScraperLogin = 'screen_scraper_login';
   static const String scanningSystemsRoms = 'scanning_systems_roms';
   static const String ofSystems = 'of_systems';
@@ -1083,6 +1101,10 @@ mixin AppLocale {
   static const String folderNotEmptyTitle = 'folder_not_empty_title';
   static const String folderNotEmptyBody = 'folder_not_empty_body';
   static const String folderNotEmptyUseAnyway = 'folder_not_empty_use_anyway';
+  static const String userDataFolderNotWritable =
+      'user_data_folder_not_writable';
+  static const String userDataFolderGrantAllFiles =
+      'user_data_folder_grant_all_files';
   static const String moveUserDataTitle = 'move_user_data_title';
   static const String moveUserDataBody = 'move_user_data_body';
   static const String moveUserDataDestNotEmpty =
@@ -1165,6 +1187,14 @@ mixin AppLocale {
   static const String rommNoRoms = 'romm_no_roms';
   static const String rommSearch = 'romm_search';
   static const String rommSearching = 'romm_searching';
+  static const String rommSearchHint = 'romm_search_hint';
+  static const String rommSearchCollectionHint = 'romm_search_collection_hint';
+  static const String rommSearchResultCount = 'romm_search_result_count';
+  static const String rommSearchResultCountOne = 'romm_search_result_count_one';
+  static const String rommSearchResultCountMore =
+      'romm_search_result_count_more';
+  static const String rommSearchNoResults = 'romm_search_no_results';
+  static const String rommSearchClear = 'romm_search_clear';
   static const String rommDownloading = 'romm_downloading';
   static const String rommDownloaded = 'romm_downloaded';
   static const String rommLinked = 'romm_linked';
@@ -1217,12 +1247,7 @@ mixin AppLocale {
   static const String filterGenre = 'filter_genre';
   static const String filterRating = 'filter_rating';
   static const String filterYear = 'filter_year';
-  static const String filterAchievements = 'filter_achievements';
-  static const String raCoverageMatched = 'ra_coverage_matched';
-  static const String raCoverageNoSet = 'ra_coverage_no_set';
   static const String raCoverageUnknown = 'ra_coverage_unknown';
-  static const String searchAchievementsLocalOnly =
-      'search_achievements_local_only';
   static const String filterAny = 'filter_any';
   static const String filterSource = 'filter_source';
   static const String sourceLocal = 'source_local';
@@ -1282,6 +1307,7 @@ mixin AppLocale {
   static const String raAotwOpenLocalGame = 'ra_aotw_open_local_game';
   static const String raAotwDownloadFromRomm = 'ra_aotw_download_from_romm';
   static const String raGamesPlayed = 'ra_games_played';
+  static const String raGamesBeaten = 'ra_games_beaten';
   static const String raAchievementProgress = 'ra_achievement_progress';
   static const String raRecent30Days = 'ra_recent_30_days';
 
@@ -1459,15 +1485,6 @@ mixin AppLocale {
   static const String rommScanQrCameraDenied = 'romm_scan_qr_camera_denied';
   static const String rommScanQrCameraUnavailable =
       'romm_scan_qr_camera_unavailable';
-
-  // RomM in-platform search (SPEC-0008 REQ "In-Platform Search Field")
-  static const String rommSearchHint = 'romm_search_hint';
-  static const String rommSearchCollectionHint = 'romm_search_collection_hint';
-  static const String rommSearchResultCount = 'romm_search_result_count';
-  static const String rommSearchResultCountOne = 'romm_search_result_count_one';
-  static const String rommSearchResultCountMore =
-      'romm_search_result_count_more';
-  static const String rommSearchNoResults = 'romm_search_no_results';
 
   // ---------------------------------------------------------------------------
   // RomM collection mirroring (ADR-0009, SPEC-0009)
