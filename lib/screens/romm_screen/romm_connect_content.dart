@@ -42,12 +42,51 @@ import 'romm_qr_scan_screen.dart';
 /// the save-sync toggle, a disconnect action, and — when [onBrowse] is provided
 /// — a shortcut back to the library browser. Unlike the old settings panel this
 /// widget owns its own gamepad navigation layer so it works as a standalone tab.
+///
+/// The credential form is also hosted by the setup wizard's RomM step, which
+/// is why the three things that differ between the hosts are parameters: what
+/// the bumpers do ([tabNavigation]), what B does with no field focused
+/// ([onExit]), and what follows a successful connection ([onConnected]). The
+/// defaults are the tab's behaviour, so the tab passes none of them.
+// Governing: ADR-0021 (RomM in first-run setup), SPEC-0020 REQ "Shared Connect Form"
 class RommConnectContent extends StatefulWidget {
   /// Invoked by the "back to library" action while connected. Null when the
   /// panel is shown as the disconnected landing view (nothing to go back to).
   final VoidCallback? onBrowse;
 
-  const RommConnectContent({super.key, this.onBrowse});
+  /// Whether the bumpers switch the app's tabs. True on the RomM tab. A host
+  /// with no tabs behind it (the setup wizard) passes false, and the bumpers
+  /// then do nothing.
+  final bool tabNavigation;
+
+  /// Invoked by B while disconnected with no text field focused. A focused
+  /// field always takes B first. Null on the tab, where there is nowhere for
+  /// the login form to go back to.
+  final VoidCallback? onExit;
+
+  /// Invoked once after a connection made from this form succeeds, after the
+  /// success notification. The connection's own follow-up work (the link
+  /// pass, the catalog refresh) is the provider's and is not awaited.
+  final VoidCallback? onConnected;
+
+  /// Told when a connect request starts and when it settles, so a host with
+  /// controls of its own can hold them for the duration.
+  final ValueChanged<bool>? onBusyChanged;
+
+  /// Whether the form is laid out inside another screen's content area
+  /// rather than as a tab of its own: drops the space reserved for the top
+  /// navigation dock.
+  final bool embedded;
+
+  const RommConnectContent({
+    super.key,
+    this.onBrowse,
+    this.tabNavigation = true,
+    this.onExit,
+    this.onConnected,
+    this.onBusyChanged,
+    this.embedded = false,
+  });
 
   @override
   State<RommConnectContent> createState() => _RommConnectContentState();
@@ -193,10 +232,11 @@ class _RommConnectContentState extends State<RommConnectContent>
       onNavigateRight: () => _setAuthMode(_authMode.toRightIn(_modeOrder)),
       onSelectItem: _selectCurrent,
       onBack: _handleBack,
-      onPreviousTab: AppNavigation.previousTab,
-      onNextTab: AppNavigation.nextTab,
-      onLeftBumper: AppNavigation.previousTab,
-      onRightBumper: AppNavigation.nextTab,
+      // Governing: ADR-0021 (RomM in first-run setup), SPEC-0020 REQ "Shared Connect Form"
+      onPreviousTab: widget.tabNavigation ? AppNavigation.previousTab : null,
+      onNextTab: widget.tabNavigation ? AppNavigation.nextTab : null,
+      onLeftBumper: widget.tabNavigation ? AppNavigation.previousTab : null,
+      onRightBumper: widget.tabNavigation ? AppNavigation.nextTab : null,
       allowRepeat: false,
       isTextFieldFocused: isAnyFieldFocused,
     );
@@ -321,13 +361,26 @@ class _RommConnectContentState extends State<RommConnectContent>
   }
 
   /// B leaves a focused field first — that is what it does everywhere else in
-  /// the app — and only steps back to the library once nothing is focused.
+  /// the app — and only steps back once nothing is focused: to the library
+  /// when connected, and to whatever hosts the login form when not.
+  // Governing: ADR-0021 (RomM in first-run setup), SPEC-0020 REQ "Gamepad Navigation"
   void _handleBack() {
-    if (isAnyFieldFocused()) {
-      exitTextEntry();
-      return;
+    switch (rommConnectBackFor(
+      fieldFocused: isAnyFieldFocused(),
+      connected: context.read<RommProvider>().isConnected,
+      busy: _busy,
+      hasBrowse: widget.onBrowse != null,
+      hasExit: widget.onExit != null,
+    )) {
+      case RommConnectBack.leaveField:
+        exitTextEntry();
+      case RommConnectBack.browse:
+        widget.onBrowse?.call();
+      case RommConnectBack.exit:
+        widget.onExit?.call();
+      case RommConnectBack.none:
+        break;
     }
-    widget.onBrowse?.call();
   }
 
   void _scrollToIndex(int index) {
@@ -375,6 +428,7 @@ class _RommConnectContentState extends State<RommConnectContent>
   Future<void> _connect() async {
     if (_busy || !_validateInputs()) return;
     setState(() => _busy = true);
+    widget.onBusyChanged?.call(true);
     final provider = context.read<RommProvider>();
     // Both captured before the await: the context can't be read across the gap.
     final neoSyncLoggedIn = context.read<AuthService>().isLoggedIn;
@@ -403,6 +457,7 @@ class _RommConnectContentState extends State<RommConnectContent>
           );
     if (!mounted) return;
     setState(() => _busy = false);
+    widget.onBusyChanged?.call(false);
     if (error != null) {
       // A pairing failure the provider could classify gets its own sentence;
       // anything else (network, TLS, verification) reads as it does for the
@@ -447,6 +502,7 @@ class _RommConnectContentState extends State<RommConnectContent>
         AppLocale.rommConnectionSuccess.getString(context),
         type: NotificationType.success,
       );
+      widget.onConnected?.call();
     }
   }
 
@@ -686,7 +742,8 @@ class _RommConnectContentState extends State<RommConnectContent>
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(height: 64.r), // Space for the top navigation dock.
+          // Space for the top navigation dock, which only the tab has.
+          if (!widget.embedded) SizedBox(height: 64.r),
           Center(
             child: SingleChildScrollView(
               controller: _scrollController,

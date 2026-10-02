@@ -1586,4 +1586,10 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommUploadFailBusy: '別のアップロードが実行中でした',
   AppLocale.rommUploadFailGated: 'サーバーはアップロードを受け付けられません',
   AppLocale.rommUploadFailOther: 'アップロードに失敗しました',
+
+  // Setup wizard: RomM step (ADR-0021, SPEC-0020)
+  AppLocale.wizardRommStepTitle: 'RomM に接続',
+  AppLocale.wizardRommStepDesc:
+      'ライブラリを RomM サーバーで管理していますか？今すぐ接続すると、NeoStation が手元のゲームをリンクし、残りも表示できます。後から RomM タブでも設定できます。',
+  AppLocale.wizardRommStepConnectedDesc: '接続しました。ゲームをバックグラウンドでサーバーにリンクしています。',
 };

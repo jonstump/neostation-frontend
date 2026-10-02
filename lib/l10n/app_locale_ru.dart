@@ -1757,4 +1757,11 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommUploadFailBusy: 'выполнялась другая загрузка',
   AppLocale.rommUploadFailGated: 'сервер не может принимать загрузки',
   AppLocale.rommUploadFailOther: 'ошибка загрузки',
+
+  // Setup wizard: RomM step (ADR-0021, SPEC-0020)
+  AppLocale.wizardRommStepTitle: 'Подключение к RomM',
+  AppLocale.wizardRommStepDesc:
+      'Ваша библиотека хранится на сервере RomM? Подключитесь сейчас — NeoStation свяжет уже имеющиеся игры и сможет показать остальные. Это можно сделать и позже на вкладке RomM.',
+  AppLocale.wizardRommStepConnectedDesc:
+      'Подключено. Игры связываются с сервером в фоновом режиме.',
 };

@@ -22,6 +22,7 @@ import 'package:neostation/l10n/app_locale.dart';
 import '../widgets/tv_directory_picker.dart';
 import '../widgets/folder_not_empty_dialog.dart';
 import 'core_footer.dart';
+import 'setup_wizard/romm_step.dart';
 import '../models/secondary_display_state.dart';
 
 /// Initial configuration wizard for the first time the app is opened
@@ -96,8 +97,9 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
   // that don't exist on desktop; the getters resolve to -1 there so a
   // comparison against a real (>= 0) step never matches.
   //   Android: 0=UserData, 1=Permissions, 2=Folder, 3=Scanning,
-  //            4=EsdeImport, 5=ArtPack
-  //   Desktop: 0=UserData, 1=Folder, 2=Scanning, 3=EsdeImport, 4=ArtPack
+  //            4=EsdeImport, 5=RomM, 6=ArtPack
+  //   Desktop: 0=UserData, 1=Folder, 2=Scanning, 3=EsdeImport, 4=RomM,
+  //            5=ArtPack
   // The Permissions step covers both All-Files access and the accessibility
   // (Screen Return) service.
   int get _stepUserData => 0;
@@ -105,7 +107,19 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
   int get _stepFolder => Platform.isAndroid ? 2 : 1;
   int get _stepScanning => Platform.isAndroid ? 3 : 2;
   int get _stepEsde => Platform.isAndroid ? 4 : 3;
-  int get _stepArtPack => Platform.isAndroid ? 5 : 4;
+  // The optional RomM step sits between the ES-DE import and the art pack:
+  // the scan has run by then, so a connection has local ROMs to link, and the
+  // art pack keeps its place as the last step.
+  // Governing: ADR-0021 (RomM in first-run setup), SPEC-0020 REQ "Step Placement"
+  int get _stepRomm => Platform.isAndroid ? 5 : 4;
+  int get _stepArtPack => Platform.isAndroid ? 6 : 5;
+
+  /// Whether the RomM step's credential form is on screen. It registers its
+  /// own gamepad layer, so this wizard's navigator stands down while it is.
+  bool _rommFormActive = false;
+
+  /// Whether the RomM form has a connect request in flight; Skip waits.
+  bool _rommBusy = false;
 
   /// The art-pack step is always the final step of the wizard.
   bool get _isLastStep => _currentStep == _stepArtPack;
@@ -205,9 +219,41 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
       },
       onNavigateUp: () => _moveArtPackSelection(-1),
       onNavigateDown: () => _moveArtPackSelection(1),
+      // The RomM step's one switch, once connected. The wizard has no cursor
+      // to put on it, so it gets a button of its own.
+      onXButton: () {
+        if (_currentStep == _stepRomm && !_rommFormActive) {
+          RommSetupStep.toggleLibrary(context);
+        }
+      },
     );
     _gamepadNav?.initialize();
     _gamepadNav?.activate();
+  }
+
+  /// The RomM step's credential form came or went. It registers a gamepad
+  /// layer of its own, and this wizard's navigator is not a registered layer,
+  /// so nothing would stop both from acting on one press: A would connect and
+  /// advance the wizard, B would leave a text field and skip the step. The
+  /// wizard's navigator is therefore off for exactly as long as the form is
+  /// on screen.
+  // Governing: ADR-0021 (RomM in first-run setup), SPEC-0020 REQ "Gamepad Navigation"
+  void _onRommFormActive(bool active) {
+    if (_rommFormActive == active) return;
+    _rommFormActive = active;
+    if (active) {
+      _gamepadNav?.deactivate();
+    } else {
+      _gamepadNav?.activate();
+      // A connect that succeeded took the form down before it could report
+      // that it had settled.
+      _rommBusy = false;
+    }
+    // This can arrive from the step's dispose, in the middle of the wizard's
+    // own rebuild, so the footer catches up on the next frame.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) setState(() {});
+    });
   }
 
   /// Moves the art-pack list selection by [delta] (D-pad up/down). A no-op on
@@ -301,10 +347,16 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
       return;
     }
 
-    // Both trailing steps (ES-DE import, art pack) are optional — skipping
-    // the ES-DE step advances to the art-pack step; skipping the art-pack
-    // step finishes setup.
+    // The three trailing steps (ES-DE import, RomM, art pack) are optional —
+    // skipping one advances to the next; skipping the art-pack step finishes
+    // setup.
     if (_currentStep == _stepEsde) {
+      setState(() => _currentStep = _stepRomm);
+      return;
+    }
+    // Governing: ADR-0021 (RomM in first-run setup), SPEC-0020 REQ "Skipping"
+    if (_currentStep == _stepRomm) {
+      if (_rommBusy) return;
       setState(() => _currentStep = _stepArtPack);
       return;
     }
@@ -352,10 +404,10 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
 
   // Step layout:
   // Android: 0=UserData, 1=Permissions, 2=FolderSelect, 3=Scanning,
-  //          4=EsdeImport, 5=ArtPack (6 steps)
+  //          4=EsdeImport, 5=RomM, 6=ArtPack (7 steps)
   // Desktop: 0=UserData, 1=FolderSelect, 2=Scanning, 3=EsdeImport,
-  //          4=ArtPack (5 steps)
-  int get _totalSteps => Platform.isAndroid ? 6 : 5;
+  //          4=RomM, 5=ArtPack (6 steps)
+  int get _totalSteps => Platform.isAndroid ? 7 : 6;
 
   @override
   Widget build(BuildContext context) {
@@ -702,6 +754,15 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     }
     if (_currentStep == _stepEsde) {
       return _buildEsdeStep(theme);
+    }
+    if (_currentStep == _stepRomm) {
+      return RommSetupStep(
+        onSkip: _handleSkip,
+        onFormActive: _onRommFormActive,
+        onBusyChanged: (busy) {
+          if (mounted) setState(() => _rommBusy = busy);
+        },
+      );
     }
     if (_currentStep == _stepArtPack) {
       return _buildArtPackStep(theme);
@@ -1754,6 +1815,8 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     // _handleSkip for why it must never be gated on a grant succeeding.
     final showSkip =
         _currentStep == _stepEsde ||
+        // Offered until connected; after that the step only has Next.
+        (_currentStep == _stepRomm && _rommFormActive) ||
         _currentStep == _stepArtPack ||
         (Platform.isAndroid &&
             (_currentStep == _stepFolder || _currentStep == _stepPermissions));
@@ -1779,27 +1842,32 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
               GamepadControl(
                 iconPath: 'assets/images/gamepad/Xbox_B_button.png',
                 label: AppLocale.skipForNow.getString(context),
-                onTap: () => _handleSkip(),
+                onTap: _rommBusy ? null : () => _handleSkip(),
                 textColor: theme.colorScheme.onSurface.withValues(alpha: 0.6),
               )
             else
               SizedBox(width: 64.r),
 
-            // Main action button
-            GamepadControl(
-              iconPath: 'assets/images/gamepad/Xbox_A_button.png',
-              label: _getButtonText(),
-              onTap:
-                  (_isSelectingFolder ||
-                      _isImportingEsde ||
-                      _isDownloadingArt ||
-                      artLoading)
-                  ? null
-                  : () => _handleMainAction(),
-              busy: _isSelectingFolder || artLoading,
-              backgroundColor: theme.colorScheme.primary,
-              textColor: theme.colorScheme.onPrimary,
-            ),
+            // On the RomM form A belongs to the form's own cursor, so the
+            // wizard offers no primary action until the step is connected.
+            if (_currentStep == _stepRomm && _rommFormActive)
+              SizedBox(width: 64.r)
+            else
+              // Main action button
+              GamepadControl(
+                iconPath: 'assets/images/gamepad/Xbox_A_button.png',
+                label: _getButtonText(),
+                onTap:
+                    (_isSelectingFolder ||
+                        _isImportingEsde ||
+                        _isDownloadingArt ||
+                        artLoading)
+                    ? null
+                    : () => _handleMainAction(),
+                busy: _isSelectingFolder || artLoading,
+                backgroundColor: theme.colorScheme.primary,
+                textColor: theme.colorScheme.onPrimary,
+              ),
           ],
         );
       },
@@ -1884,10 +1952,18 @@ class _SetupWizardState extends State<SetupWizard> with WidgetsBindingObserver {
     if (_currentStep == _stepEsde) {
       // Run the import, or advance once one has already been run.
       if (_esdeResult != null) {
-        setState(() => _currentStep = _stepArtPack);
+        setState(() => _currentStep = _stepRomm);
       } else {
         await _runWizardEsdeImport();
       }
+      return;
+    }
+
+    // The RomM step's primary action only exists once connected (the form
+    // owns A until then), and it is always Next.
+    if (_currentStep == _stepRomm) {
+      if (_rommFormActive || _rommBusy) return;
+      setState(() => _currentStep = _stepArtPack);
       return;
     }
 

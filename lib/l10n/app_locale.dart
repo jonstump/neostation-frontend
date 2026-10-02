@@ -1892,4 +1892,11 @@ mixin AppLocale {
     'ja': '日本語',
     'ko': '한국어',
   };
+
+  // ---------------------------------------------------------------------------
+  // Setup wizard: RomM step (ADR-0021, SPEC-0020)
+  static const String wizardRommStepTitle = 'wizard_romm_step_title';
+  static const String wizardRommStepDesc = 'wizard_romm_step_desc';
+  static const String wizardRommStepConnectedDesc =
+      'wizard_romm_step_connected_desc';
 }

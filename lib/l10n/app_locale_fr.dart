@@ -1820,4 +1820,11 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.rommUploadFailBusy: 'un autre envoi était en cours',
   AppLocale.rommUploadFailGated: 'le serveur ne peut pas recevoir d’envois',
   AppLocale.rommUploadFailOther: 'l’envoi a échoué',
+
+  // Setup wizard: RomM step (ADR-0021, SPEC-0020)
+  AppLocale.wizardRommStepTitle: 'Se connecter à RomM',
+  AppLocale.wizardRommStepDesc:
+      'Votre bibliothèque est sur un serveur RomM ? Connectez-vous maintenant : NeoStation associe les jeux que vous avez déjà et peut afficher les autres. Vous pourrez aussi le faire plus tard depuis l\'onglet RomM.',
+  AppLocale.wizardRommStepConnectedDesc:
+      'Connecté. Vos jeux sont associés au serveur en arrière-plan.',
 };

@@ -1729,4 +1729,11 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rommUploadFailBusy: 'another upload was running',
   AppLocale.rommUploadFailGated: 'the server cannot take uploads',
   AppLocale.rommUploadFailOther: 'upload failed',
+
+  // Setup wizard: RomM step (ADR-0021, SPEC-0020)
+  AppLocale.wizardRommStepTitle: 'Connect to RomM',
+  AppLocale.wizardRommStepDesc:
+      'Keep your library on a RomM server? Connect now and NeoStation links the games you already have and can show the rest. You can also do this later from the RomM tab.',
+  AppLocale.wizardRommStepConnectedDesc:
+      'Connected. Your games are being linked to the server in the background.',
 };

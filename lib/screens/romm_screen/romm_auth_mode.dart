@@ -131,3 +131,43 @@ List<RommConnectSlot> focusOrderFor(
     ],
   };
 }
+
+/// What B does on the RomM connect panel.
+enum RommConnectBack {
+  /// Take focus off the text field being typed in.
+  leaveField,
+
+  /// Go back to the library browser (connected only).
+  browse,
+
+  /// Hand control back to whatever hosts the login form.
+  exit,
+
+  /// Nothing to do.
+  none,
+}
+
+/// Decides what B does, from the panel's state and what its host supplied.
+///
+/// A focused field always wins — B leaves a text field everywhere in the app.
+/// Connected, B goes back to the library when the host offered that.
+/// Disconnected, it goes to the host's exit when there is one (the setup
+/// wizard's Skip), else to the library action if the host gave only that —
+/// but never while a connect request is in flight, which owns the form until
+/// it settles.
+// Governing: ADR-0021 (RomM in first-run setup), SPEC-0020 REQ "Gamepad Navigation"
+RommConnectBack rommConnectBackFor({
+  required bool fieldFocused,
+  required bool connected,
+  required bool busy,
+  required bool hasBrowse,
+  required bool hasExit,
+}) {
+  if (fieldFocused) return RommConnectBack.leaveField;
+  if (connected) {
+    return hasBrowse ? RommConnectBack.browse : RommConnectBack.none;
+  }
+  if (busy) return RommConnectBack.none;
+  if (hasExit) return RommConnectBack.exit;
+  return hasBrowse ? RommConnectBack.browse : RommConnectBack.none;
+}
