@@ -1,5 +1,5 @@
 ---
-status: draft
+status: implemented
 date: 2026-09-06
 implements: [ADR-0020]
 requires: [SPEC-0001, SPEC-0008, SPEC-0010]
@@ -164,7 +164,7 @@ Confirming a remote entry SHALL, when reachability is not `offline`, open a conf
 
 ### Requirement: Cover Cache
 
-`RommCoverCache` SHALL store small covers under `<mediaCache>/romm_covers/<serverHash>/<romId>.<ext>`, filling a missing entry on first render (through the existing cover URL candidates and auth headers — delivered by #215 as `RommProvider.warmCover(rommRomId)`: a card whose `pathFor` answers null asks the provider, which calls `ensure` once per rom id and connection and announces the answer as one coalesced bump of `RommProvider.coverRevision` that the grid, carousel, details card, and list host select on; a hit at the time the row is read announces nothing) and prefetching covers for rows upserted by a refresh, bounded to 300 per refresh with concurrency 3, after the refresh completes. The cache MUST evict least-recently-used files above `romm_cover_cache_mb` (default 200) and MUST expose `pathFor(serverUrl, romId)` for build-time use. Cards MUST prefer a local game's scraped media over the cache and MUST decode with the SPEC-0008 width rule. The cache serves remote entries only: a local game without scraped media MUST show the placeholder, not the RomM cover of its linked ROM (the precedence helper `rommCoverPathFor` implements this literally, per #206; the fallback was considered and not taken). The cache MUST be cleared for a server on disconnect and on a change of server URL — the cover-cache half of REQ "Settings And Actions", delivered by #206; the catalog half of that clear belongs to the lists, scope, and settings story (#107).
+`RommCoverCache` SHALL store small covers under `<mediaCache>/romm_covers/<serverHash>/<romId>.<ext>`, filling a missing entry on first render (through the existing cover URL candidates and auth headers — delivered by #215 as `RommProvider.warmCover(rommRomId)`: a card whose `pathFor` answers null asks the provider, which calls `ensure` once per rom id and connection and announces the answer as one coalesced bump of `RommProvider.coverRevision` that the grid, carousel, details card, and list host select on; a hit at the time the row is read announces nothing) and prefetching covers for rows upserted by a refresh, bounded to 300 per refresh with concurrency 3 (lazy fills and the prefetch share one bound of three fetches in flight, newest first, since #260 — see "Concurrency Safety"), after the refresh completes. The cache MUST evict least-recently-used files above `romm_cover_cache_mb` (default 200) and MUST expose `pathFor(serverUrl, romId)` for build-time use. Cards MUST prefer a local game's scraped media over the cache and MUST decode with the SPEC-0008 decode-size rule (the longer-axis hint, `coverDecodeHint`). The cache serves remote entries only: a local game without scraped media MUST show the placeholder, not the RomM cover of its linked ROM (the precedence helper `rommCoverPathFor` implements this literally, per #206; the fallback was considered and not taken). The cache MUST be cleared for a server on disconnect and on a change of server URL — the cover-cache half of REQ "Settings And Actions", delivered by #206; the catalog half of that clear belongs to the lists, scope, and settings story (#107).
 
 #### Scenario: Offline render
 
@@ -226,12 +226,17 @@ Errors MUST carry context (platform, page, rom id, status), MUST NOT be swallowe
 
 ### Requirement: Concurrency Safety
 
-The refresh and the cover prefetch MUST run detached from the UI with the stop signal checked between pages and files; the merge in `GameListService` MUST be synchronous over in-memory data once the catalog rows are read; list rebuilds on scope change MUST NOT re-read the database.
+The refresh and the cover prefetch MUST run detached from the UI with the stop signal checked between pages and files; the merge in `GameListService` MUST be synchronous over in-memory data once the catalog rows are read; list rebuilds on scope change MUST NOT re-read the database. Cover fetches behind `RommCoverCache.ensure` MUST be held to three in flight across every caller, lazy fills and the prefetch together, admitting the most recent request first (#260): a fast scroll renders hundreds of remote cards, RomM does not push back on a client, and an unbounded fill asked a small server for all of them at once. Every fill MUST still be served once the queue drains, and a fill still waiting when its server is cleared or the cache is stopped MUST NOT fetch.
 
 #### Scenario: Disconnect mid-refresh
 
 - **WHEN** the connection drops during a refresh
 - **THEN** the refresh stops after the current page and rows written so far stay
+
+#### Scenario: A screenful of remote cards
+
+- **WHEN** forty remote cards without a cached cover render at once
+- **THEN** at most three cover fetches are in flight, and all forty covers arrive
 
 ### Requirement: Database Operation Standards
 

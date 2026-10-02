@@ -128,7 +128,7 @@ The system SHALL map the scrape's overwrite flag onto the writer's mode: overwri
 
 ### Requirement: Entry Point Consistency
 
-The Force Rescrape action, the grid and carousel scrape chord, the details-card scrape, and the Scraper screen's bulk start SHALL all pass the provider's current step into the scrape functions. The per-game sites MUST NOT pre-check ScreenScraper credentials themselves; the Scraper screen's bulk start MUST allow starting when RomM is connected. Notifications and the bulk summary MUST name the source used ("scraped from RomM", "scraped from ScreenScraper", or "RomM had nothing, scraped from ScreenScraper"). The hardcoded strings at the per-game sites ("Scraping completed", "Please log in to ScreenScraper in the Scraping tab first.", "Error: System ID is missing.") MUST be replaced with localized keys.
+The Force Rescrape action, the grid and carousel scrape chord, the details-card scrape, and the bulk start SHALL all pass the provider's current step into the scrape functions. The per-game sites MUST NOT pre-check ScreenScraper credentials themselves; the bulk start MUST allow starting when RomM is connected. The bulk start lives on the Settings > Metadata page since #258 (upstream removed the Scraper tab): with RomM connected and no ScreenScraper account the page MUST show its options rather than the lone sign-in row, and its account slot MUST offer the ScreenScraper sign-in, which opens as a dialog. Notifications and the bulk summary MUST name the source used ("scraped from RomM", "scraped from ScreenScraper", or "RomM had nothing, scraped from ScreenScraper"). The hardcoded strings at the per-game sites ("Scraping completed", "Please log in to ScreenScraper in the Scraping tab first.", "Error: System ID is missing.") MUST be replaced with localized keys.
 
 #### Scenario: Force Rescrape names the source
 
@@ -178,12 +178,18 @@ The bulk run executes the step inside the existing worker threads and MUST follo
 
 - Cancellation MUST be checked where it is today; a step in flight completes and its write is kept
 - The step MUST be safe to call concurrently from several workers (no shared mutable state beyond the read-only link index)
+- The step's server fetches MUST be held to `RommPaging.concurrency` in flight, independent of the run's worker count (#260). The workers are sized by ScreenScraper's `maxthreads`, which says nothing about the RomM host, and RomM does not push back on a client that asks too much. A game that is not linked MUST NOT wait behind that bound
 - Cache invalidation after the run MUST go through the owners' existing methods once, as today
 
 #### Scenario: Concurrent workers
 
 - **WHEN** four workers run the step at once
 - **THEN** each writes only its own game's row and media and the link index is not mutated
+
+#### Scenario: More workers than the RomM bound
+
+- **WHEN** twelve workers run the step at once for linked games
+- **THEN** at most three RomM fetches are in flight, and every game is still scraped
 
 ### Requirement: Database Operation Standards
 

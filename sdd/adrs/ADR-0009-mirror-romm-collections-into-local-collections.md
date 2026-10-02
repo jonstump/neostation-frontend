@@ -1,6 +1,6 @@
 ---
 # status: one of proposed | accepted | deprecated | superseded (enum enforced by /sdd:status)
-status: proposed
+status: accepted
 date: 2026-09-05
 decision-makers: [Jon Stump]
 extends: [ADR-0001]
