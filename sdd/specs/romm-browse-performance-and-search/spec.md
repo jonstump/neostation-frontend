@@ -70,7 +70,7 @@ The bound MUST admit the most recently requested cover first. A scroll asks for 
 
 ### Requirement: Decode At Tile Size
 
-Tiles MUST request the cover with a decode size equal to the tile's logical size times the device pixel ratio, rounded up, so the decoded bitmap is no larger than what is drawn. Only one axis is hinted, since hinting both distorts the art: the box's longer axis (the height on the grid's portrait tile, the width on the list's square thumbnail), because under `BoxFit.cover` hinting the shorter axis caps an off-ratio cover below the size it is painted at (`coverDecodeHint`, #258). Tiles and MUST keep the previous image on screen while a recycled tile loads a new one. The calculation MUST be a pure function with a test.
+Tiles MUST request the cover with a decode size equal to the tile's logical size times the device pixel ratio, rounded up, so the decoded bitmap is no larger than what is drawn. Only one axis is hinted, since hinting both distorts the art: the box's longer axis (the height on the grid's portrait tile, the width on the list's square thumbnail), because under `BoxFit.cover` hinting the shorter axis caps an off-ratio cover below the size it is painted at (`coverDecodeHint`, #258). Tiles MUST keep the previous image on screen while a recycled tile loads a new one. The calculation MUST be a pure function with a test.
 
 #### Scenario: Grid tile
 
