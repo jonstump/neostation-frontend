@@ -36,7 +36,7 @@ Everything the wizard would need already exists: `RommConnectContent` holds the 
 Chosen option: "An optional step after the ES-DE import and before the art pack, hosting the shared credential form", because by then the database is open and the first scan has run, so the link pass that follows a connection has local ROMs to link, and the art-pack step keeps its place and its special handling as the last step.
 
 1. **Placement.** The step sits between ES-DE import and art pack on every platform: Android becomes seven steps, desktop six. It is reached whether or not a ROM folder was chosen, so a user with nothing on the device yet can still connect.
-2. **Shared form.** The disconnected half of `RommConnectContent` is extracted into a widget the tab and the wizard both host. The host supplies what differs: what the bumpers do (tab switching on the tab, nothing in the wizard), what B does with no field focused, and what happens on success. The tab's behaviour does not change.
+2. **Shared form.** The tab and the wizard host the same `RommConnectContent`. The host supplies what differs: what the bumpers do (tab switching on the tab, nothing in the wizard), what B does with no field focused, and what happens on success. The wizard shows it only while disconnected. The tab's behaviour does not change.
 3. **Skippable.** Skip is always available and advances to the art pack. Nothing is written when the step is skipped.
 4. **After connecting.** The step shows the connected server (name and version line as on the tab) and one switch, "Show RomM library in my systems" (`romm_show_library`, ADR-0020), off by default as everywhere else. Next advances. The connection's side effects — link pass, catalog refresh, save-sync registration — run exactly as they do from the tab and are not awaited by the wizard.
 5. **Already connected.** A wizard that runs while a connection exists (a re-run after a data-location change) shows the connected state and Next; it never disconnects.
@@ -45,7 +45,7 @@ Chosen option: "An optional step after the ES-DE import and before the art pack,
 ### Consequences
 
 * Good, because a RomM-first user ends setup with their library linking in the background and, if they turned the switch on, with remote entries in their systems.
-* Good, because the form stays one implementation, and the extraction makes its host contract explicit.
+* Good, because the form stays one implementation with an explicit host contract.
 * Good, because the wizard gains one step constant, one build method call, and one branch in each of the skip and main-action handlers; the step's body lives in its own file.
 * Bad, because the wizard grows by a step that most upstream-style users will skip.
 * Bad, because step indices in `setup_wizard.dart` shift, which is the part of the file most likely to conflict with upstream.
@@ -89,8 +89,8 @@ flowchart LR
     W["SetupWizard"] --> S1["… → Scan → ES-DE import"]
     S1 --> R["RomM step (optional)"]
     R -->|Skip| A["Art pack (last)"]
-    R --> F["RommConnectForm (shared)"]
-    T["RomM tab: RommConnectContent"] --> F
+    R --> F["RommConnectContent (shared)"]
+    T["RomM tab"] --> F
     F -->|connect| P["RommProvider.connect"]
     P --> L["link pass · catalog refresh · save-sync registration"]
     R -->|connected| C["server line + 'Show RomM library' switch"]

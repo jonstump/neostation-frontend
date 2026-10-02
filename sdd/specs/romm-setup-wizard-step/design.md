@@ -22,25 +22,20 @@ See [SPEC-0020](spec.md), [ADR-0021](../../adrs/ADR-0021-connect-to-romm-during-
 
 ## Decisions
 
-### Extract the form, leave the account panel on the tab
+### One widget with a host contract, not an extracted form
 
-**Choice**: a `RommConnectForm` widget carries the fields, the mode switch, the scan action, connect, the error line and the form's gamepad navigation. `RommConnectContent` keeps the connected panel and hosts the form when disconnected.
-**Rationale**: the wizard needs the form and none of the account actions (disconnect, save-sync toggle, maintenance). Splitting at that line means the wizard hosts no code it has to hide.
-
-### The host contract is three parameters
-
-**Choice**: `onConnected`, `onExitDown` (cursor leaves past the last control; null means stop there), and `tabNavigation` (true on the tab). B with no field focused calls `onExitDown` when present.
-**Rationale**: these are the only three things that differ. Anything more and the hosts start configuring the form's inside.
+**Choice**: `RommConnectContent` stays one widget and gains host parameters: `tabNavigation` (true on the tab), `onExit` (B with no field focused, disconnected), `onConnected`, `onBusyChanged`, and `embedded` (no space reserved for the tab dock). The wizard mounts it only while disconnected, so the connected account panel never renders there. The defaults are the tab's behaviour; the tab passes nothing.
+**Rationale**: the first plan was to move the disconnected half into a `RommConnectForm`. The two halves share one state class — the selection mixin, the scroll controller, the gamepad navigator and its layer, the card chrome — so the split would have rewritten about nine hundred lines of gamepad-sensitive code that only a device can verify, to end at the same user-visible result. Parameters reach "one implementation, hosted twice" with a diff the tab can be shown not to notice. What B does is a pure function (`rommConnectBackFor`) so the contract is tested without a widget.
 
 ### The wizard step lives in its own file
 
 **Choice**: `lib/widgets/setup_wizard/romm_step.dart` holds the step's body (form or connected state, the library switch). `setup_wizard.dart` gains the step constant, the `_totalSteps` change, and one branch in each handler.
 **Rationale**: the wizard file is upstream's and conflicts there are the cost of this feature; a separate file keeps the fork's lines in it to a handful.
 
-### Two layers, handed over explicitly
+### The wizard's navigator stands down while the form is up
 
-**Choice**: the form pushes its layer above the wizard's when the step is entered disconnected. `onExitDown` pops it, so the wizard's navigator drives Skip and Next; Up from the buttons pushes it back.
-**Rationale**: `GamepadNavigationManager.reactivate()` wakes the top registered layer on resume (returning from the QR scanner or the soft keyboard), so the cursor's owner has to be whichever layer is on top, not a flag.
+**Choice**: the wizard's `GamepadNavigation` is not a registered layer, so the step tells the wizard when the form mounts and unmounts (`onFormActive`) and the wizard deactivates and reactivates its navigator. B on the form with nothing focused is the wizard's Skip; the footer shows only Skip while the form is up, and only Next once connected. The library switch has no cursor to sit under, so the wizard binds it to X and the row shows that button.
+**Rationale**: the wizard's buttons are A and B bindings, not cursor targets, so there is nothing to hand a cursor to. Leaving both navigators live would make one A press connect and advance. `GamepadNavigationManager.reactivate()` wakes the top registered layer on resume, which is the form — the right owner after the QR scanner or the soft keyboard.
 
 ### The library switch is offered, not defaulted on
 
@@ -52,20 +47,20 @@ See [SPEC-0020](spec.md), [ADR-0021](../../adrs/ADR-0021-connect-to-romm-during-
 ```mermaid
 flowchart TD
     W["SetupWizard (_currentStep)"] -->|"_stepRomm"| RS["RommSetupStep"]
-    RS -->|disconnected| F["RommConnectForm"]
+    RS -->|disconnected| F["RommConnectContent (embedded)"]
     RS -->|connected| CS["server line + library switch"]
     F -->|onConnected| RS
-    F -->|onExitDown| WB["wizard buttons: Skip / Next"]
-    WB -->|Up| F
-    TAB["RommConnectContent (tab)"] -->|disconnected| F
-    TAB -->|connected| AP["account panel"]
+    F -->|"onExit (B)"| SK["wizard Skip"]
+    RS -->|onFormActive| W
+    TAB["RomM tab"] --> F
+    F -->|"connected (tab only)"| AP["account panel"]
     F --> P["RommProvider.connect / pair"]
 ```
 
 ## Risks / Trade-offs
 
 - **Upstream conflicts in the wizard.** Step indices shift. Mitigation: the step table comment and constants are the only shared lines; the body is in a separate file.
-- **Extraction regressions on the tab.** The form's cursor order, the password-disabled reordering and the QR return path all move. Mitigation: the tab's existing tests run unchanged against the extracted form before the wizard is touched.
+- **Regressions on the tab.** Mitigation: the tab passes no new parameter and every default is the old behaviour; the only branch that changed for it is B, which is a tested pure function.
 - **Soft keyboard on Android inside the wizard.** The wizard's layout was not built around text entry. Mitigation: the step scrolls, and the form already keeps the focused field above the keyboard on the tab; verify on a device.
 
 ## Migration Plan

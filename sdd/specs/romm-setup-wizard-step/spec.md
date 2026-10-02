@@ -36,7 +36,7 @@ The wizard SHALL show a RomM step after the ES-DE import step and before the art
 
 ### Requirement: Shared Connect Form
 
-The credential form (server URL, the authentication mode switch, the fields of the selected mode, the QR scan action where the platform has it, and connect) SHALL be one widget hosted by both the RomM tab and the wizard step. The host MUST supply the behaviour that differs: the bumper actions, the action for B when no field is focused, and a callback on successful connection. The RomM tab's behaviour MUST NOT change: its bumpers switch tabs and its existing tests pass against the extracted form. In the wizard the bumpers MUST do nothing.
+The credential form (server URL, the authentication mode switch, the fields of the selected mode, the QR scan action where the platform has it, and connect) SHALL be one widget hosted by both the RomM tab and the wizard step. The host MUST supply the behaviour that differs: whether the bumpers switch tabs, the action for B when no field is focused, and callbacks for a successful connection and for a request starting and settling. The RomM tab's behaviour MUST NOT change: its bumpers switch tabs and its existing tests pass against the extracted form. In the wizard the bumpers MUST do nothing.
 
 #### Scenario: Same modes in both places
 
@@ -50,7 +50,7 @@ The credential form (server URL, the authentication mode switch, the fields of t
 
 ### Requirement: Skipping
 
-The step MUST offer Skip at all times while disconnected, and Skip MUST advance to the art-pack step without sending a request or writing anything. A connect attempt in flight MUST NOT block Skip from being pressed once it settles; while it is in flight the wizard's buttons MUST be inert, as they are during the ES-DE import.
+The step MUST offer Skip at all times while disconnected, and Skip MUST advance to the art-pack step without sending a request or writing anything. While a connect attempt is in flight Skip MUST be inert, as the wizard's buttons are during the ES-DE import; it MUST work again once the attempt settles.
 
 #### Scenario: Skip
 
@@ -87,17 +87,22 @@ Once connected the step SHALL show the server's address and its version line, an
 
 ### Requirement: Gamepad Navigation
 
-Every control on the step MUST be reachable by D-pad. The form's own gamepad layer MUST sit above the wizard's while the cursor is in the form. Down from the form's last control MUST move the cursor to the wizard's buttons (Skip, and the primary action), and Up from them MUST return it to the form. B with a text field focused MUST leave the field; B with no field focused MUST move the cursor to the wizard's buttons rather than leave the step. The QR scan route MUST return to the step with the cursor where it was. The form's layer MUST be popped when the step is left.
+Every control on the step MUST be reachable by D-pad. The wizard's buttons are not cursor targets: as on every other step, B is Skip and A is the primary action. While the credential form is shown it owns the controller through its own gamepad layer, and the wizard's navigator MUST be off for exactly that long, so one press never both acts on the form and advances the wizard. On the form, A acts on the control under the cursor (connect included), B with a text field focused MUST leave the field, and B with no field focused MUST be Skip. A connect request in flight MUST hold both B and the on-screen Skip until it settles. Once connected the wizard's navigator is back: A is Next, and X toggles the library switch, which shows that button beside it. The QR scan route MUST return to the form with the cursor where it was.
 
-#### Scenario: Reach Skip without touch
+#### Scenario: Skip without touch
 
-- **WHEN** the user presses Down past the connect button
-- **THEN** the cursor is on Skip, and A advances to the art-pack step
+- **WHEN** the form is shown, no field is focused, and the user presses B
+- **THEN** the art-pack step is shown
 
 #### Scenario: B in a field
 
 - **WHEN** a text field is focused and the user presses B
 - **THEN** the field loses focus and the step stays
+
+#### Scenario: One press, one action
+
+- **WHEN** the cursor is on Connect and the user presses A
+- **THEN** the connect request is sent and the wizard does not advance
 
 ### Requirement: Localized User-Facing Text
 
