@@ -70,7 +70,7 @@ The bound MUST admit the most recently requested cover first. A scroll asks for 
 
 ### Requirement: Decode At Tile Size
 
-Tiles MUST request the cover with a decode width equal to the tile's logical width times the device pixel ratio, rounded up, so the decoded bitmap is no larger than what is drawn, and MUST keep the previous image on screen while a recycled tile loads a new one. The calculation MUST be a pure function with a test.
+Tiles MUST request the cover with a decode size equal to the tile's logical size times the device pixel ratio, rounded up, so the decoded bitmap is no larger than what is drawn. Only one axis is hinted, since hinting both distorts the art: the box's longer axis (the height on the grid's portrait tile, the width on the list's square thumbnail), because under `BoxFit.cover` hinting the shorter axis caps an off-ratio cover below the size it is painted at (`coverDecodeHint`, #258). Tiles and MUST keep the previous image on screen while a recycled tile loads a new one. The calculation MUST be a pure function with a test.
 
 #### Scenario: Grid tile
 
@@ -98,7 +98,7 @@ The ROM grid SHALL lay every row out from one constant height/width ratio and MU
 
 ### Requirement: In-Memory Cache Only
 
-Cover loading MUST use Flutter's `ImageCache` as its only cache and MUST NOT write cover files to device storage. The grid SHOULD set a cache extent of about one viewport so the next rows' covers begin loading during a scroll.
+Cover loading MUST use Flutter's `ImageCache` as its only cache and MUST NOT write cover files to device storage. The grid SHOULD keep two rows built past each edge of the viewport so the next covers begin loading during a scroll. This was about one viewport until #258; a viewport-scaled extent kept three screenfuls of tiles alive, each holding a live image request.
 
 #### Scenario: No files written
 
