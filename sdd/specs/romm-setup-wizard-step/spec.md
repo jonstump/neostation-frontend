@@ -16,7 +16,7 @@ requires: [SPEC-0007, SPEC-0010, SPEC-0019]
 
 ## Overview
 
-The setup wizard gains an optional "Connect to RomM" step between the ES-DE import and the art pack. It hosts the same credential form as the RomM tab, extracted so both can use it, and once connected offers the unified-library switch. See ADR-0021.
+The setup wizard gains an optional "Connect to RomM" step between the ES-DE import and the art pack. It hosts the same credential form as the RomM tab, the one widget serving both hosts, and once connected offers the unified-library switch. See ADR-0021.
 
 ## Requirements
 
@@ -36,7 +36,7 @@ The wizard SHALL show a RomM step after the ES-DE import step and before the art
 
 ### Requirement: Shared Connect Form
 
-The credential form (server URL, the authentication mode switch, the fields of the selected mode, the QR scan action where the platform has it, and connect) SHALL be one widget hosted by both the RomM tab and the wizard step. The host MUST supply the behaviour that differs: whether the bumpers switch tabs, the action for B when no field is focused, and callbacks for a successful connection and for a request starting and settling. The RomM tab's behaviour MUST NOT change: its bumpers switch tabs and its existing tests pass against the extracted form. In the wizard the bumpers MUST do nothing.
+The credential form (server URL, the authentication mode switch, the fields of the selected mode, the QR scan action where the platform has it, and connect) SHALL be one widget hosted by both the RomM tab and the wizard step. The host MUST supply the behaviour that differs: whether the bumpers switch tabs, the action for B when no field is focused, and callbacks for a successful connection and for a request starting and settling. The RomM tab's behaviour MUST NOT change: its bumpers switch tabs and its existing tests pass against the shared form. In the wizard the bumpers MUST do nothing.
 
 #### Scenario: Same modes in both places
 

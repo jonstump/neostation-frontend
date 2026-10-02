@@ -54,8 +54,8 @@ Chosen option: "An optional step after the ES-DE import and before the art pack,
 ### Confirmation
 
 * Widget tests: the step appears between ES-DE and art pack; Skip advances without a request; a successful connect shows the connected state; the library switch writes `romm_show_library`.
-* The tab's existing connect tests pass unchanged against the extracted form.
-* Governing comments on the step, the extracted form's host contract, and the wizard's step table.
+* The tab's existing connect tests pass unchanged against the shared form.
+* Governing comments on the step, the shared form's host contract, and the wizard's step table.
 * On a device: a fresh install connected through the wizard by pairing code reaches the systems screen with the link pass running.
 
 ## Pros and Cons of the Options
