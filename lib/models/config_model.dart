@@ -613,11 +613,12 @@ class ConfigModel {
           ) ??
           200,
       // Absent => 0 => logos shown (the default).
-      hideSystemLogos:
-          (json['hideSystemLogos'] ?? json['hide_system_logos'] ?? 0)
-                  .toString() ==
-              '1' ||
-          (json['hideSystemLogos'] ?? false).toString().toLowerCase() == 'true',
+      hideSystemLogos: readBool(
+        json,
+        'hideSystemLogos',
+        'hide_system_logos',
+        false,
+      ),
       // Absent => 0 => blur off (the default). The frosted blur is only smooth
       // on a powerful GPU, so it starts disabled.
       neoglassBlur:

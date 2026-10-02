@@ -1098,7 +1098,6 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
     setState(() {
       _searchController.clear();
       _romIndex = 0;
-      _searchController.clear();
       _view = wasCollection
           ? RommBrowseView.collections
           : RommBrowseView.platforms;
