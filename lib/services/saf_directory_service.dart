@@ -325,4 +325,26 @@ class SafDirectoryService {
       return null;
     }
   }
+
+  /// Releases every persisted SAF URI permission the app holds, so the setup
+  /// wizard has to ask for the ROM folder again. A reset must not leave grants
+  /// pointing at folders the user may hand to someone else.
+  ///
+  /// A missing native handler is reported as a failure rather than swallowed:
+  /// on Android the handler ships in `MainActivity`, so silence would hide a
+  /// real break, and the caller records the failure in the reset summary.
+  // Governing: ADR-0022 (in-app reset), SPEC-0021 REQ "What A Reset Removes"
+  static Future<void> releaseAllPersistedPermissions() async {
+    if (!Platform.isAndroid) {
+      return;
+    }
+
+    try {
+      await platform.invokeMethod('releaseAllSafPermissions');
+    } on MissingPluginException catch (e) {
+      throw StateError('SAF grant release is unavailable: ${e.message}');
+    } on PlatformException catch (e) {
+      throw StateError('could not release SAF grants: ${e.message}');
+    }
+  }
 }

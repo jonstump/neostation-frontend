@@ -374,6 +374,10 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                         result.error("INVALID_ARGUMENTS", "URI is required", null)
                     }
                 }
+                // Governing: ADR-0022 (in-app reset), SPEC-0021 REQ "What A Reset Removes"
+                "releaseAllSafPermissions" -> {
+                    releaseAllSafPermissions(result)
+                }
                 "openAllFilesAccessSettings" -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                         // Narrowest to broadest. The general All-Files list used
@@ -1590,6 +1594,30 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
             result.success(hasPermission)
         } catch (e: Exception) {
             result.success(false)
+        }
+    }
+
+    // Governing: ADR-0022 (in-app reset), SPEC-0021 REQ "What A Reset Removes"
+    // Releases every persisted URI permission the app holds so the setup
+    // wizard has to ask for the ROM and user-data folders again. Answers with
+    // the number of grants released so a silent zero is visible in Dart.
+    private fun releaseAllSafPermissions(result: MethodChannel.Result) {
+        try {
+            var released = 0
+            for (permission in contentResolver.persistedUriPermissions.toList()) {
+                try {
+                    contentResolver.releasePersistableUriPermission(
+                        permission.uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                    released++
+                } catch (e: Exception) {
+                    println("SAF: could not release permission for ${permission.uri}: ${e.message}")
+                }
+            }
+            result.success(released)
+        } catch (e: Exception) {
+            result.error("RELEASE_FAILED", e.message, null)
         }
     }
 
