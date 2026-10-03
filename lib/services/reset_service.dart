@@ -232,11 +232,20 @@ class ResetService {
 
   /// Entries the app owns inside a user-chosen folder, beyond the database,
   /// media cache and log the other clearers handle.
+  ///
+  /// `ra_cache` holds the previous user's RetroAchievements API replies, so
+  /// leaving it would show a fresh start someone else's personal data;
+  /// `temp` is archive-extraction scratch space (`ArchiveService`).
+  /// `custom_themes` and `imported_media` are also app-owned but deliberately
+  /// not listed here — see the PR's "Found, not changed".
+  // Governing: ADR-0022 (in-app reset), SPEC-0021 REQ "What A Reset Removes"
   static const List<String> _ownedEntries = [
     'credentials.enc',
     'credentials.key',
     'systems',
     'themes',
+    'ra_cache',
+    'temp',
   ];
 
   /// Removes the rest of what the app wrote to the user-data folder.

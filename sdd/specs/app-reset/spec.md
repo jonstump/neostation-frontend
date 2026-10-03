@@ -56,7 +56,7 @@ The dialog SHALL list what will be deleted (library database, scraped metadata a
 
 ### Requirement: Order And Resilience
 
-Clearers SHALL run in this order: credentials, preferences, database, media cache, log, SAF grants. Each MUST be independent: a clearer that throws is logged with what it was clearing and the next one still runs. `resetAll` SHALL return a summary of what was cleared and what failed, and MUST NOT throw.
+Clearers SHALL run in this order: credentials, preferences, database, media cache, log, app files, SAF grants. Each MUST be independent: a clearer that throws is logged with what it was clearing and the next one still runs. `resetAll` SHALL return a summary of what was cleared and what failed, and MUST NOT throw.
 
 #### Scenario: Locked media file
 

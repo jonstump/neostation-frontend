@@ -266,6 +266,76 @@ void main() {
       }
     });
 
+    test('ra_cache and temp go, roms stays, in a custom folder', () async {
+      final dir = await Directory.systemTemp.createTemp('reset_owned_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      await File(
+        p.join(dir.path, 'ra_cache', 'achievement.json'),
+      ).create(recursive: true);
+      await File(
+        p.join(dir.path, 'temp', 'nes', 'game.zip', 'game.nes'),
+      ).create(recursive: true);
+      final rom = File(p.join(dir.path, 'roms', 'nes', 'game.nes'));
+      await rom.create(recursive: true);
+      await rom.writeAsBytes([1]);
+
+      await ResetService.clearAppFiles(
+        location: locationFor(
+          dir.path,
+          isCustom: true,
+          defaultPath: '/somewhere/else/user-data',
+        ),
+      );
+
+      expect(Directory(p.join(dir.path, 'ra_cache')).existsSync(), isFalse);
+      expect(Directory(p.join(dir.path, 'temp')).existsSync(), isFalse);
+      expect(rom.existsSync(), isTrue);
+    });
+
+    test('a symlinked owned entry is unlinked, never followed', () async {
+      final dir = await Directory.systemTemp.createTemp('reset_link_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      // The target lives OUTSIDE the folder; the reset must not touch it.
+      final outside = await Directory.systemTemp.createTemp('reset_target_');
+      addTearDown(() => outside.deleteSync(recursive: true));
+      final targetFile = File(p.join(outside.path, 'pack', 't.json'));
+      await targetFile.create(recursive: true);
+      await Link(
+        p.join(dir.path, 'themes'),
+      ).create(p.join(outside.path, 'pack'));
+
+      await ResetService.clearAppFiles(
+        location: locationFor(
+          dir.path,
+          isCustom: true,
+          defaultPath: '/somewhere/else/user-data',
+        ),
+      );
+
+      expect(Link(p.join(dir.path, 'themes')).existsSync(), isFalse);
+      expect(targetFile.existsSync(), isTrue);
+      expect(Directory(p.join(outside.path, 'pack')).existsSync(), isTrue);
+    });
+
+    test('the default folder loses ra_cache and temp too', () async {
+      final root = await Directory.systemTemp.createTemp('reset_default2_');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final dir = Directory(p.join(root.path, 'user-data'))..createSync();
+      await File(
+        p.join(dir.path, 'ra_cache', 'achievement.json'),
+      ).create(recursive: true);
+      await File(
+        p.join(dir.path, 'temp', 'nes', 'game.zip', 'game.nes'),
+      ).create(recursive: true);
+
+      await ResetService.clearAppFiles(
+        location: locationFor(dir.path, isCustom: false),
+      );
+
+      expect(dir.existsSync(), isTrue);
+      expect(dir.listSync(), isEmpty);
+    });
+
     test('refuses to empty a folder that is not clearly the default', () async {
       final dir = await Directory.systemTemp.createTemp('reset_refuse_');
       addTearDown(() => dir.deleteSync(recursive: true));
