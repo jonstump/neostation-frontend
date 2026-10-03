@@ -1736,4 +1736,16 @@ const Map<String, dynamic> appLocaleEn = {
       'Keep your library on a RomM server? Connect now and NeoStation links the games you already have and can show the rest. You can also do this later from the RomM tab.',
   AppLocale.wizardRommStepConnectedDesc:
       'Connected. Your games are being linked to the server in the background.',
+  AppLocale.resetNeoStation: 'Reset NeoStation',
+  AppLocale.resetNeoStationDesc:
+      'Erases everything NeoStation stored and returns to first-run setup',
+  AppLocale.resetDialogTitle: 'Reset NeoStation?',
+  AppLocale.resetDialogDeletes:
+      'This deletes the library database, scraped metadata and artwork, cached RomM covers, saved logins, settings and the log.',
+  AppLocale.resetDialogKeeps: 'Your ROM, save, state and BIOS files are kept.',
+  AppLocale.resetDialogHint: 'Type RESET to confirm',
+  AppLocale.resetDialogButton: 'Reset NeoStation',
+  AppLocale.resetFailuresHeading: 'Some data could not be removed:',
+  AppLocale.resetRestartNotice:
+      'NeoStation has been reset. Start it again to run the setup wizard.',
 };

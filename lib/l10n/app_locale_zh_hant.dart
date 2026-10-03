@@ -1523,4 +1523,14 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.wizardRommStepDesc:
       '遊戲庫放在 RomM 伺服器上？現在連線，NeoStation 會關聯你已有的遊戲，並可顯示其餘遊戲。也可以稍後在 RomM 分頁中設定。',
   AppLocale.wizardRommStepConnectedDesc: '已連線。正在背景將你的遊戲與伺服器關聯。',
+  AppLocale.resetNeoStation: '重設 NeoStation',
+  AppLocale.resetNeoStationDesc: '清除 NeoStation 儲存的所有內容，並回到首次執行設定',
+  AppLocale.resetDialogTitle: '要重設 NeoStation 嗎？',
+  AppLocale.resetDialogDeletes:
+      '這會刪除遊戲庫資料庫、擷取的中繼資料與圖片、快取的 RomM 封面、儲存的登入資訊、設定與日誌。',
+  AppLocale.resetDialogKeeps: '你的 ROM、存檔、狀態與 BIOS 檔案會保留。',
+  AppLocale.resetDialogHint: '輸入 RESET 以確認',
+  AppLocale.resetDialogButton: '重設 NeoStation',
+  AppLocale.resetFailuresHeading: '部分資料無法刪除:',
+  AppLocale.resetRestartNotice: 'NeoStation 已重設。重新啟動即可執行設定精靈。',
 };

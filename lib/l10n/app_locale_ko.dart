@@ -1598,4 +1598,14 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.wizardRommStepDesc:
       '라이브러리를 RomM 서버에 두고 계신가요? 지금 연결하면 NeoStation이 이미 있는 게임을 연결하고 나머지도 표시할 수 있습니다. 나중에 RomM 탭에서 할 수도 있습니다.',
   AppLocale.wizardRommStepConnectedDesc: '연결되었습니다. 게임을 백그라운드에서 서버와 연결하고 있습니다.',
+  AppLocale.resetNeoStation: 'NeoStation 초기화',
+  AppLocale.resetNeoStationDesc: 'NeoStation이 저장한 모든 것을 지우고 초기 설정으로 되돌립니다',
+  AppLocale.resetDialogTitle: 'NeoStation을 초기화할까요?',
+  AppLocale.resetDialogDeletes:
+      '라이브러리 데이터베이스, 가져온 메타데이터와 아트워크, 캐시된 RomM 표지, 저장된 로그인, 설정, 로그가 삭제됩니다.',
+  AppLocale.resetDialogKeeps: 'ROM, 세이브, 상태, BIOS 파일은 그대로 유지됩니다.',
+  AppLocale.resetDialogHint: '확인하려면 RESET을 입력하세요',
+  AppLocale.resetDialogButton: 'NeoStation 초기화',
+  AppLocale.resetFailuresHeading: '일부 데이터를 삭제하지 못했습니다:',
+  AppLocale.resetRestartNotice: 'NeoStation이 초기화되었습니다. 다시 실행하면 설정 마법사가 시작됩니다.',
 };
