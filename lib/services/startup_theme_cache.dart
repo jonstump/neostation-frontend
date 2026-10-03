@@ -99,4 +99,18 @@ class StartupThemeCache {
       // Ignored — see doc comment.
     }
   }
+
+  /// Removes the cached palette so the next launch paints the fallback chrome,
+  /// as on a first run. Part of the in-app reset.
+  // Governing: ADR-0022 (in-app reset), SPEC-0021 REQ "What A Reset Removes"
+  static Future<void> clear() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_backgroundKey);
+      await prefs.remove(_foregroundKey);
+      await prefs.remove(_primaryKey);
+    } catch (_) {
+      // Ignored — see doc comment on [save].
+    }
+  }
 }

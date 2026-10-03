@@ -89,6 +89,29 @@ class LoggerService {
     }
   }
 
+  /// Detaches the file output so the log file can be deleted or replaced
+  /// while the process is still running — the in-app reset removes it.
+  ///
+  /// Logging continues on the console afterwards. Like [init], this runs in
+  /// the main isolate only; the secondary display's engine never had a file
+  /// output to detach.
+  // Governing: ADR-0022 (in-app reset), SPEC-0021 REQ "What A Reset Removes"
+  Future<void> closeFileOutput() async {
+    if (!_initialized) return;
+    final previous = _logger;
+    _logger = Logger(
+      printer: RedactingPrinter(SimplePrinter(colors: true)),
+      filter: ProductionFilter(),
+      output: MultiOutput([ConsoleOutput()]),
+    );
+    _initialized = false;
+    try {
+      await previous.close();
+    } catch (_) {
+      // The file output is on its way out; nothing else can use it.
+    }
+  }
+
   /// Starts collecting everything this isolate logs, on top of its normal
   /// output.
   ///
