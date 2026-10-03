@@ -347,6 +347,12 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                         result.error("INVALID_ARGUMENTS", "Package name is required", null)
                     }
                 }
+                "hasCamera" -> {
+                    // Any camera at all. CameraX, which the QR scanner is built on,
+                    // throws on the main thread while initialising on a device with
+                    // none and takes the process down with it, so Flutter asks first.
+                    result.success(packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA_ANY))
+                }
                 "isTelevision" -> {
                     val uiModeManager = getSystemService(android.content.Context.UI_MODE_SERVICE) as android.app.UiModeManager
                     result.success(uiModeManager.currentModeType == android.content.res.Configuration.UI_MODE_TYPE_TELEVISION)

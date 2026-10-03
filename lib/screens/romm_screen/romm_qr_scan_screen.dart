@@ -11,6 +11,7 @@ import '../../models/romm_pairing.dart';
 import '../../services/gamepad/gamepad_navigation_manager.dart';
 import '../../services/logger_service.dart';
 import '../../utils/gamepad_nav.dart';
+import '../../utils/romm_qr_platform.dart';
 
 /// What [RommQrScanScreen] hands back to the connect form. A null route
 /// result (B, the back arrow, a system back gesture) means the user left
@@ -64,6 +65,13 @@ class RommQrScanScreen extends StatefulWidget {
   /// Opens the scanner and resolves when it closes. Null means the user
   /// backed out.
   static Future<RommQrScanResult?> show(BuildContext context) {
+    // Never reach the camera stack on a device without a camera: CameraX
+    // throws on Android's main thread while initialising there, which no
+    // Dart catch sees. The form hides the action on such a device; this is
+    // for any other way in.
+    if (!DeviceCamera.available) {
+      return Future.value(const RommQrScanResult.unavailable());
+    }
     return Navigator.of(context).push<RommQrScanResult?>(
       MaterialPageRoute<RommQrScanResult?>(
         builder: (_) => const RommQrScanScreen(),
