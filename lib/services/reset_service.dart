@@ -1,15 +1,16 @@
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
+import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../data/datasources/sqlite_service.dart';
-import '../widgets/permission_check_wrapper.dart';
+import '../repositories/config_repository.dart';
 import 'config_service.dart';
 import 'credential_store.dart';
 import 'game_session_persistence.dart';
 import 'logger_service.dart';
 import 'saf_directory_service.dart';
+import 'setup_state.dart';
 import 'startup_theme_cache.dart';
 import 'user_data_location_service.dart';
 
@@ -25,6 +26,7 @@ class ResetUserDataLocation {
     required this.mediaPath,
     required this.logFilePath,
     required this.databasePath,
+    required this.defaultPath,
   });
 
   final String path;
@@ -32,6 +34,9 @@ class ResetUserDataLocation {
   final String mediaPath;
   final String logFilePath;
   final String databasePath;
+
+  /// The app's own default user-data folder, for comparison with [path].
+  final String defaultPath;
 }
 
 /// One store a reset clears, paired with the code that clears it.
@@ -79,6 +84,7 @@ class ResetService {
   static const String storeDatabase = 'database';
   static const String storeMediaCache = 'media cache';
   static const String storeLog = 'log';
+  static const String storeAppFiles = 'app files';
   static const String storeSafGrants = 'SAF grants';
 
   /// Every credential the app stores, by [CredentialStore] key. The owning
@@ -130,6 +136,10 @@ class ResetService {
         () => clearMediaCache(location: _capturedLocation),
       ),
       ResetStep(storeLog, () => clearLog(location: _capturedLocation)),
+      ResetStep(
+        storeAppFiles,
+        () => clearAppFiles(location: _capturedLocation),
+      ),
       ResetStep(storeSafGrants, clearSafGrants),
     ];
   }
@@ -160,6 +170,13 @@ class ResetService {
     for (final key in _credentialKeys) {
       await CredentialStore.delete(key);
     }
+    // CredentialStore.delete swallows backend failures, so read each key back:
+    // a locked store must report failed, not "cleared".
+    for (final key in _credentialKeys) {
+      if (await CredentialStore.read(key) != null) {
+        throw StateError('credential "$key" is still stored after the delete');
+      }
+    }
   }
 
   /// Forgets every `SharedPreferences` key the app wrote, through the owning
@@ -173,9 +190,7 @@ class ResetService {
     await StartupThemeCache.clear();
     await GameSessionPersistence.clearGameSession();
     final prefs = await SharedPreferences.getInstance();
-    // Declared in PermissionCheckWrapper (a widget, so not imported from a
-    // service); the value must not drift from the const there.
-    await prefs.remove(PermissionCheckWrapper.setupCompletedKey);
+    await prefs.remove(kSetupCompletedKey);
   }
 
   /// Closes the database, then deletes its file and SQLite's sidecars.
@@ -183,8 +198,9 @@ class ResetService {
   // Governing: ADR-0022 (in-app reset), SPEC-0021 REQ "Database Operation Standards"
   static Future<void> clearDatabase({ResetUserDataLocation? location}) async {
     final dbPath =
-        location?.databasePath ?? await SqliteService.getActualDatabasePath();
-    await SqliteService.closeDatabase();
+        location?.databasePath ??
+        await ConfigRepository.getActualDatabasePath();
+    await ConfigRepository.closeDatabase();
 
     // The secondary-display engine opens the same database. It is not told to
     // close first: on Android (the only platform with a second engine) the
@@ -214,6 +230,88 @@ class ResetService {
     await _deleteByName(logFilePath, '.old');
   }
 
+  /// Entries the app owns inside a user-chosen folder, beyond the database,
+  /// media cache and log the other clearers handle.
+  static const List<String> _ownedEntries = [
+    'credentials.enc',
+    'credentials.key',
+    'systems',
+    'themes',
+  ];
+
+  /// Removes the rest of what the app wrote to the user-data folder.
+  ///
+  /// The app's own default folder ends empty (its contents go, the folder
+  /// stays). A custom folder may hold ROMs, saves, states and BIOS, so only
+  /// the named app-owned entries go. Never recurses outside the folder and
+  /// never follows a symlink out of it.
+  static Future<void> clearAppFiles({ResetUserDataLocation? location}) async {
+    final loc = location ?? await _resolveLocation();
+    if (loc == null) {
+      throw StateError('the user-data folder could not be resolved');
+    }
+    final dirPath = p.normalize(loc.path);
+    if (!loc.isCustom && _isOwnDefaultFolder(loc)) {
+      await _deleteContents(Directory(dirPath));
+      return;
+    }
+    if (!loc.isCustom) {
+      throw StateError(
+        'refusing to empty "$dirPath": not the app\'s own default folder',
+      );
+    }
+    for (final name in _ownedEntries) {
+      final entryPath = p.join(dirPath, name);
+      final type = await FileSystemEntity.type(entryPath, followLinks: false);
+      try {
+        switch (type) {
+          case FileSystemEntityType.directory:
+            await Directory(entryPath).delete(recursive: true);
+          case FileSystemEntityType.notFound:
+            break;
+          case FileSystemEntityType.link:
+            // Delete the link itself, never its target.
+            await Link(entryPath).delete();
+          default:
+            await File(entryPath).delete();
+        }
+      } catch (e) {
+        throw StateError('could not delete $entryPath: $e');
+      }
+    }
+  }
+
+  /// True only when [loc.path] is clearly the app's own default folder: the
+  /// resolved default, named `user-data`, and not empty, the filesystem root
+  /// or the home directory.
+  static bool _isOwnDefaultFolder(ResetUserDataLocation loc) {
+    final path = p.normalize(loc.path);
+    if (loc.path.trim().isEmpty || path == '.' || p.rootPrefix(path) == path) {
+      return false;
+    }
+    final home = ConfigService.getRealHomePath();
+    if (home.isNotEmpty && p.equals(path, p.normalize(home))) return false;
+    if (!p.equals(path, p.normalize(loc.defaultPath))) return false;
+    return p.basename(path) == 'user-data';
+  }
+
+  /// Deletes everything inside [dir], keeping [dir]. Symlinks are removed as
+  /// entries, never followed.
+  static Future<void> _deleteContents(Directory dir) async {
+    if (!await dir.exists()) return;
+    await for (final entity in dir.list(followLinks: false)) {
+      try {
+        if (entity is Directory) {
+          await entity.delete(recursive: true);
+        } else {
+          await entity.delete();
+        }
+      } catch (e) {
+        throw StateError('could not delete ${entity.path}: $e');
+      }
+    }
+  }
+
   /// Releases every persisted SAF URI permission the app holds. No-op off
   /// Android
   /// (SPEC-0021 REQ "What A Reset Removes").
@@ -233,7 +331,8 @@ class ResetService {
         isCustom: isCustom,
         mediaPath: await ConfigService.getMediaPath(),
         logFilePath: await ConfigService.getLogFilePath(),
-        databasePath: await SqliteService.getActualDatabasePath(),
+        databasePath: await ConfigRepository.getActualDatabasePath(),
+        defaultPath: await ConfigService.getDefaultUserDataPath(),
       );
     } catch (e) {
       _log.w('ResetService: could not resolve the user-data location: $e');

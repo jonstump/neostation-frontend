@@ -7,6 +7,14 @@ class ConfigRepository {
   static Future<List<String>> getUserRomFolders() =>
       SqliteService.getUserRomFolders();
 
+  /// Closes the open database handle (used by the in-app reset before it
+  /// deletes the file).
+  static Future<void> closeDatabase() => SqliteService.closeDatabase();
+
+  /// Absolute path of the database file actually in use.
+  static Future<String> getActualDatabasePath() =>
+      SqliteService.getActualDatabasePath();
+
   /// Returns the full user_config row, or null if not yet created.
   static Future<Map<String, dynamic>?> getUserConfig() =>
       SqliteService.getUserConfig();

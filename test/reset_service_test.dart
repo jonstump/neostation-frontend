@@ -183,8 +183,132 @@ void main() {
         ResetService.storeDatabase,
         ResetService.storeMediaCache,
         ResetService.storeLog,
+        ResetService.storeAppFiles,
         ResetService.storeSafGrants,
       ]);
+    });
+  });
+
+  group('clearAppFiles', () {
+    ResetUserDataLocation locationFor(
+      String path, {
+      required bool isCustom,
+      String? defaultPath,
+    }) => ResetUserDataLocation(
+      path: path,
+      isCustom: isCustom,
+      mediaPath: p.join(path, mediaFolderName),
+      logFilePath: p.join(path, 'app.log'),
+      databasePath: p.join(path, 'data.sqlite'),
+      defaultPath: defaultPath ?? path,
+    );
+
+    test('the default folder ends empty but remains', () async {
+      final root = await Directory.systemTemp.createTemp('reset_default_');
+      addTearDown(() => root.deleteSync(recursive: true));
+      final dir = Directory(p.join(root.path, 'user-data'))..createSync();
+      await File(p.join(dir.path, 'credentials.enc')).writeAsString('x');
+      await File(p.join(dir.path, 'credentials.key')).writeAsString('x');
+      await File(
+        p.join(dir.path, 'systems', 'nes.json'),
+      ).create(recursive: true);
+      await File(
+        p.join(dir.path, 'themes', 't', 'a.json'),
+      ).create(recursive: true);
+      await File(p.join(dir.path, 'stray.txt')).writeAsString('x');
+
+      await ResetService.clearAppFiles(
+        location: locationFor(dir.path, isCustom: false),
+      );
+
+      expect(dir.existsSync(), isTrue);
+      expect(dir.listSync(), isEmpty);
+    });
+
+    test('a custom folder keeps its roms and loses the named files', () async {
+      final dir = await Directory.systemTemp.createTemp('reset_custom_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final owned = [
+        'credentials.enc',
+        'credentials.key',
+        p.join('systems', 'nes.json'),
+        p.join('themes', 't', 'a.json'),
+      ];
+      final foreign = [
+        p.join('roms', 'snes', 'game.sfc'),
+        p.join('saves', 'a.sav'),
+        p.join('states', 'a.state'),
+        p.join('bios', 'scph.bin'),
+      ];
+      for (final name in [...owned, ...foreign]) {
+        await File(p.join(dir.path, name)).create(recursive: true);
+      }
+
+      await ResetService.clearAppFiles(
+        location: locationFor(
+          dir.path,
+          isCustom: true,
+          defaultPath: '/somewhere/else/user-data',
+        ),
+      );
+
+      for (final name in owned) {
+        expect(
+          File(p.join(dir.path, name)).existsSync(),
+          isFalse,
+          reason: name,
+        );
+      }
+      expect(Directory(p.join(dir.path, 'systems')).existsSync(), isFalse);
+      expect(Directory(p.join(dir.path, 'themes')).existsSync(), isFalse);
+      for (final name in foreign) {
+        expect(File(p.join(dir.path, name)).existsSync(), isTrue, reason: name);
+      }
+    });
+
+    test('refuses to empty a folder that is not clearly the default', () async {
+      final dir = await Directory.systemTemp.createTemp('reset_refuse_');
+      addTearDown(() => dir.deleteSync(recursive: true));
+      final file = File(p.join(dir.path, 'precious.txt'))
+        ..writeAsStringSync('x');
+
+      // Not named user-data, even though it matches the default path.
+      await expectLater(
+        ResetService.clearAppFiles(
+          location: locationFor(dir.path, isCustom: false),
+        ),
+        throwsA(isA<StateError>()),
+      );
+      // Does not match the resolved default.
+      await expectLater(
+        ResetService.clearAppFiles(
+          location: locationFor(
+            dir.path,
+            isCustom: false,
+            defaultPath: '/elsewhere/user-data',
+          ),
+        ),
+        throwsA(isA<StateError>()),
+      );
+      for (final bad in const ['', '/']) {
+        await expectLater(
+          ResetService.clearAppFiles(
+            location: locationFor(bad, isCustom: false),
+          ),
+          throwsA(isA<StateError>()),
+          reason: 'path "$bad"',
+        );
+      }
+      final home = Platform.environment['HOME'] ?? '';
+      if (home.isNotEmpty) {
+        await expectLater(
+          ResetService.clearAppFiles(
+            location: locationFor(home, isCustom: false),
+          ),
+          throwsA(isA<StateError>()),
+        );
+      }
+      expect(file.existsSync(), isTrue);
     });
   });
 

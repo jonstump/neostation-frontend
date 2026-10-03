@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../providers/sqlite_config_provider.dart';
+import 'package:neostation/services/setup_state.dart';
 import 'setup_wizard.dart';
 import 'splash_status_layout.dart';
 
@@ -10,7 +11,7 @@ import 'splash_status_layout.dart';
 class PermissionCheckWrapper extends StatefulWidget {
   final Widget child;
 
-  static const String setupCompletedKey = 'setup_completed_prefs';
+  static const String setupCompletedKey = kSetupCompletedKey;
 
   const PermissionCheckWrapper({super.key, required this.child});
 
@@ -34,7 +35,7 @@ class _PermissionCheckWrapperState extends State<PermissionCheckWrapper> {
     });
   }
 
-  static const String setupCompletedKey = 'setup_completed_prefs';
+  static const String setupCompletedKey = kSetupCompletedKey;
 
   Future<void> _checkInitialSetup() async {
     try {
