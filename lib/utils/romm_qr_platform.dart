@@ -29,7 +29,8 @@ bool showsQrScanAction(TargetPlatform platform, {bool hasCamera = true}) =>
 
 /// Whether this device has a camera, asked once of the platform at startup.
 ///
-/// Android answers through `PackageManager.hasSystemFeature(FEATURE_CAMERA_ANY)`;
+/// Android answers by listing the camera service's devices, not by the
+/// feature flags, which the Retroid Pocket Nova sets without having a camera;
 /// every other platform is taken to have one, since only Android ships
 /// camera-less devices this app runs on and only Android's camera stack
 /// crashes on them. Until [probe] has answered, the device is assumed to
