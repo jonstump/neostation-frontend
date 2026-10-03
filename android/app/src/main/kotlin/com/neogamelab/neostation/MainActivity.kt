@@ -351,7 +351,10 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                     // Any camera at all. CameraX, which the QR scanner is built on,
                     // throws on the main thread while initialising on a device with
                     // none and takes the process down with it, so Flutter asks first.
-                    result.success(packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_CAMERA_ANY))
+                    // Asked of the camera service, not the feature flags: the Retroid
+                    // Pocket Nova advertises every camera feature and has no camera,
+                    // and FEATURE_CAMERA_ANY said yes right up to the crash.
+                    result.success(hasCameraDevice())
                 }
                 "isTelevision" -> {
                     val uiModeManager = getSystemService(android.content.Context.UI_MODE_SERVICE) as android.app.UiModeManager
@@ -2136,6 +2139,18 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                     }
                 }
             }
+        }
+    }
+
+    /// Whether the camera service lists at least one camera. False on any
+    /// failure to ask: a camera the app cannot enumerate is one it cannot open.
+    private fun hasCameraDevice(): Boolean {
+        return try {
+            val manager = getSystemService(android.content.Context.CAMERA_SERVICE) as android.hardware.camera2.CameraManager
+            manager.cameraIdList.isNotEmpty()
+        } catch (e: Exception) {
+            android.util.Log.w("MainActivity", "Camera enumeration failed: ${e.message}")
+            false
         }
     }
 

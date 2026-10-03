@@ -36,8 +36,10 @@ class AndroidService {
     }
   }
 
-  /// Whether the device has any camera. False on a handheld without one, and
-  /// on any failure to ask, so a caller never opens the camera on a maybe.
+  /// Whether the camera service lists any camera. Asked of the service, not
+  /// the feature flags, which the Retroid Pocket Nova sets without having a
+  /// camera. False on a handheld without one, and on any failure to ask, so a
+  /// caller never opens the camera on a maybe.
   static Future<bool> hasCamera() async {
     try {
       return await _channel.invokeMethod<bool>('hasCamera') ?? false;
