@@ -214,3 +214,19 @@ When orchestrating multiple SDD plugin skills in a single session (e.g., running
 #### Fork Rules
 - This repository is a fork of `misobadev/neostation-frontend`. Never open issues or PRs against upstream, and never push to the `upstream` remote (its push URL is disabled). All issues and PRs go to the fork above.
 - SDD artifacts live under `sdd/` (not `docs/`, which is the Jekyll wiki source). For an upstream PR, rebase the feature branch with `git rebase --onto upstream/main main <branch>` so SDD commits drop out; only the maintainer of this fork opens upstream PRs.
+
+#### Working On This Fork
+
+Rules that are not derivable from the code, learned the hard way. They apply to every agent and every model.
+
+- **Every `gh` call passes `--repo jonstump/neostation-frontend`.** Two agents once posted review comments on upstream PRs because the default repo resolved to upstream. Set it with `gh repo set-default jonstump/neostation-frontend` as well, but still pass the flag.
+- **PR bodies use `.github/PULL_REQUEST_TEMPLATE.md` verbatim**, every section filled in or marked n/a with a reason. Squash merges pass `--body` carrying the commit trailers; a merge of `upstream/main` is never squashed (a merge commit keeps upstream an ancestor).
+- **The `AI-Assisted:` trailer names the model doing the work** (`AI-Assisted: Claude:Fable-5.1`, `AI-Assisted: Claude:Opus-5.5`, …). Never `git commit -s`.
+- **Migration slots.** The next free slot is one above the highest `_migrateToVersionNNN` on `main` *and on every open branch*; `lib/data/datasources/CLAUDE.md` has the renumber-and-backfill rule. As of this writing `main` is at v172.
+- **Test baseline on a macOS host:** `test/ra_dashboard_week_card_test.dart` always fails there (a host font issue), and `test/ra_offline_session_revalidation_test.dart` is flaky (a used-after-dispose race in the test). Everything else must pass. A widget test that taps a control which plays a sound must call `SfxService().setEnabled(false)` in `setUp`, or CI fails with no audio library.
+- **Local Flutter may differ from the pin in `.fvmrc`.** `dart format` output can differ between patch versions; CI is the authority.
+- **RomM instance details are private.** No library counts, server names, hostnames or screenshots of a real server anywhere that leaves the machine: not in code, tests, fixtures, PR bodies or issues. Grep the diff before pushing.
+- **No large native dependencies.** PR #112 (a PDF renderer, ~18 MB of APK) was closed over size despite an approving review. Measure the binary cost of a new dependency or asset set and state it in the PR before asking for review.
+- **Findings are batched, not auto-filed.** Finish the work, then present a single list of candidate issues for the maintainer to pick from. Never open an issue unprompted.
+- **Worktrees live under `.claude/worktrees/<branch>`.** The main checkout may be on another session's branch: never `checkout` or `pull` there; refresh `main` with `git fetch origin main:main`.
+- **Test builds for the device** are the two commits on `test/android-side-by-side` (a `.test` application-id suffix and a stable debug keystore) rebased onto `main` and pushed as a fresh `test/<name>` branch, then `build-and-deploy.yml` dispatched on it; the artifact is per-ABI, `arm64-v8a` for the Nova. The maintainer installs it.
