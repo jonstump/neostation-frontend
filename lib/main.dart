@@ -33,6 +33,7 @@ import 'package:neostation/widgets/permission_check_wrapper.dart';
 import 'package:neostation/utils/custom_scroll_behavior.dart';
 import 'package:neostation/utils/desktop_window_focus.dart';
 import 'package:neostation/utils/display_metrics_log.dart';
+import 'package:neostation/utils/romm_qr_platform.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/services/config_service.dart';
@@ -352,6 +353,12 @@ void main() async {
   } catch (e) {
     log.e('Error initializing database providers: $e');
   }
+
+  // Whether the device has a camera, so the RomM QR scan is only offered
+  // where opening the camera cannot crash the app. One cheap call, answered
+  // before any screen that could offer the action is built.
+  // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "QR Scan Where A Camera Exists"
+  await DeviceCamera.probe();
 
   // Initialize the Android listener for play-time tracking
   if (Platform.isAndroid) {

@@ -122,7 +122,10 @@ class _RommConnectContentState extends State<RommConnectContent>
   /// macOS, where the scanner plugin is wired in and a camera is plausible.
   /// Windows and Linux never get the row, nor a slot for it.
   // Governing: ADR-0007 (RomM pairing login), SPEC-0007 REQ "QR Scan Where A Camera Exists"
-  bool get _canScanQr => showsQrScanAction(defaultTargetPlatform);
+  bool get _canScanQr => showsQrScanAction(
+    defaultTargetPlatform,
+    hasCamera: DeviceCamera.available,
+  );
 
   /// The current mode's cursor order, with the scan action when this
   /// platform has it.

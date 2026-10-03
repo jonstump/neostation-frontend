@@ -36,6 +36,19 @@ class AndroidService {
     }
   }
 
+  /// Whether the device has any camera. False on a handheld without one, and
+  /// on any failure to ask, so a caller never opens the camera on a maybe.
+  static Future<bool> hasCamera() async {
+    try {
+      return await _channel.invokeMethod<bool>('hasCamera') ?? false;
+    } on PlatformException catch (e) {
+      _log.w("Failed to ask for a camera: '${e.message}'.");
+      return false;
+    } on MissingPluginException {
+      return false;
+    }
+  }
+
   /// Attempts to launch an Android application using its unique [packageName].
   ///
   /// Returns true if the package was successfully opened by the OS.

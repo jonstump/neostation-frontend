@@ -30,4 +30,47 @@ void main() {
       }
     });
   });
+
+  // Governing: SPEC-0007 REQ "QR Scan Where A Camera Exists" — the Retroid
+  // Pocket Nova has no camera, and CameraX took the app down when the action
+  // was used there.
+  group('showsQrScanAction without a camera', () {
+    test(
+      'no camera, no action, on the platforms that would have offered it',
+      () {
+        expect(
+          showsQrScanAction(TargetPlatform.android, hasCamera: false),
+          isFalse,
+        );
+        expect(
+          showsQrScanAction(TargetPlatform.macOS, hasCamera: false),
+          isFalse,
+        );
+      },
+    );
+
+    test('a camera changes nothing where the action never existed', () {
+      expect(
+        showsQrScanAction(TargetPlatform.windows, hasCamera: true),
+        isFalse,
+      );
+      expect(showsQrScanAction(TargetPlatform.linux, hasCamera: true), isFalse);
+    });
+  });
+
+  group('DeviceCamera', () {
+    tearDown(() => DeviceCamera.debugSet(null));
+
+    test('a fixed answer is what the gate reads', () {
+      DeviceCamera.debugSet(false);
+      expect(DeviceCamera.available, isFalse);
+      DeviceCamera.debugSet(true);
+      expect(DeviceCamera.available, isTrue);
+    });
+
+    test('a device not yet asked counts as having a camera off Android', () {
+      // The test host is a desktop: off Android the stack cannot crash.
+      expect(DeviceCamera.available, isTrue);
+    });
+  });
 }
