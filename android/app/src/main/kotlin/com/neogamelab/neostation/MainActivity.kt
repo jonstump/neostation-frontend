@@ -378,6 +378,10 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
                 "releaseAllSafPermissions" -> {
                     releaseAllSafPermissions(result)
                 }
+                // Governing: ADR-0022 (in-app reset), SPEC-0021 REQ "Relaunch"
+                "restartActivity" -> {
+                    restartActivity(result)
+                }
                 "openAllFilesAccessSettings" -> {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                         // Narrowest to broadest. The general All-Files list used
@@ -1618,6 +1622,28 @@ class MainActivity: MultiDisplayFlutterActivity(), GamepadsCompatibleActivity {
             result.success(released)
         } catch (e: Exception) {
             result.error("RELEASE_FAILED", e.message, null)
+        }
+    }
+
+    // Governing: ADR-0022 (in-app reset), SPEC-0021 REQ "Relaunch"
+    // Finishes and relaunches the activity so the app starts over from the
+    // setup wizard on a fresh state. The result is delivered before finish()
+    // so Dart always hears back.
+    private fun restartActivity(result: MethodChannel.Result) {
+        try {
+            val intent = packageManager.getLaunchIntentForPackage(packageName)
+            if (intent == null) {
+                result.error("RESTART_FAILED", "No launch intent for this package", null)
+                return
+            }
+            intent.addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+            )
+            startActivity(intent)
+            result.success(null)
+            finish()
+        } catch (e: Exception) {
+            result.error("RESTART_FAILED", e.message, null)
         }
     }
 

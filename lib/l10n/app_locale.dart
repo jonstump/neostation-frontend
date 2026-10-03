@@ -359,6 +359,15 @@ mixin AppLocale {
   static const String openSourceLicense = 'open_source_license';
   static const String openSourceLicenseDesc = 'open_source_license_desc';
   static const String leadMaintainer = 'lead_maintainer';
+  // Governing: ADR-0022 (in-app reset), SPEC-0021 REQ "Localized User-Facing Text"
+  static const String resetNeoStation = 'reset_neostation';
+  static const String resetNeoStationDesc = 'reset_neostation_desc';
+  static const String resetDialogTitle = 'reset_dialog_title';
+  static const String resetDialogDeletes = 'reset_dialog_deletes';
+  static const String resetDialogKeeps = 'reset_dialog_keeps';
+  static const String resetDialogHint = 'reset_dialog_hint';
+  static const String resetDialogButton = 'reset_dialog_button';
+  static const String resetRestartNotice = 'reset_restart_notice';
 
   // ---------------------------------------------------------------------------
   // Game settings panel

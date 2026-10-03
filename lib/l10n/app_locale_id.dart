@@ -1755,4 +1755,16 @@ const Map<String, dynamic> appLocaleId = {
       'Menyimpan pustaka di server RomM? Hubungkan sekarang dan NeoStation akan menautkan game yang sudah ada serta dapat menampilkan sisanya. Anda juga bisa melakukannya nanti dari tab RomM.',
   AppLocale.wizardRommStepConnectedDesc:
       'Terhubung. Game Anda sedang ditautkan ke server di latar belakang.',
+  AppLocale.resetNeoStation: 'Reset NeoStation',
+  AppLocale.resetNeoStationDesc:
+      'Menghapus semua yang NeoStation simpan dan kembali ke penyiapan awal',
+  AppLocale.resetDialogTitle: 'Reset NeoStation?',
+  AppLocale.resetDialogDeletes:
+      'Ini menghapus basis data pustaka, metadata dan karya seni yang diambil, sampul RomM yang di-cache, login tersimpan, pengaturan, dan log.',
+  AppLocale.resetDialogKeeps:
+      'Berkas ROM, save, state, dan BIOS Anda tetap ada.',
+  AppLocale.resetDialogHint: 'Ketik RESET untuk mengonfirmasi',
+  AppLocale.resetDialogButton: 'Reset NeoStation',
+  AppLocale.resetRestartNotice:
+      'NeoStation telah direset. Jalankan lagi untuk memulai wizard penyiapan.',
 };

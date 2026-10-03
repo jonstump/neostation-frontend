@@ -1807,4 +1807,16 @@ const Map<String, dynamic> appLocaleEs = {
       '¿Tienes tu biblioteca en un servidor RomM? Conéctate ahora y NeoStation enlazará los juegos que ya tienes y podrá mostrar el resto. También puedes hacerlo más tarde desde la pestaña RomM.',
   AppLocale.wizardRommStepConnectedDesc:
       'Conectado. Tus juegos se están enlazando con el servidor en segundo plano.',
+  AppLocale.resetNeoStation: 'Restablecer NeoStation',
+  AppLocale.resetNeoStationDesc:
+      'Borra todo lo que NeoStation haya guardado y vuelve a la configuración inicial',
+  AppLocale.resetDialogTitle: '¿Restablecer NeoStation?',
+  AppLocale.resetDialogDeletes:
+      'Esto borra la base de datos de la biblioteca, los metadatos y las imágenes obtenidos, las portadas de RomM en caché, los inicios de sesión guardados, los ajustes y el registro.',
+  AppLocale.resetDialogKeeps:
+      'Tus archivos de ROM, partidas guardadas, estados y BIOS se conservan.',
+  AppLocale.resetDialogHint: 'Escribe RESET para confirmar',
+  AppLocale.resetDialogButton: 'Restablecer NeoStation',
+  AppLocale.resetRestartNotice:
+      'NeoStation se ha restablecido. Ábrelo de nuevo para ejecutar el asistente de configuración.',
 };

@@ -7,10 +7,14 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:neostation/services/log_export_service.dart';
+import 'package:neostation/services/logger_service.dart';
+import 'package:neostation/services/reset_service.dart';
+import 'package:neostation/services/relaunch_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/adaptive_scroll.dart';
 import 'package:neostation/data/datasources/sqlite_service.dart';
 import 'package:neostation/widgets/custom_notification.dart';
+import 'package:neostation/widgets/reset_confirm_dialog.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'settings_title.dart';
 
@@ -29,6 +33,8 @@ class AboutSettingsContent extends StatefulWidget {
 }
 
 class AboutSettingsContentState extends State<AboutSettingsContent> {
+  static final _log = LoggerService.instance;
+
   final ScrollController _scrollController = ScrollController();
 
   /// Snaps during rapid D-pad navigation, animates on a single move.
@@ -36,7 +42,7 @@ class AboutSettingsContentState extends State<AboutSettingsContent> {
 
   /// Keys used for calculating viewport alignment during navigation, one per
   /// card.
-  final List<GlobalKey> _itemKeys = List.generate(6, (_) => GlobalKey());
+  final List<GlobalKey> _itemKeys = List.generate(7, (_) => GlobalKey());
 
   String _appVersion = '';
   String _systemsVersion = '';
@@ -142,7 +148,7 @@ class AboutSettingsContentState extends State<AboutSettingsContent> {
   }
 
   int getItemCount() {
-    return 6;
+    return 7;
   }
 
   void selectItem(int index) {
@@ -165,7 +171,40 @@ class AboutSettingsContentState extends State<AboutSettingsContent> {
       case 5:
         _exportLogs();
         break;
+      case 6:
+        _resetNeoStation();
+        break;
     }
+  }
+
+  /// Wipes everything the app wrote and relaunches into the setup wizard.
+  ///
+  /// The row stays available even when the database never opened — the reset
+  /// is exactly the way out of a broken install — so nothing here touches
+  /// `SqliteService` before the confirmation.
+  //
+  // Governing: ADR-0022 (in-app reset), SPEC-0021 REQ "Reset Entry Point"
+  Future<void> _resetNeoStation() async {
+    final confirmed = await ResetConfirmDialog.show(context);
+    if (!mounted || !confirmed) return;
+
+    final summary = await ResetService.resetAll();
+    if (summary.failed.isNotEmpty) {
+      _log.w('AboutSettingsContent: reset finished with failures: $summary');
+    }
+
+    // The app does not try to run on from an empty state: every provider was
+    // built from what the reset just deleted.
+    // (SPEC-0021 REQ "Relaunch")
+    final restarted = await RelaunchService.relaunch();
+    if (restarted || Platform.isAndroid || !mounted) {
+      exit(0);
+    }
+
+    // Desktop platforms that refuse the restart get a notice saying to start
+    // the app again; the process ends when the notice is dismissed.
+    await ResetRestartNoticeDialog.show(context);
+    exit(0);
   }
 
   @override
@@ -310,6 +349,23 @@ class AboutSettingsContentState extends State<AboutSettingsContent> {
                         isFocused:
                             widget.isContentFocused &&
                             widget.selectedContentIndex == 5,
+                      ),
+                      SizedBox(height: 8.h),
+                      // Last row of the section, and reachable even when the
+                      // database never opened: the reset is the way out of a
+                      // broken install.
+                      // (SPEC-0021 REQ "Reset Entry Point")
+                      _buildInfoCard(
+                        cardKey: _itemKeys[6],
+                        icon: Symbols.restart_alt_rounded,
+                        title: AppLocale.resetNeoStation.getString(context),
+                        value: AppLocale.resetNeoStationDesc.getString(context),
+                        onTap: _resetNeoStation,
+                        trailingIcon: Symbols.warning_rounded,
+                        theme: theme,
+                        isFocused:
+                            widget.isContentFocused &&
+                            widget.selectedContentIndex == 6,
                       ),
                     ],
                   ),

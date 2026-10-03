@@ -1592,4 +1592,13 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.wizardRommStepDesc:
       'ライブラリを RomM サーバーで管理していますか？今すぐ接続すると、NeoStation が手元のゲームをリンクし、残りも表示できます。後から RomM タブでも設定できます。',
   AppLocale.wizardRommStepConnectedDesc: '接続しました。ゲームをバックグラウンドでサーバーにリンクしています。',
+  AppLocale.resetNeoStation: 'NeoStationをリセット',
+  AppLocale.resetNeoStationDesc: 'NeoStationが保存したすべてを消去し、初期セットアップに戻ります',
+  AppLocale.resetDialogTitle: 'NeoStationをリセットしますか？',
+  AppLocale.resetDialogDeletes:
+      'ライブラリのデータベース、取得したメタデータとアートワーク、キャッシュされたRomMのカバーアート、保存されたログイン情報、設定、ログが削除されます。',
+  AppLocale.resetDialogKeeps: 'ROM、セーブ、ステート、BIOSのファイルは残ります。',
+  AppLocale.resetDialogHint: '確認するには RESET と入力してください',
+  AppLocale.resetDialogButton: 'NeoStationをリセット',
+  AppLocale.resetRestartNotice: 'NeoStationをリセットしました。再度起動するとセットアップウィザードが始まります。',
 };

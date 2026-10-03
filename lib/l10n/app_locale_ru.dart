@@ -1764,4 +1764,16 @@ const Map<String, dynamic> appLocaleRu = {
       'Ваша библиотека хранится на сервере RomM? Подключитесь сейчас — NeoStation свяжет уже имеющиеся игры и сможет показать остальные. Это можно сделать и позже на вкладке RomM.',
   AppLocale.wizardRommStepConnectedDesc:
       'Подключено. Игры связываются с сервером в фоновом режиме.',
+  AppLocale.resetNeoStation: 'Сбросить NeoStation',
+  AppLocale.resetNeoStationDesc:
+      'Удаляет всё, что сохранил NeoStation, и возвращает к первичной настройке',
+  AppLocale.resetDialogTitle: 'Сбросить NeoStation?',
+  AppLocale.resetDialogDeletes:
+      'Это удалит базу данных библиотеки, полученные метаданные и изображения, кэшированные обложки RomM, сохранённые учётные данные, настройки и журнал.',
+  AppLocale.resetDialogKeeps:
+      'Ваши файлы ROM, сохранений, состояний и BIOS останутся на месте.',
+  AppLocale.resetDialogHint: 'Введите RESET для подтверждения',
+  AppLocale.resetDialogButton: 'Сбросить NeoStation',
+  AppLocale.resetRestartNotice:
+      'NeoStation сброшен. Запустите его снова, чтобы открылся мастер настройки.',
 };
