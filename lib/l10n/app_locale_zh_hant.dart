@@ -1531,5 +1531,6 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.resetDialogKeeps: '你的 ROM、存檔、狀態與 BIOS 檔案會保留。',
   AppLocale.resetDialogHint: '輸入 RESET 以確認',
   AppLocale.resetDialogButton: '重設 NeoStation',
+  AppLocale.resetFailuresHeading: '部分資料無法刪除:',
   AppLocale.resetRestartNotice: 'NeoStation 已重設。重新啟動即可執行設定精靈。',
 };

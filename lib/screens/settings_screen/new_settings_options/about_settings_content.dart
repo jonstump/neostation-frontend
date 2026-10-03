@@ -10,7 +10,10 @@ import 'package:neostation/services/log_export_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/reset_service.dart';
 import 'package:neostation/services/relaunch_service.dart';
+import 'package:neostation/services/game_service.dart'
+    show GamepadNavigationManager;
 import 'package:neostation/services/sfx_service.dart';
+import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/utils/adaptive_scroll.dart';
 import 'package:neostation/data/datasources/sqlite_service.dart';
 import 'package:neostation/widgets/custom_notification.dart';
@@ -34,6 +37,22 @@ class AboutSettingsContent extends StatefulWidget {
 
 class AboutSettingsContentState extends State<AboutSettingsContent> {
   static final _log = LoggerService.instance;
+
+  static const String _busyLayerId = 'reset_in_progress';
+
+  /// Seams for the reset flow's tests; the defaults are the real thing.
+  @visibleForTesting
+  static Future<ResetSummary> Function() resetRunner = ResetService.resetAll;
+  @visibleForTesting
+  static Future<bool> Function() relaunchRunner = RelaunchService.relaunch;
+  @visibleForTesting
+  static void Function(int) exitRunner = exit;
+  @visibleForTesting
+  static Duration relaunchGrace = const Duration(milliseconds: 300);
+
+  /// True from the confirmation until the process exits.
+  bool _isResetting = false;
+  GamepadNavigation? _busyNav;
 
   final ScrollController _scrollController = ScrollController();
 
@@ -59,6 +78,7 @@ class AboutSettingsContentState extends State<AboutSettingsContent> {
 
   @override
   void dispose() {
+    _popBusyLayer();
     _scrollController.dispose();
     super.dispose();
   }
@@ -152,6 +172,7 @@ class AboutSettingsContentState extends State<AboutSettingsContent> {
   }
 
   void selectItem(int index) {
+    if (_isResetting) return;
     switch (index) {
       case 0:
         _launchUrl('https://github.com/misobadev/neostation-frontend');
@@ -185,32 +206,104 @@ class AboutSettingsContentState extends State<AboutSettingsContent> {
   //
   // Governing: ADR-0022 (in-app reset), SPEC-0021 REQ "Reset Entry Point"
   Future<void> _resetNeoStation() async {
+    if (_isResetting) return;
     final confirmed = await ResetConfirmDialog.show(context);
-    if (!mounted || !confirmed) return;
+    if (!mounted || !confirmed || _isResetting) return;
 
-    final summary = await ResetService.resetAll();
+    // Modal busy state: touches are absorbed by the overlay and a no-op
+    // gamepad layer swallows every button until the process exits, so nothing
+    // runs against the database the reset is about to close.
+    setState(() => _isResetting = true);
+    _pushBusyLayer();
+
+    final summary = await resetRunner();
     if (summary.failed.isNotEmpty) {
       _log.w('AboutSettingsContent: reset finished with failures: $summary');
+    }
+
+    // Failures are shown before anything else: the log is closed by now and
+    // the user must not believe a partial reset was complete.
+    // (SPEC-0021 REQ "Order And Resilience")
+    if (summary.failed.isNotEmpty && mounted) {
+      _popBusyLayer();
+      await ResetRestartNoticeDialog.show(
+        context,
+        failures: summary.failed,
+        showRestartText: false,
+      );
+      if (mounted) _pushBusyLayer();
     }
 
     // The app does not try to run on from an empty state: every provider was
     // built from what the reset just deleted.
     // (SPEC-0021 REQ "Relaunch")
-    final restarted = await RelaunchService.relaunch();
-    if (restarted || Platform.isAndroid || !mounted) {
-      exit(0);
+    final restarted = await relaunchRunner();
+    if (restarted) {
+      // Give the new activity or process a moment to take over before this
+      // one goes away.
+      await Future<void>.delayed(relaunchGrace);
+      exitRunner(0);
+      return;
     }
 
-    // Desktop platforms that refuse the restart get a notice saying to start
-    // the app again; the process ends when the notice is dismissed.
-    await ResetRestartNoticeDialog.show(context);
-    exit(0);
+    // The platform refused the restart: say to start the app again; the
+    // process ends when the notice is dismissed.
+    if (mounted) {
+      _popBusyLayer();
+      await ResetRestartNoticeDialog.show(context);
+    }
+    exitRunner(0);
+  }
+
+  void _pushBusyLayer() {
+    if (_busyNav != null) return;
+    final nav = GamepadNavigation(
+      onSelectItem: () {},
+      onBack: () {},
+      allowRepeat: false,
+    );
+    _busyNav = nav;
+    nav.initialize();
+    GamepadNavigationManager.pushLayer(
+      _busyLayerId,
+      onActivate: nav.activate,
+      onDeactivate: nav.deactivate,
+    );
+  }
+
+  void _popBusyLayer() {
+    final nav = _busyNav;
+    if (nav == null) return;
+    _busyNav = null;
+    GamepadNavigationManager.popLayer(_busyLayerId);
+    nav.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
+    return Stack(
+      fit: StackFit.passthrough,
+      children: [
+        _buildContent(context, theme),
+        if (_isResetting)
+          const Positioned.fill(
+            child: ModalBarrier(color: Colors.black54, dismissible: false),
+          ),
+        if (_isResetting)
+          const Positioned.fill(
+            child: Center(
+              child: CircularProgressIndicator(
+                key: ValueKey('reset_in_progress'),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildContent(BuildContext context, ThemeData theme) {
     return SingleChildScrollView(
       controller: _scrollController,
       physics: const ClampingScrollPhysics(),

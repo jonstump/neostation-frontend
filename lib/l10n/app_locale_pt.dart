@@ -1802,6 +1802,7 @@ const Map<String, dynamic> appLocalePt = {
       'Seus arquivos de ROM, saves, estados e BIOS são mantidos.',
   AppLocale.resetDialogHint: 'Digite RESET para confirmar',
   AppLocale.resetDialogButton: 'Redefinir NeoStation',
+  AppLocale.resetFailuresHeading: 'Alguns dados não puderam ser removidos:',
   AppLocale.resetRestartNotice:
       'O NeoStation foi redefinido. Abra-o novamente para executar o assistente de configuração.',
 };

@@ -1765,6 +1765,7 @@ const Map<String, dynamic> appLocaleId = {
       'Berkas ROM, save, state, dan BIOS Anda tetap ada.',
   AppLocale.resetDialogHint: 'Ketik RESET untuk mengonfirmasi',
   AppLocale.resetDialogButton: 'Reset NeoStation',
+  AppLocale.resetFailuresHeading: 'Sebagian data tidak dapat dihapus:',
   AppLocale.resetRestartNotice:
       'NeoStation telah direset. Jalankan lagi untuk memulai wizard penyiapan.',
 };

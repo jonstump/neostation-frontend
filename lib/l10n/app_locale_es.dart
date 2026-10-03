@@ -1817,6 +1817,7 @@ const Map<String, dynamic> appLocaleEs = {
       'Tus archivos de ROM, partidas guardadas, estados y BIOS se conservan.',
   AppLocale.resetDialogHint: 'Escribe RESET para confirmar',
   AppLocale.resetDialogButton: 'Restablecer NeoStation',
+  AppLocale.resetFailuresHeading: 'No se pudieron eliminar algunos datos:',
   AppLocale.resetRestartNotice:
       'NeoStation se ha restablecido. Ábrelo de nuevo para ejecutar el asistente de configuración.',
 };

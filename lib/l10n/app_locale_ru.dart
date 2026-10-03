@@ -1774,6 +1774,7 @@ const Map<String, dynamic> appLocaleRu = {
       'Ваши файлы ROM, сохранений, состояний и BIOS останутся на месте.',
   AppLocale.resetDialogHint: 'Введите RESET для подтверждения',
   AppLocale.resetDialogButton: 'Сбросить NeoStation',
+  AppLocale.resetFailuresHeading: 'Не удалось удалить часть данных:',
   AppLocale.resetRestartNotice:
       'NeoStation сброшен. Запустите его снова, чтобы открылся мастер настройки.',
 };

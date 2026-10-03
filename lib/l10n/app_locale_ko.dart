@@ -1606,5 +1606,6 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.resetDialogKeeps: 'ROM, 세이브, 상태, BIOS 파일은 그대로 유지됩니다.',
   AppLocale.resetDialogHint: '확인하려면 RESET을 입력하세요',
   AppLocale.resetDialogButton: 'NeoStation 초기화',
+  AppLocale.resetFailuresHeading: '일부 데이터를 삭제하지 못했습니다:',
   AppLocale.resetRestartNotice: 'NeoStation이 초기화되었습니다. 다시 실행하면 설정 마법사가 시작됩니다.',
 };

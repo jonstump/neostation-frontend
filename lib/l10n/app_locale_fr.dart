@@ -1837,6 +1837,8 @@ const Map<String, dynamic> appLocaleFr = {
       'Vos fichiers de ROM, sauvegardes, états et BIOS sont conservés.',
   AppLocale.resetDialogHint: 'Saisissez RESET pour confirmer',
   AppLocale.resetDialogButton: 'Réinitialiser NeoStation',
+  AppLocale.resetFailuresHeading:
+      'Certaines données n\'ont pas pu être supprimées :',
   AppLocale.resetRestartNotice:
       'NeoStation a été réinitialisé. Relancez-le pour lancer l\'assistant de configuration.',
 };

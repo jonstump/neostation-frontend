@@ -1745,6 +1745,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.resetDialogKeeps: 'Your ROM, save, state and BIOS files are kept.',
   AppLocale.resetDialogHint: 'Type RESET to confirm',
   AppLocale.resetDialogButton: 'Reset NeoStation',
+  AppLocale.resetFailuresHeading: 'Some data could not be removed:',
   AppLocale.resetRestartNotice:
       'NeoStation has been reset. Start it again to run the setup wizard.',
 };

@@ -368,6 +368,7 @@ mixin AppLocale {
   static const String resetDialogHint = 'reset_dialog_hint';
   static const String resetDialogButton = 'reset_dialog_button';
   static const String resetRestartNotice = 'reset_restart_notice';
+  static const String resetFailuresHeading = 'reset_failures_heading';
 
   // ---------------------------------------------------------------------------
   // Game settings panel

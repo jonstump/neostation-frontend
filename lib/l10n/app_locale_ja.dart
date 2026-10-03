@@ -1600,5 +1600,6 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.resetDialogKeeps: 'ROM、セーブ、ステート、BIOSのファイルは残ります。',
   AppLocale.resetDialogHint: '確認するには RESET と入力してください',
   AppLocale.resetDialogButton: 'NeoStationをリセット',
+  AppLocale.resetFailuresHeading: '一部のデータを削除できませんでした:',
   AppLocale.resetRestartNotice: 'NeoStationをリセットしました。再度起動するとセットアップウィザードが始まります。',
 };

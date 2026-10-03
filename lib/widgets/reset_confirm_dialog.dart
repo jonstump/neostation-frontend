@@ -45,6 +45,10 @@ class _ResetConfirmDialogState extends State<ResetConfirmDialog>
 
   GamepadNavigation? _gamepadNav;
 
+  /// Set by the first pop so a second A/Enter/B press cannot pop the route
+  /// underneath (the Settings screen).
+  bool _closing = false;
+
   final TextEditingController _controller = TextEditingController();
   final FocusNode _fieldFocus = FocusNode();
 
@@ -102,6 +106,8 @@ class _ResetConfirmDialogState extends State<ResetConfirmDialog>
     if (isAnyFieldFocused()) {
       exitTextEntry();
     } else {
+      if (_closing) return;
+      _closing = true;
       Navigator.of(context).pop(false);
     }
   }
@@ -113,7 +119,8 @@ class _ResetConfirmDialogState extends State<ResetConfirmDialog>
       _controller.text.trim().toUpperCase() == _confirmationWord;
 
   void _confirm() {
-    if (!_isConfirmed) return;
+    if (!_isConfirmed || _closing) return;
+    _closing = true;
     Navigator.of(context).pop(true);
   }
 
@@ -293,16 +300,37 @@ class _ResetConfirmDialogState extends State<ResetConfirmDialog>
 /// The notice shown when the platform could not restart the process by
 /// itself: the state is already wiped and consistent, so the app says to
 /// start it again and exits once the notice is dismissed.
+///
+/// It also lists the stores a reset could not clear ([failures], store name to
+/// reason), so a partial reset is never silent; [showRestartText] is false
+/// when the notice only reports failures and the app relaunches by itself.
 class ResetRestartNoticeDialog extends StatefulWidget {
-  const ResetRestartNoticeDialog({super.key});
+  const ResetRestartNoticeDialog({
+    super.key,
+    this.failures = const {},
+    this.showRestartText = true,
+  });
+
+  /// Store name -> reason for every clearer that failed.
+  final Map<String, String> failures;
+
+  /// Whether to say the app must be started again by hand.
+  final bool showRestartText;
 
   /// Shows the notice and resolves when it is dismissed; the caller then
   /// exits the process.
-  static Future<void> show(BuildContext context) async {
+  static Future<void> show(
+    BuildContext context, {
+    Map<String, String> failures = const {},
+    bool showRestartText = true,
+  }) async {
     await showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (_) => const ResetRestartNoticeDialog(),
+      builder: (_) => ResetRestartNoticeDialog(
+        failures: failures,
+        showRestartText: showRestartText,
+      ),
     );
   }
 
@@ -315,6 +343,9 @@ class _ResetRestartNoticeDialogState extends State<ResetRestartNoticeDialog> {
   static const String _layerId = 'reset_restart_notice';
 
   GamepadNavigation? _gamepadNav;
+
+  /// Guards against a second press popping the route underneath.
+  bool _closing = false;
 
   @override
   void initState() {
@@ -343,20 +374,46 @@ class _ResetRestartNoticeDialogState extends State<ResetRestartNoticeDialog> {
   }
 
   void _close() {
+    if (_closing) return;
+    _closing = true;
     Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final style = theme.textTheme.bodyMedium?.copyWith(
+      color: theme.colorScheme.onSurface.withValues(alpha: 0.9),
+      fontSize: 10.r,
+    );
     return AlertDialog(
       backgroundColor: theme.scaffoldBackgroundColor,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16.r)),
-      content: Text(
-        AppLocale.resetRestartNotice.getString(context),
-        style: theme.textTheme.bodyMedium?.copyWith(
-          color: theme.colorScheme.onSurface.withValues(alpha: 0.9),
-          fontSize: 10.r,
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (widget.showRestartText)
+              Text(
+                AppLocale.resetRestartNotice.getString(context),
+                style: style,
+              ),
+            if (widget.showRestartText && widget.failures.isNotEmpty)
+              SizedBox(height: 10.r),
+            if (widget.failures.isNotEmpty) ...[
+              Text(
+                AppLocale.resetFailuresHeading.getString(context),
+                style: style,
+              ),
+              for (final entry in widget.failures.entries)
+                Text(
+                  '${entry.key}: ${entry.value}',
+                  key: ValueKey('reset_failure_${entry.key}'),
+                  style: style,
+                ),
+            ],
+          ],
         ),
       ),
       actions: [
