@@ -44,7 +44,7 @@ State is spread over `SharedPreferences` (bootstrap keys read before the databas
 flowchart LR
     A["Settings > About: Reset NeoStation"] --> D["confirm dialog (type RESET)"]
     D --> R["ResetService.resetAll"]
-    R --> C1["credentials"] --> C2["preferences"] --> C3["database"] --> C4["media cache"] --> C5["log"] --> C6["SAF grants (Android)"]
+    R --> C1["credentials"] --> C2["preferences"] --> C3["database"] --> C4["media cache"] --> C5["log"] --> C7["app files"] --> C6["SAF grants (Android)"]
     R --> X["relaunch / exit with notice"]
     X --> W["setup wizard"]
 ```
