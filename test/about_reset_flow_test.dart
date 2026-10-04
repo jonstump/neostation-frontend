@@ -15,6 +15,8 @@ import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/widgets/reset_confirm_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'database_test_helper.dart';
+
 /// Counts navigator pops, so tests can assert that nothing was popped.
 class _CountingObserver extends NavigatorObserver {
   int pops = 0;
@@ -38,6 +40,11 @@ void main() {
   late Completer<ResetSummary> resetGate;
   late MaterialPageRoute<void> aboutRoute;
 
+  // Mounting AboutSettingsContent reads the systems version, which opens the
+  // database; the in-memory helper keeps these tests off the developer's real
+  // one (opening writes, migrates, and a downgrade would wipe it).
+  final dbHelper = DatabaseTestHelper();
+
   setUpAll(() async {
     SharedPreferences.setMockInitialValues({});
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -52,7 +59,8 @@ void main() {
     );
   });
 
-  setUp(() {
+  setUp(() async {
+    await dbHelper.setUp();
     SfxService().setEnabled(false);
     observer.pops = 0;
     calls = [];
@@ -70,7 +78,8 @@ void main() {
     AboutSettingsContentState.relaunchGrace = const Duration(milliseconds: 300);
   });
 
-  tearDown(() {
+  tearDown(() async {
+    await dbHelper.tearDown();
     // The fakes are statics; hand the production defaults back.
     AboutSettingsContentState.resetRunner = ResetService.resetAll;
     AboutSettingsContentState.relaunchRunner = RelaunchService.relaunch;
@@ -349,6 +358,10 @@ void main() {
       expect(calls, ['reset']);
     });
 
+    // Not a pin of the post-confirmation check on its own: completing these
+    // dialogs through their buttons cannot be driven through the flow's
+    // continuation in a widget test (see the check-C test below, which pins
+    // that check alone by popping the navigator directly).
     testWidgets('two confirm dialogs opened back to back reset only once', (
       tester,
     ) async {
@@ -475,6 +488,38 @@ void main() {
           expect(find.byType(ResetRestartNoticeDialog), findsNothing);
           expect(calls, ['reset', 'relaunch']);
           expect(exits, [0]);
+        },
+      );
+
+      testWidgets(
+        'the post-confirmation check alone refuses the second resumed '
+        'invocation',
+        (tester) async {
+          await pumpAbout(tester);
+          key.currentState!.selectItem(6);
+          await settle(tester);
+          // A second trigger stacks a second dialog on top; its show future is
+          // the one the first completion resumes.
+          key.currentState!.selectItem(6);
+          await settle(tester);
+          expect(find.byType(ResetConfirmDialog), findsNWidgets(2));
+
+          // Complete BOTH invocations by popping the navigator with true,
+          // bypassing the dialogs' buttons: the pop always resolves the
+          // TOPMOST dialog's future. The first pop resumes the second
+          // invocation, which passes the post-confirmation check (the flag is
+          // still false) and starts the reset. The second pop resumes the
+          // first invocation, whose continuation only the post-confirmation
+          // check refuses.
+          navigatorKey.currentState!.pop(true);
+          await settle(tester);
+          expect(calls, ['reset']);
+
+          navigatorKey.currentState!.pop(true);
+          await settle(tester);
+          expect(calls, [
+            'reset',
+          ], reason: 'the resumed first invocation must not reset again');
         },
       );
 
