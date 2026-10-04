@@ -620,6 +620,12 @@ class SqliteMigrations {
       case 161:
         await _migrateToVersion161(db);
         break;
+      case 162:
+        await _migrateToVersion162(db);
+        break;
+      case 163:
+        await _migrateToVersion163(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -7078,7 +7084,42 @@ class SqliteMigrations {
     }
   }
 
-  /// Migration v161: Adds `app_romm_rom_map.link_source`, recording which
+  /// Migration v161: adds the independent List view size preference.
+  ///
+  /// v160 is already occupied by the Search-card preference on main. This
+  /// remains idempotent for databases that reached a branch with the former
+  /// v160 list-size migration before the branches were merged.
+  static Future<void> _migrateToVersion161(Database db) async {
+    final columns = db
+        .select('PRAGMA table_info(user_config)')
+        .map((row) => row['name'] as String)
+        .toSet();
+    if (!columns.contains('game_list_size')) {
+      db.execute(
+        "ALTER TABLE user_config ADD COLUMN game_list_size TEXT DEFAULT 'S'",
+      );
+    }
+  }
+
+  /// Migration v162: stores whether Android apps appear as a top-level tab.
+  ///
+  /// The Android Apps branch previously used v161, so devices on that branch
+  /// may have skipped main's list-size migration. Backfill it idempotently.
+  static Future<void> _migrateToVersion162(Database db) async {
+    await _migrateToVersion161(db);
+    final columns = db
+        .select('PRAGMA table_info(user_config)')
+        .map((row) => row['name'].toString())
+        .toSet();
+    if (!columns.contains('android_apps_as_tab')) {
+      db.execute(
+        'ALTER TABLE user_config ADD COLUMN android_apps_as_tab '
+        'INTEGER DEFAULT 0',
+      );
+    }
+  }
+
+  /// Migration v163: Adds `app_romm_rom_map.link_source`, recording which
   /// writer produced a RomM link row (`download`, `auto`, or `manual`).
   ///
   /// Existing rows are left null and read as automatic: both the download
@@ -7088,28 +7129,30 @@ class SqliteMigrations {
   /// skipped v119 (no map table at all) gets the table from its CREATE, which
   /// already carries the column.
   ///
-  /// Numbered 161 rather than the free 158 slot this branch first reserved:
-  /// `main` reached `_databaseVersion = 160` while the branch was open, so an
-  /// install already at 160 would never run a `case 158` and would be left
-  /// without a column every `app_romm_rom_map` query now names.
-  static Future<void> _migrateToVersion161(Database db) async {
-    _log.i('Migration v161: Adding link_source to app_romm_rom_map');
+  /// Numbered 163 rather than the 158 and then 161 slots this branch first
+  /// reserved: `main` moved past each while the branch was open (161 and 162
+  /// are the list-size and Android-apps-tab columns), and an install already
+  /// past a number never runs that `case`, so it would be left without a
+  /// column every `app_romm_rom_map` query now names. A device that ran this
+  /// branch at 161 still gets main's 161 via v162's idempotent backfill.
+  static Future<void> _migrateToVersion163(Database db) async {
+    _log.i('Migration v163: Adding link_source to app_romm_rom_map');
     try {
       final tableInfo = db.select('PRAGMA table_info(app_romm_rom_map)');
       final columns = tableInfo.map((c) => c['name'].toString()).toList();
       if (columns.isEmpty) {
         db.execute(createAppRommRomMapTableSql);
         db.execute(createAppRommRomMapIndexSql);
-        _log.i('Table app_romm_rom_map created with link_source via v161');
+        _log.i('Table app_romm_rom_map created with link_source via v163');
       } else if (!columns.contains('link_source')) {
         db.execute('ALTER TABLE app_romm_rom_map ADD COLUMN link_source TEXT');
-        _log.i('Column link_source added via v161');
+        _log.i('Column link_source added via v163');
       } else {
         _log.i('Column link_source already exists');
       }
-      _log.i('Migration v161 completed');
+      _log.i('Migration v163 completed');
     } catch (e, stackTrace) {
-      _log.e('Error in migration v161: $e');
+      _log.e('Error in migration v163: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

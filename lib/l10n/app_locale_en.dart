@@ -1,6 +1,21 @@
 part of 'app_locale.dart';
 
 const Map<String, dynamic> appLocaleEn = {
+  AppLocale.raEvents: 'Events',
+  AppLocale.raAotwYearTitle: 'Achievement of the Week ({year})',
+  AppLocale.raAotw: 'AOTW',
+  AppLocale.raAwards: 'Awards',
+  AppLocale.raSetOrder: 'Set order',
+  AppLocale.raPointsSort: 'Points: high to low',
+  AppLocale.raRaritySort: 'Rarest first',
+  AppLocale.raProgression: 'Progression',
+  AppLocale.raWinCondition: 'Win condition',
+  AppLocale.raWeek: 'Week {week}',
+  AppLocale.raMissed: 'Missed',
+  AppLocale.raUpcoming: 'Upcoming',
+  AppLocale.raCurrent: 'Current',
+  AppLocale.raEventUnavailable: 'Event credit unavailable',
+  AppLocale.raEarned: 'Earned',
   AppLocale.navigate: 'Navigate',
   AppLocale.select: 'Select',
   AppLocale.back: 'Back',
@@ -149,6 +164,12 @@ const Map<String, dynamic> appLocaleEn = {
       'Error configuring RetroArch path: {error}',
   AppLocale.androidSystemSettings: 'System Settings',
   AppLocale.androidSystemSettingsSubtitle: 'Open android system settings',
+  AppLocale.androidApps: 'Android Apps',
+  AppLocale.androidAppLayout: 'Android App Layout',
+  AppLocale.androidAppLayoutSubtitle:
+      'Choose where installed Android apps appear',
+  AppLocale.androidAppLayoutSystem: 'System',
+  AppLocale.androidAppLayoutTab: 'Tab',
   AppLocale.scanOnStartup: 'Scan folders on Startup',
   AppLocale.nowPlayingDimAfter: 'Dim Now Playing after',
   AppLocale.nowPlayingDimAfterSubtitle:
@@ -162,7 +183,7 @@ const Map<String, dynamic> appLocaleEn = {
       'Show the app dock on the secondary screen',
   AppLocale.nowPlayingDockSlots: 'Dock slots',
   AppLocale.nowPlayingDockSlotsSubtitle:
-      'How many app slots the dock shows (1-5)',
+      'How many app slots the dock shows (0-5)',
   AppLocale.nowPlayingFanartDim: 'Dim fanart',
   AppLocale.nowPlayingFanartDimSubtitle:
       'Darken the background art behind the logo so a busy fanart does not clash with it',
@@ -672,6 +693,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.descending: 'Descending',
   AppLocale.viewModeGroup: 'VIEW MODE',
   AppLocale.cardSizeGroup: 'CARD SIZE',
+  AppLocale.listSizeGroup: 'LIST SIZE',
   AppLocale.cardStyleGroup: 'CARD STYLE',
   AppLocale.fanartCard: 'Fanart',
   AppLocale.boxCard: 'Box',
@@ -731,8 +753,8 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.raDescription:
       'RetroAchievements is a community effort to provide achievements for classic games using emulators.',
   AppLocale.raEarnPoints: 'Earn hardcore points and showcase them',
-  AppLocale.raGlobalLeaderboards: 'Global leaderboards and rankings',
-  AppLocale.raGameplayHistory: 'Detailed gameplay history and progress',
+  AppLocale.raGlobalLeaderboards: 'Per-game leaderboards and personal standing',
+  AppLocale.raGameplayHistory: 'Recent games and achievement progress',
   AppLocale.raCreateAccountAt: 'Create an account at ',
   AppLocale.raToStartEarning: ' to start earning.',
   AppLocale.userProfile: 'USER PROFILE',
@@ -764,6 +786,18 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.errorSavingCredentials: 'Error saving credentials',
   AppLocale.invalidCredentials: 'Invalid credentials provided',
   AppLocale.loginError: 'Login error: {error}',
+  AppLocale.screenScraperUsernameHint:
+      'Use your ScreenScraper username, not your email address.',
+  AppLocale.screenScraperUseUsernameNotEmail:
+      'Enter your ScreenScraper username, not your email address. The API does not accept email.',
+  AppLocale.screenScraperApiClosed:
+      "ScreenScraper's API is temporarily unavailable. Please try again later.",
+  AppLocale.screenScraperAppOutdated:
+      'This app version is no longer accepted by ScreenScraper. Please update NeoStation.',
+  AppLocale.screenScraperQuotaReached:
+      'ScreenScraper daily quota reached. Please try again tomorrow.',
+  AppLocale.screenScraperConnectionError:
+      'Could not reach ScreenScraper. Check your internet connection and try again.',
   AppLocale.whatIsScreenScraper: 'What is ScreenScraper?',
   AppLocale.screenScraperDescription:
       'ScreenScraper is a collaborative database that provides high-quality metadata, covers, and videos for your games.',
@@ -1163,6 +1197,37 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.deleteGameConfirmBody:
       'This will permanently delete the game ROM, its scraped data, and media files. This action cannot be undone.',
   AppLocale.deleteGameSubtitle: 'Permanently removes the ROM file from disk',
+  AppLocale.raSubtabDashboard: 'Profile',
+  AppLocale.raSubtabUnlocks: 'Unlocks',
+  AppLocale.raSubtabGames: 'Games',
+  AppLocale.raSubtabLeaderboards: 'Leaderboards',
+  AppLocale.raStanding: 'My standing',
+  AppLocale.raStandingPill: 'Rank #{rank} · Top {percent}',
+  AppLocale.raUnranked: 'Unranked',
+  AppLocale.raYourRank: 'Rank: {rank}',
+  AppLocale.raYourPoints: 'Points: {points}',
+  AppLocale.raUserType: '{type}',
+  AppLocale.raCasual: 'Casual',
+  AppLocale.raYourGamesLeaderboards: "Your games' leaderboards",
+  AppLocale.raNoLeaderboardGames: 'No games with leaderboard activity yet',
+  AppLocale.raLeaderboardSignIn: 'Sign in to view leaderboards for this game.',
+  AppLocale.raLeaderboardNoLeaderboards: 'No leaderboards for this game',
+  AppLocale.raLeaderboardNoEntries: 'No entries yet',
+  AppLocale.raLeaderboardEntries: 'Entries',
+  AppLocale.raLeaderboardTopEntry: 'Top: {user} · {score}',
+  AppLocale.raLeaderboardYourEntry: 'Your entry',
+  AppLocale.raLeaderboardFormat: 'Format: {format}',
+  AppLocale.raLeaderboardRankAscending: 'Lower scores rank higher',
+  AppLocale.raLeaderboardRankDescending: 'Higher scores rank higher',
+  AppLocale.raGamesHeaderHint: 'Played + tracked games',
+  AppLocale.raFilterMastered: 'Mastered',
+  AppLocale.raFilterBeaten: 'Beaten',
+  AppLocale.raGamesEndOfList: "That's every game in your history",
+  AppLocale.raGamesEmpty: 'No game activity yet',
+  AppLocale.raErrorLoadGames: 'Error loading games: {error}',
+  AppLocale.raHardcore: 'Hardcore',
+  AppLocale.raUnlocksEndOfList: "That's every unlock from the last 30 days",
+  AppLocale.raUnlockGameNotOwned: "This game isn't in your library or RomM",
   AppLocale.raCompletionsLabel: 'Completions',
   AppLocale.raMasteriesLabel: 'Masteries',
   AppLocale.raPointsAbbrev: 'pts',
@@ -1170,6 +1235,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.raRecentCompletions: 'Recent Completions',
   AppLocale.raRecentMasteries: 'Recent Masteries',
   AppLocale.raNoCompletionsYet: 'No completions yet',
+  AppLocale.raNoBeatenYet: 'No beaten games yet',
   AppLocale.raNoMasteriesYet: 'No masteries yet',
   AppLocale.raTrackedGames: 'tracked games',
   AppLocale.raCompletionLabel: 'Completion',
@@ -1179,6 +1245,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.raMissable: 'MISSABLE',
   AppLocale.raFilterLocked: 'Locked',
   AppLocale.raFilterMissables: 'Missables',
+  AppLocale.raGuide: 'Guide',
   AppLocale.raNoAchievementsForFilter: 'No achievements match this filter.',
   AppLocale.raComments: 'COMMENTS',
   AppLocale.raCommentsCouldNotLoad: 'Comments could not be loaded.',
@@ -1211,6 +1278,29 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.raGamesBeaten: '{count} games beaten',
   AppLocale.raAchievementProgress: '{earned}/{total} achievements',
   AppLocale.raRecent30Days: '30 days',
+  AppLocale.raErrorApiKeyRequired:
+      'A RetroAchievements web API key is required for this dashboard data.',
+  AppLocale.raErrorEnterUsername: 'Please enter a username',
+  AppLocale.raErrorEnterApiKey:
+      'Please enter your RetroAchievements web API key',
+  AppLocale.raErrorUserNotFound: 'User not found on RetroAchievements',
+  AppLocale.raErrorConnect: 'Error connecting to RetroAchievements: {error}',
+  AppLocale.raErrorUserNotConnected: 'User not connected',
+  AppLocale.raErrorSummaryUnavailable: 'User summary could not be loaded',
+  AppLocale.raErrorAwardsUnavailable: 'User awards could not be loaded',
+  AppLocale.raErrorGameInfoUnavailable: 'Game information could not be loaded',
+  AppLocale.raErrorLoadGameInfo: 'Error loading game information: {error}',
+  AppLocale.raErrorLoadSummary: 'Error loading user summary: {error}',
+  AppLocale.raErrorLoadAotw: 'Error loading Achievement of the Week: {error}',
+  AppLocale.raErrorLoadAwards: 'Error loading user awards: {error}',
+  AppLocale.raErrorLoadCompletionProgress:
+      'Error loading completion progress: {error}',
+  AppLocale.raErrorLoadRecentlyPlayed:
+      'Error loading recently played games: {error}',
+  AppLocale.raErrorLoadRecentUnlocks: 'Error loading recent unlocks: {error}',
+  AppLocale.raErrorLoadLeaderboards: 'Error loading leaderboards: {error}',
+  AppLocale.raErrorLoadLeaderboardEntries:
+      'Error loading leaderboard entries: {error}',
 
   // Custom save folders (NeoSync v2)
   AppLocale.customSaveFoldersTitle: 'Standalone save folders',
