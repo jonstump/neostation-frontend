@@ -54,6 +54,8 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  final navigatorKey = GlobalKey<NavigatorState>();
+
   Future<void> pumpApp(WidgetTester tester) async {
     tester.view.physicalSize = const Size(1280, 720);
     tester.view.devicePixelRatio = 1.0;
@@ -66,16 +68,36 @@ void main() {
         child: ScreenUtilInit(
           designSize: const Size(1280, 720),
           builder: (context, child) => MaterialApp(
+            navigatorKey: navigatorKey,
+            // As in the RomM dialogs' harness: the app installs a
+            // NoFocusTraversalPolicy, so the default arrow-key focus
+            // traversal must go too, or an arrow press focuses a text field
+            // behind the nav's back.
+            shortcuts: const <ShortcutActivator, Intent>{},
             localizationsDelegates:
                 FlutterLocalization.instance.localizationsDelegates,
             supportedLocales: FlutterLocalization.instance.supportedLocales,
-            home: Scaffold(
-              body: Builder(
-                builder: (ctx) {
-                  host = ctx;
-                  return const SizedBox.expand();
-                },
-              ),
+            home: const Scaffold(body: SizedBox.expand()),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // The page the dialog sits on top of; the double-press tests assert it
+    // survives. Pushed rather than the home route on purpose: the navigator
+    // never pops its home route, so a double pop is only observable on a
+    // route that was pushed.
+    unawaited(
+      navigatorKey.currentState!.push(
+        MaterialPageRoute<void>(
+          builder: (_) => Scaffold(
+            key: const ValueKey('dialog_underlying_page'),
+            body: Builder(
+              builder: (ctx) {
+                host = ctx;
+                return const SizedBox.expand();
+              },
             ),
           ),
         ),
@@ -158,5 +180,83 @@ void main() {
     GamepadNavigation.triggerBack();
     await settle(tester);
     expect(find.byType(TextField), findsNothing);
+  });
+
+  group('double-press guards', () {
+    testWidgets('a second confirm in the same frame pops once, not the page '
+        'underneath', (tester) async {
+      await pumpApp(tester);
+      await openDialog(tester);
+      await tester.enterText(find.byType(TextField), 'RESET');
+      await settle(tester);
+
+      // Drive the cursor onto the button the gamepad way: B out of the
+      // field, down to the button, then A. The nav's re-activation grace
+      // and keyboard throttle are real-time, so every key press waits out
+      // 200 real milliseconds (no frames pumped) first.
+      GamepadNavigation.triggerBack();
+      await settle(tester, ms: 200);
+      await tester.sendKeyEvent(LogicalKeyboardKey.arrowDown);
+      await settle(tester, ms: 200);
+
+      // Two confirm presses with no pump between, so both land while the
+      // dialog is still on the stack: only the first may pop anything.
+      // The second press is a key event on purpose: the moment the first
+      // pop starts the route ignores pointers, so a second TAP could never
+      // reach the button, but the keyboard path is not hit-tested, and it
+      // confirms exactly like the tap does.
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 200)),
+      );
+      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      await settle(tester);
+
+      expect(dialogResult, isTrue);
+      // The page underneath was not popped by the second confirm.
+      expect(
+        find.byKey(const ValueKey('dialog_underlying_page')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('a second back press pops once, not the page underneath', (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      await openDialog(tester);
+      // The field is not focused, so B closes the dialog directly.
+
+      // Two B presses in the same frame; only the first may pop anything.
+      expect(GamepadNavigation.triggerBack(), isTrue);
+      expect(GamepadNavigation.triggerBack(), isTrue);
+      await settle(tester);
+
+      expect(dialogResult, isFalse);
+      expect(
+        find.byKey(const ValueKey('dialog_underlying_page')),
+        findsOneWidget,
+      );
+    });
+
+    testWidgets('the notice dialog dismisses once, not twice', (tester) async {
+      await pumpApp(tester);
+      var noticeClosed = false;
+      unawaited(
+        ResetRestartNoticeDialog.show(host).then((_) => noticeClosed = true),
+      );
+      await settle(tester);
+
+      // Two dismiss presses in the same frame; only the first may pop.
+      expect(GamepadNavigation.triggerBack(), isTrue);
+      expect(GamepadNavigation.triggerBack(), isTrue);
+      await settle(tester);
+
+      expect(noticeClosed, isTrue);
+      expect(
+        find.byKey(const ValueKey('dialog_underlying_page')),
+        findsOneWidget,
+      );
+    });
   });
 }

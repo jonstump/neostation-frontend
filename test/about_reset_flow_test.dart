@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io' show exit;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -7,8 +8,10 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/screens/settings_screen/new_settings_options/about_settings_content.dart';
+import 'package:neostation/services/relaunch_service.dart';
 import 'package:neostation/services/reset_service.dart';
 import 'package:neostation/services/sfx_service.dart';
+import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/widgets/reset_confirm_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -55,7 +58,14 @@ void main() {
     AboutSettingsContentState.relaunchGrace = const Duration(milliseconds: 300);
   });
 
-  tearDown(() => SfxService().setEnabled(true));
+  tearDown(() {
+    // The fakes are statics; hand the production defaults back.
+    AboutSettingsContentState.resetRunner = ResetService.resetAll;
+    AboutSettingsContentState.relaunchRunner = RelaunchService.relaunch;
+    AboutSettingsContentState.exitRunner = exit;
+    AboutSettingsContentState.relaunchGrace = const Duration(milliseconds: 300);
+    SfxService().setEnabled(true);
+  });
 
   Future<void> settle(WidgetTester tester) async {
     await tester.pump();
@@ -189,5 +199,83 @@ void main() {
     await tester.tap(find.byType(TextButton));
     await settle(tester);
     expect(exits, [0]);
+  });
+
+  group('guards', () {
+    testWidgets('a second trigger while the reset runs does not reset again', (
+      tester,
+    ) async {
+      await pumpAbout(tester);
+      key.currentState!.selectItem(6);
+      await settle(tester);
+      await confirmReset(tester);
+      expect(calls, ['reset']);
+
+      // A second trigger through the row's public entry points while the
+      // fake reset is still pending. The busy overlay absorbs a tap on the
+      // row itself; the direct selectItem call bypasses hit testing, which
+      // is exactly the path the _isResetting guard exists for.
+      final rowTitle = AppLocale.resetNeoStation.getString(key.currentContext!);
+      await tester.tap(find.text(rowTitle), warnIfMissed: false);
+      key.currentState!.selectItem(6);
+      await settle(tester);
+
+      // With the guard broken, a second confirm dialog opens on top; confirm
+      // it so the second reset would actually start.
+      if (find.byType(ResetConfirmDialog).evaluate().isNotEmpty) {
+        await tester.enterText(find.byType(TextField).last, 'RESET');
+        await tester.pump();
+        await tester.tap(
+          find.byKey(const ValueKey('reset_confirm_button')).last,
+          warnIfMissed: false,
+        );
+        await settle(tester);
+      }
+
+      expect(calls, [
+        'reset',
+      ], reason: 'a second trigger must not start a second reset');
+    });
+
+    testWidgets(
+      'the busy layer is on top while the reset runs and gone after',
+      (tester) async {
+        AboutSettingsContentState.relaunchRunner = () async {
+          calls.add('relaunch');
+          return false;
+        };
+        await pumpAbout(tester);
+        key.currentState!.selectItem(6);
+        await settle(tester);
+        await confirmReset(tester);
+
+        // While the fake reset is still pending: the busy overlay is up, the
+        // busy layer is the active top layer, and its no-op back swallows the
+        // press without closing anything or starting anything.
+        expect(find.byKey(const ValueKey('reset_in_progress')), findsOneWidget);
+        expect(
+          GamepadNavigation.triggerBack(),
+          isTrue,
+          reason: 'the busy layer is the active layer, swallowing back',
+        );
+        key.currentState!.selectItem(6);
+        await settle(tester);
+        expect(calls, ['reset']);
+        expect(find.byType(ResetRestartNoticeDialog), findsNothing);
+        expect(find.byKey(const ValueKey('reset_in_progress')), findsOneWidget);
+
+        resetGate.complete(ResetSummary());
+        await settle(tester);
+        expect(find.byType(ResetRestartNoticeDialog), findsOneWidget);
+        await tester.tap(find.byType(TextButton));
+        await settle(tester);
+        expect(exits, [0]);
+
+        // The busy layer was popped: nothing answers back anymore. The
+        // manager's stack is private (no public inspector), so this is the
+        // behavioural proof: with no active layer, triggerBack is false.
+        expect(GamepadNavigation.triggerBack(), isFalse);
+      },
+    );
   });
 }
