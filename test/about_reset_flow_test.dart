@@ -15,6 +15,14 @@ import 'package:neostation/utils/gamepad_nav.dart';
 import 'package:neostation/widgets/reset_confirm_dialog.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// Counts navigator pops, so tests can assert that nothing was popped.
+class _CountingObserver extends NavigatorObserver {
+  int pops = 0;
+
+  @override
+  void didPop(Route route, Route? previousRoute) => pops++;
+}
+
 /// The About reset row end to end with fakes: confirm, reset, relaunch, exit.
 ///
 /// Governing: ADR-0022 (in-app reset), SPEC-0021 REQ "Typed Confirmation",
@@ -23,9 +31,12 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   final key = GlobalKey<AboutSettingsContentState>();
+  final navigatorKey = GlobalKey<NavigatorState>();
+  final observer = _CountingObserver();
   late List<String> calls;
   late List<int> exits;
   late Completer<ResetSummary> resetGate;
+  late MaterialPageRoute<void> aboutRoute;
 
   setUpAll(() async {
     SharedPreferences.setMockInitialValues({});
@@ -43,6 +54,7 @@ void main() {
 
   setUp(() {
     SfxService().setEnabled(false);
+    observer.pops = 0;
     calls = [];
     exits = [];
     resetGate = Completer<ResetSummary>();
@@ -88,21 +100,44 @@ void main() {
         child: ScreenUtilInit(
           designSize: const Size(1920, 1080),
           builder: (context, child) => MaterialApp(
+            navigatorKey: navigatorKey,
+            navigatorObservers: [observer],
             localizationsDelegates:
                 FlutterLocalization.instance.localizationsDelegates,
             supportedLocales: FlutterLocalization.instance.supportedLocales,
-            home: Scaffold(
-              body: AboutSettingsContent(
-                key: key,
-                isContentFocused: focused,
-                selectedContentIndex: index,
-              ),
-            ),
+            home: const Scaffold(body: SizedBox.expand()),
           ),
         ),
       ),
     );
     await settle(tester);
+
+    // The About screen is a pushed route, not the home, so "nothing was
+    // popped" is observable: the navigator never pops its home route.
+    aboutRoute = MaterialPageRoute<void>(
+      builder: (_) => Scaffold(
+        body: AboutSettingsContent(
+          key: key,
+          isContentFocused: focused,
+          selectedContentIndex: index,
+        ),
+      ),
+    );
+    unawaited(navigatorKey.currentState!.push(aboutRoute));
+    await settle(tester);
+  }
+
+  /// Removes the About route without touching whatever sits on top of it.
+  void removeAboutScreen() =>
+      navigatorKey.currentState!.removeRoute(aboutRoute);
+
+  /// Pumps until [done], bounding the wait: the busy overlay's spinner is an
+  /// infinite animation, so `pumpAndSettle` can never be used while a reset
+  /// is pending.
+  Future<void> pumpUntil(WidgetTester tester, bool Function() done) async {
+    for (var i = 0; i < 12 && !done(); i++) {
+      await tester.pump(const Duration(milliseconds: 100));
+    }
   }
 
   Future<void> confirmReset(WidgetTester tester) async {
@@ -202,6 +237,9 @@ void main() {
   });
 
   group('guards', () {
+    // Pins the three _isResetting checks together: this test fails only when
+    // ALL of them are removed. The tests below pin the individual checks
+    // where that is possible at all.
     testWidgets('a second trigger while the reset runs does not reset again', (
       tester,
     ) async {
@@ -248,16 +286,27 @@ void main() {
         key.currentState!.selectItem(6);
         await settle(tester);
         await confirmReset(tester);
+        final popsAfterConfirm = observer.pops;
 
         // While the fake reset is still pending: the busy overlay is up, the
         // busy layer is the active top layer, and its no-op back swallows the
-        // press without closing anything or starting anything.
+        // press without closing anything or starting anything. The no-new-pops
+        // and still-mounted assertions are what make this a no-op contract:
+        // an onBack that called Navigator.maybePop would pop the About route
+        // and fail them.
         expect(find.byKey(const ValueKey('reset_in_progress')), findsOneWidget);
         expect(
           GamepadNavigation.triggerBack(),
           isTrue,
           reason: 'the busy layer is the active layer, swallowing back',
         );
+        await settle(tester);
+        expect(
+          observer.pops,
+          popsAfterConfirm,
+          reason: 'back on the busy layer is a no-op',
+        );
+        expect(find.byType(AboutSettingsContent), findsOneWidget);
         key.currentState!.selectItem(6);
         await settle(tester);
         expect(calls, ['reset']);
@@ -277,5 +326,179 @@ void main() {
         expect(GamepadNavigation.triggerBack(), isFalse);
       },
     );
+
+    testWidgets('re-triggering the row while the reset runs opens no second '
+        'dialog', (tester) async {
+      await pumpAbout(tester);
+      key.currentState!.selectItem(6);
+      await settle(tester);
+      await confirmReset(tester);
+      expect(calls, ['reset']);
+
+      // Second trigger while the fake reset is still pending. Pins the entry
+      // guards (selectItem's check and _resetNeoStation's first line) as a
+      // pair: they are observationally identical, and this test fails only
+      // when BOTH are gone, because the post-confirmation check still holds
+      // the line after a second dialog is confirmed.
+      final rowTitle = AppLocale.resetNeoStation.getString(key.currentContext!);
+      await tester.tap(find.text(rowTitle), warnIfMissed: false);
+      key.currentState!.selectItem(6);
+      await settle(tester);
+
+      expect(find.byType(ResetConfirmDialog), findsNothing);
+      expect(calls, ['reset']);
+    });
+
+    testWidgets('two confirm dialogs opened back to back reset only once', (
+      tester,
+    ) async {
+      await pumpAbout(tester);
+
+      // Open the first dialog; while it is open the flag is still false, so
+      // the entry checks let a second dialog stack on top.
+      key.currentState!.selectItem(6);
+      await settle(tester);
+      key.currentState!.selectItem(6);
+      await settle(tester);
+      expect(find.byType(ResetConfirmDialog), findsNWidgets(2));
+
+      // Confirm the FIRST dialog. It is covered by the second one, so a tap
+      // cannot reach it; its own field is still focusable, and the IME done
+      // action submits it without any hit testing.
+      tester
+          .widget<TextField>(find.byType(TextField).first)
+          .focusNode!
+          .requestFocus();
+      await tester.enterText(find.byType(TextField).first, 'RESET');
+      await tester.pump();
+      await tester.testTextInput.receiveAction(TextInputAction.done);
+      await settle(tester);
+
+      // The flag flipped true and the reset started; the second dialog is
+      // now the only one left.
+      expect(calls, ['reset']);
+      expect(find.byType(ResetConfirmDialog), findsOneWidget);
+
+      // Confirming the second must be refused by the post-confirmation
+      // check alone — the entry checks already passed for this invocation.
+      await confirmReset(tester);
+
+      expect(calls, ['reset'], reason: 'the second dialog must not reset');
+    });
+
+    group('mounted early returns', () {
+      testWidgets('unmounting mid-reset still relaunches and exits', (
+        tester,
+      ) async {
+        await pumpAbout(tester);
+        key.currentState!.selectItem(6);
+        await settle(tester);
+        await confirmReset(tester);
+
+        // The user leaves the screen (navigation, theme change) while the
+        // reset runs.
+        navigatorKey.currentState!.pop();
+        await pumpUntil(
+          tester,
+          () => find.byType(AboutSettingsContent).evaluate().isEmpty,
+        );
+        expect(find.byType(AboutSettingsContent), findsNothing);
+
+        resetGate.complete(ResetSummary());
+        await settle(tester);
+
+        // Today's behavior: the reset state is global, so the relaunch and
+        // the exit run anyway, and nothing throws. Two pops happened: the
+        // confirm dialog and the About route.
+        expect(observer.pops, 2);
+        expect(calls, ['reset', 'relaunch']);
+        await tester.pump(const Duration(milliseconds: 400));
+        expect(exits, [0]);
+        // dispose popped the busy layer: nothing answers back.
+        expect(GamepadNavigation.triggerBack(), isFalse);
+      });
+
+      testWidgets(
+        'unmounted mid-reset with failures: no failure notice, the app just '
+        'exits (today\'s behavior)',
+        (tester) async {
+          await pumpAbout(tester);
+          key.currentState!.selectItem(6);
+          await settle(tester);
+          await confirmReset(tester);
+
+          navigatorKey.currentState!.pop();
+          await pumpUntil(
+            tester,
+            () => find.byType(AboutSettingsContent).evaluate().isEmpty,
+          );
+
+          resetGate.complete(
+            ResetSummary()..failed['media cache'] = 'locked file',
+          );
+          await settle(tester);
+
+          // Today's behavior: the failure notice is behind `if (mounted)`, so
+          // an unmounted screen means the user never learns the reset was
+          // partial. The relaunch still runs and the process still exits.
+          expect(find.byType(ResetRestartNoticeDialog), findsNothing);
+          expect(calls, ['reset', 'relaunch']);
+          await tester.pump(const Duration(milliseconds: 400));
+          expect(exits, [0]);
+        },
+      );
+
+      testWidgets(
+        'unmounted before a refused relaunch: no notice, the app just exits '
+        "(today's behavior)",
+        (tester) async {
+          AboutSettingsContentState.relaunchRunner = () async {
+            calls.add('relaunch');
+            return false;
+          };
+          await pumpAbout(tester);
+          key.currentState!.selectItem(6);
+          await settle(tester);
+          await confirmReset(tester);
+
+          navigatorKey.currentState!.pop();
+          await pumpUntil(
+            tester,
+            () => find.byType(AboutSettingsContent).evaluate().isEmpty,
+          );
+
+          resetGate.complete(ResetSummary());
+          await settle(tester);
+
+          // Today's behavior: the refused-relaunch notice is behind
+          // `if (mounted)`, so the user is not told to start the app again.
+          expect(find.byType(ResetRestartNoticeDialog), findsNothing);
+          expect(calls, ['reset', 'relaunch']);
+          expect(exits, [0]);
+        },
+      );
+
+      testWidgets('confirming after the screen was removed starts nothing', (
+        tester,
+      ) async {
+        await pumpAbout(tester);
+        key.currentState!.selectItem(6);
+        await settle(tester);
+
+        // The screen goes away while its confirm dialog is still open (the
+        // dialog lives on the root navigator and survives).
+        removeAboutScreen();
+        await settle(tester);
+        expect(find.byType(ResetConfirmDialog), findsOneWidget);
+
+        await confirmReset(tester);
+
+        // Today's behavior: the post-confirmation mounted check refuses the
+        // reset, so nothing runs and nothing throws.
+        expect(calls, isEmpty, reason: 'a disposed screen must not reset');
+        expect(exits, isEmpty);
+        expect(observer.pops, 1, reason: 'only the About route was removed');
+      });
+    });
   });
 }
