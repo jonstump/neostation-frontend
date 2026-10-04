@@ -7,6 +7,8 @@ import 'package:neostation/screens/settings_screen/new_settings_options/about_se
 import 'package:neostation/services/sfx_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'database_test_helper.dart';
+
 /// The About section must end with the reset row.
 ///
 /// It is what `_getContentItemCount()` in `new_settings_screen.dart` bounds
@@ -33,6 +35,19 @@ void main() {
   tearDownAll(() => SfxService().setEnabled(true));
 
   final key = GlobalKey<AboutSettingsContentState>();
+
+  // Mounting AboutSettingsContent reads the systems version, which opens the
+  // database; the in-memory helper keeps these tests off the developer's real
+  // one (opening writes, migrates, and a downgrade would wipe it).
+  final dbHelper = DatabaseTestHelper();
+
+  setUp(() async {
+    await dbHelper.setUp();
+  });
+
+  tearDown(() async {
+    await dbHelper.tearDown();
+  });
 
   Future<void> pump(WidgetTester tester) => tester.pumpWidget(
     MediaQuery(
