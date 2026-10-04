@@ -317,24 +317,27 @@ void main() {
       expect(Directory(p.join(outside.path, 'pack')).existsSync(), isTrue);
     });
 
-    test('the default folder loses ra_cache and temp too', () async {
-      final root = await Directory.systemTemp.createTemp('reset_default2_');
-      addTearDown(() => root.deleteSync(recursive: true));
-      final dir = Directory(p.join(root.path, 'user-data'))..createSync();
-      await File(
-        p.join(dir.path, 'ra_cache', 'achievement.json'),
-      ).create(recursive: true);
-      await File(
-        p.join(dir.path, 'temp', 'nes', 'game.zip', 'game.nes'),
-      ).create(recursive: true);
+    test(
+      'the default folder ends empty and the folder itself is kept (ra_cache and temp included)',
+      () async {
+        final root = await Directory.systemTemp.createTemp('reset_default2_');
+        addTearDown(() => root.deleteSync(recursive: true));
+        final dir = Directory(p.join(root.path, 'user-data'))..createSync();
+        await File(
+          p.join(dir.path, 'ra_cache', 'achievement.json'),
+        ).create(recursive: true);
+        await File(
+          p.join(dir.path, 'temp', 'nes', 'game.zip', 'game.nes'),
+        ).create(recursive: true);
 
-      await ResetService.clearAppFiles(
-        location: locationFor(dir.path, isCustom: false),
-      );
+        await ResetService.clearAppFiles(
+          location: locationFor(dir.path, isCustom: false),
+        );
 
-      expect(dir.existsSync(), isTrue);
-      expect(dir.listSync(), isEmpty);
-    });
+        expect(dir.existsSync(), isTrue);
+        expect(dir.listSync(), isEmpty);
+      },
+    );
 
     test('refuses to empty a folder that is not clearly the default', () async {
       final dir = await Directory.systemTemp.createTemp('reset_refuse_');
