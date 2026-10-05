@@ -97,6 +97,55 @@ void main() {
       }
     });
 
+    test('every action maps to exactly the binding the spec pins', () {
+      // Written as a literal on purpose, not derived from `defaults`: this is
+      // the one exact expectation for every row of the table, so a swap or a
+      // wrong single binding in any row fails here
+      // (SPEC-0022 REQ "Binding Comes From The Navigator").
+      const expected = <GamepadAction, List<GamepadInputType>>{
+        GamepadAction.confirm: [GamepadInputType.buttonA],
+        GamepadAction.back: [GamepadInputType.buttonB],
+        GamepadAction.context: [GamepadInputType.buttonX],
+        GamepadAction.favourite: [GamepadInputType.buttonY],
+        GamepadAction.previousTab: [GamepadInputType.buttonLB],
+        GamepadAction.nextTab: [GamepadInputType.buttonRB],
+        GamepadAction.leftTrigger: [GamepadInputType.buttonLT],
+        GamepadAction.rightTrigger: [GamepadInputType.buttonRT],
+        GamepadAction.modifier: [GamepadInputType.buttonSelect],
+        GamepadAction.start: [GamepadInputType.buttonStart],
+        GamepadAction.dpad: [
+          GamepadInputType.dpadUp,
+          GamepadInputType.dpadDown,
+          GamepadInputType.dpadLeft,
+          GamepadInputType.dpadRight,
+        ],
+        GamepadAction.dpadUp: [GamepadInputType.dpadUp],
+        GamepadAction.dpadDown: [GamepadInputType.dpadDown],
+        GamepadAction.dpadLeft: [GamepadInputType.dpadLeft],
+        GamepadAction.dpadRight: [GamepadInputType.dpadRight],
+        GamepadAction.leftStick: [
+          GamepadInputType.leftStickX,
+          GamepadInputType.leftStickY,
+        ],
+        GamepadAction.rightStick: [
+          GamepadInputType.rightStickX,
+          GamepadInputType.rightStickY,
+        ],
+      };
+
+      // The literal must cover every enum value exactly once, so a value
+      // added later without updating this test fails too.
+      expect(expected.keys.toSet(), GamepadAction.values.toSet());
+
+      for (final action in GamepadAction.values) {
+        expect(
+          GamepadBinding.defaults.inputsFor(action),
+          expected[action],
+          reason: '${action.name} is bound differently than the spec pins it',
+        );
+      }
+    });
+
     test('the enum has exactly the 17 spec values in spec order', () {
       expect(GamepadAction.values.map((a) => a.name), [
         'confirm',
