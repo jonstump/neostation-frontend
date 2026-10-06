@@ -25,6 +25,8 @@ void main() {
   // Pins where the app looks for its own updates, so a fork build never asks
   // upstream.
   group('AppConfig update channels', () {
+    // Fails for anyone running the tests with NEOSTATION_GITHUB_REPO defined:
+    // it pins the default, which is what a plain build uses.
     test('defaults to this fork', () {
       expect(AppConfig.githubRepository, 'jonstump/neostation-frontend');
     });
@@ -52,20 +54,31 @@ void main() {
       );
     });
 
-    // The services must take their URLs from AppConfig. A hard-coded
+    // The services must take their URLs from AppConfig, and each constant must
+    // take the RIGHT member: pointing the manifest URL at the raw-base member
+    // would still compile and still look like a repository URL. A hard-coded
     // repository in either file would silently send a fork build back to
     // upstream, which is the bug this configuration exists to prevent.
-    for (final file in const [
-      'lib/services/update_service.dart',
-      'lib/services/systems_update_service.dart',
-    ]) {
-      test('$file takes its URLs from AppConfig', () {
+    const declarations = {
+      'lib/services/update_service.dart': [
+        'static const String _githubApiUrl = AppConfig.latestReleaseApiUrl;',
+      ],
+      'lib/services/systems_update_service.dart': [
+        'const _manifestUrl = AppConfig.systemsManifestUrl;',
+        'const _baseRawUrl = AppConfig.systemsRawBaseUrl;',
+        'const _githubApiUrl = AppConfig.systemsContentsApiUrl;',
+      ],
+    };
+    declarations.forEach((file, expected) {
+      test('$file takes each URL from the right AppConfig member', () {
         final source = File(file).readAsStringSync();
-        expect(source, contains('AppConfig.'));
+        for (final declaration in expected) {
+          expect(source, contains(declaration));
+        }
         expect(source, isNot(contains('misobadev')));
         expect(source, isNot(contains('api.github.com/repos/')));
         expect(source, isNot(contains('raw.githubusercontent.com')));
       });
-    }
+    });
   });
 }
