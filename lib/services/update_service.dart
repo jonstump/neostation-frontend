@@ -11,6 +11,7 @@ import 'package:archive/archive_io.dart';
 import 'package:neostation/services/logger_service.dart';
 
 import 'package:neostation/services/permission_service.dart';
+import 'package:neostation/utils/app_config.dart';
 import 'package:neostation/utils/version_compare.dart';
 
 /// Service responsible for orchestrating the over-the-air (OTA) update lifecycle.
@@ -20,8 +21,7 @@ import 'package:neostation/utils/version_compare.dart';
 /// procedures (including multi-stage self-replacement on Desktop).
 class UpdateService {
   /// GitHub Releases API endpoint for the latest production build.
-  static const String _githubApiUrl =
-      'https://api.github.com/repos/misobadev/neostation-frontend/releases/latest';
+  static const String _githubApiUrl = AppConfig.latestReleaseApiUrl;
 
   static final _log = LoggerService.instance;
 
