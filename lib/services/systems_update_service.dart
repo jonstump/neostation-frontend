@@ -8,14 +8,12 @@ import 'config_service.dart';
 import 'logger_service.dart';
 import 'retroachievements_hash_service.dart';
 import '../data/datasources/sqlite_service.dart';
+import '../utils/app_config.dart';
 import '../utils/bounded_concurrency.dart';
 
-const _manifestUrl =
-    'https://raw.githubusercontent.com/misobadev/neostation-frontend/main/assets/manifest.json';
-const _baseRawUrl =
-    'https://raw.githubusercontent.com/misobadev/neostation-frontend/main/assets/systems';
-const _githubApiUrl =
-    'https://api.github.com/repos/misobadev/neostation-frontend/contents/assets/systems';
+const _manifestUrl = AppConfig.systemsManifestUrl;
+const _baseRawUrl = AppConfig.systemsRawBaseUrl;
+const _githubApiUrl = AppConfig.systemsContentsApiUrl;
 
 final _log = LoggerService.instance;
 

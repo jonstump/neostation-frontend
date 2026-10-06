@@ -125,6 +125,7 @@ Create a `.env` file from `.env.example` for local development.
 |----------|-------------|
 | `SCREENSCRAPER_DEV_ID` | ScreenScraper developer ID |
 | `SCREENSCRAPER_DEV_PASSWORD` | ScreenScraper developer password |
+| `NEOSTATION_GITHUB_REPO` | Optional. `owner/name` of the GitHub repository this build updates itself from (app releases and systems definitions). Defaults to `jonstump/neostation-frontend`. |
 
 > RetroAchievements no longer uses a build-time key. Each user signs in with their own RetroAchievements username and web API key (from [retroachievements.org/controlpanel.php](https://retroachievements.org/controlpanel.php)) inside the app.
 

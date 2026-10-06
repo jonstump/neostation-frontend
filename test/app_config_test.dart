@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/utils/app_config.dart';
 
@@ -18,5 +20,52 @@ void main() {
     test('should have default notify base URL', () {
       expect(AppConfig.notifyBaseUrl, 'ws://notify.neosync.cloud/ws');
     });
+  });
+
+  // Pins where the app looks for its own updates, so a fork build never asks
+  // upstream.
+  group('AppConfig update channels', () {
+    test('defaults to this fork', () {
+      expect(AppConfig.githubRepository, 'jonstump/neostation-frontend');
+    });
+
+    test('the release check asks the configured repository', () {
+      expect(
+        AppConfig.latestReleaseApiUrl,
+        'https://api.github.com/repos/jonstump/neostation-frontend/releases/latest',
+      );
+    });
+
+    test('the systems channel reads the configured repository and branch', () {
+      expect(AppConfig.systemsBranch, 'main');
+      expect(
+        AppConfig.systemsManifestUrl,
+        'https://raw.githubusercontent.com/jonstump/neostation-frontend/main/assets/manifest.json',
+      );
+      expect(
+        AppConfig.systemsRawBaseUrl,
+        'https://raw.githubusercontent.com/jonstump/neostation-frontend/main/assets/systems',
+      );
+      expect(
+        AppConfig.systemsContentsApiUrl,
+        'https://api.github.com/repos/jonstump/neostation-frontend/contents/assets/systems',
+      );
+    });
+
+    // The services must take their URLs from AppConfig. A hard-coded
+    // repository in either file would silently send a fork build back to
+    // upstream, which is the bug this configuration exists to prevent.
+    for (final file in const [
+      'lib/services/update_service.dart',
+      'lib/services/systems_update_service.dart',
+    ]) {
+      test('$file takes its URLs from AppConfig', () {
+        final source = File(file).readAsStringSync();
+        expect(source, contains('AppConfig.'));
+        expect(source, isNot(contains('misobadev')));
+        expect(source, isNot(contains('api.github.com/repos/')));
+        expect(source, isNot(contains('raw.githubusercontent.com')));
+      });
+    }
   });
 }
