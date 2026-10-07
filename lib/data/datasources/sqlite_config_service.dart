@@ -234,6 +234,8 @@ class SqliteConfigService {
           'hide_search_card',
           true,
         ),
+        gamepadGlyphStyle:
+            userConfig?['gamepad_glyph_style']?.toString() ?? 'auto',
         activeSyncProvider:
             userConfig?['active_sync_provider']?.toString() ?? 'neosync',
         autoUpdateApp: ConfigModel.readBool(
@@ -420,6 +422,7 @@ class SqliteConfigService {
         hideTabScraper: config.hideTabScraper ? 1 : 0,
         hideTabRomm: config.hideTabRomm ? 1 : 0,
         hideSearchCard: config.hideSearchCard ? 1 : 0,
+        gamepadGlyphStyle: config.gamepadGlyphStyle,
         activeSyncProvider: config.activeSyncProvider,
         autoUpdateApp: config.autoUpdateApp ? 1 : 0,
         autoUpdateSystems: config.autoUpdateSystems ? 1 : 0,

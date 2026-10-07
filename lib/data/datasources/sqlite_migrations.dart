@@ -893,6 +893,9 @@ class SqliteMigrations {
       case 172:
         await _migrateToVersion172(db);
         break;
+      case 173:
+        await _migrateToVersion173(db);
+        break;
       default:
         _log.w('No migration defined for version $version');
     }
@@ -7891,5 +7894,44 @@ class SqliteMigrations {
     await _migrateToVersion159(db);
     await _migrateToVersion160(db);
     _log.i('Migration v172 completed');
+  }
+
+  /// Migration v173: adds `user_config.gamepad_glyph_style`, defaulting to
+  /// 'auto'.
+  ///
+  /// The controller-glyph style setting (ADR-0023, SPEC-0022). 'auto' means
+  /// "not pinned": the hint style follows the connected pad via the style
+  /// detector. Any other value pins a `GlyphStyle` ('xbox', 'nintendo',
+  /// 'playstation', 'positional'); an unknown stored value degrades to auto
+  /// at read time (`glyphStyleFromConfig`) rather than throwing.
+  static Future<void> _migrateToVersion173(Database db) async {
+    _log.i('Migration v173: Adding gamepad_glyph_style to user_config');
+    try {
+      if (db
+          .select(
+            "SELECT name FROM sqlite_master WHERE type='table' "
+            "AND name='user_config'",
+          )
+          .isEmpty) {
+        _log.i('Table user_config does not exist; skipping v173');
+        return;
+      }
+      final tableInfo = db.select('PRAGMA table_info(user_config)');
+      final columns = tableInfo.map((c) => c['name'].toString()).toList();
+      if (!columns.contains('gamepad_glyph_style')) {
+        db.execute(
+          "ALTER TABLE user_config ADD COLUMN gamepad_glyph_style "
+          "TEXT DEFAULT 'auto'",
+        );
+        _log.i('Column gamepad_glyph_style added via v173');
+      } else {
+        _log.i('Column gamepad_glyph_style already exists');
+      }
+      _log.i('Migration v173 completed');
+    } catch (e, stackTrace) {
+      _log.e('Error in migration v173: $e');
+      _log.e('   StackTrace: $stackTrace');
+      rethrow;
+    }
   }
 }

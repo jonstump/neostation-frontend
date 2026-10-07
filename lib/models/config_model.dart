@@ -143,6 +143,15 @@ class ConfigModel {
   /// migration v158); search stays reachable from every card's Y menu.
   final bool hideSearchCard;
 
+  /// The controller-glyph style setting (`user_config.gamepad_glyph_style`,
+  /// migration v173). `'auto'` means "not pinned": the hint style follows the
+  /// connected pad via the style detector. Any other value pins a `GlyphStyle`
+  /// ('xbox', 'nintendo', 'playstation', 'positional'); an unknown stored
+  /// value degrades to auto at read time (`glyphStyleFromConfig`) rather than
+  /// throwing.
+  // Governing: ADR-0023 (controller glyphs), SPEC-0022 REQ "Database Operation Standards"
+  final String gamepadGlyphStyle;
+
   /// Seconds of inactivity before the secondary "Now Playing" panel dims, or `0`
   /// to never dim. Only meaningful when a secondary display is active.
   final int nowPlayingDimDelay;
@@ -319,6 +328,7 @@ class ConfigModel {
     this.hideTabScraper = false,
     this.hideTabRomm = false,
     this.hideSearchCard = true,
+    this.gamepadGlyphStyle = 'auto',
     this.activeSyncProvider = 'neosync',
     this.autoUpdateApp = true,
     this.autoUpdateSystems = true,
@@ -491,6 +501,10 @@ class ConfigModel {
         'hide_search_card',
         true,
       ),
+      gamepadGlyphStyle:
+          json['gamepadGlyphStyle']?.toString() ??
+          json['gamepad_glyph_style']?.toString() ??
+          'auto',
       activeSyncProvider:
           (json['activeSyncProvider'] ??
                   json['active_sync_provider'] ??
@@ -733,6 +747,7 @@ class ConfigModel {
       'hideTabScraper': hideTabScraper,
       'hideTabRomm': hideTabRomm,
       'hideSearchCard': hideSearchCard,
+      'gamepadGlyphStyle': gamepadGlyphStyle,
       'activeSyncProvider': activeSyncProvider,
       'autoUpdateApp': autoUpdateApp,
       'autoUpdateSystems': autoUpdateSystems,
@@ -794,6 +809,7 @@ class ConfigModel {
     bool? hideTabScraper,
     bool? hideTabRomm,
     bool? hideSearchCard,
+    String? gamepadGlyphStyle,
     String? activeSyncProvider,
     bool? autoUpdateApp,
     bool? autoUpdateSystems,
@@ -852,6 +868,7 @@ class ConfigModel {
       hideTabScraper: hideTabScraper ?? this.hideTabScraper,
       hideTabRomm: hideTabRomm ?? this.hideTabRomm,
       hideSearchCard: hideSearchCard ?? this.hideSearchCard,
+      gamepadGlyphStyle: gamepadGlyphStyle ?? this.gamepadGlyphStyle,
       activeSyncProvider: activeSyncProvider ?? this.activeSyncProvider,
       autoUpdateApp: autoUpdateApp ?? this.autoUpdateApp,
       autoUpdateSystems: autoUpdateSystems ?? this.autoUpdateSystems,
