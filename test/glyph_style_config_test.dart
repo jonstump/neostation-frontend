@@ -30,6 +30,12 @@ void main() {
       expect(glyphStyleFromConfig('AUTO'), isNull);
       expect(glyphStyleFromConfig('Xbox '), isNull);
       expect(glyphStyleFromConfig('Nintendo'), isNull);
+      // Whitespace alone does not turn a valid value into a match: the
+      // trimming-only mutation survived the earlier tests because 'Xbox '
+      // has the wrong case. These catch trim() without the case check.
+      expect(glyphStyleFromConfig(' xbox'), isNull);
+      expect(glyphStyleFromConfig('xbox '), isNull);
+      expect(glyphStyleFromConfig('\nxbox'), isNull);
     });
   });
 
