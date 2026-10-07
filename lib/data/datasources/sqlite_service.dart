@@ -459,7 +459,7 @@ class SqliteService {
   SqliteService._internal();
 
   // Database configuration
-  static const int _databaseVersion = 172;
+  static const int _databaseVersion = 173;
   static const String _databaseName = 'data.sqlite';
 
   DatabaseAdapter? _database;
@@ -1935,6 +1935,7 @@ class SqliteService {
         hide_tab_romm INTEGER DEFAULT 0,
         hide_tab_search INTEGER DEFAULT 0,
         hide_search_card INTEGER DEFAULT 1,
+        gamepad_glyph_style TEXT DEFAULT 'auto',
         active_sync_provider TEXT DEFAULT 'neosync',
         systems_version TEXT DEFAULT '',
         -- Generation stamp of the bundled RA seed asset that is currently
@@ -2819,6 +2820,7 @@ class SqliteService {
     int? hideTabScraper,
     int? hideTabRomm,
     int? hideSearchCard,
+    String? gamepadGlyphStyle,
     String? activeSyncProvider,
     String? systemsVersion,
     String? raSeedStamp,
@@ -2941,6 +2943,9 @@ class SqliteService {
     }
     if (hideSearchCard != null) {
       updates['hide_search_card'] = hideSearchCard;
+    }
+    if (gamepadGlyphStyle != null) {
+      updates['gamepad_glyph_style'] = gamepadGlyphStyle;
     }
     if (activeSyncProvider != null) {
       updates['active_sync_provider'] = activeSyncProvider;
