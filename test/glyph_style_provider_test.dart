@@ -1,5 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:neostation/data/datasources/sqlite_config_service.dart';
 import 'package:neostation/data/datasources/sqlite_service.dart';
+import 'package:neostation/models/config_model.dart';
 import 'package:neostation/providers/sqlite_config_provider.dart';
 import 'package:neostation/services/gamepad/glyph_service.dart';
 import 'package:neostation/services/gamepad/glyph_style.dart';
@@ -32,6 +34,75 @@ void main() {
     GlyphService.instance.setPinned(null);
     GlyphService.instance.setDetected(GlyphStyle.xbox);
     await helper.tearDown();
+  });
+
+  group('startup restore', () {
+    test('a stored playstation pins playstation on load', () async {
+      // Store through the existing save path, NOT initialize().
+      final stored = ConfigModel(gamepadGlyphStyle: 'playstation');
+      await SqliteConfigService.saveConfig(stored);
+
+      final fresh = SqliteConfigProvider();
+      await fresh.loadConfigForTesting();
+
+      expect(fresh.config.gamepadGlyphStyle, 'playstation');
+      expect(GlyphService.instance.pinned, GlyphStyle.playstation);
+    });
+
+    test('a stale pin is cleared when the stored value is auto', () async {
+      // A previous session left a pin; the user has since set the style to
+      // auto. Loading must clear the stale pin, not leave it.
+      GlyphService.instance.setPinned(GlyphStyle.xbox);
+      final stored = ConfigModel(gamepadGlyphStyle: 'auto');
+      await SqliteConfigService.saveConfig(stored);
+
+      final fresh = SqliteConfigProvider();
+      await fresh.loadConfigForTesting();
+
+      expect(fresh.config.gamepadGlyphStyle, 'auto');
+      expect(GlyphService.instance.pinned, isNull);
+    });
+
+    test('nothing stored: the pin stays null', () async {
+      final fresh = SqliteConfigProvider();
+      await fresh.loadConfigForTesting();
+
+      expect(fresh.config.gamepadGlyphStyle, 'auto');
+      expect(GlyphService.instance.pinned, isNull);
+    });
+  });
+
+  group('clearConfig', () {
+    test('clears the pin and the config', () async {
+      await provider.updateGamepadGlyphStyle('nintendo');
+      expect(GlyphService.instance.pinned, GlyphStyle.nintendo);
+
+      await provider.clearConfig();
+
+      expect(GlyphService.instance.pinned, isNull);
+      expect(provider.config.gamepadGlyphStyle, 'auto');
+    });
+  });
+
+  group('update order', () {
+    test(
+      'the first notification already sees the new config and pin',
+      () async {
+        final observed = <String, Object?>{};
+        provider.addListener(() {
+          observed['pin'] = GlyphService.instance.pinned;
+          observed['config'] = provider.config.gamepadGlyphStyle;
+        });
+
+        await provider.updateGamepadGlyphStyle('playstation');
+
+        // At the moment the (only) notification fired, both values already
+        // held the new state: the copyWith and the sync happened before the
+        // notify.
+        expect(observed['config'], 'playstation');
+        expect(observed['pin'], GlyphStyle.playstation);
+      },
+    );
   });
 
   group('updateGamepadGlyphStyle', () {
