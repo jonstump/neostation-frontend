@@ -1102,6 +1102,7 @@ extension SqliteConfigScanning on SqliteConfigProvider {
       await SqliteConfigService.clearUserConfig();
 
       _config = ConfigModel.empty;
+      _syncGlyphStyle();
       _detectedSystems = [];
       _scanCompleted = false;
 
@@ -1131,6 +1132,7 @@ extension SqliteConfigScanning on SqliteConfigProvider {
 
   Future<void> _loadConfig() async {
     _config = await SqliteConfigService.loadConfig();
+    _syncGlyphStyle();
     if (_detectedSystems.isNotEmpty) {
       _sortDetectedSystems();
     }

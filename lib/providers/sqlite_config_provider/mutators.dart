@@ -91,6 +91,22 @@ extension SqliteConfigMutators on SqliteConfigProvider {
     _notify();
   }
 
+  /// Persists the controller-glyph style setting.
+  ///
+  /// [value] is normalised through the config converter before it is stored,
+  /// so an unknown string becomes 'auto' and garbage is never persisted. The
+  /// service is synced afterwards so already-mounted hints redraw without a
+  /// restart (SPEC-0022 REQ "Auto Style With A Pin").
+  // Governing: ADR-0023 (controller glyphs), SPEC-0022 REQ "Auto Style With A Pin"
+  Future<void> updateGamepadGlyphStyle(String value) async {
+    final style = glyphStyleFromConfig(value);
+    final stored = glyphStyleToConfig(style);
+    _config = _config.copyWith(gamepadGlyphStyle: stored);
+    await SqliteConfigService.saveConfig(_config);
+    _syncGlyphStyle();
+    _notify();
+  }
+
   /// Persists the cell span of the "Recently Played" card in the systems grid
   /// ('default' for the 3x2 block, '2x1' for the compact wide card).
   Future<void> updateRecentCardSize(String value) async {
