@@ -5,8 +5,91 @@ import '../../models/romm_metadata_fetch.dart';
 import '../../models/system_model.dart';
 import '../../repositories/romm_save_map_repository.dart';
 import '../../utils/bounded_concurrency.dart';
+import '../../utils/semaphore.dart';
 import '../logger_service.dart';
 import 'romm_paging.dart';
+
+/// The server-facing side of every RomM metadata fetch: the one gate every
+/// call shares, and the one measurement of what those calls put on the
+/// server.
+///
+/// The per-system pass bounds its *games* with [runBounded], but the writer
+/// is also called directly — a link-picker confirm, a browser confirm, the
+/// replace a completed download performs — and those paths had no bound at
+/// all: a finished bulk sync firing its completion fetches could put as many
+/// requests on the server as it had just finished transfers. One gate, sized
+/// [RommPaging.concurrency] like the pass's own pool, covers both: the pass
+/// and every ad-hoc caller share the same three slots, so the writer's
+/// worst-case footprint is the same whether or not a pass is running.
+///
+/// The gate lives in the writer — one acquisition per `fetchMetadataForRomId`
+/// call, never nested, and the pass's `runBounded` workers never acquire it
+/// themselves — so equal sizes cannot deadlock: a worker or an ad-hoc call
+/// holds at most one slot, waits for nothing else while holding it, and
+/// releases in a `finally`.
+///
+/// It is a FIFO [Semaphore], not a [LifoSemaphore]: that one is for work
+/// whose value decays while it waits (grid tiles the user has scrolled
+/// past), and its own documentation says not to use it for work that must
+/// complete — every metadata fetch must.
+///
+/// The counters (requests by kind, peak in-flight) are what the pass's
+/// single measurement line reads after a run: they describe the load the
+/// app actually put on the server, including any ad-hoc calls that shared
+/// the gate while the pass ran.
+// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
+class RommMetadataNetwork {
+  static final RommMetadataNetwork instance = RommMetadataNetwork._();
+
+  final Semaphore _gate = Semaphore(RommPaging.concurrency);
+
+  int _inFlight = 0;
+
+  /// Calls inside the gated section right now. Test seam.
+  int get inFlight => _inFlight;
+
+  /// The highest [_inFlight] reached since the last [resetForTesting].
+  int peakInFlight = 0;
+
+  /// Detail GETs issued through the gate.
+  int detailRequests = 0;
+
+  /// Media downloads issued through the gate.
+  int mediaRequests = 0;
+
+  RommMetadataNetwork._();
+
+  /// Enters the bounded section. Every caller must call [leave] exactly
+  /// once, in a `finally`.
+  Future<void> enter() async {
+    await _gate.acquire();
+    _inFlight++;
+    if (_inFlight > peakInFlight) peakInFlight = _inFlight;
+  }
+
+  /// Leaves the bounded section, handing the slot to the oldest waiter.
+  void leave() {
+    _inFlight--;
+    _gate.release();
+  }
+
+  /// Counts one detail GET. Recorded by the writer, read by the pass's
+  /// measurement line.
+  void recordDetail() => detailRequests++;
+
+  /// Counts one media download.
+  void recordMedia() => mediaRequests++;
+
+  /// Clears the counters. Only for tests: with nothing inside the gate.
+  @visibleForTesting
+  static void resetForTesting() {
+    final n = instance;
+    assert(n._inFlight == 0, 'resetting the network gate while it is held');
+    n.peakInFlight = 0;
+    n.detailRequests = 0;
+    n.mediaRequests = 0;
+  }
+}
 
 /// The scanned games of one system — the library index, never the disk.
 typedef RommSystemGameLister =

@@ -19,6 +19,7 @@ import '../repositories/scraper_repository.dart';
 import '../repositories/system_repository.dart';
 import '../services/logger_service.dart';
 import '../services/romm_playtime_service.dart';
+import '../services/romm/romm_metadata_fetch.dart';
 import '../services/romm_service.dart';
 import '../services/storage_space_service.dart';
 import '../services/user_data_location_service.dart';
@@ -2211,6 +2212,7 @@ class RommProvider extends ChangeNotifier {
   /// [indexedName] is the on-disk filename the scan records (the playlist for
   /// an unpacked multi-disc ROM, otherwise the fsName). The metadata row is
   /// matched to the scanned game by exact filename, so it must use this name.
+  ///
   /// [rom] is the list entry when the caller holds one; otherwise the detail
   /// stands in for it (same JSON shape).
   ///
@@ -2219,8 +2221,38 @@ class RommProvider extends ChangeNotifier {
   /// [RommMetadataFetchException]; a media failure after them keeps the
   /// columns and reports [RommMetadataOutcomeKind.partial]. Public so the
   /// per-system pass can fetch from a rom-id index without a [GameModel].
+  ///
+  /// The whole call runs inside [RommMetadataNetwork]'s gate, so the pass's
+  /// pool and every ad-hoc caller (a link confirm, a download completion
+  /// wave) share one bound of [RommPaging.concurrency] requests on the
+  /// server — see that class for why the gate lives here and is taken once.
   // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "RomM Metadata Writer With Two Modes"
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
   Future<RommMetadataOutcome> fetchMetadataForRomId({
+    required int romId,
+    required SystemModel system,
+    required FileProvider fileProvider,
+    required String indexedName,
+    required RommMetadataMode mode,
+    RommRom? rom,
+  }) async {
+    final network = RommMetadataNetwork.instance;
+    await network.enter();
+    try {
+      return await _fetchMetadataUngated(
+        romId: romId,
+        system: system,
+        fileProvider: fileProvider,
+        indexedName: indexedName,
+        mode: mode,
+        rom: rom,
+      );
+    } finally {
+      network.leave();
+    }
+  }
+
+  Future<RommMetadataOutcome> _fetchMetadataUngated({
     required int romId,
     required SystemModel system,
     required FileProvider fileProvider,
@@ -2239,6 +2271,7 @@ class RommProvider extends ChangeNotifier {
       // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Error Handling Standards"
       final RommDetailFetch fetch;
       try {
+        RommMetadataNetwork.instance.recordDetail();
         fetch = await service.fetchRomDetail(romId);
       } catch (e, st) {
         return _metadataFailure(
@@ -2764,6 +2797,7 @@ class RommProvider extends ChangeNotifier {
         if (source == null || source.isEmpty) continue;
         attempted = source;
         // A video's bytes are not an image, so only art is content-checked.
+        RommMetadataNetwork.instance.recordMedia();
         final fetch = await service.fetchImage(
           source,
           requireImage: forcedExt == null,

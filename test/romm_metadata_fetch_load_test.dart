@@ -218,6 +218,7 @@ void main() {
   );
 
   setUp(() async {
+    RommMetadataNetwork.resetForTesting();
     db = await helper.setUp();
     await db.execute(SqliteMigrations.createAppRommRomMapTableSql);
     await db.execute(
@@ -373,12 +374,12 @@ void main() {
     });
   });
 
-  group('ad-hoc writer calls (current behaviour)', () {
+  group('ad-hoc writer calls', () {
     // The link-picker confirm, the browser's "already downloaded" confirm
-    // and a completed download all call the writer directly — outside the
-    // pass's pool. Pinned as-is so the current cost is on the record and a
-    // future pool has a test to flip.
-    test('two concurrent link-confirm fetches are not pooled', () async {
+    // and a completed download all call the writer directly. They used to
+    // have no bound at all (Round 1 pinned peak 2 for two concurrent
+    // confirms); they now share the pass's gate, so the bound holds.
+    test('two concurrent link-confirm fetches share the pass bound', () async {
       await Future.wait([
         provider.fetchMetadataForRomId(
           romId: 0,
@@ -398,13 +399,54 @@ void main() {
 
       expect(
         svc.peakInFlight,
-        2,
-        reason:
-            'current behaviour: nothing bounds these calls — they run beside '
-            'the pass\'s pool, so a pass (3) plus confirms adds up past the '
-            'pool bound. If this test starts failing, a pool was added: '
-            'update it to assert the bound instead',
+        lessThanOrEqualTo(RommPaging.concurrency),
+        reason: 'the shared gate must bound ad-hoc calls too',
+      );
+      expect(
+        RommMetadataNetwork.instance.peakInFlight,
+        lessThanOrEqualTo(RommPaging.concurrency),
       );
     });
+
+    // Equal sizes (pass pool 3, gate 3) must not deadlock: the gate is
+    // acquired once per call, in the writer, and the pass's runBounded
+    // workers never hold it themselves. A deadlock hangs this test until
+    // the framework's timeout fails it.
+    test(
+      'a pass and a burst of ad-hoc calls share the bound without deadlocking',
+      () async {
+        final adHoc = Future.wait([
+          for (var i = 10; i < 20; i++)
+            provider.fetchMetadataForRomId(
+              romId: i,
+              system: _snes,
+              fileProvider: media,
+              indexedName: 'game$i.sfc',
+              mode: RommMetadataMode.replace,
+            ),
+        ]);
+
+        final summary = await pass(10).run(_snes, RommMetadataMode.fillGaps);
+        final outcomes = await adHoc;
+
+        expect(summary.filled, 10, reason: 'the pass finished');
+        expect(
+          outcomes.every((o) => o.kind == RommMetadataOutcomeKind.replaced),
+          isTrue,
+          reason: 'every ad-hoc call finished',
+        );
+        expect(
+          svc.peakInFlight,
+          lessThanOrEqualTo(RommPaging.concurrency),
+          reason:
+              'pass pool and ad-hoc burst together must stay within the '
+              'shared bound',
+        );
+        expect(
+          RommMetadataNetwork.instance.peakInFlight,
+          lessThanOrEqualTo(RommPaging.concurrency),
+        );
+      },
+    );
   });
 }
