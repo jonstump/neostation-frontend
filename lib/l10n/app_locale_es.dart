@@ -1477,7 +1477,7 @@ const Map<String, dynamic> appLocaleEs = {
   // Link action on search results
   AppLocale.searchLinkToRomm: 'Vincular con RomM',
 
-  // SPEC-0005 REQ "Per-Game Fetch Action" — Manage tab fetch row, mode
+  // Manage tab fetch row, mode
   // chooser, and outcome notifications
   AppLocale.rommFetchMetadataRow: 'Obtener metadatos de RomM',
   AppLocale.rommFetchMetadataRowSubtitle:
@@ -1505,7 +1505,7 @@ const Map<String, dynamic> appLocaleEs = {
       'Se escribieron {count} campos, pero no se pudieron descargar {media} imágenes',
   AppLocale.rommFetchMetadataFailed: 'Error al obtener los metadatos de RomM',
 
-  // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
+  // system settings fetch action
   AppLocale.rommSystemFetchAction: 'Obtener metadatos de RomM',
   AppLocale.rommSystemFetchActionSubtitle:
       'Rellenar huecos o reemplazar metadatos y arte de todos los juegos vinculados de este sistema',

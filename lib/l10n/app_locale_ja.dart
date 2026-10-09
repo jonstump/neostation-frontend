@@ -1306,7 +1306,7 @@ const Map<String, dynamic> appLocaleJa = {
   // Link action on search results
   AppLocale.searchLinkToRomm: 'RomM にリンク',
 
-  // SPEC-0005 REQ "Per-Game Fetch Action" — Manage tab fetch row, mode
+  // Manage tab fetch row, mode
   // chooser, and outcome notifications
   AppLocale.rommFetchMetadataRow: 'RomM からメタデータを取得',
   AppLocale.rommFetchMetadataRowSubtitle:
@@ -1332,7 +1332,7 @@ const Map<String, dynamic> appLocaleJa = {
       '{count} 項目を書き込みましたが、{media} 点のアートワークのダウンロードに失敗しました',
   AppLocale.rommFetchMetadataFailed: 'RomM からのメタデータ取得に失敗しました',
 
-  // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
+  // system settings fetch action
   AppLocale.rommSystemFetchAction: 'RomM からメタデータを取得',
   AppLocale.rommSystemFetchActionSubtitle:
       'このシステムのリンク済みゲームすべてについて、メタデータとアートワークの不足分を補うか、すべて置き換えます',

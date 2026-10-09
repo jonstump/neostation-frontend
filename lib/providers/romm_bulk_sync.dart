@@ -263,7 +263,6 @@ class RommBulkSync extends ChangeNotifier {
   /// Simultaneous transfers — [RommPaging.concurrency], the one definition
   /// this queue and the per-system metadata pass share. Kept under this name
   /// for the callers and tests that already read it here.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
   static const int defaultConcurrency = RommPaging.concurrency;
 
   /// Rows per enumeration request — [RommPaging.pageSize], the one definition

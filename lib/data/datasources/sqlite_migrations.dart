@@ -7228,7 +7228,6 @@ class SqliteMigrations {
   /// writers set the column only when they insert a row; whole-row writers set
   /// it on every write. Nullable and guarded by `PRAGMA table_info`, so a
   /// re-run is a no-op.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Metadata Source Provenance"
   static Future<void> _migrateToVersion169(Database db) async {
     _log.i(
       'Migration v169: Adding metadata_source to user_screenscraper_metadata',

@@ -24,6 +24,5 @@ abstract final class RommPaging {
   /// the server. Three is a starting point to be tuned against a real server
   /// on device. Lives here for the same reason as [pageSize]: the metadata
   /// pass is a service and must not read the constant from the provider.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
   static const int concurrency = 3;
 }

@@ -106,8 +106,6 @@ class RommMetadataFetchStrings {
 /// are dropped and the affected systems' libraries refreshed.
 ///
 /// [runSystem] is the system settings' "Fetch metadata from RomM" action.
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
 class RommMetadataFetchRunner {
   static final _log = LoggerService.instance;
 
@@ -179,7 +177,6 @@ class RommMetadataFetchRunner {
       ),
       // A disconnect mid-pass would otherwise fail every remaining game
       // against the cleared config; stop between games instead.
-      // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
       shouldStop: () => !romm.isConnected,
       onProgress: (done, total) => notifications.update(
         id: notificationId,
@@ -205,7 +202,6 @@ class RommMetadataFetchRunner {
         // list drops its artwork caches and reloads on the revision bump, and
         // the provider's settle rescans each system for a library that isn't
         // showing it right now.
-        // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
         scraping.markArtworkUpdated();
         for (final system in refreshSystems) {
           romm.scheduleLibraryRefresh(system);
@@ -253,8 +249,6 @@ class RommMetadataFetchRunner {
   /// among the fields; `show` also moves the row to the end of the list, where
   /// `update` spliced in place, and appends the row if the id has since been
   /// dismissed where `update` would no-op. Both match the upload runner.
-  ///
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
   static void _showTerminal(
     GlobalNotificationService notifications, {
     required String notificationId,

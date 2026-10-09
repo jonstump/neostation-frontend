@@ -1489,7 +1489,7 @@ const Map<String, dynamic> appLocaleFr = {
   // Link action on search results
   AppLocale.searchLinkToRomm: 'Lier à RomM',
 
-  // SPEC-0005 REQ "Per-Game Fetch Action" — Manage tab fetch row, mode
+  // Manage tab fetch row, mode
   // chooser, and outcome notifications
   AppLocale.rommFetchMetadataRow: 'Récupérer les métadonnées depuis RomM',
   AppLocale.rommFetchMetadataRowSubtitle:
@@ -1518,7 +1518,7 @@ const Map<String, dynamic> appLocaleFr = {
   AppLocale.rommFetchMetadataFailed:
       'Échec de la récupération des métadonnées depuis RomM',
 
-  // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
+  // system settings fetch action
   AppLocale.rommSystemFetchAction: 'Récupérer les métadonnées depuis RomM',
   AppLocale.rommSystemFetchActionSubtitle:
       'Compléter les manques ou remplacer les métadonnées et les visuels de tous les jeux liés de ce système',

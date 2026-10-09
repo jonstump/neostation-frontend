@@ -1470,7 +1470,7 @@ mixin AppLocale {
 
   // Link action on search results
   static const String searchLinkToRomm = 'search_link_to_romm';
-  // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
+  // system settings fetch action
   static const String rommSystemFetchAction = 'romm_system_fetch_action';
   static const String rommSystemFetchActionSubtitle =
       'romm_system_fetch_action_subtitle';
@@ -1499,7 +1499,7 @@ mixin AppLocale {
   static const String rommSystemFetchServerStop =
       'romm_system_fetch_server_stop';
 
-  // SPEC-0005 REQ "Per-Game Fetch Action" — Manage tab fetch row, mode
+  // Manage tab fetch row, mode
   // chooser, and outcome notifications
   static const String rommFetchMetadataRow = 'romm_fetch_metadata_row';
   static const String rommFetchMetadataRowSubtitle =

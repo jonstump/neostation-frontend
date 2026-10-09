@@ -6,9 +6,6 @@ import 'database_test_helper.dart';
 /// Provenance and fill-gaps behaviour of the metadata writers in
 /// [ScraperRepository], plus the scrape-candidate join that ScreenScraper's
 /// `new_only` mode depends on.
-///
-/// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Metadata Source
-/// Provenance", REQ "Cooperation With ScreenScraper"
 void main() {
   final dbHelper = DatabaseTestHelper();
   late dynamic db;

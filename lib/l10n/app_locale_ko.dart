@@ -1314,7 +1314,7 @@ const Map<String, dynamic> appLocaleKo = {
   // Link action on search results
   AppLocale.searchLinkToRomm: 'RomM에 연결',
 
-  // SPEC-0005 REQ "Per-Game Fetch Action" — Manage tab fetch row, mode
+  // Manage tab fetch row, mode
   // chooser, and outcome notifications
   AppLocale.rommFetchMetadataRow: 'RomM에서 메타데이터 가져오기',
   AppLocale.rommFetchMetadataRowSubtitle:
@@ -1340,7 +1340,7 @@ const Map<String, dynamic> appLocaleKo = {
       '항목 {count}개를 기록했지만 아트워크 {media}개를 다운로드하지 못했습니다',
   AppLocale.rommFetchMetadataFailed: 'RomM에서 메타데이터를 가져오지 못했습니다',
 
-  // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
+  // system settings fetch action
   AppLocale.rommSystemFetchAction: 'RomM에서 메타데이터 가져오기',
   AppLocale.rommSystemFetchActionSubtitle:
       '이 시스템의 연결된 모든 게임에 대해 메타데이터와 아트워크의 빈 곳을 채우거나 전부 교체합니다',

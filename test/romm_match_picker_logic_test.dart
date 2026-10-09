@@ -7,17 +7,13 @@ import 'package:neostation/models/romm_rom_page.dart';
 import 'package:neostation/repositories/romm_save_map_repository.dart';
 import 'package:neostation/screens/game_screen/game_settings_dialog/romm_match_picker_controller.dart';
 
-/// The link picker's logic behind the dialog (SPEC-0004 "Link Picker Dialog"
-/// and "Error Handling Standards") against hand-written fakes: the search is
+/// The link picker's logic behind the dialog against hand-written fakes:
+/// the search is
 /// scoped to the platform ids the system resolves to, a burst of keystrokes
 /// costs one request, confirm writes a manual row keyed by the on-disk
 /// filename, invalidates the game's sync state exactly once and then runs
-/// exactly one fill-gaps metadata fetch (SPEC-0005 "Fill Gaps On Link
-/// Confirm"), cancelling writes nothing, and a failed search is reported and
+/// exactly one fill-gaps metadata fetch, cancelling writes nothing, and a failed search is reported and
 /// retryable.
-
-// Governing: ADR-0004 (manual link provenance), SPEC-0004 REQ "Link Picker Dialog"
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Fill Gaps On Link Confirm"
 
 RommRom _rom(int id, String fsName, {int platformId = 1, String? name}) =>
     RommRom(
@@ -309,7 +305,6 @@ void main() {
       },
     );
 
-    // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Fill Gaps On Link Confirm"
     test(
       'runs exactly one fill-gaps fetch, after the row is written',
       () async {

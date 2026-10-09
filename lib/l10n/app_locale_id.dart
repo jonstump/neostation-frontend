@@ -1443,7 +1443,7 @@ const Map<String, dynamic> appLocaleId = {
   // Link action on search results
   AppLocale.searchLinkToRomm: 'Tautkan ke RomM',
 
-  // SPEC-0005 REQ "Per-Game Fetch Action" — Manage tab fetch row, mode
+  // Manage tab fetch row, mode
   // chooser, and outcome notifications
   AppLocale.rommFetchMetadataRow: 'Ambil metadata dari RomM',
   AppLocale.rommFetchMetadataRowSubtitle:
@@ -1471,7 +1471,7 @@ const Map<String, dynamic> appLocaleId = {
       '{count} kolom ditulis, tetapi {media} gambar gagal diunduh',
   AppLocale.rommFetchMetadataFailed: 'Gagal mengambil metadata dari RomM',
 
-  // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
+  // system settings fetch action
   AppLocale.rommSystemFetchAction: 'Ambil metadata dari RomM',
   AppLocale.rommSystemFetchActionSubtitle:
       'Isi yang kosong atau ganti metadata dan gambar untuk semua game tertaut di sistem ini',

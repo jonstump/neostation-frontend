@@ -2,13 +2,11 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/screens/game_screen/game_settings_dialog/game_settings_manage_layout.dart';
 import 'package:neostation/utils/enabled_index_nav.dart';
 
-/// The Manage tab's row gating (SPEC-0005 "Per-Game Fetch Action") as a pure
+/// The Manage tab's row gating as a pure
 /// function: the fetch row is appended at index 6 and enabled only when the
 /// game is linked and RomM is connected, indices 0-5 keep their meaning and
 /// their enable rules, and the D-pad fallback never strands on a row that
 /// just disabled.
-
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-Game Fetch Action"
 
 bool _enabled(
   int idx, {

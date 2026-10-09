@@ -26,7 +26,6 @@ import 'database_test_helper.dart';
 /// fully successful game. The writer-level tests run the real writer against
 /// a scripted service, so "writes are kept" and "requests stop" are measured
 /// against the database and the request counters, not asserted.
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
 
 const _snes = SystemModel(
   id: 'snes',

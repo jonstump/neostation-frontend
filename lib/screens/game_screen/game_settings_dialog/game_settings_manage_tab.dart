@@ -548,7 +548,6 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
 
   /// Opens the mode chooser and runs the fetch with what was picked; B in the
   /// chooser cancels without touching the game.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-Game Fetch Action"
   Future<void> _confirmFetchRommMetadata() async {
     if (!_canFetchRommMetadata || _isFetchingRommMetadata) return;
     SfxService().playNavSound();
@@ -563,7 +562,6 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
   /// new text and art at once, and reports the outcome. Re-entry is blocked
   /// while a fetch is in flight; the provider never throws, so a failure
   /// arrives as an outcome and is reported the same way.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-Game Fetch Action"
   Future<void> _fetchRommMetadata(RommMetadataMode mode) async {
     if (_isFetchingRommMetadata) return;
     setState(() => _isFetchingRommMetadata = true);
@@ -989,7 +987,6 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
 
           // Fetch metadata from RomM: enabled only while linked and
           // connected, otherwise greyed and skipped by the D-pad.
-          // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-Game Fetch Action"
           GestureDetector(
             onTap: () {
               if (!_canFetchRommMetadata) return;

@@ -1270,7 +1270,7 @@ const Map<String, dynamic> appLocaleZhHant = {
   // Link action on search results
   AppLocale.searchLinkToRomm: '連結至 RomM',
 
-  // SPEC-0005 REQ "Per-Game Fetch Action" — Manage tab fetch row, mode
+  // Manage tab fetch row, mode
   // chooser, and outcome notifications
   AppLocale.rommFetchMetadataRow: '從 RomM 取得中繼資料',
   AppLocale.rommFetchMetadataRowSubtitle: '從 RomM 補齊或取代此遊戲的中繼資料與封面圖',
@@ -1290,7 +1290,7 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.rommFetchMetadataPartial: '已寫入 {count} 個欄位，但 {media} 張封面圖下載失敗',
   AppLocale.rommFetchMetadataFailed: '從 RomM 取得中繼資料失敗',
 
-  // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
+  // system settings fetch action
   AppLocale.rommSystemFetchAction: '從 RomM 取得中繼資料',
   AppLocale.rommSystemFetchActionSubtitle: '為此系統中所有已連結的遊戲填補或取代中繼資料與圖片',
   AppLocale.rommSystemFetchRequiresConnection: '連線至 RomM 以啟用此操作',

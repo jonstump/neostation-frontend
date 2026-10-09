@@ -37,7 +37,6 @@ class RommFetchMetadataMessage {
 /// that were written and the artwork that was not, so the user knows the
 /// text is there but a picture is missing. Pure so the choice is testable
 /// without widgets.
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-Game Fetch Action"
 RommFetchMetadataMessage rommFetchMetadataMessageFor(
   RommMetadataOutcome outcome,
 ) {

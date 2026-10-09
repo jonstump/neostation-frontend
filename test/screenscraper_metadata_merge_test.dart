@@ -13,9 +13,6 @@ import 'database_test_helper.dart';
 /// takes an explicit
 /// [MetadataWriteMode]: [MetadataWriteMode.merge] for a routine pass,
 /// [MetadataWriteMode.replace] for a forced `all`-mode re-scrape.
-///
-/// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Metadata Source
-/// Provenance", REQ "Cooperation With ScreenScraper"
 void main() {
   final dbHelper = DatabaseTestHelper();
   late dynamic db;
@@ -42,7 +39,7 @@ void main() {
     return rows.first;
   }
 
-  /// The row a RomM fetch leaves behind: SPEC-0005's seven columns, written
+  /// The row a RomM fetch leaves behind: the seven columns, written
   /// the way RomM's replace mode writes them.
   Future<void> rommRow(String filename) async {
     await ScraperRepository.saveGameMetadata(

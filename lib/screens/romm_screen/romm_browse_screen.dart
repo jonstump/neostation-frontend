@@ -375,8 +375,6 @@ class _RommBrowseScreenState extends State<RommBrowseScreen> {
   /// whatever the game's row and media folders are missing. When the row
   /// already existed this is the same "already downloaded" no-op it always
   /// was.
-  // Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Link on Already Downloaded", REQ "Localized User-Facing Text"
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Fill Gaps On Link Confirm"
   Future<void> _linkLocalCopy(RommRom rom, RommLocalCopy copy) async {
     final fileProvider = context.read<FileProvider>();
     final linked = await _rommProvider.linkLocalCopy(rom, copy);

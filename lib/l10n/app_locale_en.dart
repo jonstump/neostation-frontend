@@ -1417,7 +1417,7 @@ const Map<String, dynamic> appLocaleEn = {
   // Link action on search results
   AppLocale.searchLinkToRomm: 'Link to RomM',
 
-  // SPEC-0005 REQ "Per-Game Fetch Action" — Manage tab fetch row, mode
+  // Manage tab fetch row, mode
   // chooser, and outcome notifications
   AppLocale.rommFetchMetadataRow: 'Fetch metadata from RomM',
   AppLocale.rommFetchMetadataRowSubtitle:
@@ -1444,7 +1444,7 @@ const Map<String, dynamic> appLocaleEn = {
       'Wrote {count} fields, but {media} artwork failed to download',
   AppLocale.rommFetchMetadataFailed: 'Fetching metadata from RomM failed',
 
-  // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
+  // system settings fetch action
   AppLocale.rommSystemFetchAction: 'Fetch metadata from RomM',
   AppLocale.rommSystemFetchActionSubtitle:
       'Fill gaps or replace metadata and artwork for every linked game in this system',

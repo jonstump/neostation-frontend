@@ -17,7 +17,6 @@ import 'package:neostation/utils/gamepad_nav.dart';
 /// post-frame callback and activated by the [GamepadNavigationManager]. D-pad
 /// moves between the two options, A confirms the focused one, B cancels.
 /// Pops with the chosen [RommMetadataMode], or null when cancelled.
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-Game Fetch Action"
 class RommFetchModeDialog extends StatefulWidget {
   const RommFetchModeDialog({super.key});
 

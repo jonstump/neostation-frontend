@@ -1437,7 +1437,7 @@ const Map<String, dynamic> appLocaleRu = {
   // Link action on search results
   AppLocale.searchLinkToRomm: 'Связать с RomM',
 
-  // SPEC-0005 REQ "Per-Game Fetch Action" — Manage tab fetch row, mode
+  // Manage tab fetch row, mode
   // chooser, and outcome notifications
   AppLocale.rommFetchMetadataRow: 'Получить метаданные из RomM',
   AppLocale.rommFetchMetadataRowSubtitle:
@@ -1465,7 +1465,7 @@ const Map<String, dynamic> appLocaleRu = {
       'Записано полей: {count}, но не удалось загрузить обложек: {media}',
   AppLocale.rommFetchMetadataFailed: 'Не удалось получить метаданные из RomM',
 
-  // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
+  // system settings fetch action
   AppLocale.rommSystemFetchAction: 'Получить метаданные из RomM',
   AppLocale.rommSystemFetchActionSubtitle:
       'Заполнить пробелы или заменить метаданные и обложки для всех привязанных игр этой системы',

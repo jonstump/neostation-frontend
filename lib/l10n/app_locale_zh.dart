@@ -1268,7 +1268,7 @@ const Map<String, dynamic> appLocaleZh = {
   // Link action on search results
   AppLocale.searchLinkToRomm: '链接到 RomM',
 
-  // SPEC-0005 REQ "Per-Game Fetch Action" — Manage tab fetch row, mode
+  // Manage tab fetch row, mode
   // chooser, and outcome notifications
   AppLocale.rommFetchMetadataRow: '从 RomM 获取元数据',
   AppLocale.rommFetchMetadataRowSubtitle: '从 RomM 补全或替换此游戏的元数据和封面图',
@@ -1288,7 +1288,7 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.rommFetchMetadataPartial: '已写入 {count} 个字段，但 {media} 张封面图下载失败',
   AppLocale.rommFetchMetadataFailed: '从 RomM 获取元数据失败',
 
-  // SPEC-0005 REQ "Per-System Fetch Pass" — system settings fetch action
+  // system settings fetch action
   AppLocale.rommSystemFetchAction: '从 RomM 获取元数据',
   AppLocale.rommSystemFetchActionSubtitle: '为此系统中所有已关联的游戏填补或替换元数据和图片',
   AppLocale.rommSystemFetchRequiresConnection: '连接 RomM 以启用此操作',

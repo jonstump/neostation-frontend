@@ -5,7 +5,6 @@
 /// or the RomM state changes; new rows are appended, never inserted. Kept as a
 /// pure class so the gating rules are unit-testable without widgets, the way
 /// `rommLinkStateOf` is for the state line.
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-Game Fetch Action"
 abstract final class ManageTabLayout {
   static const int cloudSync = 0;
   static const int playTime = 1;

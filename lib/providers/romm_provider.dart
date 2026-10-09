@@ -1488,7 +1488,6 @@ class RommProvider extends ChangeNotifier {
   /// gone). Arms the debounced settle when something was written so the
   /// library picks up the new art without a manual rescan, exactly as a
   /// download does. Never throws; see [RommMetadataOutcome].
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Fill Gaps On Link Confirm"
   Future<RommMetadataOutcome> fillMetadataGaps(
     RommRom rom,
     RommLocalCopy copy,
@@ -1514,7 +1513,6 @@ class RommProvider extends ChangeNotifier {
   /// extension-stripped and would file a second row beside the one
   /// `getGameMetadata` reads. A game without a map row fails with
   /// [RommMetadataFetchException.notLinked]. Never throws.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "RomM Metadata Writer With Two Modes"
   Future<RommMetadataOutcome> fetchMetadata({
     required GameModel game,
     required SystemModel system,
@@ -2226,8 +2224,6 @@ class RommProvider extends ChangeNotifier {
   /// pool and every ad-hoc caller (a link confirm, a download completion
   /// wave) share one bound of [RommPaging.concurrency] requests on the
   /// server — see that class for why the gate lives here and is taken once.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "RomM Metadata Writer With Two Modes"
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
   Future<RommMetadataOutcome> fetchMetadataForRomId({
     required int romId,
     required SystemModel system,
@@ -2268,7 +2264,6 @@ class RommProvider extends ChangeNotifier {
       // from the fetch itself stays a non-transport failure: the real
       // service classifies instead of throwing, but a fake or a wrapper may
       // not.
-      // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Error Handling Standards"
       final RommDetailFetch fetch;
       try {
         RommMetadataNetwork.instance.recordDetail();
@@ -2345,7 +2340,6 @@ class RommProvider extends ChangeNotifier {
       );
     }
 
-    // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "RomM Metadata Writer With Two Modes"
     int columnsWritten;
     try {
       switch (mode) {
@@ -2458,7 +2452,6 @@ class RommProvider extends ChangeNotifier {
 
   /// Logs a fetch that stopped before its columns were written and wraps the
   /// cause with where it happened, so the caller can tell the stages apart.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Error Handling Standards"
   RommMetadataOutcome _metadataFailure({
     required String stage,
     required int romId,
@@ -2500,7 +2493,6 @@ class RommProvider extends ChangeNotifier {
   /// `first_release_date` epoch ms → `YYYY-MM-DD`; `average_rating` on RomM's
   /// 0–100 scale → `rating` on the app's 0–20 scale, one decimal. Absent or
   /// empty values are left out rather than written blank.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "RomM Metadata Writer With Two Modes"
   @visibleForTesting
   static Map<String, dynamic> rommMetadataColumns(
     Map<String, dynamic> detail, {
@@ -2541,7 +2533,6 @@ class RommProvider extends ChangeNotifier {
     }
     // RomM averages its providers' ratings onto 0–100; the app (following
     // ScreenScraper) stores 0–20. 85 → 17.0.
-    // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "RomM Metadata Writer With Two Modes"
     final rating = md['average_rating'];
     if (rating is num) {
       final scaled = (rating.toDouble() / 5).clamp(0.0, 20.0);
@@ -2763,7 +2754,6 @@ class RommProvider extends ChangeNotifier {
   /// are independent, and a single unwritable folder or dead URL must not cost
   /// the caller every type queued behind it. They are logged with the URL that
   /// was being fetched and reported back as [_RommMediaWriteKind.failed].
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Error Handling Standards"
   Future<_RommMediaWrite> _saveRommMedia(
     List<String?> sources,
     String folder,
@@ -2815,7 +2805,6 @@ class RommProvider extends ChangeNotifier {
           // cannot stand in for RomM's), so this type reports a transport
           // failure and the pass's breaker sees it. A 404/410 stays a plain
           // miss and the candidate list walks on.
-          // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Error Handling Standards"
           _log.e(
             'RomM media import failed: type=$folder '
             'system=${system.folderName} filename=$indexedName '

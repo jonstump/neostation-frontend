@@ -14,16 +14,14 @@ import 'package:neostation/services/romm/romm_metadata_fetch.dart';
 /// scanned library, a link map, and a scripted writer whose fetches can be
 /// held open behind gates. No filesystem, no database, no network, and no
 /// widget — the pass is supposed to need none of them, which is also why a
-/// dialog closing under it cannot stop it (SPEC-0005 "Concurrency Safety").
+/// dialog closing under it cannot stop it.
 ///
-/// What is pinned (SPEC-0005 "Per-System Fetch Pass"): only linked games are
+/// What is pinned: only linked games are
 /// fetched and unlinked ones are counted; at most the bulk-sync concurrency
 /// is in flight; cancel stops new fetches while in-flight ones complete;
 /// a second run is refused while one runs and allowed after; one failing
 /// game is counted, logged with its id, and the pass continues; not found is
 /// counted; and exactly one summary line is logged per run.
-
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
 
 const _snes = SystemModel(
   id: 'snes',
@@ -199,13 +197,11 @@ void main() {
     RommMetadataFetch.resetActiveForTesting();
   });
 
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
   test('fetches with bulk sync\'s concurrency, from one definition', () {
     expect(RommMetadataFetch.concurrency, RommBulkSync.defaultConcurrency);
   });
 
   group('mixed system', () {
-    // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
     test(
       '120 games / 100 linked: 100 fetches, 20 unlinked counted, counts',
       () async {
@@ -295,7 +291,6 @@ void main() {
     });
   });
 
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
   test('never more than the bulk-sync concurrency is in flight', () async {
     final lib = _library(count: 20, linked: 20);
     final writer = _FakeWriter(gated: true);
@@ -326,7 +321,6 @@ void main() {
   });
 
   group('cancel', () {
-    // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
     test('after 40 of 100: no further fetches start, in-flight complete, '
         'cancelled reported', () async {
       final lib = _library(count: 100, linked: 100);
@@ -405,7 +399,6 @@ void main() {
   });
 
   group('one pass at a time', () {
-    // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
     test('a second run on any system is refused while one runs', () async {
       final lib = _library(count: 5, linked: 5);
       final writer = _FakeWriter(gated: true);
@@ -469,7 +462,6 @@ void main() {
   });
 
   group('per-game outcomes', () {
-    // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Error Handling Standards"
     test(
       'one throwing fetch is counted, logged with its id, pass continues',
       () async {
@@ -555,7 +547,6 @@ void main() {
   });
 
   group('summary log line', () {
-    // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
     test('exactly one per run, with every count as key=value', () async {
       final lib = _library(count: 12, linked: 10);
       final writer = _FakeWriter(notFound: {2}, failing: {3});
@@ -606,7 +597,6 @@ void main() {
     });
   });
 
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Error Handling Standards"
   test(
     'an unreadable library is a named failure and releases the guard',
     () async {
@@ -636,7 +626,6 @@ void main() {
     },
   );
 
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
   test(
     'the notifier reports progress and the active pass for any listener',
     () async {

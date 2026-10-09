@@ -488,7 +488,6 @@ void main() {
   });
 
   group('nothing to link', () {
-    // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Fill Gaps On Link Confirm"
     test('links 400 games without a single detail request', () async {
       // The linker's whole server surface is [RommLibraryLinker.listPlatforms]
       // and [RommLibraryLinker.fetchPage]; no detail fetcher can even be

@@ -1,5 +1,4 @@
 /// How a RomM metadata fetch treats what the game already has.
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "RomM Metadata Writer With Two Modes"
 enum RommMetadataMode {
   /// Write only metadata columns that are null or blank and only media files
   /// that do not exist. An existing row keeps its `is_fully_scraped` and
@@ -108,7 +107,6 @@ class RommMetadataOutcome {
 /// A RomM metadata fetch that could not run to completion, with the stage it
 /// failed at and the rom it was for, so a caller can tell a game that is not
 /// linked from a server or repository failure.
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Error Handling Standards"
 class RommMetadataFetchException implements Exception {
   /// `link`, `detail`, `columns`, or `media`.
   final String stage;

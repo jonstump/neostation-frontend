@@ -18,8 +18,7 @@ import 'package:path/path.dart' as p;
 import 'database_test_helper.dart';
 
 /// The RomM metadata writer ([RommProvider.fetchMetadata]) in both modes
-/// (SPEC-0005 "RomM Metadata Writer With Two Modes" and "Error Handling
-/// Standards") against the in-memory database, a scripted server detail, a
+/// against the in-memory database, a scripted server detail, a
 /// fake image fetch, and a temp media directory.
 ///
 /// What is pinned: fill-gaps writes only empty columns and missing files and
@@ -28,8 +27,6 @@ import 'database_test_helper.dart';
 /// not-found and not-linked outcomes; a media failure after the columns
 /// landed is partial, logged with its URL; the detail is read once; and the
 /// row is keyed by the map row's stored filename, never the display name.
-
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "RomM Metadata Writer With Two Modes"
 
 const _snes = SystemModel(
   id: 'snes',
@@ -450,7 +447,6 @@ void main() {
     // A dead or rate-limited server used to read here as "not found" —
     // getRomDetail collapsed every miss to null. The breaker can only exist
     // if these are failures.
-    // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Error Handling Standards"
     test('an unreachable detail is a failure, never "not found"', () async {
       await link();
       svc.detailMiss = RommDetailMiss.unreachable;
@@ -535,7 +531,6 @@ void main() {
       expect(await row(), isNull);
     });
 
-    // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Error Handling Standards"
     test('cover download fails after the columns: partial, logged', () async {
       await link();
       svc.failing.add(_coverUrl);

@@ -26,7 +26,6 @@ typedef EsdeSystemMediaLocation = ({
 /// insert a row, so an existing row keeps the source that created it. The
 /// manual metadata editor writes [manual]. Rows written before the column
 /// existed are null and stay null — nothing in the row says who wrote it.
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Metadata Source Provenance"
 enum MetadataSource {
   /// A ScreenScraper scrape (full or partial).
   screenscraper('screenscraper'),
@@ -73,7 +72,6 @@ enum MetadataSource {
 /// the one writer that genuinely clears columns, the manual metadata editor,
 /// goes through [ScraperRepository.updateGameMetadata], a partial update that
 /// can still write null. So [merge] never nulls a column, by construction.
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Metadata Source Provenance"
 enum MetadataWriteMode {
   /// Columns absent from the write — and columns present but null or blank —
   /// keep whatever the row already held, whichever source put it there.
@@ -797,7 +795,6 @@ class ScraperRepository {
   /// runs inside a transaction so a concurrent writer cannot land between
   /// them. Bulk scraping runs several ROMs at once, but each worker owns its
   /// own row, so the lock is only ever contended briefly.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Metadata Source Provenance"
   static Future<bool> saveGameMetadata(
     Map<String, dynamic> metadata,
     String appSystemId, {
@@ -883,7 +880,6 @@ class ScraperRepository {
   ///
   /// Pure — no database access — so the write can be inspected in a test
   /// without one.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Metadata Source Provenance"
   static Map<String, dynamic> buildMergeMetadataWrite({
     required String appSystemId,
     required String filename,
@@ -971,7 +967,6 @@ class ScraperRepository {
   /// Reads the game's current row, asks [build] for the fill-gaps write, and
   /// applies it as an insert (no row) or a partial update (existing row), all
   /// through parameterized statements.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Database Operation Standards"
   static Future<bool> _mergeFillGaps(
     String appSystemId,
     String filename,
@@ -1042,7 +1037,6 @@ class ScraperRepository {
   ///
   /// Pure — no database access — so a bulk importer that already has the rows
   /// in hand can reuse the precedence rules and batch the writes itself.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Metadata Source Provenance"
   static Map<String, dynamic>? buildFillGapsMetadataWrite({
     required String appSystemId,
     required String filename,
@@ -1290,7 +1284,6 @@ class ScraperRepository {
   ///
   /// Metadata is joined on the system id as well as the filename, so a row
   /// for `Game.zip` under one system never hides `Game.zip` under another.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Cooperation With ScreenScraper"
   static Future<int> getRomCountForScraping(
     String appSystemId,
     String scrapeMode,
@@ -1309,7 +1302,6 @@ class ScraperRepository {
   /// Returns the list of ROMs eligible for scraping for a given system.
   ///
   /// Same join as [getRomCountForScraping], so the two always agree.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Cooperation With ScreenScraper"
   static Future<List<Map<String, dynamic>>> getRomsForScraping(
     String appSystemId,
     String scrapeMode,

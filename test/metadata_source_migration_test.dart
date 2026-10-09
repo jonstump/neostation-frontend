@@ -9,9 +9,6 @@ import 'package:neostation/data/datasources/sqlite_migrations.dart';
 ///
 /// Rows written before the column existed carry nothing that says who wrote
 /// them, so the migration leaves them null rather than guessing.
-///
-/// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Metadata Source
-/// Provenance"
 void main() {
   late Database db;
 

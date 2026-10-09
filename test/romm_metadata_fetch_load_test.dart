@@ -40,7 +40,6 @@ import 'database_test_helper.dart';
 /// * the ad-hoc paths that call the writer directly (link confirm, browser
 ///   confirm, download completion) have **no** pool of their own — pinned
 ///   here as current behaviour so a later change has something to flip.
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
 
 const _snes = SystemModel(
   id: 'snes',
@@ -247,7 +246,6 @@ void main() {
   });
 
   group('peak in-flight requests, 50-game pass', () {
-    // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
     test('fill-gaps mode stays within the pool bound', () async {
       final summary = await pass(50).run(_snes, RommMetadataMode.fillGaps);
 
@@ -269,7 +267,6 @@ void main() {
       );
     });
 
-    // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
     test('replace mode stays within the pool bound', () async {
       final summary = await pass(50).run(_snes, RommMetadataMode.replace);
 

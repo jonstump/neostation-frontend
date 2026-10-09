@@ -17,19 +17,16 @@ import 'package:path/path.dart' as p;
 import 'database_test_helper.dart';
 
 /// The link paths for ROMs that were already on disk before RomM was
-/// connected (SPEC-0001 "Link on Already Downloaded"): finding the local copy
+/// connected: finding the local copy
 /// by the shared filename rule, writing its mapping row exactly once, and the
 /// browser confirm's metadata fetch filling the gaps of whatever row the game
-/// already has (SPEC-0005 "Fill Gaps On Link Confirm") instead of skipping it.
+/// already has instead of skipping it.
 ///
 /// [RommProvider.resolveSystem] is the only server-facing step in the probe,
 /// so a subclass pins it to a fixed system and the rest runs against a real
 /// temp directory and an in-memory database — the same filesystem the
 /// "downloaded" badge probes, which is what makes the two agree. The metadata
 /// fetch substitutes the server the same way.
-
-// Governing: ADR-0001 (filename linking), SPEC-0001 REQ "Link on Already Downloaded"
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Fill Gaps On Link Confirm"
 
 const _snes = SystemModel(
   id: 'snes',

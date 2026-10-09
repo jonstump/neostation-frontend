@@ -12,7 +12,6 @@ part of '../system_emulator_settings_dialog.dart';
 /// context or provider reference past the moment it starts, so closing the
 /// dialog neither cancels it nor stops the global notification from
 /// reporting progress and completion.
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
 extension _RommFetch on _SystemEmulatorSettingsDialogState {
   Widget _buildRommFetchItem({required int index, required Key key}) {
     final connected = context.watch<RommProvider>().isConnected;
@@ -186,7 +185,6 @@ extension _RommFetch on _SystemEmulatorSettingsDialogState {
 
   /// A press on the row: cancels this system's running pass, refuses while
   /// another system's pass runs, and otherwise asks for the mode and starts.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
   Future<void> _activateRommFetch() async {
     final active = RommMetadataFetch.active;
     if (active != null) {
@@ -194,7 +192,6 @@ extension _RommFetch on _SystemEmulatorSettingsDialogState {
         active.cancel();
         return;
       }
-      // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
       AppNotification.showNotification(
         context,
         AppLocale.rommSystemFetchBusy

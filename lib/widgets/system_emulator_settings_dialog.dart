@@ -372,7 +372,6 @@ class _SystemEmulatorSettingsDialogState
   /// Only a hardware system has games of its own to link: the aggregate
   /// libraries would fetch every system's games under the wrong folder, and
   /// the Android apps grid has no ROMs to link at all.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
   bool get _offersRommFetch =>
       !SystemFolderNames.isAggregate(_system.folderName) &&
       _system.folderName != SystemFolderNames.android;

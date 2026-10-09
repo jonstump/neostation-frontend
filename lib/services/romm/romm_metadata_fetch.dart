@@ -38,7 +38,6 @@ import 'romm_paging.dart';
 /// single measurement line reads after a run: they describe the load the
 /// app actually put on the server, including any ad-hoc calls that shared
 /// the gate while the pass ran.
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
 class RommMetadataNetwork {
   static final RommMetadataNetwork instance = RommMetadataNetwork._();
 
@@ -176,7 +175,6 @@ class RommMetadataFetchTarget {
 
 /// What one run of [RommMetadataFetch] did — the counts the summary
 /// notification and the single summary log line report.
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
 @immutable
 class RommMetadataFetchSummary {
   /// Games of the system with a map row — the ones the pass set out to fetch.
@@ -253,7 +251,6 @@ class RommMetadataFetchSummary {
 /// A second pass was asked for while one was running. Only one pass runs at a
 /// time across every system; the UI maps this to a localized notice naming
 /// the system that is busy.
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
 class RommMetadataFetchBusyException implements Exception {
   /// The system whose pass is still running.
   final String runningSystemFolder;
@@ -275,7 +272,6 @@ class RommMetadataFetchBusyException implements Exception {
 /// Why [RommMetadataFetch.run] could not run at all — the system's games or
 /// the link map were unreadable. Per-game failures are counted, not thrown;
 /// this is for the inputs nothing can proceed without.
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Error Handling Standards"
 class RommMetadataFetchPassException implements Exception {
   final String context;
   final Object cause;
@@ -306,7 +302,6 @@ class RommMetadataFetchPassException implements Exception {
 /// with [RommMetadataFetchBusyException]. [cancel] (or the injected
 /// [shouldStop]) ends the pass between games — the fetches already in flight
 /// complete and their writes are kept.
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
 class RommMetadataFetch extends ChangeNotifier {
   static final _defaultLog = LoggerService.instance;
 
@@ -324,7 +319,6 @@ class RommMetadataFetch extends ChangeNotifier {
   /// count — an unreachable or rate-limited detail GET, or a media download
   /// that failed for a transport reason, each counted once per game — and any
   /// fully successful game resets the streak.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
   static const int maxConsecutiveTransportFailures = 5;
 
   /// How often a paused pass re-checks cancel: a pause must be interruptible
@@ -335,7 +329,6 @@ class RommMetadataFetch extends ChangeNotifier {
   /// The pass currently running, or null. A [ValueNotifier] so a settings
   /// dialog opened while a pass is running can show its Cancel affordance and
   /// drop it when the pass ends, whichever dialog started it.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
   static final ValueNotifier<RommMetadataFetch?> activeNotifier =
       ValueNotifier<RommMetadataFetch?>(null);
 
@@ -422,7 +415,6 @@ class RommMetadataFetch extends ChangeNotifier {
 
   /// Asks the running pass to stop. No further games start; the fetches in
   /// flight complete and their writes are kept.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
   void cancel() {
     if (!_running || _cancelRequested) return;
     _cancelRequested = true;
@@ -442,7 +434,6 @@ class RommMetadataFetch extends ChangeNotifier {
   /// [RommMetadataFetchPassException] when the games or the link map could
   /// not be read. Per-game failures never propagate: they are counted and
   /// logged with the rom id.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
   Future<RommMetadataFetchSummary> run(
     SystemModel system,
     RommMetadataMode mode,
@@ -543,7 +534,6 @@ class RommMetadataFetch extends ChangeNotifier {
       // The breaker is the same shape: once N consecutive transport-class
       // failures say the server is not answering, the games still queued
       // are not worth one 30-second timeout each.
-      // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
       if (_stopRequested || _breakerTripped) {
         skipped++;
         return;
@@ -551,7 +541,6 @@ class RommMetadataFetch extends ChangeNotifier {
       // A 429's pause: the whole pool waits out the server's Retry-After
       // before any further game is dispatched. Cancel (or the injected stop
       // check) interrupts it within one poll slice.
-      // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
       await _waitOutPause();
       if (_stopRequested || _breakerTripped) {
         skipped++;
@@ -581,7 +570,6 @@ class RommMetadataFetch extends ChangeNotifier {
           // Counted, named, and stepped over — never fatal to the games
           // still to come on its own; only a *streak* of transport-class
           // failures stops the pass.
-          // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Error Handling Standards"
           failed++;
           _log.w(
             'RomM metadata fetch pass game failed '
@@ -621,7 +609,6 @@ class RommMetadataFetch extends ChangeNotifier {
   /// it, never shortens it. The game that produced the 429 still counts
   /// toward the breaker, so a server that keeps saying 429 stops the pass
   /// even while the pauses hold it back.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
   void _armPause(Duration retryAfter) {
     final capped = retryAfter > RommService.retryAfterCap
         ? RommService.retryAfterCap
@@ -658,7 +645,6 @@ class RommMetadataFetch extends ChangeNotifier {
   /// failure, no transport flag) resets the streak. A `notFound`, a 404 on a
   /// media URL, a parse error and a plain partial from 404s neither count
   /// nor reset: they say nothing about the server's health.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
   void _countTransportFailure(RommMetadataOutcome outcome) {
     final fullySuccessful =
         (outcome.kind == RommMetadataOutcomeKind.filled ||
@@ -711,7 +697,6 @@ class RommMetadataFetch extends ChangeNotifier {
   /// Phrased `pass complete:` / `pass cancelled:` rather than `pass:` because
   /// the log redactor treats `pass:` as a credential key and blanks whatever
   /// follows it.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
   /// The one line a run leaves in the log: what the pass did, and what it
   /// put on the server while doing it — requests by kind, the peak in-flight
   /// through the writer's shared gate, the 429 pauses, and why it ended.

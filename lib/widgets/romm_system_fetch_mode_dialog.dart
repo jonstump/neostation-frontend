@@ -19,7 +19,6 @@ import 'package:neostation/utils/gamepad_nav.dart';
 ///
 /// Gamepad wiring follows [ConfirmActionDialog]: the layer is pushed in a
 /// post-frame callback and activation is left to the manager.
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
 class RommSystemFetchModeDialog extends StatefulWidget {
   /// The system's display name, for the title.
   final String systemName;

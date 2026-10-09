@@ -122,7 +122,6 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
       // Fill-gaps only: a hand-picked link must never replace metadata the
       // user scraped, edited, or imported. Art that landed is picked up by
       // the same debounced settle a download arms.
-      // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Fill Gaps On Link Confirm"
       fetchMetadata: (_) async {
         final outcome = await rommProvider.fetchMetadata(
           game: widget.game,
@@ -256,7 +255,6 @@ class _RommMatchPickerDialogState extends State<RommMatchPickerDialog> {
   /// confirm is in flight B is ignored: the link row is already written and
   /// the fill-gaps fetch is running, so popping `false` here would tell the
   /// Manage tab nothing changed when it did.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Fill Gaps On Link Confirm"
   void _handleBack() {
     if (_isConfirming) return;
     if (_queryFocus.hasFocus) {

@@ -4,11 +4,9 @@ import 'package:neostation/models/romm_metadata_fetch.dart';
 import 'package:neostation/utils/romm_fetch_metadata_message.dart';
 
 /// The Manage tab's outcome-to-notification choice for "Fetch metadata from
-/// RomM" (SPEC-0005 "Per-Game Fetch Action"), as a pure function: every
+/// RomM", as a pure function: every
 /// outcome kind maps to one `AppLocale` key, the right placeholders, and a
 /// tone, and `format` resolves and substitutes them.
-
-// Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-Game Fetch Action"
 
 void main() {
   group('rommFetchMetadataMessageFor', () {

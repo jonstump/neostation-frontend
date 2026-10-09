@@ -832,7 +832,6 @@ class ScreenScraperService {
   /// for; `all` mode is the way to clear them.
   ///
   /// Public only as a test seam.
-  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Metadata Source Provenance"
   @visibleForTesting
   static MetadataWriteMode writeModeFor(Map<String, dynamic> scraperConfig) =>
       scraperConfig['scrape_mode'].toString() == 'all'
