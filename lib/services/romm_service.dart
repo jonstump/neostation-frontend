@@ -72,6 +72,59 @@ class RommImageFetch {
   bool get isAbsent => miss == RommImageMiss.absent;
 }
 
+/// Why [RommService.fetchRomDetail] produced no detail. Mirrors
+/// [RommImageMiss] so the metadata fetch can tell a server that answered
+/// "no such ROM" apart from one that never answered — a distinction the old
+/// null-returning [RommService.getRomDetail] could not carry, which is how
+/// a dead server came to be reported to the user as "not found".
+enum RommDetailMiss {
+  /// The server answered, and there is no ROM behind this id: a `404`/`410`,
+  /// or a `200` whose body is not a detail object (RomM falls through to its
+  /// SPA shell for a resource path it no longer has a file for — the same
+  /// shape [RommImageMiss.absent] documents for images).
+  absent,
+
+  /// No usable answer arrived: a timeout, a socket or TLS failure, a `5xx`,
+  /// or a `401`/`403` after the auth retries. Says nothing about whether the
+  /// ROM exists, so it must stay retryable.
+  unreachable,
+
+  /// The server is rate limiting this client (`429`).
+  /// [RommDetailFetch.retryAfter] carries the parsed `Retry-After`, already
+  /// clamped to [RommService.retryAfterCap].
+  rateLimited,
+}
+
+/// The result of [RommService.fetchRomDetail]: the detail JSON, or why there
+/// is none.
+@immutable
+class RommDetailFetch {
+  /// A successful fetch.
+  const RommDetailFetch.found(Map<String, dynamic> this.detail)
+    : miss = null,
+      retryAfter = null;
+
+  /// A fetch that produced no detail, and why.
+  const RommDetailFetch.missing(RommDetailMiss this.miss, {this.retryAfter})
+    : detail = null;
+
+  /// The detail JSON, or null when [miss] is set.
+  final Map<String, dynamic>? detail;
+
+  /// Why there is no [detail], or null on success.
+  final RommDetailMiss? miss;
+
+  /// The server's `Retry-After` on a [RommDetailMiss.rateLimited] answer,
+  /// already clamped to [RommService.retryAfterCap]; null when the header was
+  /// missing or malformed (the caller then has only the breaker to lean on)
+  /// and on every other miss.
+  final Duration? retryAfter;
+
+  /// Whether the server gave a definite negative answer — the only case a
+  /// caller may treat as permanent.
+  bool get isAbsent => miss == RommDetailMiss.absent;
+}
+
 /// HTTP client for a remote RomM server (library browse + ROM download).
 ///
 /// Holds the server base URL and credentials for one connection. Two
@@ -126,6 +179,50 @@ class RommService {
 
   static http.Client get _httpClient =>
       _httpClientOverride ?? _sharedHttpClient;
+
+  /// Ceiling on any `Retry-After` a `429` can impose, in
+  /// [parseRetryAfter]. A server that asks for more (or sends an HTTP-date
+  /// far in the future) is honoured for this long and no longer: the pass
+  /// pauses at most this long before it re-examines the server, so a broken
+  /// or hostile header cannot park the fetch indefinitely while the user
+  /// watches a bar that never moves.
+  static const Duration retryAfterCap = Duration(seconds: 60);
+
+  /// Parses a `Retry-After` header value into the pause it asks for, already
+  /// clamped to [retryAfterCap].
+  ///
+  /// Both forms RFC 7231 allows are handled:
+  /// * delay-seconds (`"120"`) — clamped to the cap; zero or negative is
+  ///   nonsense and yields [Duration.zero] (the caller leans on the breaker,
+  ///   whose consecutive count is the real protection);
+  /// * HTTP-date (`"Wed, 21 Oct 2026 07:28:00 GMT"`) — the delta from [now],
+  ///   zero when the date is in the past, clamped to the cap.
+  ///
+  /// A missing (`null`) or unparseable value yields null: the caller must
+  /// treat that as "the server gave no guidance" rather than crash or invent
+  /// a pause. This stays in the service, next to the classification that
+  /// produces it, so the pass never parses headers.
+  static Duration? parseRetryAfter(String? value, {DateTime Function()? now}) {
+    final trimmed = value?.trim();
+    if (trimmed == null || trimmed.isEmpty) return null;
+    final seconds = int.tryParse(trimmed);
+    if (seconds != null) {
+      if (seconds <= 0) return Duration.zero;
+      final asked = Duration(seconds: seconds);
+      return asked > retryAfterCap ? retryAfterCap : asked;
+    }
+    DateTime date;
+    try {
+      date = HttpDate.parse(trimmed);
+    } on Exception {
+      // `HttpDate.parse` signals a bad date with an HttpException, not a
+      // FormatException; both mean "not a header we can use".
+      return null;
+    }
+    final delta = date.difference((now ?? DateTime.now)());
+    if (delta <= Duration.zero) return Duration.zero;
+    return delta > retryAfterCap ? retryAfterCap : delta;
+  }
 
   String _baseUrl = '';
 
@@ -734,17 +831,77 @@ class RommService {
     return RommRom.fromJson(jsonDecode(resp.body) as Map<String, dynamic>);
   }
 
-  /// Returns the raw ROM-detail JSON (metadata + media paths), or null on error.
-  /// Used by the metadata import, which needs fields beyond [RommRom].
+  /// Returns the raw ROM-detail JSON (metadata + media paths), or null on
+  /// error — every miss, whatever its class, collapses to null here.
+  ///
+  /// A thin wrapper over [fetchRomDetail] kept for the callers that only
+  /// want "the detail or nothing" (the download completion path); the
+  /// metadata fetch uses [fetchRomDetail] so it can tell a real "no such
+  /// ROM" apart from an unreachable or rate-limited server.
   Future<Map<String, dynamic>?> getRomDetail(int id) async {
+    final fetch = await fetchRomDetail(id);
+    return fetch.detail;
+  }
+
+  /// [getRomDetail], but saying why there is no detail — the same answer
+  /// shape [fetchImage] gives for media. Only this method sees the `429`'s
+  /// `Retry-After` header: it parses and clamps it here (see
+  /// [parseRetryAfter]) so no caller ever parses a header.
+  ///
+  /// No exceptions escape: every transport failure and non-200 answer is a
+  /// miss of the class the response determines (see [RommDetailMiss]).
+  /// Misses are logged here, as [getRomDetail] logged its catches, so the
+  /// support log keeps the same record whichever entry point a caller uses.
+  Future<RommDetailFetch> fetchRomDetail(int id) async {
+    http.Response resp;
     try {
-      final resp = await _authedGet('/api/roms/$id');
-      final decoded = jsonDecode(resp.body);
-      return decoded is Map<String, dynamic> ? decoded : null;
+      resp = await _sendWithAuthRetry<http.Response>(
+        () => _httpClient
+            .get(_uri('/api/roms/$id'), headers: _authHeaders)
+            .timeout(const Duration(seconds: 30)),
+        statusOf: (r) => r.statusCode,
+      );
     } catch (e) {
-      _log.e('RomM getRomDetail failed: $e');
-      return null;
+      // TimeoutException, SocketException, TLS failures, and the
+      // RommException('Request timed out' / 'Cannot reach server') the auth
+      // retry wrapper itself throws.
+      _log.e('RomM detail fetch unreachable (rom=$id): $e');
+      return const RommDetailFetch.missing(RommDetailMiss.unreachable);
     }
+    if (resp.statusCode == 429) {
+      final pause = parseRetryAfter(resp.headers['retry-after']);
+      _log.w(
+        'RomM detail fetch rate limited (rom=$id)'
+        '${pause == null ? '' : ', retry-after=${pause.inMilliseconds}ms'}',
+      );
+      return RommDetailFetch.missing(
+        RommDetailMiss.rateLimited,
+        retryAfter: pause,
+      );
+    }
+    if (resp.statusCode == 404 || resp.statusCode == 410) {
+      _log.w('RomM detail fetch: HTTP ${resp.statusCode} (rom=$id)');
+      return const RommDetailFetch.missing(RommDetailMiss.absent);
+    }
+    if (resp.statusCode != 200) {
+      // 5xx, and 401/403 that survived the auth retries.
+      _log.e('RomM detail fetch failed: HTTP ${resp.statusCode} (rom=$id)');
+      return const RommDetailFetch.missing(RommDetailMiss.unreachable);
+    }
+    final dynamic decoded;
+    try {
+      decoded = jsonDecode(resp.body);
+    } on FormatException {
+      // An HTML body is RomM's SPA shell, the same "definitely not here"
+      // answer [RommImageMiss.absent] documents.
+      _log.w('RomM detail fetch: non-JSON body (rom=$id)');
+      return const RommDetailFetch.missing(RommDetailMiss.absent);
+    }
+    if (decoded is! Map<String, dynamic>) {
+      _log.w('RomM detail fetch: body is not an object (rom=$id)');
+      return const RommDetailFetch.missing(RommDetailMiss.absent);
+    }
+    return RommDetailFetch.found(decoded);
   }
 
   /// Fetches raw image bytes (RomM-relative path or absolute URL), or null.
