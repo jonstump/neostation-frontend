@@ -26,12 +26,12 @@ void main() {
 
   tearDown(() => RommService.debugUseHttpClient(null));
 
-  Map<String, dynamic> _detailBody() => jsonDecode('{"id": 7}');
+  Map<String, dynamic> detailBody() => jsonDecode('{"id": 7}');
 
   group('fetchRomDetail classification', () {
     test('a 200 with a detail object is a success', () async {
       final fetch = await detailOf(
-        http.Response(jsonEncode(_detailBody()), 200),
+        http.Response(jsonEncode(detailBody()), 200),
       );
       expect(fetch.detail, isNotNull);
       expect(fetch.miss, isNull);

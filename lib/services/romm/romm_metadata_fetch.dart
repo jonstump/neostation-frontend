@@ -161,6 +161,19 @@ class RommMetadataFetchSummary {
   /// metadata.
   final bool cancelled;
 
+  /// True when the server-protection breaker ended the pass: N consecutive
+  /// transport-class failures said the server was not answering, so the
+  /// games still queued were skipped rather than each waiting out a
+  /// timeout. Games already written keep their metadata, and
+  /// [transportFailures] says how many failures the pass saw. Distinct from
+  /// [cancelled]: nothing the user asked for, and the notification must say
+  /// so.
+  final bool serverProtectionStop;
+
+  /// Transport-class failures the pass counted, once per game (see
+  /// `RommMetadataFetch.maxConsecutiveTransportFailures`).
+  final int transportFailures;
+
   /// Wall-clock time of the run.
   final Duration elapsed;
 
@@ -172,10 +185,13 @@ class RommMetadataFetchSummary {
     this.notFound = 0,
     this.failed = 0,
     this.cancelled = false,
+    this.serverProtectionStop = false,
+    this.transportFailures = 0,
     this.elapsed = Duration.zero,
   });
 
-  /// Linked games the pass never started because it was cancelled.
+  /// Linked games the pass never started because it was cancelled or the
+  /// breaker stopped it.
   int get skipped => linked - filled - replaced - notFound - failed;
 
   /// True when at least one row was written, so the artwork caches and the
@@ -247,6 +263,19 @@ class RommMetadataFetch extends ChangeNotifier {
   /// definition bulk sync (`RommBulkSync.defaultConcurrency`) reads too.
   static const int concurrency = RommPaging.concurrency;
 
+  /// Consecutive transport-class failures that stop the pass.
+  ///
+  /// Five: above one burst of the 3-wide pool (a dead server fails up to
+  /// three games near-simultaneously, and a single unlucky burst must not
+  /// stop a pass that would recover), and small enough that a genuinely dead
+  /// server is walked away from within about two pool rounds instead of one
+  /// 30-second timeout per remaining game. Only transport-class failures
+  /// count — an unreachable or rate-limited detail GET, or a media download
+  /// that failed for a transport reason, each counted once per game — and any
+  /// fully successful game resets the streak.
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
+  static const int maxConsecutiveTransportFailures = 5;
+
   /// The pass currently running, or null. A [ValueNotifier] so a settings
   /// dialog opened while a pass is running can show its Cancel affordance and
   /// drop it when the pass ends, whichever dialog started it.
@@ -276,6 +305,15 @@ class RommMetadataFetch extends ChangeNotifier {
   int _total = 0;
   SystemModel? _system;
   RommMetadataMode? _mode;
+
+  /// Consecutive transport-class failures so far this run.
+  int _consecutiveTransportFailures = 0;
+
+  /// Total transport-class failures so far this run (streak-independent).
+  int _transportFailures = 0;
+
+  /// True once the breaker tripped: no new games are dispatched.
+  bool _breakerTripped = false;
 
   RommMetadataFetch({
     required RommSystemGameLister listGames,
@@ -416,13 +454,19 @@ class RommMetadataFetch extends ChangeNotifier {
     _onProgress?.call(0, _total);
 
     var filled = 0, replaced = 0, notFound = 0, failed = 0, skipped = 0;
+    _consecutiveTransportFailures = 0;
+    _transportFailures = 0;
+    _breakerTripped = false;
     await runBounded<RommMetadataFetchTarget>(targets, concurrency, (
       target,
     ) async {
       // Checked before each game, never mid-fetch: a game that has started
       // runs to completion and keeps its writes; the rest are skipped.
+      // The breaker is the same shape: once N consecutive transport-class
+      // failures say the server is not answering, the games still queued
+      // are not worth one 30-second timeout each.
       // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
-      if (_stopRequested) {
+      if (_stopRequested || _breakerTripped) {
         skipped++;
         return;
       }
@@ -448,7 +492,8 @@ class RommMetadataFetch extends ChangeNotifier {
           notFound++;
         case RommMetadataOutcomeKind.failed:
           // Counted, named, and stepped over — never fatal to the games
-          // still to come.
+          // still to come on its own; only a *streak* of transport-class
+          // failures stops the pass.
           // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Error Handling Standards"
           failed++;
           _log.w(
@@ -457,6 +502,7 @@ class RommMetadataFetch extends ChangeNotifier {
             'filename="${target.indexedName}"): ${outcome.error}',
           );
       }
+      _countTransportFailure(outcome);
       _done++;
       notifyListeners();
       _onProgress?.call(_done, _total);
@@ -469,9 +515,45 @@ class RommMetadataFetch extends ChangeNotifier {
       unlinkedSkipped: unlinked,
       notFound: notFound,
       failed: failed,
-      cancelled: skipped > 0 || _stopRequested,
+      cancelled: skipped > 0 && !_breakerTripped || _stopRequested,
+      transportFailures: _transportFailures,
+      serverProtectionStop: _breakerTripped,
       elapsed: _clock().difference(started),
     );
+  }
+
+  /// Feeds the breaker from one game's outcome.
+  ///
+  /// The rule, stated once: a game contributes **at most one** increment —
+  /// any transport-class outcome counts once, however many media types
+  /// failed — and only a *fully* successful game (completed, no media
+  /// failure, no transport flag) resets the streak. A `notFound`, a 404 on a
+  /// media URL, a parse error and a plain partial from 404s neither count
+  /// nor reset: they say nothing about the server's health.
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
+  void _countTransportFailure(RommMetadataOutcome outcome) {
+    final fullySuccessful =
+        (outcome.kind == RommMetadataOutcomeKind.filled ||
+            outcome.kind == RommMetadataOutcomeKind.replaced) &&
+        outcome.mediaFailed == 0 &&
+        !outcome.transportClass;
+    if (fullySuccessful) {
+      _consecutiveTransportFailures = 0;
+      return;
+    }
+    if (!outcome.transportClass) return;
+    _consecutiveTransportFailures++;
+    _transportFailures++;
+    if (!_breakerTripped &&
+        _consecutiveTransportFailures >= maxConsecutiveTransportFailures) {
+      _breakerTripped = true;
+      _log.w(
+        'RomM metadata fetch pass stopping early: '
+        '$maxConsecutiveTransportFailures consecutive transport failures '
+        '(system=${_system?.folderName}, done=$_done, total=$_total); '
+        'games already fetched keep their metadata',
+      );
+    }
   }
 
   /// The rom id of [game]'s map row, or null when it has none.
@@ -508,11 +590,18 @@ class RommMetadataFetch extends ChangeNotifier {
     RommMetadataFetchSummary s,
   ) {
     _log.i(
-      'RomM metadata fetch pass ${s.cancelled ? 'cancelled' : 'complete'}: '
+      'RomM metadata fetch pass '
+      '${s.cancelled
+          ? 'cancelled'
+          : s.serverProtectionStop
+          ? 'stopped'
+          : 'complete'}: '
       'system=${system.folderName} mode=${mode.name} '
       'linked=${s.linked} filled=${s.filled} replaced=${s.replaced} '
       'unlinked_skipped=${s.unlinkedSkipped} not_found=${s.notFound} '
       'failed=${s.failed} skipped=${s.skipped} cancelled=${s.cancelled} '
+      'transport_failures=${s.transportFailures} '
+      'stopped=${s.serverProtectionStop} '
       'elapsed_ms=${s.elapsed.inMilliseconds}',
     );
   }
