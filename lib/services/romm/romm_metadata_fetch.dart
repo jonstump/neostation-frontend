@@ -66,6 +66,7 @@ class RommMetadataNetwork {
     await _gate.acquire();
     _inFlight++;
     if (_inFlight > peakInFlight) peakInFlight = _inFlight;
+    if (_sessionActive && _inFlight > _sessionPeak) _sessionPeak = _inFlight;
   }
 
   /// Leaves the bounded section, handing the slot to the oldest waiter.
@@ -81,6 +82,41 @@ class RommMetadataNetwork {
   /// Counts one media download.
   void recordMedia() => mediaRequests++;
 
+  // ── Measurement session ─────────────────────────────────────────────────
+  // The counters above are cumulative for the process; a pass must report
+  // only what was issued while it ran (including any ad-hoc calls that
+  // shared the gate, which are part of the load the server saw).
+
+  int _sessionStartDetail = 0;
+  int _sessionStartMedia = 0;
+  bool _sessionActive = false;
+
+  /// Requests in flight inside the current measurement session at once.
+  int _sessionPeak = 0;
+
+  /// The requests issued and the peak in-flight since [startSession].
+  ({int detail, int media, int peak}) get sessionLoad => (
+    detail: detailRequests - _sessionStartDetail,
+    media: mediaRequests - _sessionStartMedia,
+    peak: _sessionPeak,
+  );
+
+  /// Begins a measurement session. Called by a pass at the start of its run.
+  void startSession() {
+    _sessionActive = true;
+    _sessionStartDetail = detailRequests;
+    _sessionStartMedia = mediaRequests;
+    _sessionPeak = 0;
+  }
+
+  /// Ends the session, returning what it measured. Idempotent: a second
+  /// call (a pass whose run threw) reads zeros rather than double-counting.
+  ({int detail, int media, int peak}) endSession() {
+    final load = _sessionActive ? sessionLoad : (detail: 0, media: 0, peak: 0);
+    _sessionActive = false;
+    return load;
+  }
+
   /// Clears the counters. Only for tests: with nothing inside the gate.
   @visibleForTesting
   static void resetForTesting() {
@@ -89,6 +125,10 @@ class RommMetadataNetwork {
     n.peakInFlight = 0;
     n.detailRequests = 0;
     n.mediaRequests = 0;
+    n._sessionActive = false;
+    n._sessionPeak = 0;
+    n._sessionStartDetail = 0;
+    n._sessionStartMedia = 0;
   }
 }
 
@@ -431,11 +471,17 @@ class RommMetadataFetch extends ChangeNotifier {
     notifyListeners();
 
     final started = _clock();
+    // Measured from here so the single summary line can report what this
+    // run put on the server — including ad-hoc calls that shared the gate.
+    RommMetadataNetwork.instance.startSession();
     try {
       final summary = await _run(system, mode, started);
-      _logSummary(system, mode, summary);
+      final load = RommMetadataNetwork.instance.endSession();
+      _logSummary(system, mode, summary, load: load);
       return summary;
     } finally {
+      // A run that threw never read its session; drop it without counting.
+      RommMetadataNetwork.instance.endSession();
       _running = false;
       if (identical(activeNotifier.value, this)) activeNotifier.value = null;
       notifyListeners();
@@ -666,11 +712,25 @@ class RommMetadataFetch extends ChangeNotifier {
   /// the log redactor treats `pass:` as a credential key and blanks whatever
   /// follows it.
   // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Per-System Fetch Pass"
+  /// The one line a run leaves in the log: what the pass did, and what it
+  /// put on the server while doing it — requests by kind, the peak in-flight
+  /// through the writer's shared gate, the 429 pauses, and why it ended.
+  ///
+  /// Deliberately free of hostnames, library counts and any `pass:` token
+  /// (the log redactor treats that word as a credential name; see
+  /// `log_redaction.dart`). "Retries" are the pauses: the pass itself never
+  /// re-issues a request — an auth retry happens inside the service, below
+  /// this line's reach.
   void _logSummary(
     SystemModel system,
     RommMetadataMode mode,
-    RommMetadataFetchSummary s,
-  ) {
+    RommMetadataFetchSummary s, {
+    ({int detail, int media, int peak}) load = const (
+      detail: 0,
+      media: 0,
+      peak: 0,
+    ),
+  }) {
     _log.i(
       'RomM metadata fetch pass '
       '${s.cancelled
@@ -684,6 +744,9 @@ class RommMetadataFetch extends ChangeNotifier {
       'failed=${s.failed} skipped=${s.skipped} cancelled=${s.cancelled} '
       'transport_failures=${s.transportFailures} '
       'stopped=${s.serverProtectionStop} '
+      'detail_requests=${load.detail} media_requests=${load.media} '
+      'peak_in_flight=${load.peak} '
+      'pauses=${s.pauses} paused_ms=${s.paused.inMilliseconds} '
       'elapsed_ms=${s.elapsed.inMilliseconds}',
     );
   }

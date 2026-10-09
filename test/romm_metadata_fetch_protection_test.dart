@@ -535,6 +535,55 @@ void main() {
         expect(summary.transportFailures, greaterThanOrEqualTo(5));
       },
     );
+
+    test(
+      'the one measurement line reports requests, peak, pauses and the stop reason',
+      () async {
+        await pass(10).run(_snes, RommMetadataMode.fillGaps);
+
+        final lines = LoggerService.instance
+            .takeCapture()
+            .where((l) => l.startsWith('i|RomM metadata fetch pass'))
+            .toList();
+        expect(lines, hasLength(1), reason: 'exactly one line per run');
+        final line = lines.single;
+        expect(line, contains('detail_requests=10'));
+        expect(
+          line,
+          contains('media_requests=20'),
+          reason:
+              'the cover plus the fanart type\'s cover fallback, per game, '
+              'through the fake',
+        );
+        expect(line, contains('peak_in_flight=3'));
+        expect(line, contains('pauses=0'));
+        expect(line, contains('stopped=false'));
+        expect(line, contains('complete:'), reason: 'why the run ended');
+        expect(
+          line,
+          isNot(contains('romm.invalid')),
+          reason: 'no hostname in the measurement',
+        );
+      },
+    );
+
+    test(
+      'the measurement line reports the stop reason and pauses of a protected run',
+      () async {
+        svc.rateLimitDetailFrom = 0;
+        svc.retryAfter = const Duration(milliseconds: 10);
+
+        await pass(10).run(_snes, RommMetadataMode.fillGaps);
+
+        final line = LoggerService.instance.takeCapture().firstWhere(
+          (l) => l.startsWith('i|RomM metadata fetch pass'),
+        );
+        expect(line, contains('stopped:'));
+        expect(line, contains('transport_failures='));
+        expect(line, contains('pauses='));
+        expect(line, contains('paused_ms='));
+      },
+    );
   });
 }
 
