@@ -7,6 +7,7 @@ import '../../repositories/romm_save_map_repository.dart';
 import '../../utils/bounded_concurrency.dart';
 import '../../utils/semaphore.dart';
 import '../logger_service.dart';
+import '../romm_service.dart';
 import 'romm_paging.dart';
 
 /// The server-facing side of every RomM metadata fetch: the one gate every
@@ -174,6 +175,14 @@ class RommMetadataFetchSummary {
   /// `RommMetadataFetch.maxConsecutiveTransportFailures`).
   final int transportFailures;
 
+  /// 429 pauses the pass took (see `RommMetadataFetch`'s Retry-After
+  /// handling). A pause that covered several games still counts once per
+  /// 429 that armed it.
+  final int pauses;
+
+  /// Total time the pass spent paused for Retry-After.
+  final Duration paused;
+
   /// Wall-clock time of the run.
   final Duration elapsed;
 
@@ -187,6 +196,8 @@ class RommMetadataFetchSummary {
     this.cancelled = false,
     this.serverProtectionStop = false,
     this.transportFailures = 0,
+    this.pauses = 0,
+    this.paused = Duration.zero,
     this.elapsed = Duration.zero,
   });
 
@@ -276,6 +287,11 @@ class RommMetadataFetch extends ChangeNotifier {
   // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
   static const int maxConsecutiveTransportFailures = 5;
 
+  /// How often a paused pass re-checks cancel: a pause must be interruptible
+  /// promptly, not after its full duration. Small enough to feel immediate,
+  /// large enough to cost nothing.
+  static const Duration _pausePollInterval = Duration(milliseconds: 50);
+
   /// The pass currently running, or null. A [ValueNotifier] so a settings
   /// dialog opened while a pass is running can show its Cancel affordance and
   /// drop it when the pass ends, whichever dialog started it.
@@ -297,6 +313,7 @@ class RommMetadataFetch extends ChangeNotifier {
   final RommMetadataStopCheck _shouldStop;
   final RommMetadataProgress? _onProgress;
   final DateTime Function() _clock;
+  final Future<void> Function(Duration) _sleep;
   final LoggerService _log;
 
   bool _running = false;
@@ -315,6 +332,16 @@ class RommMetadataFetch extends ChangeNotifier {
   /// True once the breaker tripped: no new games are dispatched.
   bool _breakerTripped = false;
 
+  /// Clock time the pool's current 429 pause runs to, or null when not
+  /// paused. Re-arming takes the later instant, never the shorter.
+  DateTime? _pauseUntil;
+
+  /// 429 pauses taken this run.
+  int _pauses = 0;
+
+  /// Total time spent paused this run (the slices actually waited).
+  Duration _pausedTotal = Duration.zero;
+
   RommMetadataFetch({
     required RommSystemGameLister listGames,
     required RommLinkIndexLoader linkIndex,
@@ -322,6 +349,7 @@ class RommMetadataFetch extends ChangeNotifier {
     RommMetadataStopCheck? shouldStop,
     RommMetadataProgress? onProgress,
     DateTime Function()? clock,
+    Future<void> Function(Duration duration)? sleep,
     LoggerService? logger,
   }) : _listGames = listGames,
        _linkIndex = linkIndex,
@@ -329,6 +357,7 @@ class RommMetadataFetch extends ChangeNotifier {
        _shouldStop = shouldStop ?? _neverStop,
        _onProgress = onProgress,
        _clock = clock ?? DateTime.now,
+       _sleep = sleep ?? Future<void>.delayed,
        _log = logger ?? _defaultLog;
 
   static bool _neverStop() => false;
@@ -457,6 +486,9 @@ class RommMetadataFetch extends ChangeNotifier {
     _consecutiveTransportFailures = 0;
     _transportFailures = 0;
     _breakerTripped = false;
+    _pauseUntil = null;
+    _pauses = 0;
+    _pausedTotal = Duration.zero;
     await runBounded<RommMetadataFetchTarget>(targets, concurrency, (
       target,
     ) async {
@@ -466,6 +498,15 @@ class RommMetadataFetch extends ChangeNotifier {
       // failures say the server is not answering, the games still queued
       // are not worth one 30-second timeout each.
       // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
+      if (_stopRequested || _breakerTripped) {
+        skipped++;
+        return;
+      }
+      // A 429's pause: the whole pool waits out the server's Retry-After
+      // before any further game is dispatched. Cancel (or the injected stop
+      // check) interrupts it within one poll slice.
+      // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
+      await _waitOutPause();
       if (_stopRequested || _breakerTripped) {
         skipped++;
         return;
@@ -503,6 +544,9 @@ class RommMetadataFetch extends ChangeNotifier {
           );
       }
       _countTransportFailure(outcome);
+      if (outcome.transportClass && outcome.retryAfter != null) {
+        _armPause(outcome.retryAfter!);
+      }
       _done++;
       notifyListeners();
       _onProgress?.call(_done, _total);
@@ -518,8 +562,46 @@ class RommMetadataFetch extends ChangeNotifier {
       cancelled: skipped > 0 && !_breakerTripped || _stopRequested,
       transportFailures: _transportFailures,
       serverProtectionStop: _breakerTripped,
+      pauses: _pauses,
+      paused: _pausedTotal,
       elapsed: _clock().difference(started),
     );
+  }
+
+  /// Arms the pool-wide pause a `429` asked for, clamped to the service's
+  /// cap — the service already clamps what it reports, so this is defence
+  /// against a value that arrived by another path. Re-arming while already
+  /// paused takes the *later* instant: a second 429 during a pause extends
+  /// it, never shortens it. The game that produced the 429 still counts
+  /// toward the breaker, so a server that keeps saying 429 stops the pass
+  /// even while the pauses hold it back.
+  // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Concurrency Safety"
+  void _armPause(Duration retryAfter) {
+    final capped = retryAfter > RommService.retryAfterCap
+        ? RommService.retryAfterCap
+        : retryAfter;
+    if (capped <= Duration.zero) return;
+    final until = _clock().add(capped);
+    if (_pauseUntil == null || until.isAfter(_pauseUntil!)) {
+      _pauseUntil = until;
+    }
+    _pauses++;
+  }
+
+  /// Waits out the armed pause, in slices small enough that [cancel] — or
+  /// the injected stop check — ends it within one slice rather than one
+  /// pause.
+  Future<void> _waitOutPause() async {
+    while (true) {
+      final remaining = _pauseUntil?.difference(_clock()) ?? Duration.zero;
+      if (remaining <= Duration.zero) return;
+      if (_stopRequested) return;
+      final slice = remaining > _pausePollInterval
+          ? _pausePollInterval
+          : remaining;
+      await _sleep(slice);
+      _pausedTotal += slice;
+    }
   }
 
   /// Feeds the breaker from one game's outcome.

@@ -274,6 +274,146 @@ void main() {
     );
   });
 
+  group('429 Retry-After pause', () {
+    setUp(() {
+      RommMetadataFetch.resetActiveForTesting();
+      LoggerService.instance.startCapture();
+    });
+    tearDown(() {
+      LoggerService.instance.takeCapture();
+      RommMetadataFetch.resetActiveForTesting();
+    });
+
+    final games = [for (var i = 0; i < 10; i++) _game(i)];
+
+    RommMetadataFetch passOf(
+      Future<RommMetadataOutcome> Function(int romId) outcomeFor, {
+      DateTime Function()? clock,
+      Future<void> Function(Duration)? sleep,
+    }) => RommMetadataFetch(
+      listGames: (folder) async => games,
+      linkIndex: () async => RommRomIdIndex({
+        for (var i = 0; i < games.length; i++)
+          RommRomIdIndex.keyFor('snes', games[i].filename): i,
+      }),
+      fetchOne: (target, system, mode) async {
+        await Future<void>.delayed(Duration.zero);
+        return outcomeFor(target.romId);
+      },
+      clock: clock,
+      sleep: sleep,
+    );
+
+    RommMetadataOutcome rateLimited([Duration? retryAfter]) =>
+        RommMetadataOutcome.failed(
+          StateError('rate limited'),
+          transportClass: true,
+          retryAfter: retryAfter,
+        );
+
+    test(
+      'a 429 with Retry-After pauses the pool and the pass resumes',
+      () async {
+        final watch = Stopwatch()..start();
+        final summary = await passOf(
+          (romId) async => romId == 0
+              ? rateLimited(const Duration(milliseconds: 150))
+              : _success,
+        ).run(_snes, RommMetadataMode.fillGaps);
+        watch.stop();
+
+        expect(summary.filled, 9, reason: 'the healthy games all ran');
+        expect(summary.failed, 1);
+        expect(summary.pauses, 1);
+        expect(
+          watch.elapsedMilliseconds,
+          greaterThanOrEqualTo(140),
+          reason: 'the pool really waited out the Retry-After',
+        );
+        expect(
+          summary.paused.inMilliseconds,
+          greaterThanOrEqualTo(140),
+          reason: 'the paused total is measured, not asserted',
+        );
+        expect(summary.serverProtectionStop, isFalse);
+      },
+    );
+
+    test(
+      'a hostile Retry-After is clamped to the cap by the pass too',
+      () async {
+        var fakeNow = DateTime(2026, 10, 9, 12);
+        final slices = <Duration>[];
+        final summary = await passOf(
+          (romId) async =>
+              romId == 0 ? rateLimited(const Duration(hours: 2)) : _success,
+          clock: () => fakeNow,
+          sleep: (d) async {
+            slices.add(d);
+            fakeNow = fakeNow.add(d);
+          },
+        ).run(_snes, RommMetadataMode.fillGaps);
+
+        expect(summary.filled, 9);
+        final total = slices.fold(Duration.zero, (a, b) => a + b);
+        expect(
+          total,
+          lessThanOrEqualTo(RommService.retryAfterCap),
+          reason:
+              'a value that bypassed the service clamp still cannot pause the '
+              'pass past the cap',
+        );
+      },
+    );
+
+    test(
+      'a missing Retry-After (null) is safe: no pause, and only the breaker counts',
+      () async {
+        final summary = await passOf(
+          (romId) async => romId == 0 ? rateLimited(null) : _success,
+        ).run(_snes, RommMetadataMode.fillGaps);
+
+        expect(summary.filled, 9);
+        expect(summary.pauses, 0, reason: 'nothing to wait for');
+        expect(summary.paused, Duration.zero);
+        expect(summary.serverProtectionStop, isFalse);
+      },
+    );
+
+    test('repeated 429s count toward the breaker even while pausing', () async {
+      final summary = await passOf(
+        (romId) async => rateLimited(const Duration(milliseconds: 10)),
+      ).run(_snes, RommMetadataMode.fillGaps);
+
+      expect(summary.serverProtectionStop, isTrue);
+      expect(summary.transportFailures, greaterThanOrEqualTo(5));
+      expect(summary.pauses, greaterThanOrEqualTo(1));
+    });
+
+    test('cancel during a pause ends the pass within one poll slice', () async {
+      final pass = passOf(
+        (romId) async => rateLimited(const Duration(seconds: 30)),
+      );
+      final watch = Stopwatch()..start();
+      final running = pass.run(_snes, RommMetadataMode.fillGaps);
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+      pass.cancel();
+      final summary = await running;
+      watch.stop();
+
+      expect(summary.cancelled, isTrue);
+      expect(summary.skipped, greaterThan(0));
+      expect(
+        watch.elapsedMilliseconds,
+        lessThan(2000),
+        reason:
+            'a 30-second pause must not outlive the cancel that interrupted '
+            'it (it exits within one 50ms poll slice)',
+      );
+      expect(summary.serverProtectionStop, isFalse);
+    });
+  });
+
   // ── Writer-level: the real writer against a scripted server ─────────────
 
   group('circuit breaker (real writer)', () {
