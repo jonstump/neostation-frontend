@@ -379,22 +379,16 @@ void main() {
     // and a completed download all call the writer directly. They used to
     // have no bound at all (Round 1 pinned peak 2 for two concurrent
     // confirms); they now share the pass's gate, so the bound holds.
-    test('two concurrent link-confirm fetches share the pass bound', () async {
+    test('six concurrent link-confirm fetches share the pass bound', () async {
       await Future.wait([
-        provider.fetchMetadataForRomId(
-          romId: 0,
-          system: _snes,
-          fileProvider: media,
-          indexedName: 'game0.sfc',
-          mode: RommMetadataMode.fillGaps,
-        ),
-        provider.fetchMetadataForRomId(
-          romId: 1,
-          system: _snes,
-          fileProvider: media,
-          indexedName: 'game1.sfc',
-          mode: RommMetadataMode.fillGaps,
-        ),
+        for (var i = 0; i < 6; i++)
+          provider.fetchMetadataForRomId(
+            romId: i,
+            system: _snes,
+            fileProvider: media,
+            indexedName: 'game$i.sfc',
+            mode: RommMetadataMode.fillGaps,
+          ),
       ]);
 
       expect(
