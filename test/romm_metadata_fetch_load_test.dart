@@ -136,21 +136,27 @@ class _RecordingService extends RommService {
   }
 
   @override
-  Future<Map<String, dynamic>?> getRomDetail(int id) async {
+  Future<RommDetailFetch> fetchRomDetail(int id) async {
     detailCalls++;
     await _hold();
-    return details[id];
+    final body = details[id];
+    return body == null
+        ? const RommDetailFetch.missing(RommDetailMiss.absent)
+        : RommDetailFetch.found(body);
   }
 
   @override
-  Future<Uint8List?> fetchImageBytes(
+  Future<RommImageFetch> fetchImage(
     String pathOrUrl, {
     bool requireImage = true,
     bool quiet = false,
   }) async {
     mediaCalls++;
     await _hold();
-    return assets[pathOrUrl];
+    final bytes = assets[pathOrUrl];
+    return bytes == null
+        ? const RommImageFetch.missing(RommImageMiss.absent)
+        : RommImageFetch.found(bytes);
   }
 }
 

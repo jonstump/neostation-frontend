@@ -101,26 +101,49 @@ class _FakeRommService extends RommService {
     _videoUrl: _mp4,
   };
   final Set<String> failing = {};
+
+  /// Media URLs that answer 404 — a definite miss, not a failure.
+  final Set<String> absent = {};
+
   final List<String> fetched = [];
 
+  /// When set, the detail answer is this miss instead of [detail].
+  RommDetailMiss? detailMiss;
+
+  /// The `Retry-After` a rate-limited detail answer carries.
+  Duration? detailRetryAfter;
+
   @override
-  Future<Map<String, dynamic>?> getRomDetail(int id) async {
+  Future<RommDetailFetch> fetchRomDetail(int id) async {
     detailCalls++;
     if (detailThrows) throw const SocketException('timeout');
-    return detail;
+    final miss = detailMiss;
+    if (miss != null) {
+      return RommDetailFetch.missing(miss, retryAfter: detailRetryAfter);
+    }
+    final body = detail;
+    return body == null
+        ? const RommDetailFetch.missing(RommDetailMiss.absent)
+        : RommDetailFetch.found(body);
   }
 
   @override
-  Future<Uint8List?> fetchImageBytes(
+  Future<RommImageFetch> fetchImage(
     String pathOrUrl, {
     bool requireImage = true,
     bool quiet = false,
   }) async {
     fetched.add(pathOrUrl);
     if (failing.contains(pathOrUrl)) {
-      throw const SocketException('connection reset');
+      return const RommImageFetch.missing(RommImageMiss.unreachable);
     }
-    return assets[pathOrUrl];
+    if (absent.contains(pathOrUrl)) {
+      return const RommImageFetch.missing(RommImageMiss.absent);
+    }
+    final bytes = assets[pathOrUrl];
+    return bytes == null
+        ? const RommImageFetch.missing(RommImageMiss.absent)
+        : RommImageFetch.found(bytes);
   }
 }
 
@@ -424,6 +447,64 @@ void main() {
       expect(await Directory(p.join(root.path, 'snes')).exists(), isFalse);
     });
 
+    // A dead or rate-limited server used to read here as "not found" —
+    // getRomDetail collapsed every miss to null. The breaker can only exist
+    // if these are failures.
+    // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Error Handling Standards"
+    test('an unreachable detail is a failure, never "not found"', () async {
+      await link();
+      svc.detailMiss = RommDetailMiss.unreachable;
+
+      final outcome = await fetch(RommMetadataMode.replace);
+
+      expect(outcome.kind, RommMetadataOutcomeKind.failed);
+      expect(outcome.transportClass, isTrue);
+      expect(outcome.retryAfter, isNull);
+      expect(svc.fetched, isEmpty, reason: 'no media is asked for');
+      expect(await row(), isNull);
+    });
+
+    test(
+      'a rate-limited detail is a failure carrying the Retry-After',
+      () async {
+        await link();
+        svc.detailMiss = RommDetailMiss.rateLimited;
+        svc.detailRetryAfter = const Duration(seconds: 7);
+
+        final outcome = await fetch(RommMetadataMode.replace);
+
+        expect(outcome.kind, RommMetadataOutcomeKind.failed);
+        expect(outcome.transportClass, isTrue);
+        expect(outcome.retryAfter, const Duration(seconds: 7));
+        expect(svc.fetched, isEmpty);
+      },
+    );
+
+    test(
+      'a 404 media URL is a plain miss, not a partial or a failure',
+      () async {
+        await link();
+        svc.absent.add(_coverUrl);
+        svc.assets.remove(_fanartUrl);
+        svc.absent.add(_fanartUrl);
+
+        final outcome = await fetch(RommMetadataMode.fillGaps);
+
+        expect(outcome.kind, RommMetadataOutcomeKind.filled);
+        expect(outcome.mediaFailed, 0);
+        expect(outcome.mediaWritten, 3, reason: 'wheel, screenshot, video');
+        expect(outcome.transportClass, isFalse);
+        expect(
+          LoggerService.instance
+              .takeCapture()
+              .where((l) => l.startsWith('e|RomM media import failed'))
+              .toList(),
+          isEmpty,
+          reason: 'a 404 is not an error',
+        );
+      },
+    );
+
     test('not linked: failed with the sentinel, no request made', () async {
       final outcome = await fetch(RommMetadataMode.fillGaps);
 
@@ -445,6 +526,11 @@ void main() {
       expect(error.stage, 'detail');
       expect(error.romId, 42);
       expect(error.cause, isA<SocketException>());
+      expect(
+        outcome.transportClass,
+        isFalse,
+        reason: 'a throw from the fetch is not classified by the service',
+      );
       expect(error.toString(), contains('rom=42'));
       expect(await row(), isNull);
     });
@@ -469,7 +555,16 @@ void main() {
       expect(await mediaFile('fanarts', 'png').exists(), isTrue);
       final error = outcome.error as RommMetadataFetchException;
       expect(error.stage, 'media');
-      expect(error.cause, isA<SocketException>());
+      expect(
+        error.cause,
+        isA<StateError>(),
+        reason: 'a transport failure is reported as such, not swallowed',
+      );
+      expect(
+        outcome.transportClass,
+        isTrue,
+        reason: 'the pass breaker must see a dead server in the media too',
+      );
       final logged = LoggerService.instance
           .takeCapture()
           .where((l) => l.startsWith('e|RomM media import failed'))

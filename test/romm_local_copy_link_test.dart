@@ -47,21 +47,35 @@ class _FakeRommService extends RommService {
   final List<String> fetched = [];
 
   @override
-  Future<Map<String, dynamic>?> getRomDetail(int id) async {
+  Future<RommDetailFetch> fetchRomDetail(int id) async {
     detailCalls++;
-    return detail;
+    final body = detail;
+    return body == null
+        ? const RommDetailFetch.missing(RommDetailMiss.absent)
+        : RommDetailFetch.found(body);
   }
 
   @override
-  Future<Uint8List?> fetchImageBytes(
+  Future<RommImageFetch> fetchImage(
     String pathOrUrl, {
     bool requireImage = true,
     bool quiet = false,
   }) async {
     fetched.add(pathOrUrl);
     return pathOrUrl.endsWith('cover.png')
-        ? Uint8List.fromList([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
-        : null;
+        ? RommImageFetch.found(
+            Uint8List.fromList([
+              0x89,
+              0x50,
+              0x4E,
+              0x47,
+              0x0D,
+              0x0A,
+              0x1A,
+              0x0A,
+            ]),
+          )
+        : const RommImageFetch.missing(RommImageMiss.absent);
   }
 }
 

@@ -2228,24 +2228,57 @@ class RommProvider extends ChangeNotifier {
     required RommMetadataMode mode,
     RommRom? rom,
   }) async {
-    final Map<String, dynamic>? detail;
-    try {
-      detail = await service.getRomDetail(romId);
-    } catch (e, st) {
-      return _metadataFailure(
-        stage: 'detail',
-        romId: romId,
-        indexedName: indexedName,
-        cause: e,
-        stackTrace: st,
-      );
-    }
-    if (detail == null) {
-      _log.i(
-        'RomM metadata fetch: no detail '
-        '(rom=$romId, system=${system.folderName}, filename=$indexedName)',
-      );
-      return const RommMetadataOutcome.notFound();
+    final Map<String, dynamic> detail;
+    {
+      // The classified fetch, so an unreachable or rate-limited server is a
+      // failure the pass can count — not "not found", which is reserved for
+      // the server answering that the ROM is not there (404/410). A throw
+      // from the fetch itself stays a non-transport failure: the real
+      // service classifies instead of throwing, but a fake or a wrapper may
+      // not.
+      // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Error Handling Standards"
+      final RommDetailFetch fetch;
+      try {
+        fetch = await service.fetchRomDetail(romId);
+      } catch (e, st) {
+        return _metadataFailure(
+          stage: 'detail',
+          romId: romId,
+          indexedName: indexedName,
+          cause: e,
+          stackTrace: st,
+        );
+      }
+      switch (fetch.miss) {
+        case null:
+          detail = fetch.detail!;
+        case RommDetailMiss.absent:
+          _log.i(
+            'RomM metadata fetch: no detail '
+            '(rom=$romId, system=${system.folderName}, filename=$indexedName)',
+          );
+          return const RommMetadataOutcome.notFound();
+        case RommDetailMiss.unreachable:
+        case RommDetailMiss.rateLimited:
+          final rateLimited = fetch.miss == RommDetailMiss.rateLimited;
+          _log.e(
+            'RomM metadata fetch: detail '
+            '${rateLimited ? 'rate limited' : 'unreachable'} '
+            '(rom=$romId, system=${system.folderName}, filename=$indexedName)',
+          );
+          return RommMetadataOutcome.failed(
+            RommMetadataFetchException(
+              stage: 'detail',
+              romId: romId,
+              filename: indexedName,
+              cause: rateLimited
+                  ? 'the RomM server is rate limiting this client'
+                  : 'the RomM server could not be reached',
+            ),
+            transportClass: true,
+            retryAfter: fetch.retryAfter,
+          );
+      }
     }
 
     // app_system_id is a FK to app_systems(id); refuse rather than silently
@@ -2379,6 +2412,7 @@ class RommProvider extends ChangeNotifier {
               cause: media.firstError,
             )
           : null,
+      transportClass: media.transportFailed,
     );
     _log.i(
       'RomM metadata fetch: kind=${kind.name} mode=${mode.name} rom=$romId '
@@ -2613,6 +2647,9 @@ class RommProvider extends ChangeNotifier {
           .where((r) => r.kind == _RommMediaWriteKind.failed)
           .map((r) => r.error)
           .firstOrNull,
+      transportFailed: results.any(
+        (r) => r.kind == _RommMediaWriteKind.failed && r.transport,
+      ),
     );
   }
 
@@ -2727,11 +2764,35 @@ class RommProvider extends ChangeNotifier {
         if (source == null || source.isEmpty) continue;
         attempted = source;
         // A video's bytes are not an image, so only art is content-checked.
-        bytes = await service.fetchImageBytes(
+        final fetch = await service.fetchImage(
           source,
           requireImage: forcedExt == null,
         );
-        if (bytes != null && bytes.isNotEmpty) break;
+        final fetched = fetch.bytes;
+        if (fetched != null && fetched.isNotEmpty) {
+          bytes = fetched;
+          break;
+        }
+        if (fetch.miss == RommImageMiss.unreachable) {
+          // The server could not be reached — a timeout, socket/TLS failure,
+          // 5xx or 429. Trying the remaining candidates would only re-ask a
+          // server that just failed to answer (and the last cover candidate
+          // is often the metadata provider's original, a different host that
+          // cannot stand in for RomM's), so this type reports a transport
+          // failure and the pass's breaker sees it. A 404/410 stays a plain
+          // miss and the candidate list walks on.
+          // Governing: ADR-0005 (RomM metadata source), SPEC-0005 REQ "Error Handling Standards"
+          _log.e(
+            'RomM media import failed: type=$folder '
+            'system=${system.folderName} filename=$indexedName '
+            'url=$attempted unreachable',
+          );
+          return _RommMediaWrite(
+            _RommMediaWriteKind.failed,
+            error: StateError('the RomM server could not be reached'),
+            transport: true,
+          );
+        }
         bytes = null;
       }
       if (bytes == null) {
@@ -2924,7 +2985,12 @@ enum _RommMediaWriteKind { written, skipped, none, failed }
 class _RommMediaWrite {
   final _RommMediaWriteKind kind;
   final Object? error;
-  const _RommMediaWrite(this.kind, {this.error});
+
+  /// True when [kind] is failed *because the server could not be reached*
+  /// (timeout, socket/TLS, 5xx, 429) rather than because a local write went
+  /// wrong. Only these feed the pass's circuit breaker.
+  final bool transport;
+  const _RommMediaWrite(this.kind, {this.error, this.transport = false});
 }
 
 typedef _RommMediaSetResult = ({
@@ -2932,4 +2998,7 @@ typedef _RommMediaSetResult = ({
   int skipped,
   int failed,
   Object? firstError,
+
+  /// Whether any failed media type failed for a transport reason.
+  bool transportFailed,
 });

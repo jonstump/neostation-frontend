@@ -53,6 +53,19 @@ class RommMetadataOutcome {
   /// failure behind [RommMetadataOutcomeKind.partial].
   final Object? error;
 
+  /// True when the failure (or, on a [RommMetadataOutcomeKind.partial], the
+  /// media failure behind it) is transport-class: the RomM server could not
+  /// be reached, answered a `5xx`, or said `429`. False for every other
+  /// failure — a real 404 is [RommMetadataOutcomeKind.notFound], a 404 on a
+  /// media URL is a plain miss, and a local write or parse error is not the
+  /// server's health. The pass's circuit breaker counts only these.
+  final bool transportClass;
+
+  /// The server's `Retry-After` when [transportClass] is set by a `429` —
+  /// already clamped by `RommService.parseRetryAfter`. Null on every other
+  /// outcome. The pass pauses dispatching for this long.
+  final Duration? retryAfter;
+
   const RommMetadataOutcome({
     required this.kind,
     this.columnsWritten = 0,
@@ -60,13 +73,23 @@ class RommMetadataOutcome {
     this.mediaSkipped = 0,
     this.mediaFailed = 0,
     this.error,
+    this.transportClass = false,
+    this.retryAfter,
   });
 
   const RommMetadataOutcome.notFound()
     : this(kind: RommMetadataOutcomeKind.notFound);
 
-  const RommMetadataOutcome.failed(Object error)
-    : this(kind: RommMetadataOutcomeKind.failed, error: error);
+  const RommMetadataOutcome.failed(
+    Object error, {
+    bool transportClass = false,
+    Duration? retryAfter,
+  }) : this(
+         kind: RommMetadataOutcomeKind.failed,
+         error: error,
+         transportClass: transportClass,
+         retryAfter: retryAfter,
+       );
 
   /// True when the fetch left the row with RomM data in it — filled, replaced,
   /// or partial.
