@@ -1546,4 +1546,6 @@ const Map<String, dynamic> appLocaleDe = {
       'Für {system} läuft bereits ein RomM-Metadatenabruf. Warte, bis er abgeschlossen ist, und versuche es erneut.',
   AppLocale.rommSystemFetchFailedToStart:
       'RomM-Metadaten für {system} konnten nicht abgerufen werden: {error}',
+  AppLocale.rommSystemFetchServerStop:
+      'Früh abgebrochen: Der RomM-Server antwortet nicht mehr. Bereits geladene Spiele behalten ihre Metadaten.',
 };

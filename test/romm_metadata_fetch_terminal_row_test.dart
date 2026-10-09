@@ -42,6 +42,7 @@ void main() {
     cancelledTemplate: 'cancelled',
     busyTemplate: 'busy {system}',
     failedToStartTemplate: 'failed {error}',
+    serverStop: 'stopped for the server',
   );
 
   late GlobalNotificationService notifications;
@@ -117,6 +118,26 @@ void main() {
     expect(row.type, GlobalNotificationType.success);
     expect(row.ongoing, isFalse);
   });
+
+  test(
+    'a breaker-stopped pass renders the stop reason, not the counts',
+    () async {
+      await run((pass) async {
+        reportProgress(1);
+        return const RommMetadataFetchSummary(
+          linked: 4,
+          failed: 5,
+          serverProtectionStop: true,
+          transportFailures: 5,
+        );
+      });
+
+      final row = rowFor(notificationId);
+      expect(row.message, 'stopped for the server');
+      expect(row.progress, isNull);
+      expect(row.type, GlobalNotificationType.error);
+    },
+  );
 
   test('a cancelled pass ends with no progress bar', () async {
     await run((pass) async {

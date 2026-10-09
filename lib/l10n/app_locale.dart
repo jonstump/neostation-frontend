@@ -1496,6 +1496,8 @@ mixin AppLocale {
   static const String rommSystemFetchBusy = 'romm_system_fetch_busy';
   static const String rommSystemFetchFailedToStart =
       'romm_system_fetch_failed_to_start';
+  static const String rommSystemFetchServerStop =
+      'romm_system_fetch_server_stop';
 
   // SPEC-0005 REQ "Per-Game Fetch Action" — Manage tab fetch row, mode
   // chooser, and outcome notifications

@@ -1500,4 +1500,6 @@ const Map<String, dynamic> appLocaleId = {
       'Pengambilan metadata RomM untuk {system} masih berjalan. Tunggu hingga selesai, lalu coba lagi.',
   AppLocale.rommSystemFetchFailedToStart:
       'Tidak dapat mengambil metadata RomM untuk {system}: {error}',
+  AppLocale.rommSystemFetchServerStop:
+      'Dihentikan lebih awal: server RomM berhenti merespons. Game yang sudah diambil tetap menyimpan metadatanya.',
 };

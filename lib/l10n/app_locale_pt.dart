@@ -1512,4 +1512,6 @@ const Map<String, dynamic> appLocalePt = {
       'Já há uma obtenção de metadados do RomM em andamento para {system}. Aguarde a conclusão e tente novamente.',
   AppLocale.rommSystemFetchFailedToStart:
       'Não foi possível obter os metadados do RomM para {system}: {error}',
+  AppLocale.rommSystemFetchServerStop:
+      'Interrompido antecipadamente: o servidor RomM parou de responder. Os jogos já obtidos mantêm seus metadados.',
 };

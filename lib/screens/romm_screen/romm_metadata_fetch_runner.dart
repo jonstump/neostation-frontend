@@ -30,6 +30,10 @@ class RommMetadataFetchStrings {
   final String busyTemplate;
   final String failedToStartTemplate;
 
+  /// The server-protection stop reason — rendered instead of the counts
+  /// when the breaker ended the pass.
+  final String serverStop;
+
   const RommMetadataFetchStrings({
     required this.started,
     required this.preparing,
@@ -38,6 +42,7 @@ class RommMetadataFetchStrings {
     required this.cancelledTemplate,
     required this.busyTemplate,
     required this.failedToStartTemplate,
+    this.serverStop = '',
   });
 
   factory RommMetadataFetchStrings.of(BuildContext context, String subject) {
@@ -59,6 +64,7 @@ class RommMetadataFetchStrings {
       failedToStartTemplate: AppLocale.rommSystemFetchFailedToStart
           .getString(context)
           .replaceFirst('{system}', subject),
+      serverStop: AppLocale.rommSystemFetchServerStop.getString(context),
     );
   }
 
@@ -71,6 +77,10 @@ class RommMetadataFetchStrings {
       .replaceFirst('{total}', '$total');
 
   String summary(RommMetadataFetchSummary s) {
+    // The breaker's stop reason comes without the counts: it is the answer
+    // to "why did my fetch stop", and the games that failed are already
+    // logged per game with their rom ids.
+    if (s.serverProtectionStop) return serverStop;
     final text = summaryTemplate
         .replaceFirst('{linked}', '${s.linked}')
         .replaceFirst('{filled}', '${s.filled}')

@@ -1494,4 +1494,6 @@ const Map<String, dynamic> appLocaleRu = {
       'Загрузка метаданных RomM для {system} уже выполняется. Дождитесь её завершения и попробуйте снова.',
   AppLocale.rommSystemFetchFailedToStart:
       'Не удалось получить метаданные RomM для {system}: {error}',
+  AppLocale.rommSystemFetchServerStop:
+      'Остановлено досрочно: сервер RomM перестал отвечать. Метаданные уже полученных игр сохраняются.',
 };

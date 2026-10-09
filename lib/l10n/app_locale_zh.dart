@@ -1307,4 +1307,5 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.rommSystemFetchCancelled: '已取消 — {summary}',
   AppLocale.rommSystemFetchBusy: '{system} 的 RomM 元数据获取仍在进行中。请等待其完成后再试。',
   AppLocale.rommSystemFetchFailedToStart: '无法获取 {system} 的 RomM 元数据：{error}',
+  AppLocale.rommSystemFetchServerStop: '提前停止：RomM 服务器已停止响应。已获取的游戏会保留其元数据。',
 };

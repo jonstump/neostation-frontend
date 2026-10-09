@@ -1356,4 +1356,6 @@ const Map<String, dynamic> appLocaleJa = {
       '{system} の RomM メタデータ取得がすでに実行中です。完了を待ってからもう一度お試しください。',
   AppLocale.rommSystemFetchFailedToStart:
       '{system} の RomM メタデータを取得できませんでした: {error}',
+  AppLocale.rommSystemFetchServerStop:
+      '途中で停止しました：RomMサーバーが応答しなくなりました。取得済みのゲームのメタデータは保持されます。',
 };

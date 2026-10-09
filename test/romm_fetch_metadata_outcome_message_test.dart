@@ -159,5 +159,31 @@ void main() {
         }
       }
     });
+
+    test('the server-protection stop reason resolves in every language', () {
+      final maps = {
+        'en': AppLocale.en,
+        'es': AppLocale.es,
+        'ru': AppLocale.ru,
+        'zh': AppLocale.zh,
+        'zh_Hant': AppLocale.zhHant,
+        'pt': AppLocale.pt,
+        'fr': AppLocale.fr,
+        'de': AppLocale.de,
+        'it': AppLocale.it,
+        'id': AppLocale.id,
+        'ja': AppLocale.ja,
+        'ko': AppLocale.ko,
+      };
+      for (final entry in maps.entries) {
+        expect(
+          entry.value[AppLocale.rommSystemFetchServerStop],
+          isA<String>().having((s) => s.isNotEmpty, 'non-empty', true),
+          reason:
+              '${AppLocale.rommSystemFetchServerStop} missing in '
+              '${entry.key}',
+        );
+      }
+    });
   });
 }
