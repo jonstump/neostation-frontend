@@ -18,6 +18,8 @@ import '../repositories/config_repository.dart';
 import '../repositories/game_repository.dart';
 import '../services/permission_service.dart';
 import '../services/romm/romm_props_outbox_service.dart';
+import '../services/gamepad/glyph_service.dart';
+import '../services/gamepad/glyph_style_config.dart';
 import '../services/steam_scraper_service.dart';
 import '../services/systems_update_service.dart';
 import '../models/secondary_display_state.dart';
@@ -389,6 +391,7 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
     _detectedSystems = [];
     _scanCompleted = false;
     _error = null;
+    _syncGlyphStyle();
     notifyListeners();
     await initialize();
   }
@@ -434,6 +437,20 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// (e.g. [SqliteConfigMutators]) can't call it directly. Mirrors the `notify()`
   /// bridge in [neo_sync_provider]. Behaviourally identical to a direct call.
   void _notify() => notifyListeners();
+
+  /// Pushes the stored glyph-style pin into [GlyphService] so the hints the
+  /// app draws follow the stored setting.
+  ///
+  /// Synchronous, no I/O: the service's `setPinned` notifies only when the
+  /// value actually changes, so an unchanged style redraws nothing. `'auto'`
+  /// in the stored config maps to a null pin (unpinned), letting the
+  /// detector's style win.
+  // Governing: ADR-0023 (controller glyphs), SPEC-0022 REQ "Auto Style With A Pin"
+  void _syncGlyphStyle() {
+    GlyphService.instance.setPinned(
+      glyphStyleFromConfig(_config.gamepadGlyphStyle),
+    );
+  }
 
   void _setLoading(bool loading) {
     _isLoading = loading;

@@ -64,6 +64,15 @@ class DatabaseTestHelper {
       )
     ''');
 
+    // Tables clearUserData() deletes from; created here so a test that
+    // calls clearConfig() does not fail on a missing table.
+    await db.execute(
+      'CREATE TABLE IF NOT EXISTS user_retroarch_cores (id INTEGER PRIMARY KEY)',
+    );
+    await db.execute(
+      'CREATE TABLE IF NOT EXISTS user_retroarch_paths (id INTEGER PRIMARY KEY)',
+    );
+
     await db.execute('''
       CREATE TABLE user_roms (
         filename TEXT,

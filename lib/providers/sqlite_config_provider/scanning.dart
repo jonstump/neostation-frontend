@@ -1102,6 +1102,7 @@ extension SqliteConfigScanning on SqliteConfigProvider {
       await SqliteConfigService.clearUserConfig();
 
       _config = ConfigModel.empty;
+      _syncGlyphStyle();
       _detectedSystems = [];
       _scanCompleted = false;
 
@@ -1131,10 +1132,20 @@ extension SqliteConfigScanning on SqliteConfigProvider {
 
   Future<void> _loadConfig() async {
     _config = await SqliteConfigService.loadConfig();
+    _syncGlyphStyle();
     if (_detectedSystems.isNotEmpty) {
       _sortDetectedSystems();
     }
   }
+
+  /// Test seam for the startup restore: `initialize()` touches platform
+  /// channels, network downloads and asset syncing, so no test can run it.
+  /// This wrapper exposes only the config load (which reads the in-memory
+  /// database and syncs the glyph service), letting a test verify that the
+  /// stored pin reaches [GlyphService] at startup. Nothing in `lib/` should
+  /// call it.
+  @visibleForTesting
+  Future<void> loadConfigForTesting() => _loadConfig();
 
   Future<void> _loadAvailableSystems() async {
     _availableSystems = await SqliteConfigService.loadAvailableSystems();
