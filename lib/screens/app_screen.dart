@@ -19,7 +19,7 @@ import 'systems_screen/system_content.dart';
 import 'systems_screen/my_systems_section/initial_setup_widget.dart';
 import 'retro_achievements_screen/ra_content.dart';
 import 'settings_screen/new_settings_screen.dart';
-import 'neo_sync_screen/login_screen/neo_sync_content.dart';
+import 'saves_screen/saves_tab.dart';
 import 'romm_screen/romm_tab.dart';
 import 'game_screen/android_apps/android_apps_grid.dart';
 import 'package:neostation/services/game_service.dart';
@@ -588,24 +588,11 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
         return; // System tab manages its own secondary display state.
       }
 
-      String tabName = '';
-      switch (index) {
-        case AppTabs.sync:
-          tabName = 'Sync';
-          break;
-        case AppTabs.achievements:
-          tabName = 'Achievements';
-          break;
-        case AppTabs.romm:
-          tabName = 'RomM';
-          break;
-        case AppTabs.settings:
-          tabName = 'Settings';
-          break;
-        case AppTabs.androidApps:
-          tabName = AppLocale.androidApps.getString(context);
-          break;
-      }
+      // The same label as the header's tab strip, translated here: the
+      // second engine reads the language only when it starts.
+      final tabName = navTabSpec(
+        NavTab.values[index],
+      ).labelKey.getString(context);
 
       secondaryState.updateState(
         systemName: tabName,
@@ -741,16 +728,16 @@ class AppScreenState extends State<AppScreen> with WidgetsBindingObserver {
           onCardTapped: _onSystemCardTapped,
         );
       case AppTabs.sync:
-        // NeoSync tab manages its own focus lifecycle due to complex login flows.
+        // Each save provider's content owns its gamepad navigation layer.
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _gamepadNav.deactivate();
         });
-        return const NeoSyncContent();
+        return const SavesTab();
       case AppTabs.achievements:
         return RAContent();
       case AppTabs.romm:
         // RomM tab hosts its own gamepad navigation layer (browse/connect),
-        // so hand off focus like the NeoSync tab does.
+        // so hand off focus like the Saves tab does.
         WidgetsBinding.instance.addPostFrameCallback((_) {
           _gamepadNav.deactivate();
         });

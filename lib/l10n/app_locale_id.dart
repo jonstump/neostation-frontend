@@ -1,6 +1,97 @@
 part of 'app_locale.dart';
 
 const Map<String, dynamic> appLocaleId = {
+  AppLocale.smartMatchesOne: '1 game cocok',
+  AppLocale.smartCollection: 'Koleksi pintar',
+  AppLocale.manualCollection: 'Koleksi manual',
+  AppLocale.smartEditRules: 'Edit aturan',
+  AppLocale.smartMatchAll: 'Cocokkan semua aturan',
+  AppLocale.smartMatchAny: 'Cocokkan salah satu aturan',
+  AppLocale.smartAddRule: 'Tambah aturan',
+  AppLocale.smartChooseValue: 'Pilih nilai',
+  AppLocale.smartCustomValue: 'Masukkan nilai',
+  AppLocale.smartMatches: '{count} game cocok',
+  AppLocale.smartInvalidRules:
+      'Aturan ini tidak dapat dibaca. Edit untuk memulihkan koleksi ini.',
+  AppLocale.smartInvalidValue: 'Masukkan nilai yang valid untuk aturan ini.',
+  AppLocale.smartNoMatches: 'Belum ada game yang cocok dengan aturan ini.',
+  AppLocale.smartPreviewError: 'Pratinjau gagal dimuat. Coba lagi.',
+  AppLocale.smartYes: 'Ya',
+  AppLocale.smartNo: 'Tidak',
+  AppLocale.smartDone: 'Selesai',
+  AppLocale.smartLower: 'Minimum',
+  AppLocale.smartUpper: 'Maksimum',
+  AppLocale.smartRating: 'Rating (0–10)',
+  AppLocale.smartPlayed: 'Dimainkan',
+  AppLocale.smartIs: 'Adalah',
+  AppLocale.smartIsNot: 'Bukan',
+  AppLocale.smartContains: 'Mengandung',
+  AppLocale.smartNotContains: 'Tidak mengandung',
+  AppLocale.smartBefore: 'Sebelum',
+  AppLocale.smartAfter: 'Setelah',
+  AppLocale.smartAtLeast: 'Setidaknya',
+  AppLocale.smartAtMost: 'Paling banyak',
+  AppLocale.smartBetween: 'Antara',
+  AppLocale.smartWithinDays: 'Dalam',
+  AppLocale.smartNotWithinDays: 'Tidak dalam',
+  AppLocale.smartDays: '{count} hari terakhir',
+  AppLocale.smartDaysOne: '{count} hari terakhir',
+  AppLocale.smartDaysFew: '{count} hari terakhir',
+  AppLocale.collectionLoadError: 'Gagal memuat game koleksi ini.',
+  AppLocale.smartRulesOnly:
+      'Game dimasukkan secara otomatis berdasarkan aturan ini.',
+  AppLocale.customSounds: "Suara kustom",
+  AppLocale.customSoundsSubtitle:
+      "Pilih suara untuk navigasi, konfirmasi, dan kembali",
+  AppLocale.customSoundsHint:
+      "WAV, MP3, OGG, atau FLAC · Maksimal 5 detik dan 5 MiB",
+  AppLocale.customSoundsMovement: "Navigasi",
+  AppLocale.customSoundsConfirm: "Konfirmasi",
+  AppLocale.customSoundsBack: "Kembali",
+  AppLocale.customSoundsDefault: "Bawaan",
+  AppLocale.customSoundsImport: "Impor / Ganti",
+  AppLocale.customSoundsPreview: "Dengarkan",
+  AppLocale.customSoundsReset: "Pulihkan bawaan",
+  AppLocale.customSoundsClose: "Tutup",
+  AppLocale.customSoundsSizeError: "Pilih berkas maksimal 5 MiB.",
+  AppLocale.customSoundsDurationError: "Pilih suara maksimal 5 detik.",
+  AppLocale.customSoundsInvalidError:
+      "Berkas ini kosong, tidak didukung, atau tidak dapat diputar.",
+  AppLocale.customSoundsSaveError:
+      "Suara tidak dapat diimpor atau disimpan. Suara sebelumnya tetap digunakan.",
+
+  AppLocale.rommSavesAutoDownload:
+      'Simpanan cloud yang lebih baru diunduh saat Anda memulai game yang ditautkan.',
+  AppLocale.rommSaveFile: 'Berkas simpanan',
+  AppLocale.rommSaveState: 'Status simpanan',
+  AppLocale.rommRetryUploads: 'Coba unggah lagi',
+  AppLocale.rommUploadsFailed:
+      'Beberapa unggahan gagal. Periksa koneksi dan izin RomM, lalu coba lagi.',
+  AppLocale.rommUploadsFailedFor:
+      'Simpanan untuk {games} gagal diunggah. Periksa koneksi dan izin RomM, lalu coba lagi.',
+  AppLocale.rommGameListSeparator: ', ',
+  AppLocale.rommGameListMore: '{games} dan {count} lainnya',
+  AppLocale.rommSavesHelp:
+      'Lihat simpanan dan status RomM. Coba unggah lagi memeriksa game lokal yang tertaut ke RomM dengan sinkronisasi aktif. Simpanan jarak jauh yang lebih baru diunduh saat game dimulai.',
+  AppLocale.rommDeleteTitle: 'Hapus dari RomM',
+  AppLocale.rommDeleteConfirm:
+      '{file} akan dihapus permanen dari server RomM Anda. Salinan di perangkat Anda tetap disimpan, dan perangkat yang masih menyinkronkan game ini akan mengunggah salinannya lagi.',
+  AppLocale.rommDeleted: 'Dihapus dari RomM.',
+  AppLocale.rommDeleteFailed:
+      'Gagal menghapus dari RomM. Periksa koneksi dan izin RomM, lalu coba lagi.',
+  AppLocale.rommDeleteNotSent:
+      'Penghapusan dibatalkan sebelum mencapai RomM. Tidak ada yang dihapus.',
+  AppLocale.rommSaveFileCount: '{count} berkas simpanan',
+  AppLocale.rommSaveFilesCount: '{count} berkas simpanan',
+  AppLocale.rommSaveStateCount: '{count} status simpanan',
+  AppLocale.rommSaveStatesCount: '{count} status simpanan',
+  AppLocale.rommDeleteGameBothConfirm:
+      '{saves} dan {states} untuk {game} akan dihapus permanen dari server RomM Anda. Salinan di perangkat Anda tetap disimpan, dan perangkat yang masih menyinkronkan game ini akan mengunggah salinannya lagi.',
+  AppLocale.rommDeleteGameConfirm:
+      '{files} untuk {game} akan dihapus permanen dari server RomM Anda. Salinan di perangkat Anda tetap disimpan, dan perangkat yang masih menyinkronkan game ini akan mengunggah salinannya lagi.',
+  AppLocale.rommDeleteKeepsSaves: 'Berkas simpanan game ini tetap ada di RomM.',
+  AppLocale.rommDeleteKeepsStates:
+      'Status simpanan game ini tetap ada di RomM.',
   AppLocale.ignoreArticlesInGameSort: "Abaikan artikel saat mengurutkan game",
   AppLocale.ignoreArticlesInGameSortSubtitle:
       "Abaikan The, A, atau An di awal judul. Misalnya, The Legend of Zelda diurutkan di huruf L.",
@@ -195,9 +286,9 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.nowPlayingDimOff: 'Mati',
   AppLocale.secondarySectionNowPlaying: 'Panel Now Playing',
   AppLocale.secondarySectionDock: 'Dock aplikasi',
-  AppLocale.screenshotAccess: 'Screen return & screenshots',
+  AppLocale.screenshotAccess: 'Kembali ke layar & tangkapan layar',
   AppLocale.screenshotAccessSubtitle:
-      'Restores the Now Playing screen when you close an app opened from the dock, and lets the screenshot button capture the screen (opens Android accessibility settings)',
+      'Memulihkan layar Now Playing saat Anda menutup aplikasi yang dibuka dari dock, dan memungkinkan tombol tangkapan layar menangkap layar (membuka setelan Aksesibilitas Android)',
   AppLocale.scanOnStartupSubtitle:
       'Pindai folder ROM secara otomatis saat membuka aplikasi',
   AppLocale.ignoreHiddenFiles: 'Abaikan item tersembunyi',
@@ -250,8 +341,8 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.bartopShutdown: 'Matikan BarTOP saat keluar',
   AppLocale.bartopShutdownSubtitle: 'Mematikan komputer saat menutup aplikasi',
 
-  AppLocale.showSyncTab: 'Tampilkan tab NeoSync',
-  AppLocale.showSyncTabSubtitle: 'Menampilkan tab NeoSync di bilah navigasi',
+  AppLocale.showSyncTab: 'Tampilkan tab Simpanan',
+  AppLocale.showSyncTabSubtitle: 'Tampilkan tab Simpanan di bilah navigasi',
   AppLocale.showAchievementsTab: 'Tampilkan tab Pencapaian',
   AppLocale.showAchievementsTabSubtitle:
       'Menampilkan tab RetroAchievements di bilah navigasi',
@@ -304,8 +395,22 @@ const Map<String, dynamic> appLocaleId = {
       'Tidak ditemukan metadata yatim.',
   AppLocale.cleanOrphanedMetadataDone:
       'Dibersihkan {entries} entri metadata dan {files} file media.',
+  AppLocale.cleanOrphanedMetadataDelete:
+      '{count} entri metadata yatim akan dihapus dari database dan disk.',
+  AppLocale.cleanOrphanedMetadataDeleteOne:
+      '{count} entri metadata yatim akan dihapus dari database dan disk.',
   AppLocale.cleanOrphanedMetadataEsdeSkippedSuffix:
-      '{count} entri yang diimpor dari ES-DE dibiarkan tidak terubah.',
+      ' {count} entri yang diimpor dari ES-DE dibiarkan apa adanya.',
+  AppLocale.cleanOrphanedMetadataEsdeSkippedSuffixOne:
+      ' {count} entri yang diimpor dari ES-DE dibiarkan apa adanya.',
+  AppLocale.cleanOrphanedMetadataNotRemoved:
+      ' {count} entri tidak dapat dihapus. Jalankan alat ini lagi untuk mencoba ulang.',
+  AppLocale.cleanOrphanedMetadataNotRemovedOne:
+      ' {count} entri tidak dapat dihapus. Jalankan alat ini lagi untuk mencoba ulang.',
+  AppLocale.cleanOrphanedMetadataNothingToDelete:
+      'Tidak ada yang perlu dihapus: satu-satunya metadata yatim diimpor dari ES-DE, dan alat ini tidak menyentuhnya.',
+  AppLocale.cleanOrphanedMetadataMediaUnavailable:
+      'NeoStation tidak dapat menemukan folder medianya. Mulai ulang NeoStation lalu coba lagi.',
   AppLocale.cleanOrphanedMetadataFailed:
       'Gagal membersihkan metadata yatim: {error}',
   AppLocale.rematchAchievements: 'Cocokkan Game RetroAchievements',
@@ -355,6 +460,9 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.pressToRemoveFolder: 'Tekan Konfirmasi untuk menghapus folder ini',
   AppLocale.maxRomFoldersReached: 'Maksimal 5 folder ROM diizinkan',
   AppLocale.romFolderRemoved: 'Folder ROM dihapus',
+  AppLocale.romFolderRemoveFailed: 'Gagal menghapus folder ROM: {error}',
+  AppLocale.romFolderAlreadyAdded:
+      'Folder itu sudah ditambahkan sebagai folder ROM',
   AppLocale.selectRomsFolder: 'Pilih folder ROM',
   AppLocale.scanningSystem: 'Memindai sistem',
 
@@ -391,9 +499,8 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.scrapingUnavailableAndroid: 'Scraping tidak tersedia di Android.',
   AppLocale.achievements: 'Pencapaian',
 
-  AppLocale.neoSync: 'NeoSync',
   AppLocale.neoSyncLogin: 'Masuk NeoSync',
-  AppLocale.neoSyncSynchronizing: 'NeoSync: Menyingkronkan...',
+  AppLocale.neoSyncSynchronizing: 'NeoSync: Menyinkronkan...',
   AppLocale.neoSyncNotConnected: 'NeoSync: Tidak terhubung',
   AppLocale.neoSyncSynchronized: 'NeoSync: Simpanan disinkronkan',
   AppLocale.neoSyncSavesSync: 'File simpanan akan disinkronkan dengan NeoSync',
@@ -645,6 +752,20 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.hintScrape: 'Ambil',
   AppLocale.hintMoreActions: 'Lainnya',
   AppLocale.hintOptions: 'Opsi',
+  AppLocale.gameOptionsThisGame: 'Game Ini',
+  AppLocale.gameOptionsView: 'Tampilan',
+  AppLocale.systemOptionsSelectedSystem: 'Sistem Terpilih',
+  AppLocale.systemOptionsSystemView: 'Tampilan Sistem',
+  AppLocale.systemOptionsSystemLayout: 'Tata Letak Sistem',
+  AppLocale.systemOptionsGameSearch: 'Pencarian Game',
+  AppLocale.systemOptionsSystemViewSubtitle: 'Cara sistem ditampilkan.',
+  AppLocale.systemOptionsSystemSorting: 'Pengurutan Sistem',
+  AppLocale.systemOptionsSystemSortingSubtitle: 'Cara sistem diurutkan.',
+  AppLocale.systemOptionsGameSettingsDescription:
+      'Emulator, core, kontrol, dan tampilan',
+  AppLocale.systemOptionsSearchDescription: 'Cari game di seluruh pustaka',
+  AppLocale.systemOptionsNoSystem:
+      'Pilih sistem untuk mengonfigurasi pengaturan game.',
   AppLocale.addTo: 'Tambahkan ke…',
   AppLocale.addedToCollection: 'Ditambahkan ke {name}',
   AppLocale.newCollection: 'Koleksi baru…',
@@ -683,6 +804,25 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.cannotReadFolder: 'Tidak dapat membaca folder ini',
   AppLocale.noStorageFound: 'Tidak ada penyimpanan ditemukan',
   AppLocale.lastPlayed: 'Terakhir dimainkan',
+  AppLocale.nowPlayingTitle: 'Now Playing',
+  AppLocale.nowPlayingSession: 'Sesi',
+  AppLocale.nowPlayingLastPlayed: 'Terakhir dimainkan',
+  AppLocale.launchAnApp: 'Jalankan aplikasi',
+  AppLocale.chooseAnApp: 'Pilih aplikasi',
+  AppLocale.noAppsFound: 'Tidak ada aplikasi',
+  AppLocale.timeNever: 'Belum pernah',
+  AppLocale.timeYesterday: 'Kemarin',
+  AppLocale.timeDaysAgo: '{count} hari lalu',
+  AppLocale.timeHoursAgo: '{count} jam lalu',
+  AppLocale.timeMinutesAgo: '{count} menit lalu',
+  AppLocale.timeJustNow: 'Baru saja',
+  AppLocale.clockAm: 'AM',
+  AppLocale.clockPm: 'PM',
+  AppLocale.clockTime12h: '{time} {period}',
+  AppLocale.playTimeHoursMinutes: '{h} jam {m} menit',
+  AppLocale.playTimeMinutes: '{m} menit',
+  AppLocale.playTimeUnderMinute: '<1 menit',
+  AppLocale.raNewThisSession: '+{count} di sesi ini',
   AppLocale.apps: 'Aplikasi',
   AppLocale.tracks: 'Lagu',
   AppLocale.games: 'Game',
@@ -708,7 +848,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.sortByGroup: 'Urutkan Berdasarkan',
   AppLocale.orderGroup: 'Urutan',
   AppLocale.synced: 'Disinkronkan',
-  AppLocale.syncing: 'Menyingkronkan',
+  AppLocale.syncing: 'Menyinkronkan...',
   AppLocale.conflict: 'Konflik',
   AppLocale.ready: 'Siap',
   AppLocale.quota: 'Kuota',
@@ -828,10 +968,16 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.storagePermission: 'Izin Penyimpanan',
   AppLocale.storagePermissionDesc:
       'NeoStation memerlukan "Akses Semua File" untuk mengelola konfigurasi RetroArch dan menyinkronkan simpanan Anda dengan benar.\n\nHarap berikan izin ini di layar berikutnya.',
-  AppLocale.screenReturnAccess: 'Screen Return Access',
+  AppLocale.screenReturnAccess: 'Akses Kembali ke Layar',
   AppLocale.screenReturnAccessDesc:
-      'Brings the Now Playing screen back when you close an app opened from the dock, and enables system screenshots. Only the foreground app name is read \u2014 no screen content is collected.',
-  AppLocale.screenReturnAccessHint: 'Turn on NeoStation, then tap Allow',
+      'Mengembalikan layar Now Playing saat Anda menutup aplikasi yang dibuka dari dock, dan mengaktifkan tangkapan layar sistem. Hanya nama aplikasi di latar depan yang dibaca — tidak ada konten layar yang dikumpulkan.',
+  AppLocale.screenReturnAccessHint: 'Aktifkan NeoStation, lalu ketuk Izinkan',
+  AppLocale.screenReturnDialogTitle: 'Aktifkan fitur Kembali ke Layar',
+  AppLocale.screenReturnDialogBody:
+      'Untuk membuka aplikasi dari dock, NeoStation memerlukan layanan aksesibilitas Kembali ke Layar. Layanan ini membawa Anda kembali ke sini setelah Anda menutup aplikasi yang dibuka. Tanpanya, Anda mungkin tidak bisa kembali.',
+  AppLocale.screenReturnDialogSteps:
+      'Di layar berikutnya, cari NeoStation di daftar layanan lalu aktifkan.',
+  AppLocale.openSettings: 'Buka setelan',
   AppLocale.selectRomFolder: 'Pilih Folder ROM',
   AppLocale.romFolderSelected: 'Folder ROM dipilih!',
   AppLocale.chooseRomFolderDesc:
@@ -1035,6 +1181,39 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.systemsUpdateDownloading: 'Mengunduh konfigurasi sistem...',
   AppLocale.systemsUpdateCancelling: 'Membatalkan...',
   AppLocale.systemsUpdateSyncing: 'Menyinkronkan database sistem...',
+  AppLocale.waitingForRomStorage:
+      'Menunggu penyimpanan ROM ({attempt}/{max})...',
+  AppLocale.updatingSystemsList: 'Memperbarui daftar sistem...',
+  AppLocale.romsScanned: 'ROM selesai dipindai',
+  AppLocale.errorScanningRoms: 'Kesalahan saat memindai ROM',
+  AppLocale.romStorageNotReady:
+      'Penyimpanan ROM belum siap; game yang ada tetap disimpan.',
+  AppLocale.romFolderNotAddedTitle: 'Folder ROM tidak ditambahkan',
+  AppLocale.romFolderAddFailed: 'Gagal menyimpan folder ROM: {error}',
+  AppLocale.romFolderSafMissingTitle: 'Folder ROM tanpa akses penyimpanan',
+  AppLocale.romFoldersSafMissingTitle: 'Folder ROM tanpa akses penyimpanan',
+  AppLocale.romFolderSafMissing:
+      'Sebuah folder ROM tidak dapat dibaca. Berikan akses lagi di Pengaturan > Direktori.',
+  AppLocale.romFoldersSafMissing:
+      '{count} folder ROM tidak dapat dibaca. Berikan akses lagi di Pengaturan > Direktori.',
+  AppLocale.romStorageAccessRequired:
+      'Akses penyimpanan diperlukan. Pilih folder ROM dengan pemilih file.',
+  AppLocale.romFolderAccessDenied:
+      'Tidak dapat mengakses folder ROM {folder}. Periksa izin penyimpanan.',
+  AppLocale.romFolderUnreachableTitle: 'Folder ROM tidak tersedia',
+  AppLocale.romFoldersUnreachableTitle: 'Folder ROM tidak tersedia',
+  AppLocale.romFolderUnreachable:
+      'Folder ROM {folders} tidak dapat dijangkau. Game yang ada tetap disimpan. {advice}',
+  AppLocale.romFoldersUnreachable:
+      'Folder ROM berikut tidak dapat dijangkau: {folders}. Game yang ada tetap disimpan. {advice}',
+  AppLocale.romFolderAdvicePortal:
+      'Jalur itu berasal dari izin sementara portal desktop dan tidak dapat dipulihkan: hapus jalur itu di Pengaturan > Direktori lalu tambahkan foldernya lagi.',
+  AppLocale.romFolderAdviceReconnect:
+      'Sambungkan kembali drive, atau hapus folder di Pengaturan > Direktori.',
+  AppLocale.noRomFolderTitle: 'Tidak ada folder ROM yang diatur',
+  AppLocale.noRomFolderConfigured:
+      'Tidak ada folder ROM yang diatur, jadi tidak ada yang dipindai. Game yang ada tetap disimpan. Tambahkan lagi folder ROM Anda di Pengaturan > Direktori.',
+  AppLocale.errorScanningRomsDetail: 'Kesalahan saat memindai ROM: {error}',
   AppLocale.systemsUpdateComplete: 'Sistem berhasil diperbarui!',
   AppLocale.systemsUpdateError: 'Gagal memperbarui sistem. Coba lagi nanti.',
 
@@ -1116,6 +1295,17 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.rommTesting: 'Menguji...',
   AppLocale.rommConnectionSuccess: 'Koneksi berhasil',
   AppLocale.rommConnectionFailed: 'Koneksi gagal',
+  AppLocale.rommErrorTls:
+      'Tidak dapat membuat koneksi aman (HTTPS). Jika server RomM Anda tidak menggunakan HTTPS, masukkan URL-nya dengan awalan http://.',
+  AppLocale.rommErrorUnreachable: 'Server RomM tidak dapat dijangkau: {error}',
+  AppLocale.rommErrorTimeout: 'Server RomM tidak merespons tepat waktu.',
+  AppLocale.rommErrorInvalidApiKey: 'Kunci API ditolak.',
+  AppLocale.rommErrorUnexpectedStatus:
+      'Server merespons dengan kesalahan ({error}). Periksa apakah URL tersebut mengarah ke server RomM Anda.',
+  AppLocale.rommErrorNotRomm:
+      'URL itu tidak merespons seperti server RomM. Periksa URL server.',
+  AppLocale.rommErrorServerStatus:
+      'Server RomM merespons dengan kesalahan ({error}).',
   AppLocale.rommConnectedAs: 'Terhubung sebagai {user}',
   AppLocale.rommCredentialsRequired:
       'Masukkan URL server, nama pengguna, dan kata sandi',
@@ -1201,6 +1391,7 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.resetPlayTimeConfirm: 'Atur Ulang Waktu Bermain',
   AppLocale.resetPlayTimeConfirmBody:
       'Ini akan mengatur ulang waktu bermain yang tercatat untuk game ini menjadi nol secara permanen. Tindakan ini tidak dapat dibatalkan.',
+  AppLocale.playTimeResetDone: 'Waktu bermain diatur ulang',
   AppLocale.removeRomFolderConfirmBody:
       'Ini akan menghapus folder ROM ini dari sumber pustaka Anda. File Anda di disk tidak akan dihapus.',
   AppLocale.disconnectRaConfirm: 'Putuskan RetroAchievements',
@@ -1352,27 +1543,29 @@ const Map<String, dynamic> appLocaleId = {
       'Migrasikan penyimpanan cloud ke NeoSync v2',
 
   // ES-DE import
-  AppLocale.esdeImport: 'ES-DE Import',
-  AppLocale.esdeImportSubtitle: 'Import metadata and artwork from ES-DE',
-  AppLocale.esdeSelectFolder: 'Select ES-DE Folder',
+  AppLocale.esdeImport: 'Impor ES-DE',
+  AppLocale.esdeImportSubtitle: 'Impor metadata dan gambar dari ES-DE',
+  AppLocale.esdeSelectFolder: 'Pilih Folder ES-DE',
   AppLocale.esdeSelectFolderSubtitle:
-      'Choose the ES-DE folder containing gamelists and downloaded_media',
-  AppLocale.esdeRunImport: 'Import from ES-DE',
+      'Pilih folder ES-DE yang berisi gamelists dan downloaded_media',
+  AppLocale.esdeRunImport: 'Impor dari ES-DE',
   AppLocale.esdeRunImportSubtitle:
-      'Fill in missing metadata and use ES-DE artwork as fallback',
-  AppLocale.esdeImporting: 'Importing from ES-DE',
-  AppLocale.esdeImportComplete: 'ES-DE import complete',
-  AppLocale.esdeImportNoFolder: 'Select your ES-DE folder first',
-  AppLocale.esdeReset: 'Reset ES-DE Import',
+      'Lengkapi metadata yang kurang dan gunakan gambar ES-DE sebagai cadangan',
+  AppLocale.esdeImporting: 'Mengimpor dari ES-DE',
+  AppLocale.esdeImportComplete: 'Impor ES-DE selesai',
+  AppLocale.esdeImportNoFolder: 'Pilih folder ES-DE Anda terlebih dahulu',
+  AppLocale.esdeReset: 'Atur Ulang Impor ES-DE',
   AppLocale.esdeResetSubtitle:
-      'Remove imported metadata and media links so the import can be re-run',
-  AppLocale.esdeResetComplete: 'ES-DE import reset',
+      'Hapus metadata dan tautan media yang diimpor agar impor dapat dijalankan ulang',
+  AppLocale.esdeResetComplete: 'Impor ES-DE diatur ulang',
+  AppLocale.esdeImportFailed: 'Impor ES-DE gagal: {error}',
+  AppLocale.esdeResetFailed: 'Gagal mengatur ulang impor ES-DE: {error}',
   AppLocale.esdeResetConfirmBody:
-      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+      'Ini menghapus semua metadata dan tautan media yang diimpor dari ES-DE serta mengosongkan pilihan folder. Game dan file ROM Anda tidak terpengaruh.',
   AppLocale.esdeImportNotEsdeFolder:
-      'This folder is not an ES-DE installation (no gamelists found)',
+      'Folder ini bukan instalasi ES-DE (gamelists tidak ditemukan)',
   AppLocale.esdeImportNothingFound:
-      'No matching systems or games were found to import',
+      'Tidak ditemukan sistem atau game yang cocok untuk diimpor',
   AppLocale.esdeSummarySystemsMatched: 'Sistem cocok',
   AppLocale.esdeSummaryUnmatched: 'tidak cocok',
   AppLocale.esdeSummarySkipped: 'dilewati (tidak terbaca)',
@@ -1400,6 +1593,19 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.wizardArtPackUnavailable:
       'System Art Pack tidak dapat dijangkau saat ini. Anda dapat memasangnya '
       'nanti dari Pengaturan setelah online.',
+  AppLocale.wizardSaveFailedTitle: 'Penyiapan belum selesai',
+  AppLocale.wizardSaveFailedBody:
+      'NeoStation tidak dapat menyimpan pengaturan Anda. Pastikan penyimpanan Anda tersedia, lalu coba lagi.\n\n{error}',
+  AppLocale.wizardRomFolderNotAdded:
+      'NeoStation tidak dapat menambahkan folder ini.\n\n{error}',
+  AppLocale.wizardRomFolderTemporary:
+      'NeoStation tidak dapat mempertahankan akses ke folder itu setelah dimulai ulang. Pilih folder di dalam folder home Anda atau di media yang dapat dilepas.',
+  AppLocale.wizardFolderNotUsable:
+      'NeoStation tidak dapat menggunakan folder ini. Pilih folder di penyimpanan perangkat atau kartu SD.',
+  AppLocale.wizardArtPackFailed:
+      'System Art Pack tidak dapat diunduh. Coba lagi, atau lewati untuk sekarang.',
+  AppLocale.wizardScanFailed:
+      'Pemindaian tidak selesai. Coba lagi, atau lewati langkah ini.\n\n{error}',
 
   // Hide / unhide games
   AppLocale.hideGame: 'Sembunyikan Game',

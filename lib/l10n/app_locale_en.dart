@@ -1,6 +1,97 @@
 part of 'app_locale.dart';
 
 const Map<String, dynamic> appLocaleEn = {
+  AppLocale.smartMatchesOne: '1 matching game',
+  AppLocale.smartCollection: 'Smart collection',
+  AppLocale.manualCollection: 'Manual collection',
+  AppLocale.smartEditRules: 'Edit rules',
+  AppLocale.smartMatchAll: 'Match all rules',
+  AppLocale.smartMatchAny: 'Match any rule',
+  AppLocale.smartAddRule: 'Add rule',
+  AppLocale.smartChooseValue: 'Choose a value',
+  AppLocale.smartCustomValue: 'Enter a value',
+  AppLocale.smartMatches: '{count} matching games',
+  AppLocale.smartInvalidRules:
+      'These rules cannot be read. Edit them to restore this collection.',
+  AppLocale.smartInvalidValue: 'Enter a valid value for this rule.',
+  AppLocale.smartNoMatches: 'No games match these rules yet.',
+  AppLocale.smartPreviewError: 'Could not load the preview. Try again.',
+  AppLocale.smartYes: 'Yes',
+  AppLocale.smartNo: 'No',
+  AppLocale.smartDone: 'Done',
+  AppLocale.smartLower: 'Minimum',
+  AppLocale.smartUpper: 'Maximum',
+  AppLocale.smartRating: 'Rating (0–10)',
+  AppLocale.smartPlayed: 'Played',
+  AppLocale.smartIs: 'Is',
+  AppLocale.smartIsNot: 'Is not',
+  AppLocale.smartContains: 'Contains',
+  AppLocale.smartNotContains: 'Does not contain',
+  AppLocale.smartBefore: 'Before',
+  AppLocale.smartAfter: 'After',
+  AppLocale.smartAtLeast: 'At least',
+  AppLocale.smartAtMost: 'At most',
+  AppLocale.smartBetween: 'Between',
+  AppLocale.smartWithinDays: 'Within the last',
+  AppLocale.smartNotWithinDays: 'Not within the last',
+  AppLocale.smartDays: '{count} days',
+  AppLocale.smartDaysOne: '{count} day',
+  AppLocale.smartDaysFew: '{count} days',
+  AppLocale.collectionLoadError:
+      "Could not load this collection's games. Try again.",
+  AppLocale.smartRulesOnly: 'Games are included automatically by these rules.',
+  AppLocale.customSounds: "Custom sounds",
+  AppLocale.customSoundsSubtitle:
+      "Choose sounds for movement, confirm and back",
+  AppLocale.customSoundsHint:
+      "WAV, MP3, OGG or FLAC · Up to 5 seconds and 5 MiB",
+  AppLocale.customSoundsMovement: "Movement",
+  AppLocale.customSoundsConfirm: "Confirm",
+  AppLocale.customSoundsBack: "Back",
+  AppLocale.customSoundsDefault: "Default",
+  AppLocale.customSoundsImport: "Import / Replace",
+  AppLocale.customSoundsPreview: "Preview",
+  AppLocale.customSoundsReset: "Restore default",
+  AppLocale.customSoundsClose: "Close",
+  AppLocale.customSoundsSizeError: "Choose a file no larger than 5 MiB.",
+  AppLocale.customSoundsDurationError:
+      "Choose a clip no longer than 5 seconds.",
+  AppLocale.customSoundsInvalidError:
+      "This file is empty, unsupported or cannot be played.",
+  AppLocale.customSoundsSaveError:
+      "Could not import or save the sound. Your previous sound is unchanged.",
+
+  AppLocale.rommSavesAutoDownload:
+      'Newer cloud saves download when you launch a linked game.',
+  AppLocale.rommSaveFile: 'Save file',
+  AppLocale.rommSaveState: 'Save state',
+  AppLocale.rommRetryUploads: 'Retry uploads',
+  AppLocale.rommUploadsFailed:
+      'Some uploads failed. Check your connection and RomM permissions, then retry.',
+  AppLocale.rommUploadsFailedFor:
+      "Saves for {games} didn't upload. Check your connection and RomM permissions, then retry.",
+  AppLocale.rommGameListSeparator: ', ',
+  AppLocale.rommGameListMore: '{games} and {count} more',
+  AppLocale.rommSavesHelp:
+      'Browse your RomM saves and states. Retry uploads checks local games linked to RomM with save sync enabled. Newer remote saves download when you launch a game.',
+  AppLocale.rommDeleteTitle: 'Delete from RomM',
+  AppLocale.rommDeleteConfirm:
+      '{file} will be permanently deleted from your RomM server. Copies on your devices are kept, and any device that still syncs this game will upload its copy again.',
+  AppLocale.rommDeleted: 'Deleted from RomM.',
+  AppLocale.rommDeleteFailed:
+      "Couldn't delete from RomM. Check your connection and RomM permissions, then try again.",
+  AppLocale.rommDeleteNotSent:
+      'Delete cancelled before it reached RomM. Nothing was deleted.',
+  AppLocale.rommSaveFileCount: '{count} save file',
+  AppLocale.rommSaveFilesCount: '{count} save files',
+  AppLocale.rommSaveStateCount: '{count} save state',
+  AppLocale.rommSaveStatesCount: '{count} save states',
+  AppLocale.rommDeleteGameBothConfirm:
+      '{saves} and {states} for {game} will be permanently deleted from your RomM server. Copies on your devices are kept, and any device that still syncs this game will upload its copies again.',
+  AppLocale.rommDeleteGameConfirm:
+      '{files} for {game} will be permanently deleted from your RomM server. Copies on your devices are kept, and any device that still syncs this game will upload its copies again.',
+  AppLocale.rommDeleteKeepsSaves: "This game's save files stay on RomM.",
+  AppLocale.rommDeleteKeepsStates: "This game's save states stay on RomM.",
   AppLocale.ignoreArticlesInGameSort: "Ignore articles when sorting games",
   AppLocale.ignoreArticlesInGameSortSubtitle:
       "Sort by title without leading The, A, or An. For example, The Legend of Zelda sorts under L.",
@@ -250,9 +341,8 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.bartopShutdownSubtitle:
       'Shut down the computer when exiting the application',
 
-  AppLocale.showSyncTab: 'Show NeoSync tab',
-  AppLocale.showSyncTabSubtitle:
-      'Display the NeoSync tab in the navigation bar',
+  AppLocale.showSyncTab: 'Show Saves tab',
+  AppLocale.showSyncTabSubtitle: 'Display the Saves tab in the navigation bar',
   AppLocale.showAchievementsTab: 'Show Achievements tab',
   AppLocale.showAchievementsTabSubtitle:
       'Display the RetroAchievements tab in the navigation bar',
@@ -305,8 +395,22 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.cleanOrphanedMetadataNothingFound: 'No orphaned metadata found.',
   AppLocale.cleanOrphanedMetadataDone:
       'Cleaned {entries} metadata entr(y/ies) and {files} media file(s).',
+  AppLocale.cleanOrphanedMetadataDelete:
+      '{count} orphaned metadata entries will be deleted from the database and disk.',
+  AppLocale.cleanOrphanedMetadataDeleteOne:
+      '{count} orphaned metadata entry will be deleted from the database and disk.',
   AppLocale.cleanOrphanedMetadataEsdeSkippedSuffix:
-      ' {count} ES-DE entr(y/ies) were left untouched.',
+      ' {count} ES-DE imported entries are left untouched.',
+  AppLocale.cleanOrphanedMetadataEsdeSkippedSuffixOne:
+      ' {count} ES-DE imported entry is left untouched.',
+  AppLocale.cleanOrphanedMetadataNotRemoved:
+      ' {count} entries couldn\'t be removed. Run the tool again to retry.',
+  AppLocale.cleanOrphanedMetadataNotRemovedOne:
+      ' {count} entry couldn\'t be removed. Run the tool again to retry.',
+  AppLocale.cleanOrphanedMetadataNothingToDelete:
+      'Nothing to delete: the only orphaned metadata was imported from ES-DE, and this tool leaves it alone.',
+  AppLocale.cleanOrphanedMetadataMediaUnavailable:
+      'NeoStation can\'t find its media folder. Restart NeoStation and try again.',
   AppLocale.cleanOrphanedMetadataFailed:
       'Failed to clean orphaned metadata: {error}',
   AppLocale.rematchAchievements: 'Match RetroAchievements Games',
@@ -356,6 +460,8 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.pressToRemoveFolder: 'Press confirm to remove this folder',
   AppLocale.maxRomFoldersReached: 'Maximum 5 ROM folders allowed',
   AppLocale.romFolderRemoved: 'ROM folder removed',
+  AppLocale.romFolderRemoveFailed: 'Couldn\'t remove the ROM folder: {error}',
+  AppLocale.romFolderAlreadyAdded: 'That folder is already in your ROM folders',
   AppLocale.selectRomsFolder: 'Select ROMs Folder',
   AppLocale.scanningSystem: 'Scanning system',
 
@@ -392,7 +498,6 @@ const Map<String, dynamic> appLocaleEn = {
       'Scraping unavailable for Android apps.',
   AppLocale.achievements: 'Achievements',
 
-  AppLocale.neoSync: 'NeoSync',
   AppLocale.neoSyncLogin: 'NeoSync Login',
   AppLocale.neoSyncSynchronizing: 'NeoSync: Synchronizing...',
   AppLocale.neoSyncNotConnected: 'NeoSync: Not connected',
@@ -644,6 +749,20 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.hintScrape: 'Scrape',
   AppLocale.hintMoreActions: 'More',
   AppLocale.hintOptions: 'Options',
+  AppLocale.gameOptionsThisGame: 'This Game',
+  AppLocale.gameOptionsView: 'View',
+  AppLocale.systemOptionsSelectedSystem: 'Selected System',
+  AppLocale.systemOptionsSystemView: 'System View',
+  AppLocale.systemOptionsSystemLayout: 'System Layout',
+  AppLocale.systemOptionsGameSearch: 'Game Search',
+  AppLocale.systemOptionsSystemViewSubtitle: 'How systems are displayed.',
+  AppLocale.systemOptionsSystemSorting: 'System Sorting',
+  AppLocale.systemOptionsSystemSortingSubtitle: 'How systems are ordered.',
+  AppLocale.systemOptionsGameSettingsDescription:
+      'Emulator, cores, controls and display',
+  AppLocale.systemOptionsSearchDescription: 'Find games across your library',
+  AppLocale.systemOptionsNoSystem:
+      'Select a system to configure Game Settings.',
   AppLocale.addTo: 'Add to…',
   AppLocale.addedToCollection: 'Added to {name}',
   AppLocale.newCollection: 'New collection…',
@@ -681,6 +800,25 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.cannotReadFolder: 'Cannot read this folder',
   AppLocale.noStorageFound: 'No storage found',
   AppLocale.lastPlayed: 'Last Played',
+  AppLocale.nowPlayingTitle: 'Now Playing',
+  AppLocale.nowPlayingSession: 'Session',
+  AppLocale.nowPlayingLastPlayed: 'Last played',
+  AppLocale.launchAnApp: 'Launch an app',
+  AppLocale.chooseAnApp: 'Choose an app',
+  AppLocale.noAppsFound: 'No apps found',
+  AppLocale.timeNever: 'Never',
+  AppLocale.timeYesterday: 'Yesterday',
+  AppLocale.timeDaysAgo: '{count} days ago',
+  AppLocale.timeHoursAgo: '{count}h ago',
+  AppLocale.timeMinutesAgo: '{count}m ago',
+  AppLocale.timeJustNow: 'Just now',
+  AppLocale.clockAm: 'AM',
+  AppLocale.clockPm: 'PM',
+  AppLocale.clockTime12h: '{time} {period}',
+  AppLocale.playTimeHoursMinutes: '{h}h {m}m',
+  AppLocale.playTimeMinutes: '{m}m',
+  AppLocale.playTimeUnderMinute: '<1m',
+  AppLocale.raNewThisSession: '+{count} this session',
   AppLocale.apps: 'Apps',
   AppLocale.tracks: 'Tracks',
   AppLocale.games: 'Games',
@@ -706,7 +844,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.sortByGroup: 'SORT BY',
   AppLocale.orderGroup: 'ORDER',
   AppLocale.synced: 'Synced',
-  AppLocale.syncing: 'Syncing',
+  AppLocale.syncing: 'Syncing...',
   AppLocale.conflict: 'Conflict',
   AppLocale.ready: 'Ready',
   AppLocale.quota: 'Quota',
@@ -828,6 +966,12 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.screenReturnAccessDesc:
       'Brings the Now Playing screen back when you close an app opened from the dock, and enables system screenshots. Only the foreground app name is read \u2014 no screen content is collected.',
   AppLocale.screenReturnAccessHint: 'Turn on NeoStation, then tap Allow',
+  AppLocale.screenReturnDialogTitle: 'Enable Screen Return',
+  AppLocale.screenReturnDialogBody:
+      'To launch apps from the dock, NeoStation needs the Screen Return accessibility service. It lets NeoStation bring you back here after you close the app you opened. Without it you could be left with no way back.',
+  AppLocale.screenReturnDialogSteps:
+      'On the next screen, find NeoStation in the list of services and switch it on.',
+  AppLocale.openSettings: 'Open settings',
   AppLocale.selectRomFolder: 'Select ROM Folder',
   AppLocale.romFolderSelected: 'ROM folder selected!',
   AppLocale.chooseRomFolderDesc:
@@ -1029,6 +1173,39 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.systemsUpdateDownloading: 'Downloading system configs...',
   AppLocale.systemsUpdateCancelling: 'Cancelling...',
   AppLocale.systemsUpdateSyncing: 'Syncing systems database...',
+  AppLocale.waitingForRomStorage:
+      'Waiting for ROM storage ({attempt}/{max})...',
+  AppLocale.updatingSystemsList: 'Updating systems list...',
+  AppLocale.romsScanned: 'ROMs scanned',
+  AppLocale.errorScanningRoms: 'Error scanning ROMs',
+  AppLocale.romStorageNotReady:
+      'ROM storage is not ready; existing games were kept.',
+  AppLocale.romFolderNotAddedTitle: 'ROM folder not added',
+  AppLocale.romFolderAddFailed: 'Couldn\'t save the ROM folder: {error}',
+  AppLocale.romFolderSafMissingTitle: 'ROM folder missing storage access',
+  AppLocale.romFoldersSafMissingTitle: 'ROM folders missing storage access',
+  AppLocale.romFolderSafMissing:
+      'A ROM folder can\'t be read. Grant access to it again in Settings > Directories.',
+  AppLocale.romFoldersSafMissing:
+      '{count} ROM folders can\'t be read. Grant access to them again in Settings > Directories.',
+  AppLocale.romStorageAccessRequired:
+      'Storage access required. Pick a ROM folder with the file picker.',
+  AppLocale.romFolderAccessDenied:
+      'Can\'t access the ROM folder {folder}. Check the storage permissions.',
+  AppLocale.romFolderUnreachableTitle: 'ROM folder unavailable',
+  AppLocale.romFoldersUnreachableTitle: 'ROM folders unavailable',
+  AppLocale.romFolderUnreachable:
+      'Can\'t reach the ROM folder {folders}. Existing games were kept. {advice}',
+  AppLocale.romFoldersUnreachable:
+      'Can\'t reach these ROM folders: {folders}. Existing games were kept. {advice}',
+  AppLocale.romFolderAdvicePortal:
+      'That path came from a temporary desktop-portal grant and can\'t come back: remove it in Settings > Directories and add the folder again.',
+  AppLocale.romFolderAdviceReconnect:
+      'Reconnect the drive, or remove the folder in Settings > Directories.',
+  AppLocale.noRomFolderTitle: 'No ROM folder configured',
+  AppLocale.noRomFolderConfigured:
+      'No ROM folder is configured, so there was nothing to scan. Existing games were kept. Add your ROM folder again in Settings > Directories.',
+  AppLocale.errorScanningRomsDetail: 'Error scanning ROMs: {error}',
   AppLocale.systemsUpdateComplete: 'Systems updated successfully!',
   AppLocale.systemsUpdateError:
       'Failed to update systems. Please try again later.',
@@ -1109,6 +1286,17 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.rommTesting: 'Testing...',
   AppLocale.rommConnectionSuccess: 'Connection successful',
   AppLocale.rommConnectionFailed: 'Connection failed',
+  AppLocale.rommErrorTls:
+      'Couldn\'t make a secure (HTTPS) connection. If your RomM server doesn\'t use HTTPS, enter its URL starting with http://.',
+  AppLocale.rommErrorUnreachable: 'Can\'t reach the RomM server: {error}',
+  AppLocale.rommErrorTimeout: 'The RomM server didn\'t respond in time.',
+  AppLocale.rommErrorInvalidApiKey: 'The API key was rejected.',
+  AppLocale.rommErrorUnexpectedStatus:
+      'The server answered with an error ({error}). Check that the URL points to your RomM server.',
+  AppLocale.rommErrorNotRomm:
+      'That URL didn\'t answer like a RomM server. Check the server URL.',
+  AppLocale.rommErrorServerStatus:
+      'The RomM server answered with an error ({error}).',
   AppLocale.rommConnectedAs: 'Connected as {user}',
   AppLocale.rommCredentialsRequired:
       'Enter the server URL, username and password',
@@ -1190,6 +1378,7 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.resetPlayTimeConfirm: 'Reset Play Time',
   AppLocale.resetPlayTimeConfirmBody:
       'This will permanently reset the recorded play time for this game to zero. This cannot be undone.',
+  AppLocale.playTimeResetDone: 'Play time reset',
   AppLocale.removeRomFolderConfirmBody:
       'This will remove this ROM folder from your library sources. Your files on disk are not deleted.',
   AppLocale.disconnectRaConfirm: 'Disconnect RetroAchievements',
@@ -1342,6 +1531,8 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.esdeResetSubtitle:
       'Remove imported metadata and media links so the import can be re-run',
   AppLocale.esdeResetComplete: 'ES-DE import reset',
+  AppLocale.esdeImportFailed: 'ES-DE import failed: {error}',
+  AppLocale.esdeResetFailed: 'ES-DE import reset failed: {error}',
   AppLocale.esdeResetConfirmBody:
       'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
   AppLocale.esdeImportNotEsdeFolder:
@@ -1374,6 +1565,19 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.wizardArtPackUnavailable:
       'The System Art Pack couldn\'t be reached right now. You can install it '
       'later from Settings once you\'re online.',
+  AppLocale.wizardSaveFailedTitle: "Setup isn't finished",
+  AppLocale.wizardSaveFailedBody:
+      "NeoStation couldn't save your settings. Make sure your storage is available, then try again.\n\n{error}",
+  AppLocale.wizardRomFolderNotAdded:
+      "NeoStation couldn't add this folder.\n\n{error}",
+  AppLocale.wizardRomFolderTemporary:
+      "NeoStation can't keep access to that folder after a restart. Pick a folder inside your home folder or on removable media.",
+  AppLocale.wizardFolderNotUsable:
+      "NeoStation can't use this folder. Pick a folder on this device's storage or SD card.",
+  AppLocale.wizardArtPackFailed:
+      "The System Art Pack couldn't be downloaded. Try again, or skip it for now.",
+  AppLocale.wizardScanFailed:
+      "The scan didn't finish. Try again, or skip this step.\n\n{error}",
 
   // Hide / unhide games
   AppLocale.hideGame: 'Hide Game',

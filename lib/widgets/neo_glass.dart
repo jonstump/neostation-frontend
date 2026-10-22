@@ -89,6 +89,11 @@ class NeoGlass extends StatelessWidget {
     }
   }
 
+  /// The rim stroke width NeoGlass will draw: the explicit [override] when
+  /// given, otherwise the user's configured value. `0` means no rim/border.
+  static double borderWidthOf(BuildContext context, {double? override}) =>
+      override ?? _prefs(context).borderWidth;
+
   @override
   Widget build(BuildContext context) {
     final prefs = _prefs(context);
@@ -141,6 +146,47 @@ class NeoGlass extends StatelessWidget {
   }
 }
 
+/// Paints only the NeoGlass specular rim over [child], using the same
+/// user-configured border width as the full [NeoGlass] surface (or an explicit
+/// [borderWidth] override). When the effective width is `0` no rim is drawn, so
+/// bordered surfaces can be made borderless with the global Glass Border
+/// setting — e.g. the systems grid tiles.
+class NeoGlassRim extends StatelessWidget {
+  const NeoGlassRim({
+    super.key,
+    required this.child,
+    required this.cornerRadius,
+    this.borderWidth,
+    this.intensity = 1,
+  });
+
+  final Widget child;
+
+  /// Corner radius of the surface whose edge the rim traces.
+  final double cornerRadius;
+
+  /// Rim stroke width. When null, the user's configured border width is used.
+  final double? borderWidth;
+
+  /// Strength of the specular highlight (0.0–1.0).
+  final double intensity;
+
+  @override
+  Widget build(BuildContext context) {
+    final width = borderWidth ?? NeoGlass._prefs(context).borderWidth;
+    return CustomPaint(
+      foregroundPainter: (intensity > 0 && width > 0)
+          ? _GlassRimPainter(
+              cornerRadius: cornerRadius,
+              intensity: intensity,
+              strokeWidth: width,
+            )
+          : null,
+      child: child,
+    );
+  }
+}
+
 /// Paints the glass rim: a soft specular highlight sweeping with the light
 /// direction, matching how the liquid-glass packages shade their borders — but
 /// in a single plain-Canvas stroke blended over the backdrop.
@@ -150,9 +196,9 @@ class _GlassRimPainter extends CustomPainter {
     required this.intensity,
     required this.strokeWidth,
   }) : _colors = [
-         Colors.white.withValues(alpha: 0.96 * intensity),
-         Colors.white.withValues(alpha: 0.64 * intensity),
-         Colors.white.withValues(alpha: 0.16 * intensity),
+         Colors.white.withValues(alpha: 0.15 * intensity),
+         Colors.white.withValues(alpha: 0.10 * intensity),
+         Colors.white.withValues(alpha: 0.025 * intensity),
        ];
 
   final double cornerRadius;
@@ -179,15 +225,21 @@ class _GlassRimPainter extends CustomPainter {
 
     // Light from the top-left. The rim stays light all around — it only fades
     // in strength towards the far edge, it never turns dark. Blended with
-    // BlendMode.overlay so the edge reads as the backdrop colour lifted
-    // brighter (overlay preserves the hue instead of washing it to white).
+    // BlendMode.plus so the edge reads as the backdrop lifted brighter.
+    //
+    // Not BlendMode.overlay (or screen, or any other advanced blend): Impeller
+    // emulates those on GPUs without framebuffer fetch (Windows' OpenGL ES via
+    // ANGLE), and with a gradient shader that emulation smears the rim's
+    // bottom and right edges to the bottom and right of the window — vertical
+    // bands under every pill that shift with the window size. plus is a
+    // fixed-function blend, so it never takes that path.
     canvas.drawPath(
       path,
       Paint()
         ..style = PaintingStyle.stroke
         ..strokeWidth = strokeWidth
         ..isAntiAlias = true
-        ..blendMode = BlendMode.overlay
+        ..blendMode = BlendMode.plus
         ..shader = LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,

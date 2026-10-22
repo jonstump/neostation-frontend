@@ -38,6 +38,7 @@ import 'package:neostation/services/config_service.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/utils/image_cache_budget.dart';
 import 'package:neostation/services/sfx_service.dart';
+import 'models/custom_sfx.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -51,6 +52,7 @@ import 'package:fullscreen_window/fullscreen_window.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:neostation/screens/secondary_screen/secondary_screen.dart';
 import 'package:device_info_plus/device_info_plus.dart';
+import 'package:file_picker/file_picker.dart';
 
 // Politica personalizada para deshabilitar navegacion por teclado
 class NoFocusTraversalPolicy extends FocusTraversalPolicy {
@@ -214,6 +216,14 @@ void main() async {
   // wait happens once (behind the loading screen) rather than once per caller.
   if (Platform.isAndroid) {
     await _awaitUserDataStorage();
+  }
+
+  // The App Sandbox is disabled on macOS (see Release.entitlements), so the
+  // `files.user-selected.*` entitlements are gone. file_picker_darwin still
+  // checks for them before every dialog and fails with ENTITLEMENT_NOT_FOUND
+  // instead of opening one, which left every folder/file picker dead (#614).
+  if (Platform.isMacOS) {
+    await FilePicker.skipEntitlementsChecks();
   }
 
   // Inicializar window_manager para desktop con tamano minimo 640x480
@@ -471,12 +481,15 @@ void main() async {
   // suspend. This engine's screen-power truth is GameService.deviceScreenOn.
   SfxService.isScreenOn = () => GameService.deviceScreenOn.value;
 
-  // Initialize SFX service for navigation sounds (fire-and-forget).
-  SfxService().init().then((_) {
-    // Apply persisted SFX preferences immediately.
-    SfxService().setVolume(sqliteConfigProvider.config.sfxVolume);
-    SfxService().setEnabled(sqliteConfigProvider.config.sfxEnabled);
-  });
+  // Seed settings before initialization so the first interaction uses them.
+  final sfx = SfxService();
+  sfx.setVolume(sqliteConfigProvider.config.sfxVolume);
+  sfx.setEnabled(sqliteConfigProvider.config.sfxEnabled);
+  unawaited(
+    sfx
+        .setCustomSounds(sqliteConfigProvider.config.customSfx)
+        .then((_) => sfx.init()),
+  );
 }
 
 /// Startup strings for the current device locale.
@@ -873,6 +886,9 @@ Future<void> subDisplay() async {
     SfxService().setVolume(
       double.tryParse(rawConfig?['sfx_volume']?.toString() ?? '0.75') ?? 0.75,
     );
+    await SfxService().setCustomSounds(
+      CustomSfx.decode(rawConfig?['custom_sfx']),
+    );
   } catch (e) {
     debugPrint('Secondary display could not load saved config: $e');
   }
@@ -1012,7 +1028,17 @@ class _MyAppState extends State<MyApp> {
           // first screen. A lazy create would leave the count at zero until
           // something else read the provider.
           lazy: false,
-          create: (context) => CollectionsProvider()..load(),
+          create: (context) {
+            final scraping = context.read<ScrapingProvider>();
+            return CollectionsProvider(
+              sources: [
+                context.read<SqliteDatabaseProvider>(),
+                context.read<SqliteConfigProvider>(),
+                scraping,
+              ],
+              isBusy: () => scraping.isScraping,
+            )..load();
+          },
         ),
         ChangeNotifierProvider(
           // Eager: the theme manifest is a network fetch, and during first-run

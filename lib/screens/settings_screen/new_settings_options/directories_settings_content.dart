@@ -63,6 +63,15 @@ class DirectoriesSettingsContentState
   String? _currentUserDataPath;
   bool _isLoading = true;
 
+  // A ROM folder removal is running: a second press is ignored rather than
+  // asking again about a folder that may be gone by then.
+  bool _removingRomFolder = false;
+
+  // A ROM folder is being added (picker, save and scan): a second press is
+  // ignored rather than opening another picker whose folder would not be
+  // scanned while the first scan runs.
+  bool _addingRomFolder = false;
+
   // Migration progress state (shown inline, no dialog).
   bool _isMigrating = false;
   double _migrationProgress = 0.0;
@@ -286,7 +295,9 @@ class DirectoriesSettingsContentState
       if (mounted) {
         AppNotification.showNotification(
           context,
-          '$e',
+          AppLocale.errorConfiguringPath
+              .getString(context)
+              .replaceFirst('{error}', '$e'),
           type: NotificationType.error,
         );
       }
@@ -321,6 +332,9 @@ class DirectoriesSettingsContentState
       context,
     );
     final localeEsdeSummarySystems = AppLocale.esdeSummarySystems.getString(
+      context,
+    );
+    final localeEsdeImportFailed = AppLocale.esdeImportFailed.getString(
       context,
     );
 
@@ -365,7 +379,7 @@ class DirectoriesSettingsContentState
       // Rebuild the fallback map now that esde_media_dir rows exist.
       if (mounted) await context.read<FileProvider>().refreshEsde();
     } catch (e) {
-      error = e.toString();
+      error = localeEsdeImportFailed.replaceFirst('{error}', '$e');
       _log.e('ES-DE import failed: $e');
     }
 
@@ -457,7 +471,9 @@ class DirectoriesSettingsContentState
       if (mounted) {
         AppNotification.showNotification(
           context,
-          '$e',
+          AppLocale.esdeResetFailed
+              .getString(context)
+              .replaceFirst('{error}', '$e'),
           type: NotificationType.error,
         );
       }
@@ -469,81 +485,124 @@ class DirectoriesSettingsContentState
   // ---------------------------------------------------------------------------
 
   Future<void> _selectRomFolder() async {
-    final configProvider = Provider.of<SqliteConfigProvider>(
-      context,
-      listen: false,
-    );
-
-    if (configProvider.config.romFolders.length >= 5) {
-      if (mounted) {
-        AppNotification.showNotification(
-          context,
-          AppLocale.maxRomFoldersReached.getString(context),
-          type: NotificationType.info,
-        );
-      }
-      return;
-    }
-
+    if (_addingRomFolder) return;
+    _addingRomFolder = true;
     try {
-      String? selected;
+      final configProvider = Provider.of<SqliteConfigProvider>(
+        context,
+        listen: false,
+      );
 
-      if (Platform.isAndroid) {
-        final isTV = await PermissionService.isTelevision();
-        if (isTV) {
-          if (mounted) selected = await TvDirectoryPicker.show(context);
-        } else {
-          try {
-            final uri = await PermissionService.requestFolderAccess();
-            selected = uri?.toString();
-          } on PlatformException catch (e) {
-            if (e.code == 'PICKER_FAILED' && mounted) {
-              selected = await TvDirectoryPicker.show(context);
+      if (configProvider.config.romFolders.length >= 5) {
+        if (mounted) {
+          AppNotification.showNotification(
+            context,
+            AppLocale.maxRomFoldersReached.getString(context),
+            type: NotificationType.info,
+          );
+        }
+        return;
+      }
+
+      try {
+        String? selected;
+
+        if (Platform.isAndroid) {
+          final isTV = await PermissionService.isTelevision();
+          if (isTV) {
+            if (mounted) selected = await TvDirectoryPicker.show(context);
+          } else {
+            try {
+              final uri = await PermissionService.requestFolderAccess();
+              selected = uri?.toString();
+            } on PlatformException catch (e) {
+              if (e.code == 'PICKER_FAILED' && mounted) {
+                selected = await TvDirectoryPicker.show(context);
+              }
             }
           }
+        } else {
+          selected = await TvDirectoryPicker.pickDirectory(
+            context,
+            dialogTitle: AppLocale.selectRomsFolder.getString(context),
+          );
         }
-      } else {
-        selected = await TvDirectoryPicker.pickDirectory(
-          context,
-          dialogTitle: AppLocale.selectRomsFolder.getString(context),
-        );
-      }
 
-      if (selected != null) {
-        await configProvider.addRomFolder(selected);
+        if (selected == null) return;
+        if (configProvider.config.romFolders.contains(selected)) {
+          if (mounted) {
+            AppNotification.showNotification(
+              context,
+              AppLocale.romFolderAlreadyAdded.getString(context),
+              type: NotificationType.info,
+            );
+          }
+          return;
+        }
+        try {
+          await configProvider.addRomFolder(selected);
+        } catch (e) {
+          _log.e('Failed to add ROM folder: $e');
+          if (mounted) {
+            AppNotification.showNotification(
+              context,
+              AppLocale.romFolderAddFailed
+                  .getString(context)
+                  .replaceFirst('{error}', '$e'.split('\n').first),
+              type: NotificationType.error,
+            );
+          }
+        }
         await _loadCurrentPaths();
+      } catch (e) {
+        _log.e('ROM folder selection failed: $e');
       }
-    } catch (e) {
-      _log.e('ROM folder selection failed: $e');
+    } finally {
+      _addingRomFolder = false;
     }
   }
 
   Future<void> _removeRomFolder(String path) async {
-    final confirmed = await ConfirmActionDialog.show(
-      context,
-      title: AppLocale.removeRomFolder.getString(context),
-      body: AppLocale.removeRomFolderConfirmBody.getString(context),
-      confirmLabel: AppLocale.removeRomFolder.getString(context),
-      icon: Symbols.folder_delete_rounded,
-    );
-    if (!confirmed || !mounted) return;
-
-    final configProvider = Provider.of<SqliteConfigProvider>(
-      context,
-      listen: false,
-    );
+    if (_removingRomFolder) return;
+    _removingRomFolder = true;
     try {
-      await configProvider.removeRomFolder(path);
-      await _loadCurrentPaths();
-      if (mounted) {
-        AppNotification.showNotification(
-          context,
-          AppLocale.romFolderRemoved.getString(context),
-          type: NotificationType.info,
-        );
+      final confirmed = await ConfirmActionDialog.show(
+        context,
+        title: AppLocale.removeRomFolder.getString(context),
+        body: AppLocale.removeRomFolderConfirmBody.getString(context),
+        confirmLabel: AppLocale.removeRomFolder.getString(context),
+        icon: Symbols.folder_delete_rounded,
+      );
+      if (!confirmed || !mounted) return;
+
+      final configProvider = Provider.of<SqliteConfigProvider>(
+        context,
+        listen: false,
+      );
+      try {
+        await configProvider.removeRomFolder(path);
+        if (mounted) {
+          AppNotification.showNotification(
+            context,
+            AppLocale.romFolderRemoved.getString(context),
+            type: NotificationType.info,
+          );
+        }
+      } catch (e) {
+        _log.e('Failed to remove ROM folder: $e');
+        if (mounted) {
+          AppNotification.showNotification(
+            context,
+            AppLocale.romFolderRemoveFailed
+                .getString(context)
+                .replaceFirst('{error}', '$e'.split('\n').first),
+            type: NotificationType.error,
+          );
+        }
       }
-    } catch (e) {
-      _log.e('Failed to remove ROM folder: $e');
+      await _loadCurrentPaths();
+    } finally {
+      _removingRomFolder = false;
     }
   }
 

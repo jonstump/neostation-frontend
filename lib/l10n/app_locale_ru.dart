@@ -1,6 +1,96 @@
 part of 'app_locale.dart';
 
 const Map<String, dynamic> appLocaleRu = {
+  AppLocale.smartMatchesOne: 'Подходящих игр: 1',
+  AppLocale.smartCollection: 'Умная коллекция',
+  AppLocale.manualCollection: 'Ручная коллекция',
+  AppLocale.smartEditRules: 'Изменить правила',
+  AppLocale.smartMatchAll: 'Соответствовать всем правилам',
+  AppLocale.smartMatchAny: 'Соответствовать любому правилу',
+  AppLocale.smartAddRule: 'Добавить правило',
+  AppLocale.smartChooseValue: 'Выбрать значение',
+  AppLocale.smartCustomValue: 'Ввести значение',
+  AppLocale.smartMatches: 'Подходящих игр: {count}',
+  AppLocale.smartInvalidRules:
+      'Не удалось прочитать правила. Измените их, чтобы восстановить коллекцию.',
+  AppLocale.smartInvalidValue: 'Введите допустимое значение для этого правила.',
+  AppLocale.smartNoMatches: 'Пока нет игр, соответствующих этим правилам.',
+  AppLocale.smartPreviewError:
+      'Не удалось загрузить предпросмотр. Повторите попытку.',
+  AppLocale.smartYes: 'Да',
+  AppLocale.smartNo: 'Нет',
+  AppLocale.smartDone: 'Готово',
+  AppLocale.smartLower: 'Минимум',
+  AppLocale.smartUpper: 'Максимум',
+  AppLocale.smartRating: 'Оценка (0–10)',
+  AppLocale.smartPlayed: 'Играли',
+  AppLocale.smartIs: 'Равно',
+  AppLocale.smartIsNot: 'Не равно',
+  AppLocale.smartContains: 'Содержит',
+  AppLocale.smartNotContains: 'Не содержит',
+  AppLocale.smartBefore: 'До',
+  AppLocale.smartAfter: 'После',
+  AppLocale.smartAtLeast: 'Не менее',
+  AppLocale.smartAtMost: 'Не более',
+  AppLocale.smartBetween: 'Между',
+  AppLocale.smartWithinDays: 'За последние',
+  AppLocale.smartNotWithinDays: 'Не за последние',
+  AppLocale.smartDays: '{count} дней',
+  AppLocale.smartDaysOne: '{count} день',
+  AppLocale.smartDaysFew: '{count} дня',
+  AppLocale.collectionLoadError: 'Не удалось загрузить игры этой коллекции.',
+  AppLocale.smartRulesOnly: 'Игры добавляются автоматически по этим правилам.',
+  AppLocale.customSounds: "Свои звуки",
+  AppLocale.customSoundsSubtitle:
+      "Выберите звуки навигации, подтверждения и возврата",
+  AppLocale.customSoundsHint: "WAV, MP3, OGG или FLAC · До 5 секунд и 5 МиБ",
+  AppLocale.customSoundsMovement: "Навигация",
+  AppLocale.customSoundsConfirm: "Подтверждение",
+  AppLocale.customSoundsBack: "Назад",
+  AppLocale.customSoundsDefault: "По умолчанию",
+  AppLocale.customSoundsImport: "Импорт / Замена",
+  AppLocale.customSoundsPreview: "Прослушать",
+  AppLocale.customSoundsReset: "Восстановить стандартный",
+  AppLocale.customSoundsClose: "Закрыть",
+  AppLocale.customSoundsSizeError: "Выберите файл размером до 5 МиБ.",
+  AppLocale.customSoundsDurationError: "Выберите звук длиной до 5 секунд.",
+  AppLocale.customSoundsInvalidError:
+      "Файл пуст, не поддерживается или не воспроизводится.",
+  AppLocale.customSoundsSaveError:
+      "Не удалось импортировать или сохранить звук. Предыдущий звук сохранён.",
+
+  AppLocale.rommSavesAutoDownload:
+      'Более новые облачные сохранения загружаются при запуске связанной игры.',
+  AppLocale.rommSaveFile: 'Файл сохранения',
+  AppLocale.rommSaveState: 'Состояние игры',
+  AppLocale.rommRetryUploads: 'Повторить отправку',
+  AppLocale.rommUploadsFailed:
+      'Некоторые файлы не отправлены. Проверьте подключение и разрешения RomM, затем повторите попытку.',
+  AppLocale.rommUploadsFailedFor:
+      'Сохранения для {games} не отправлены. Проверьте подключение и разрешения RomM, затем повторите попытку.',
+  AppLocale.rommGameListSeparator: ', ',
+  AppLocale.rommGameListMore: '{games} и ещё {count}',
+  AppLocale.rommSavesHelp:
+      'Просматривайте сохранения и состояния RomM. Повторная отправка проверяет локальные игры, связанные с RomM, с включённой синхронизацией. Новые удалённые сохранения скачиваются при запуске игры.',
+  AppLocale.rommDeleteTitle: 'Удалить из RomM',
+  AppLocale.rommDeleteConfirm:
+      '{file} будет безвозвратно удалён с вашего сервера RomM. Копии на ваших устройствах сохранятся, а устройства, которые всё ещё синхронизируют эту игру, снова отправят свою копию.',
+  AppLocale.rommDeleted: 'Удалено из RomM.',
+  AppLocale.rommDeleteFailed:
+      'Не удалось удалить из RomM. Проверьте подключение и разрешения RomM, затем повторите попытку.',
+  AppLocale.rommDeleteNotSent:
+      'Удаление отменено до отправки в RomM. Ничего не удалено.',
+  AppLocale.rommSaveFileCount: '{count} файл сохранения',
+  AppLocale.rommSaveFilesCount: '{count} файлов сохранения',
+  AppLocale.rommSaveStateCount: '{count} состояние игры',
+  AppLocale.rommSaveStatesCount: '{count} состояний игры',
+  AppLocale.rommDeleteGameBothConfirm:
+      'Это безвозвратно удалит с вашего сервера RomM {saves} и {states} для {game}. Копии на ваших устройствах сохранятся, а устройства, которые всё ещё синхронизируют эту игру, снова отправят свои копии.',
+  AppLocale.rommDeleteGameConfirm:
+      'Это безвозвратно удалит с вашего сервера RomM {files} для {game}. Копии на ваших устройствах сохранятся, а устройства, которые всё ещё синхронизируют эту игру, снова отправят свои копии.',
+  AppLocale.rommDeleteKeepsSaves:
+      'Файлы сохранения этой игры останутся в RomM.',
+  AppLocale.rommDeleteKeepsStates: 'Состояния этой игры останутся в RomM.',
   AppLocale.ignoreArticlesInGameSort: "Игнорировать артикли при сортировке игр",
   AppLocale.ignoreArticlesInGameSortSubtitle:
       "Пропускать The, A и An в начале названия. Например, The Legend of Zelda сортируется под буквой L.",
@@ -197,9 +287,9 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.nowPlayingDimOff: 'Выкл',
   AppLocale.secondarySectionNowPlaying: 'Панель Now Playing',
   AppLocale.secondarySectionDock: 'Док приложений',
-  AppLocale.screenshotAccess: 'Screen return & screenshots',
+  AppLocale.screenshotAccess: 'Возврат к экрану и скриншоты',
   AppLocale.screenshotAccessSubtitle:
-      'Restores the Now Playing screen when you close an app opened from the dock, and lets the screenshot button capture the screen (opens Android accessibility settings)',
+      'Возвращает экран Now Playing, когда вы закрываете приложение, открытое из дока, и позволяет кнопке скриншота делать скриншоты (открывает настройки специальных возможностей Android)',
   AppLocale.scanOnStartupSubtitle:
       'Автоматически сканировать папки ROM при запуске приложения',
   AppLocale.ignoreHiddenFiles: 'Игнорировать скрытые элементы',
@@ -255,9 +345,9 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.bartopShutdownSubtitle:
       'Выключать компьютер при выходе из приложения',
 
-  AppLocale.showSyncTab: 'Показывать вкладку NeoSync',
+  AppLocale.showSyncTab: 'Показывать вкладку сохранений',
   AppLocale.showSyncTabSubtitle:
-      'Отображает вкладку NeoSync на панели навигации',
+      'Отображать вкладку сохранений на панели навигации',
   AppLocale.showAchievementsTab: 'Показывать вкладку достижений',
   AppLocale.showAchievementsTabSubtitle:
       'Отображает вкладку RetroAchievements на панели навигации',
@@ -311,8 +401,22 @@ const Map<String, dynamic> appLocaleRu = {
       'Потерянные метаданные не найдены.',
   AppLocale.cleanOrphanedMetadataDone:
       'Очищено {entries} запис(ь/ей) метаданных и {files} медиафайл(а/ов).',
+  AppLocale.cleanOrphanedMetadataDelete:
+      'Из базы данных и с диска будут удалены потерянные записи метаданных: {count}.',
+  AppLocale.cleanOrphanedMetadataDeleteOne:
+      '{count} потерянная запись метаданных будет удалена из базы данных и с диска.',
   AppLocale.cleanOrphanedMetadataEsdeSkippedSuffix:
-      ' {count} запис(ь/ей), импортированных из ES-DE, оставлены нетронутыми.',
+      ' Записи, импортированные из ES-DE, остаются нетронутыми: {count}.',
+  AppLocale.cleanOrphanedMetadataEsdeSkippedSuffixOne:
+      ' {count} запись, импортированная из ES-DE, остаётся нетронутой.',
+  AppLocale.cleanOrphanedMetadataNotRemoved:
+      ' Не удалось удалить записи: {count}. Запустите инструмент ещё раз.',
+  AppLocale.cleanOrphanedMetadataNotRemovedOne:
+      ' Не удалось удалить {count} запись. Запустите инструмент ещё раз.',
+  AppLocale.cleanOrphanedMetadataNothingToDelete:
+      'Удалять нечего: все потерянные метаданные импортированы из ES-DE, а этот инструмент их не трогает.',
+  AppLocale.cleanOrphanedMetadataMediaUnavailable:
+      'NeoStation не может найти свою папку медиафайлов. Перезапустите NeoStation и попробуйте снова.',
   AppLocale.cleanOrphanedMetadataFailed:
       'Не удалось очистить потерянные метаданные: {error}',
   AppLocale.rematchAchievements: 'Сопоставить игры RetroAchievements',
@@ -363,6 +467,8 @@ const Map<String, dynamic> appLocaleRu = {
       'Нажмите «Подтвердить», чтобы удалить эту папку',
   AppLocale.maxRomFoldersReached: 'Разрешено не более 5 папок ROM',
   AppLocale.romFolderRemoved: 'Папка ROM удалена',
+  AppLocale.romFolderRemoveFailed: 'Не удалось удалить папку ROM: {error}',
+  AppLocale.romFolderAlreadyAdded: 'Эта папка уже есть среди ваших папок ROM',
   AppLocale.selectRomsFolder: 'Выбрать папку ROM',
   AppLocale.scanningSystem: 'Сканирование системы',
 
@@ -399,7 +505,6 @@ const Map<String, dynamic> appLocaleRu = {
       'Получение данных недоступно для приложений Android.',
   AppLocale.achievements: 'Достижения',
 
-  AppLocale.neoSync: 'NeoSync',
   AppLocale.neoSyncLogin: 'Вход в NeoSync',
   AppLocale.neoSyncSynchronizing: 'NeoSync: Синхронизация...',
   AppLocale.neoSyncNotConnected: 'NeoSync: Не подключено',
@@ -656,6 +761,20 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.hintScrape: 'Скрейп',
   AppLocale.hintMoreActions: 'Ещё',
   AppLocale.hintOptions: 'Опции',
+  AppLocale.gameOptionsThisGame: 'Эта игра',
+  AppLocale.gameOptionsView: 'Вид',
+  AppLocale.systemOptionsSelectedSystem: 'Выбранная система',
+  AppLocale.systemOptionsSystemView: 'Вид системы',
+  AppLocale.systemOptionsSystemLayout: 'Макет системы',
+  AppLocale.systemOptionsGameSearch: 'Поиск игр',
+  AppLocale.systemOptionsSystemViewSubtitle: 'Как отображаются системы.',
+  AppLocale.systemOptionsSystemSorting: 'Сортировка системы',
+  AppLocale.systemOptionsSystemSortingSubtitle: 'Как сортируются системы.',
+  AppLocale.systemOptionsGameSettingsDescription:
+      'Эмулятор, ядра, управление и отображение',
+  AppLocale.systemOptionsSearchDescription: 'Искать игры во всей библиотеке',
+  AppLocale.systemOptionsNoSystem:
+      'Выберите систему, чтобы настроить параметры игры.',
   AppLocale.addTo: 'Добавить в…',
   AppLocale.addedToCollection: 'Добавлено в {name}',
   AppLocale.newCollection: 'Новая коллекция…',
@@ -694,6 +813,25 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.cannotReadFolder: 'Не удалось прочитать папку',
   AppLocale.noStorageFound: 'Хранилище не найдено',
   AppLocale.lastPlayed: 'Последний запуск',
+  AppLocale.nowPlayingTitle: 'Now Playing',
+  AppLocale.nowPlayingSession: 'Сеанс',
+  AppLocale.nowPlayingLastPlayed: 'Последний запуск',
+  AppLocale.launchAnApp: 'Запуск приложения',
+  AppLocale.chooseAnApp: 'Выбор приложения',
+  AppLocale.noAppsFound: 'Приложения не найдены',
+  AppLocale.timeNever: 'Никогда',
+  AppLocale.timeYesterday: 'Вчера',
+  AppLocale.timeDaysAgo: '{count} дн. назад',
+  AppLocale.timeHoursAgo: '{count} ч назад',
+  AppLocale.timeMinutesAgo: '{count} мин назад',
+  AppLocale.timeJustNow: 'Только что',
+  AppLocale.clockAm: 'AM',
+  AppLocale.clockPm: 'PM',
+  AppLocale.clockTime12h: '{time} {period}',
+  AppLocale.playTimeHoursMinutes: '{h} ч {m} мин',
+  AppLocale.playTimeMinutes: '{m} мин',
+  AppLocale.playTimeUnderMinute: '<1 мин',
+  AppLocale.raNewThisSession: '+{count} за этот сеанс',
   AppLocale.apps: 'Приложения',
   AppLocale.tracks: 'Треки',
   AppLocale.games: 'Игры',
@@ -719,7 +857,7 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.sortByGroup: 'СОРТИРОВАТЬ ПО',
   AppLocale.orderGroup: 'ПОРЯДОК',
   AppLocale.synced: 'Синхронизировано',
-  AppLocale.syncing: 'Синхронизация',
+  AppLocale.syncing: 'Синхронизация...',
   AppLocale.conflict: 'Конфликт',
   AppLocale.ready: 'Готово',
   AppLocale.quota: 'Квота',
@@ -837,10 +975,17 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.storagePermission: 'Разрешение на доступ к памяти',
   AppLocale.storagePermissionDesc:
       'NeoStation нужен «Доступ ко всем файлам» для управления конфигурациями RetroArch.',
-  AppLocale.screenReturnAccess: 'Screen Return Access',
+  AppLocale.screenReturnAccess: 'Доступ для возврата к экрану',
   AppLocale.screenReturnAccessDesc:
-      'Brings the Now Playing screen back when you close an app opened from the dock, and enables system screenshots. Only the foreground app name is read \u2014 no screen content is collected.',
-  AppLocale.screenReturnAccessHint: 'Turn on NeoStation, then tap Allow',
+      'Возвращает экран Now Playing, когда вы закрываете приложение, открытое из дока, и включает системные скриншоты. Считывается только название приложения на переднем плане — содержимое экрана не собирается.',
+  AppLocale.screenReturnAccessHint:
+      'Включите NeoStation, затем нажмите «Разрешить»',
+  AppLocale.screenReturnDialogTitle: 'Включить возврат к экрану',
+  AppLocale.screenReturnDialogBody:
+      'Чтобы запускать приложения из дока, NeoStation нужна служба специальных возможностей для возврата к экрану. Она возвращает вас сюда после закрытия открытого приложения. Без неё вернуться сюда может быть невозможно.',
+  AppLocale.screenReturnDialogSteps:
+      'На следующем экране найдите NeoStation в списке служб и включите эту службу.',
+  AppLocale.openSettings: 'Открыть настройки',
   AppLocale.selectRomFolder: 'Выбрать папку ROM',
   AppLocale.romFolderSelected: 'Папка ROM выбрана!',
   AppLocale.chooseRomFolderDesc: 'Выберите папку, где хранятся ваши ROM.',
@@ -1034,6 +1179,38 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.systemsUpdateDownloading: 'Загрузка конфигураций систем...',
   AppLocale.systemsUpdateCancelling: 'Отмена...',
   AppLocale.systemsUpdateSyncing: 'Синхронизация базы данных систем...',
+  AppLocale.waitingForRomStorage: 'Ожидание хранилища ROM ({attempt}/{max})...',
+  AppLocale.updatingSystemsList: 'Обновление списка систем...',
+  AppLocale.romsScanned: 'ROM просканированы',
+  AppLocale.errorScanningRoms: 'Ошибка при сканировании ROM',
+  AppLocale.romStorageNotReady:
+      'Хранилище ROM не готово; существующие игры сохранены.',
+  AppLocale.romFolderNotAddedTitle: 'Папка ROM не добавлена',
+  AppLocale.romFolderAddFailed: 'Не удалось сохранить папку ROM: {error}',
+  AppLocale.romFolderSafMissingTitle: 'Нет доступа к хранилищу для папки ROM',
+  AppLocale.romFoldersSafMissingTitle: 'Нет доступа к хранилищу для папок ROM',
+  AppLocale.romFolderSafMissing:
+      'Не удаётся прочитать папку ROM. Снова предоставьте доступ в разделе Настройки > Директории.',
+  AppLocale.romFoldersSafMissing:
+      'Не удаётся прочитать папки ROM: {count}. Снова предоставьте доступ в разделе Настройки > Директории.',
+  AppLocale.romStorageAccessRequired:
+      'Требуется доступ к хранилищу. Выберите папку ROM через окно выбора файлов.',
+  AppLocale.romFolderAccessDenied:
+      'Нет доступа к папке ROM {folder}. Проверьте разрешения на доступ к памяти.',
+  AppLocale.romFolderUnreachableTitle: 'Папка ROM недоступна',
+  AppLocale.romFoldersUnreachableTitle: 'Папки ROM недоступны',
+  AppLocale.romFolderUnreachable:
+      'Папка ROM {folders} недоступна. Существующие игры сохранены. {advice}',
+  AppLocale.romFoldersUnreachable:
+      'Эти папки ROM недоступны: {folders}. Существующие игры сохранены. {advice}',
+  AppLocale.romFolderAdvicePortal:
+      'Этот путь получен по временному разрешению портала рабочего стола, и восстановить его нельзя: удалите его в разделе Настройки > Директории и добавьте папку снова.',
+  AppLocale.romFolderAdviceReconnect:
+      'Подключите диск снова или удалите папку в разделе Настройки > Директории.',
+  AppLocale.noRomFolderTitle: 'Папка ROM не настроена',
+  AppLocale.noRomFolderConfigured:
+      'Папка ROM не настроена, поэтому сканировать было нечего. Существующие игры сохранены. Снова добавьте папку ROM в разделе Настройки > Директории.',
+  AppLocale.errorScanningRomsDetail: 'Ошибка при сканировании ROM: {error}',
   AppLocale.systemsUpdateComplete: 'Системы успешно обновлены!',
   AppLocale.systemsUpdateError: 'Ошибка обновления систем. Попробуйте позже.',
 
@@ -1115,6 +1292,17 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.rommTesting: 'Проверка...',
   AppLocale.rommConnectionSuccess: 'Подключение установлено',
   AppLocale.rommConnectionFailed: 'Не удалось подключиться',
+  AppLocale.rommErrorTls:
+      'Не удалось установить защищённое (HTTPS) соединение. Если ваш сервер RomM не использует HTTPS, введите его URL, начиная с http://.',
+  AppLocale.rommErrorUnreachable:
+      'Не удаётся подключиться к серверу RomM: {error}',
+  AppLocale.rommErrorTimeout: 'Сервер RomM не ответил вовремя.',
+  AppLocale.rommErrorInvalidApiKey: 'Ключ API отклонён.',
+  AppLocale.rommErrorUnexpectedStatus:
+      'Сервер ответил ошибкой ({error}). Проверьте, что URL указывает на ваш сервер RomM.',
+  AppLocale.rommErrorNotRomm:
+      'По этому URL отвечает не сервер RomM. Проверьте URL сервера.',
+  AppLocale.rommErrorServerStatus: 'Сервер RomM ответил ошибкой ({error}).',
   AppLocale.rommConnectedAs: 'Подключено как {user}',
   AppLocale.rommCredentialsRequired:
       'Введите URL сервера, имя пользователя и пароль',
@@ -1199,6 +1387,7 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.resetPlayTimeConfirm: 'Сбросить время игры',
   AppLocale.resetPlayTimeConfirmBody:
       'Записанное время игры для этой игры будет безвозвратно сброшено до нуля. Это действие нельзя отменить.',
+  AppLocale.playTimeResetDone: 'Время игры сброшено',
   AppLocale.removeRomFolderConfirmBody:
       'Эта папка ROM будет удалена из источников вашей библиотеки. Ваши файлы на диске не будут удалены.',
   AppLocale.disconnectRaConfirm: 'Отключить RetroAchievements',
@@ -1346,27 +1535,29 @@ const Map<String, dynamic> appLocaleRu = {
       'Мигрировать облачные сохранения на NeoSync v2',
 
   // ES-DE import
-  AppLocale.esdeImport: 'ES-DE Import',
-  AppLocale.esdeImportSubtitle: 'Import metadata and artwork from ES-DE',
-  AppLocale.esdeSelectFolder: 'Select ES-DE Folder',
+  AppLocale.esdeImport: 'Импорт из ES-DE',
+  AppLocale.esdeImportSubtitle: 'Импорт метаданных и обложек из ES-DE',
+  AppLocale.esdeSelectFolder: 'Выбрать папку ES-DE',
   AppLocale.esdeSelectFolderSubtitle:
-      'Choose the ES-DE folder containing gamelists and downloaded_media',
-  AppLocale.esdeRunImport: 'Import from ES-DE',
+      'Выберите папку ES-DE, содержащую папки gamelists и downloaded_media',
+  AppLocale.esdeRunImport: 'Импортировать из ES-DE',
   AppLocale.esdeRunImportSubtitle:
-      'Fill in missing metadata and use ES-DE artwork as fallback',
-  AppLocale.esdeImporting: 'Importing from ES-DE',
-  AppLocale.esdeImportComplete: 'ES-DE import complete',
-  AppLocale.esdeImportNoFolder: 'Select your ES-DE folder first',
-  AppLocale.esdeReset: 'Reset ES-DE Import',
+      'Дополнить недостающие метаданные и использовать обложки ES-DE как запасной вариант',
+  AppLocale.esdeImporting: 'Идёт импорт из ES-DE',
+  AppLocale.esdeImportComplete: 'Импорт из ES-DE завершён',
+  AppLocale.esdeImportNoFolder: 'Сначала выберите папку ES-DE',
+  AppLocale.esdeReset: 'Сбросить импорт из ES-DE',
   AppLocale.esdeResetSubtitle:
-      'Remove imported metadata and media links so the import can be re-run',
-  AppLocale.esdeResetComplete: 'ES-DE import reset',
+      'Удалить импортированные метаданные и ссылки на медиа, чтобы импорт можно было запустить заново',
+  AppLocale.esdeResetComplete: 'Импорт из ES-DE сброшен',
+  AppLocale.esdeImportFailed: 'Ошибка импорта из ES-DE: {error}',
+  AppLocale.esdeResetFailed: 'Не удалось сбросить импорт из ES-DE: {error}',
   AppLocale.esdeResetConfirmBody:
-      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+      'Будут удалены все импортированные из ES-DE метаданные и ссылки на медиа, а выбор папки будет сброшен. Ваши игры и файлы ROM не будут затронуты.',
   AppLocale.esdeImportNotEsdeFolder:
-      'This folder is not an ES-DE installation (no gamelists found)',
+      'Эта папка не является установкой ES-DE (папка gamelists не найдена)',
   AppLocale.esdeImportNothingFound:
-      'No matching systems or games were found to import',
+      'Не найдено подходящих систем или игр для импорта',
   AppLocale.esdeSummarySystemsMatched: 'Сопоставлено систем',
   AppLocale.esdeSummaryUnmatched: 'без совпадений',
   AppLocale.esdeSummarySkipped: 'пропущено (не читается)',
@@ -1395,6 +1586,19 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.wizardArtPackUnavailable:
       'Сейчас не удалось получить System Art Pack. Вы можете установить его '
       'позже в Настройках, когда будете онлайн.',
+  AppLocale.wizardSaveFailedTitle: 'Настройка не завершена',
+  AppLocale.wizardSaveFailedBody:
+      'NeoStation не удалось сохранить настройки. Убедитесь, что хранилище доступно, и попробуйте ещё раз.\n\n{error}',
+  AppLocale.wizardRomFolderNotAdded:
+      'NeoStation не удалось добавить эту папку.\n\n{error}',
+  AppLocale.wizardRomFolderTemporary:
+      'NeoStation не сможет сохранить доступ к этой папке после перезапуска. Выберите папку в домашней папке или на съёмном носителе.',
+  AppLocale.wizardFolderNotUsable:
+      'NeoStation не может использовать эту папку. Выберите папку во внутренней памяти устройства или на SD-карте.',
+  AppLocale.wizardArtPackFailed:
+      'Не удалось загрузить System Art Pack. Попробуйте ещё раз или пока пропустите его.',
+  AppLocale.wizardScanFailed:
+      'Сканирование не завершилось. Попробуйте ещё раз или пропустите этот шаг.\n\n{error}',
 
   // Hide / unhide games
   AppLocale.hideGame: 'Скрыть игру',

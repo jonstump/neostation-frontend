@@ -3,6 +3,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:file_picker/file_picker.dart';
+import '../models/custom_sfx.dart';
+import '../services/custom_sfx_import_service.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/screenshot_service.dart';
@@ -23,6 +25,7 @@ import '../models/secondary_display_state.dart';
 import 'package:flutter/services.dart';
 import '../widgets/tv_directory_picker.dart';
 import '../constants/system_folder_names.dart';
+import '../l10n/app_locale.dart';
 import '../utils/rom_folder_path.dart';
 import '../services/global_notification_service.dart';
 import '../services/game_session_persistence.dart';
@@ -39,6 +42,20 @@ part 'sqlite_config_provider/secondary_display.dart';
 /// user preferences persistence, and secondary display state management.
 /// Replaces the legacy JSON-based configuration provider.
 class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
+  SqliteConfigProvider()
+    : _sfxImporter = CustomSfxImportService(),
+      _customSfxPlayback = SfxService();
+
+  @visibleForTesting
+  SqliteConfigProvider.forTesting({
+    required CustomSfxImportService sfxImporter,
+    required SfxService sfxPlayback,
+  }) : _sfxImporter = sfxImporter,
+       _customSfxPlayback = sfxPlayback;
+
+  final CustomSfxImportService _sfxImporter;
+  final SfxService _customSfxPlayback;
+  Future<void> _sfxMutation = Future.value();
   ConfigModel _config = ConfigModel.empty;
   List<SystemModel> _detectedSystems = [];
   List<SystemModel> _availableSystems = [];
@@ -49,6 +66,12 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// Flag to prevent concurrent ROM scanning operations.
   bool _isScanningRoms = false;
   bool _isSilentScanning = false;
+
+  /// Scans in progress (full scans and single-system rescans), and a future
+  /// that completes when the last of them ends. Removing a ROM folder waits on
+  /// it, so a running scan can't write the removed folder's games back.
+  int _activeScans = 0;
+  Completer<void>? _scansIdle;
   bool _pendingStartupScan = false;
   SystemModel? _silentScannedSystem;
   ScanSummary? _lastScanSummary;
@@ -217,7 +240,7 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
       // CRITICAL: Always reload and sync system JSONs with the database at startup
       // to ensure that new cores or systems modified in assets are reflected,
       // regardless of whether ROM scanning is enabled.
-      _scanStatus = 'Syncing system databases...';
+      _scanStatus = AppLocale.systemsUpdateSyncing.getStringForCurrentLocale();
       notifyListeners();
       await SqliteService.loadAndSyncSystems();
 
@@ -301,6 +324,7 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
           fanartDimLevel: _config.fanartDimLevel,
           sfxEnabled: _config.sfxEnabled,
           sfxVolume: _config.sfxVolume,
+          customSfx: _config.customSfx,
           use12HourClock: _config.use12HourClock,
         );
       }
@@ -434,17 +458,61 @@ class SqliteConfigProvider extends ChangeNotifier with WidgetsBindingObserver {
   /// bridge in [neo_sync_provider]. Behaviourally identical to a direct call.
   void _notify() => notifyListeners();
 
+  /// Saves the config after a change from [previous]. When the save fails
+  /// (a locked database, storage that went away), puts [previous] back and
+  /// rethrows, so the app doesn't show a value the database never got and the
+  /// next save of another setting doesn't store it after all.
+  ///
+  /// If another change has replaced the config meanwhile, nothing is put back:
+  /// that change is kept, and so is the failed one, which it builds on. A save
+  /// that runs later than its change (queued behind another) passes the config
+  /// the change produced as [applied].
+  Future<void> _saveOrRevert(
+    ConfigModel previous, {
+    ConfigModel? applied,
+  }) async {
+    final attempted = _config;
+    final change = applied ?? attempted;
+    try {
+      await SqliteConfigService.saveConfig(attempted);
+    } catch (_) {
+      if (identical(_config, change)) {
+        _config = previous;
+        notifyListeners();
+      }
+      rethrow;
+    }
+  }
+
   void _setLoading(bool loading) {
     _isLoading = loading;
     notifyListeners();
   }
 
   void _setScanning(bool scanning) {
+    // Count the transition only: a scan's early exits and its `finally` can
+    // both clear the flag.
+    if (scanning && !_isScanning) _scanStarted();
+    if (!scanning && _isScanning) _scanEnded();
     _isScanning = scanning;
     if (scanning) {
       _scanCompleted = false;
     }
     notifyListeners();
+  }
+
+  void _scanStarted() {
+    _activeScans++;
+    _scansIdle ??= Completer<void>();
+  }
+
+  void _scanEnded() {
+    if (_activeScans == 0) return;
+    _activeScans--;
+    if (_activeScans == 0) {
+      _scansIdle?.complete();
+      _scansIdle = null;
+    }
   }
 
   void clearError() {

@@ -1,6 +1,86 @@
 part of 'app_locale.dart';
 
 const Map<String, dynamic> appLocaleJa = {
+  AppLocale.smartMatchesOne: '一致するゲーム：1件',
+  AppLocale.smartCollection: 'スマートコレクション',
+  AppLocale.manualCollection: '手動コレクション',
+  AppLocale.smartEditRules: 'ルールを編集',
+  AppLocale.smartMatchAll: 'すべてのルールに一致',
+  AppLocale.smartMatchAny: 'いずれかのルールに一致',
+  AppLocale.smartAddRule: 'ルールを追加',
+  AppLocale.smartChooseValue: '値を選択',
+  AppLocale.smartCustomValue: '値を入力',
+  AppLocale.smartMatches: '一致するゲーム：{count}件',
+  AppLocale.smartInvalidRules: 'ルールを読み込めません。編集してコレクションを復元してください。',
+  AppLocale.smartInvalidValue: 'このルールに有効な値を入力してください。',
+  AppLocale.smartNoMatches: 'このルールに一致するゲームはまだありません。',
+  AppLocale.smartPreviewError: 'プレビューを読み込めませんでした。再試行してください。',
+  AppLocale.smartYes: 'はい',
+  AppLocale.smartNo: 'いいえ',
+  AppLocale.smartDone: '完了',
+  AppLocale.smartLower: '最小',
+  AppLocale.smartUpper: '最大',
+  AppLocale.smartRating: '評価（0–10）',
+  AppLocale.smartPlayed: 'プレイ済み',
+  AppLocale.smartIs: '一致する',
+  AppLocale.smartIsNot: '一致しない',
+  AppLocale.smartContains: '含む',
+  AppLocale.smartNotContains: '含まない',
+  AppLocale.smartBefore: 'より前',
+  AppLocale.smartAfter: 'より後',
+  AppLocale.smartAtLeast: '以上',
+  AppLocale.smartAtMost: '以下',
+  AppLocale.smartBetween: '範囲',
+  AppLocale.smartWithinDays: '直近',
+  AppLocale.smartNotWithinDays: '直近以外',
+  AppLocale.smartDays: '{count}日間',
+  AppLocale.smartDaysOne: '{count}日間',
+  AppLocale.smartDaysFew: '{count}日間',
+  AppLocale.collectionLoadError: 'このコレクションのゲームを読み込めませんでした。',
+  AppLocale.smartRulesOnly: 'これらのルールに従ってゲームが自動的に追加されます。',
+  AppLocale.customSounds: "カスタム効果音",
+  AppLocale.customSoundsSubtitle: "移動・決定・戻る操作の効果音を選択",
+  AppLocale.customSoundsHint: "WAV、MP3、OGG、FLAC · 5秒・5 MiBまで",
+  AppLocale.customSoundsMovement: "移動",
+  AppLocale.customSoundsConfirm: "決定",
+  AppLocale.customSoundsBack: "戻る",
+  AppLocale.customSoundsDefault: "標準",
+  AppLocale.customSoundsImport: "読み込み / 置き換え",
+  AppLocale.customSoundsPreview: "試聴",
+  AppLocale.customSoundsReset: "標準に戻す",
+  AppLocale.customSoundsClose: "閉じる",
+  AppLocale.customSoundsSizeError: "5 MiB以下のファイルを選択してください。",
+  AppLocale.customSoundsDurationError: "5秒以下の効果音を選択してください。",
+  AppLocale.customSoundsInvalidError: "ファイルが空か、未対応、または再生できません。",
+  AppLocale.customSoundsSaveError: "効果音を読み込みまたは保存できませんでした。以前の効果音は保持されます。",
+
+  AppLocale.rommSavesAutoDownload: '連携したゲームの起動時に、新しいクラウドセーブをダウンロードします。',
+  AppLocale.rommSaveFile: 'セーブデータ',
+  AppLocale.rommSaveState: 'セーブステート',
+  AppLocale.rommRetryUploads: 'アップロードを再試行',
+  AppLocale.rommUploadsFailed: '一部のアップロードに失敗しました。接続とRomMの権限を確認して再試行してください。',
+  AppLocale.rommUploadsFailedFor:
+      '{games}のセーブをアップロードできませんでした。接続とRomMの権限を確認して再試行してください。',
+  AppLocale.rommGameListSeparator: '、',
+  AppLocale.rommGameListMore: '{games}ほか{count}件',
+  AppLocale.rommSavesHelp:
+      'RomMのセーブとステートを表示します。アップロードの再試行では、RomMにリンクされ同期が有効なローカルゲームを確認します。新しいリモートセーブはゲーム起動時にダウンロードされます。',
+  AppLocale.rommDeleteTitle: 'RomMから削除',
+  AppLocale.rommDeleteConfirm:
+      '{file} をRomMサーバーから完全に削除します。デバイス上のコピーは残り、このゲームの同期を続けているデバイスからは再びアップロードされます。',
+  AppLocale.rommDeleted: 'RomMから削除しました。',
+  AppLocale.rommDeleteFailed: 'RomMから削除できませんでした。接続とRomMの権限を確認して再試行してください。',
+  AppLocale.rommDeleteNotSent: '削除はRomMに届く前にキャンセルされました。何も削除されていません。',
+  AppLocale.rommSaveFileCount: 'セーブデータ{count}件',
+  AppLocale.rommSaveFilesCount: 'セーブデータ{count}件',
+  AppLocale.rommSaveStateCount: 'セーブステート{count}件',
+  AppLocale.rommSaveStatesCount: 'セーブステート{count}件',
+  AppLocale.rommDeleteGameBothConfirm:
+      '{game} の{saves}と{states}をRomMサーバーから完全に削除します。デバイス上のコピーは残り、このゲームの同期を続けているデバイスからは再びアップロードされます。',
+  AppLocale.rommDeleteGameConfirm:
+      '{game} の{files}をRomMサーバーから完全に削除します。デバイス上のコピーは残り、このゲームの同期を続けているデバイスからは再びアップロードされます。',
+  AppLocale.rommDeleteKeepsSaves: 'このゲームのセーブデータはRomMに残ります。',
+  AppLocale.rommDeleteKeepsStates: 'このゲームのセーブステートはRomMに残ります。',
   AppLocale.ignoreArticlesInGameSort: "ゲームの並び替えで冠詞を無視",
   AppLocale.ignoreArticlesInGameSortSubtitle:
       "タイトル先頭の The、A、An を無視します。例：The Legend of Zelda は L に分類されます。",
@@ -174,9 +254,9 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.nowPlayingDimOff: 'オフ',
   AppLocale.secondarySectionNowPlaying: 'Now Playingパネル',
   AppLocale.secondarySectionDock: 'アプリドック',
-  AppLocale.screenshotAccess: 'Screen return & screenshots',
+  AppLocale.screenshotAccess: '画面復帰とスクリーンショット',
   AppLocale.screenshotAccessSubtitle:
-      'Restores the Now Playing screen when you close an app opened from the dock, and lets the screenshot button capture the screen (opens Android accessibility settings)',
+      'ドックから開いたアプリを閉じたときにNow Playing画面に戻し、スクリーンショットボタンで画面を撮影できるようにします（Androidのユーザー補助設定が開きます）',
   AppLocale.scanOnStartupSubtitle: 'アプリ起動時にROMフォルダを自動的にスキャン',
   AppLocale.ignoreHiddenFiles: '隠しアイテムを無視',
   AppLocale.ignoreHiddenFilesSubtitle: 'ROMスキャン中に隠しファイルとフォルダを非表示にする',
@@ -220,8 +300,8 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.bartopShutdown: '終了時にBarTOPをシャットダウン',
   AppLocale.bartopShutdownSubtitle: 'アプリ終了時にコンピュータをシャットダウン',
 
-  AppLocale.showSyncTab: 'NeoSyncタブを表示',
-  AppLocale.showSyncTabSubtitle: 'ナビゲーションバーにNeoSyncタブを表示します',
+  AppLocale.showSyncTab: 'セーブタブを表示',
+  AppLocale.showSyncTabSubtitle: 'ナビゲーションバーにセーブタブを表示します',
   AppLocale.showAchievementsTab: '実績タブを表示',
   AppLocale.showAchievementsTabSubtitle: 'ナビゲーションバーにRetroAchievementsタブを表示します',
   AppLocale.showRommTab: 'RomM タブを表示',
@@ -266,8 +346,22 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.cleanOrphanedMetadataNothingFound: '孤立したメタデータは見つかりませんでした。',
   AppLocale.cleanOrphanedMetadataDone:
       '{entries} 件のメタデータエントリと {files} 個のメディアファイルを削除しました。',
+  AppLocale.cleanOrphanedMetadataDelete:
+      '孤立したメタデータエントリ {count} 件をデータベースとディスクから削除します。',
+  AppLocale.cleanOrphanedMetadataDeleteOne:
+      '孤立したメタデータエントリ {count} 件をデータベースとディスクから削除します。',
   AppLocale.cleanOrphanedMetadataEsdeSkippedSuffix:
-      '{count} 件の ES-DE からインポートしたエントリはそのまま残されています。',
+      'ES-DE からインポートした {count} 件のエントリはそのまま残ります。',
+  AppLocale.cleanOrphanedMetadataEsdeSkippedSuffixOne:
+      'ES-DE からインポートした {count} 件のエントリはそのまま残ります。',
+  AppLocale.cleanOrphanedMetadataNotRemoved:
+      '{count} 件のエントリを削除できませんでした。もう一度ツールを実行してください。',
+  AppLocale.cleanOrphanedMetadataNotRemovedOne:
+      '{count} 件のエントリを削除できませんでした。もう一度ツールを実行してください。',
+  AppLocale.cleanOrphanedMetadataNothingToDelete:
+      '削除するものはありません。孤立したメタデータはすべて ES-DE からインポートしたもので、このツールでは削除しません。',
+  AppLocale.cleanOrphanedMetadataMediaUnavailable:
+      'NeoStation のメディアフォルダが見つかりません。NeoStation を再起動してからもう一度お試しください。',
   AppLocale.cleanOrphanedMetadataFailed: '孤立したメタデータの削除に失敗しました: {error}',
   AppLocale.rematchAchievements: 'RetroAchievements のゲームを照合',
   AppLocale.rommLinkLibrary: 'ライブラリをRomMにリンク',
@@ -312,6 +406,8 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.pressToRemoveFolder: '決定を押してこのフォルダを削除',
   AppLocale.maxRomFoldersReached: '最大5つのROMフォルダが許可されています',
   AppLocale.romFolderRemoved: 'ROMフォルダが削除されました',
+  AppLocale.romFolderRemoveFailed: 'ROMフォルダを削除できませんでした: {error}',
+  AppLocale.romFolderAlreadyAdded: 'そのフォルダはすでにROMフォルダとして追加されています',
   AppLocale.selectRomsFolder: 'ROMフォルダを選択',
   AppLocale.scanningSystem: 'システムをスキャン中',
 
@@ -346,7 +442,6 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.scrapingUnavailableAndroid: 'Androidではスクレイピングを利用できません。',
   AppLocale.achievements: '実績',
 
-  AppLocale.neoSync: 'NeoSync',
   AppLocale.neoSyncLogin: 'NeoSync ログイン',
   AppLocale.neoSyncSynchronizing: 'NeoSync: 同期中...',
   AppLocale.neoSyncNotConnected: 'NeoSync: 未接続',
@@ -579,6 +674,18 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.hintScrape: 'スクレイプ',
   AppLocale.hintMoreActions: 'その他',
   AppLocale.hintOptions: 'オプション',
+  AppLocale.gameOptionsThisGame: 'このゲーム',
+  AppLocale.gameOptionsView: '表示',
+  AppLocale.systemOptionsSelectedSystem: '選択中のシステム',
+  AppLocale.systemOptionsSystemView: 'システム表示',
+  AppLocale.systemOptionsSystemLayout: 'システムレイアウト',
+  AppLocale.systemOptionsGameSearch: 'ゲーム検索',
+  AppLocale.systemOptionsSystemViewSubtitle: 'システムの表示方法。',
+  AppLocale.systemOptionsSystemSorting: 'システム並べ替え',
+  AppLocale.systemOptionsSystemSortingSubtitle: 'システムの並べ替え方法。',
+  AppLocale.systemOptionsGameSettingsDescription: 'エミュレータ、コア、操作、表示',
+  AppLocale.systemOptionsSearchDescription: 'ライブラリ全体からゲームを検索',
+  AppLocale.systemOptionsNoSystem: 'ゲーム設定を構成するシステムを選択してください。',
   AppLocale.addTo: '追加する…',
   AppLocale.addedToCollection: '{name} に追加しました',
   AppLocale.newCollection: '新しいコレクション…',
@@ -615,6 +722,25 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.cannotReadFolder: 'このフォルダを読み込めません',
   AppLocale.noStorageFound: 'ストレージが見つかりません',
   AppLocale.lastPlayed: '最後にプレイ',
+  AppLocale.nowPlayingTitle: 'Now Playing',
+  AppLocale.nowPlayingSession: 'セッション',
+  AppLocale.nowPlayingLastPlayed: '最後にプレイ',
+  AppLocale.launchAnApp: 'アプリを起動',
+  AppLocale.chooseAnApp: 'アプリを選択',
+  AppLocale.noAppsFound: 'アプリが見つかりません',
+  AppLocale.timeNever: '未プレイ',
+  AppLocale.timeYesterday: '昨日',
+  AppLocale.timeDaysAgo: '{count}日前',
+  AppLocale.timeHoursAgo: '{count}時間前',
+  AppLocale.timeMinutesAgo: '{count}分前',
+  AppLocale.timeJustNow: 'たった今',
+  AppLocale.clockAm: '午前',
+  AppLocale.clockPm: '午後',
+  AppLocale.clockTime12h: '{period}{time}',
+  AppLocale.playTimeHoursMinutes: '{h}時間{m}分',
+  AppLocale.playTimeMinutes: '{m}分',
+  AppLocale.playTimeUnderMinute: '1分未満',
+  AppLocale.raNewThisSession: 'このセッションで +{count}',
   AppLocale.apps: 'アプリ',
   AppLocale.tracks: 'トラック',
   AppLocale.games: 'ゲーム',
@@ -640,7 +766,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.sortByGroup: '並べ替え',
   AppLocale.orderGroup: '順序',
   AppLocale.synced: '同期済み',
-  AppLocale.syncing: '同期中',
+  AppLocale.syncing: '同期中...',
   AppLocale.conflict: '競合',
   AppLocale.ready: '準備完了',
   AppLocale.quota: '容量',
@@ -753,10 +879,16 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.storagePermission: 'ストレージの許可',
   AppLocale.storagePermissionDesc:
       'NeoStationがRetroArchの設定を管理し、セーブデータを正しく同期するには「すべてのファイルへのアクセス」が必要です。\n\n次の画面でこの許可を与えてください。',
-  AppLocale.screenReturnAccess: 'Screen Return Access',
+  AppLocale.screenReturnAccess: '画面復帰のアクセス許可',
   AppLocale.screenReturnAccessDesc:
-      'Brings the Now Playing screen back when you close an app opened from the dock, and enables system screenshots. Only the foreground app name is read \u2014 no screen content is collected.',
-  AppLocale.screenReturnAccessHint: 'Turn on NeoStation, then tap Allow',
+      'ドックから開いたアプリを閉じるとNow Playing画面に戻り、システムのスクリーンショットが使えるようになります。読み取るのは前面に表示中のアプリ名だけで、画面の内容は収集しません。',
+  AppLocale.screenReturnAccessHint: 'NeoStationをオンにして、「許可」をタップしてください',
+  AppLocale.screenReturnDialogTitle: '画面復帰を有効にする',
+  AppLocale.screenReturnDialogBody:
+      'ドックからアプリを起動するには、画面復帰のユーザー補助サービスが必要です。開いたアプリを閉じたあと、この画面に戻れるようにします。これがないと、戻る手段がなくなることがあります。',
+  AppLocale.screenReturnDialogSteps:
+      '次の画面で、サービスの一覧から NeoStation を探してオンにしてください。',
+  AppLocale.openSettings: '設定を開く',
   AppLocale.selectRomFolder: 'ROMフォルダを選択',
   AppLocale.romFolderSelected: 'ROMフォルダが選択されました！',
   AppLocale.chooseRomFolderDesc:
@@ -942,6 +1074,35 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.systemsUpdateDownloading: 'システム設定をダウンロード中...',
   AppLocale.systemsUpdateCancelling: 'キャンセル中...',
   AppLocale.systemsUpdateSyncing: 'システムデータベースを同期中...',
+  AppLocale.waitingForRomStorage: 'ROMストレージを待機中 ({attempt}/{max})...',
+  AppLocale.updatingSystemsList: 'システムリストを更新中...',
+  AppLocale.romsScanned: 'ROMをスキャンしました',
+  AppLocale.errorScanningRoms: 'ROMのスキャン中にエラーが発生しました',
+  AppLocale.romStorageNotReady: 'ROMストレージの準備ができていません。既存のゲームは保持されました。',
+  AppLocale.romFolderNotAddedTitle: 'ROMフォルダが追加されませんでした',
+  AppLocale.romFolderAddFailed: 'ROMフォルダを保存できませんでした: {error}',
+  AppLocale.romFolderSafMissingTitle: 'ストレージにアクセスできないROMフォルダ',
+  AppLocale.romFoldersSafMissingTitle: 'ストレージにアクセスできないROMフォルダ',
+  AppLocale.romFolderSafMissing: 'ROMフォルダを読み取れません。設定 > ディレクトリでアクセスを許可し直してください。',
+  AppLocale.romFoldersSafMissing:
+      '{count}個のROMフォルダを読み取れません。設定 > ディレクトリでアクセスを許可し直してください。',
+  AppLocale.romStorageAccessRequired:
+      'ストレージへのアクセスが必要です。ファイル選択でROMフォルダを選んでください。',
+  AppLocale.romFolderAccessDenied:
+      'ROMフォルダ {folder} にアクセスできません。ストレージの権限を確認してください。',
+  AppLocale.romFolderUnreachableTitle: 'ROMフォルダを利用できません',
+  AppLocale.romFoldersUnreachableTitle: 'ROMフォルダを利用できません',
+  AppLocale.romFolderUnreachable:
+      'ROMフォルダ {folders} にアクセスできません。既存のゲームは保持されました。{advice}',
+  AppLocale.romFoldersUnreachable:
+      'これらのROMフォルダにアクセスできません: {folders}。既存のゲームは保持されました。{advice}',
+  AppLocale.romFolderAdvicePortal:
+      'そのパスはデスクトップポータルの一時的な許可によるもので、元に戻りません。設定 > ディレクトリで削除してから、フォルダを追加し直してください。',
+  AppLocale.romFolderAdviceReconnect: 'ドライブを接続し直すか、設定 > ディレクトリでフォルダを削除してください。',
+  AppLocale.noRomFolderTitle: 'ROMフォルダが設定されていません',
+  AppLocale.noRomFolderConfigured:
+      'ROMフォルダが設定されていないため、スキャンするものがありませんでした。既存のゲームは保持されました。設定 > ディレクトリでROMフォルダを追加し直してください。',
+  AppLocale.errorScanningRomsDetail: 'ROMのスキャン中にエラーが発生しました: {error}',
   AppLocale.systemsUpdateComplete: 'システムが正常に更新されました！',
   AppLocale.systemsUpdateError: 'システムの更新に失敗しました。後でもう一度試してください。',
 
@@ -1014,6 +1175,16 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.rommTesting: 'テスト中...',
   AppLocale.rommConnectionSuccess: '接続に成功しました',
   AppLocale.rommConnectionFailed: '接続に失敗しました',
+  AppLocale.rommErrorTls:
+      '安全な（HTTPS）接続を確立できませんでした。RomM サーバーが HTTPS を使用していない場合は、http:// から始まる URL を入力してください。',
+  AppLocale.rommErrorUnreachable: 'RomM サーバーに接続できません: {error}',
+  AppLocale.rommErrorTimeout: 'RomM サーバーが時間内に応答しませんでした。',
+  AppLocale.rommErrorInvalidApiKey: 'API キーが拒否されました。',
+  AppLocale.rommErrorUnexpectedStatus:
+      'サーバーがエラーを返しました（{error}）。URL が RomM サーバーを指しているか確認してください。',
+  AppLocale.rommErrorNotRomm:
+      'その URL は RomM サーバーとして応答しませんでした。サーバー URL を確認してください。',
+  AppLocale.rommErrorServerStatus: 'RomM サーバーがエラーを返しました（{error}）。',
   AppLocale.rommConnectedAs: '{user} として接続中',
   AppLocale.rommCredentialsRequired: 'サーバー URL、ユーザー名、パスワードを入力してください',
   AppLocale.rommAuthPassword: 'パスワード',
@@ -1091,6 +1262,7 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.resetPlayTimeConfirm: 'プレイ時間をリセット',
   AppLocale.resetPlayTimeConfirmBody:
       'このゲームの記録されたプレイ時間を完全にゼロにリセットします。この操作は元に戻せません。',
+  AppLocale.playTimeResetDone: 'プレイ時間をリセットしました',
   AppLocale.removeRomFolderConfirmBody:
       'このROMフォルダをライブラリのソースから削除します。ディスク上のファイルは削除されません。',
   AppLocale.disconnectRaConfirm: 'RetroAchievements の接続を解除',
@@ -1221,27 +1393,26 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.customSaveFoldersMigrate: 'クラウドセーブをNeoSync v2に移行',
 
   // ES-DE import
-  AppLocale.esdeImport: 'ES-DE Import',
-  AppLocale.esdeImportSubtitle: 'Import metadata and artwork from ES-DE',
-  AppLocale.esdeSelectFolder: 'Select ES-DE Folder',
+  AppLocale.esdeImport: 'ES-DE インポート',
+  AppLocale.esdeImportSubtitle: 'ES-DE からメタデータとアートワークをインポート',
+  AppLocale.esdeSelectFolder: 'ES-DE フォルダーを選択',
   AppLocale.esdeSelectFolderSubtitle:
-      'Choose the ES-DE folder containing gamelists and downloaded_media',
-  AppLocale.esdeRunImport: 'Import from ES-DE',
-  AppLocale.esdeRunImportSubtitle:
-      'Fill in missing metadata and use ES-DE artwork as fallback',
-  AppLocale.esdeImporting: 'Importing from ES-DE',
-  AppLocale.esdeImportComplete: 'ES-DE import complete',
-  AppLocale.esdeImportNoFolder: 'Select your ES-DE folder first',
-  AppLocale.esdeReset: 'Reset ES-DE Import',
-  AppLocale.esdeResetSubtitle:
-      'Remove imported metadata and media links so the import can be re-run',
-  AppLocale.esdeResetComplete: 'ES-DE import reset',
+      'gamelists と downloaded_media が含まれる ES-DE フォルダーを選択します',
+  AppLocale.esdeRunImport: 'ES-DE からインポート',
+  AppLocale.esdeRunImportSubtitle: '不足しているメタデータを補い、ES-DE のアートワークを代替として使用します',
+  AppLocale.esdeImporting: 'ES-DE からインポート中',
+  AppLocale.esdeImportComplete: 'ES-DE のインポート完了',
+  AppLocale.esdeImportNoFolder: '先に ES-DE フォルダーを選択してください',
+  AppLocale.esdeReset: 'ES-DE インポートをリセット',
+  AppLocale.esdeResetSubtitle: 'インポートしたメタデータとメディアのリンクを削除し、再度インポートできるようにします',
+  AppLocale.esdeResetComplete: 'ES-DE のインポートをリセットしました',
+  AppLocale.esdeImportFailed: 'ES-DE のインポートに失敗しました: {error}',
+  AppLocale.esdeResetFailed: 'ES-DE インポートのリセットに失敗しました: {error}',
   AppLocale.esdeResetConfirmBody:
-      'This removes all imported ES-DE metadata and media links and clears the selected folder. Your games and ROM files are not affected.',
+      'ES-DE からインポートしたメタデータとメディアのリンクをすべて削除し、選択したフォルダーの設定を解除します。ゲームと ROM ファイルには影響しません。',
   AppLocale.esdeImportNotEsdeFolder:
-      'This folder is not an ES-DE installation (no gamelists found)',
-  AppLocale.esdeImportNothingFound:
-      'No matching systems or games were found to import',
+      'このフォルダーは ES-DE のインストール先ではありません（gamelists が見つかりません）',
+  AppLocale.esdeImportNothingFound: 'インポート対象となるシステムやゲームが見つかりませんでした',
   AppLocale.esdeSummarySystemsMatched: '一致したシステム',
   AppLocale.esdeSummaryUnmatched: '一致なし',
   AppLocale.esdeSummarySkipped: 'スキップ（読み取り不可）',
@@ -1268,6 +1439,19 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.wizardArtPackUnavailable:
       '現在 System Art Pack にアクセスできませんでした。オンラインになったら、'
       '後で設定からインストールできます。',
+  AppLocale.wizardSaveFailedTitle: 'セットアップが完了していません',
+  AppLocale.wizardSaveFailedBody:
+      'NeoStation は設定を保存できませんでした。ストレージが使用できることを確認してから、もう一度お試しください。\n\n{error}',
+  AppLocale.wizardRomFolderNotAdded:
+      'NeoStation はこのフォルダを追加できませんでした。\n\n{error}',
+  AppLocale.wizardRomFolderTemporary:
+      'NeoStation は再起動後にこのフォルダへアクセスし続けることができません。ホームフォルダ内またはリムーバブルメディア上のフォルダを選んでください。',
+  AppLocale.wizardFolderNotUsable:
+      'NeoStation はこのフォルダを使用できません。端末のストレージまたは SD カード上のフォルダを選んでください。',
+  AppLocale.wizardArtPackFailed:
+      'System Art Pack をダウンロードできませんでした。もう一度お試しいただくか、今はスキップしてください。',
+  AppLocale.wizardScanFailed:
+      'スキャンが完了しませんでした。もう一度お試しいただくか、この手順をスキップしてください。\n\n{error}',
 
   // Hide / unhide games
   AppLocale.hideGame: 'ゲームを非表示',
