@@ -24,6 +24,9 @@ enum ThreadProcessingStep {
   /// Downloading missing media assets.
   downloadingImages,
 
+  /// Offering the ROM to RomM before any ScreenScraper work.
+  fetchingFromRomm,
+
   /// Processing successfully finished.
   completed,
 }

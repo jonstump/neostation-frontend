@@ -1366,4 +1366,23 @@ const Map<String, dynamic> appLocaleKo = {
       '{system}의 RomM 메타데이터를 가져올 수 없습니다: {error}',
   AppLocale.rommSystemFetchServerStop:
       '조기 중단됨: RomM 서버가 응답하지 않습니다. 이미 가져온 게임은 메타데이터를 유지합니다.',
+  AppLocale.scrapeFetchingFromRomm: 'RomM에서 메타데이터를 가져오는 중…',
+  AppLocale.scrapeCompletedFromRomm: 'RomM에서 게임 정보를 가져왔습니다',
+  AppLocale.scrapeCompletedFromScreenscraper: 'ScreenScraper에서 게임 정보를 가져왔습니다',
+  AppLocale.scrapeCompletedFallback:
+      'RomM에 이 게임의 정보가 없어 ScreenScraper에서 가져왔습니다',
+  AppLocale.scrapeFailedWithReason: '게임 정보 가져오기 실패: {reason}',
+  AppLocale.scrapeSystemIdMissing: '오류: 시스템 ID가 없습니다.',
+  AppLocale.scrapeSummaryFromRomm: 'RomM에서: {count}',
+  AppLocale.scrapeSummaryFromScreenscraper: 'ScreenScraper에서: {count}',
+  AppLocale.scrapeBulkRommOnlyStarted:
+      'RomM에서만 스크래핑합니다. ScreenScraper가 설정되지 않았습니다',
+  AppLocale.scrapeBulkNoSourceAvailable:
+      '스크래핑을 시작하기 전에 ScreenScraper에 로그인하거나 RomM에 연결하세요',
+  AppLocale.scraperScreenscraperOptional:
+      'RomM이 연결되어 스크래핑에 먼저 사용됩니다. ScreenScraper에 로그인하면 대체 소스로 추가됩니다.',
+  AppLocale.scraperLoginToScreenscraper: 'ScreenScraper 로그인',
+  AppLocale.scraperSubtitleBoth:
+      'RomM에서 게임 메타데이터를 다운로드하고, RomM에 없는 항목은 ScreenScraper로 보완',
+  AppLocale.scraperSubtitleRomm: 'RomM에서 게임 메타데이터 다운로드',
 };

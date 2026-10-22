@@ -1536,4 +1536,24 @@ const Map<String, dynamic> appLocaleEs = {
       'No se pudieron obtener los metadatos de RomM para {system}: {error}',
   AppLocale.rommSystemFetchServerStop:
       'Detenido antes de tiempo: el servidor de RomM dejó de responder. Los juegos ya obtenidos conservan sus metadatos.',
+  AppLocale.scrapeFetchingFromRomm: 'Obteniendo metadatos de RomM…',
+  AppLocale.scrapeCompletedFromRomm: 'Scraping completado desde RomM',
+  AppLocale.scrapeCompletedFromScreenscraper:
+      'Scraping completado desde ScreenScraper',
+  AppLocale.scrapeCompletedFallback:
+      'RomM no tenía nada para este juego; scraping completado desde ScreenScraper',
+  AppLocale.scrapeFailedWithReason: 'Error de scraping: {reason}',
+  AppLocale.scrapeSystemIdMissing: 'Error: falta el ID del sistema.',
+  AppLocale.scrapeSummaryFromRomm: 'Desde RomM: {count}',
+  AppLocale.scrapeSummaryFromScreenscraper: 'Desde ScreenScraper: {count}',
+  AppLocale.scrapeBulkRommOnlyStarted:
+      'Scraping solo desde RomM; ScreenScraper no está configurado',
+  AppLocale.scrapeBulkNoSourceAvailable:
+      'Inicia sesión en ScreenScraper o conecta RomM antes de iniciar el scraping',
+  AppLocale.scraperScreenscraperOptional:
+      'RomM está conectado y se usa primero para el scraping. Inicia sesión en ScreenScraper para añadirlo como fuente de respaldo.',
+  AppLocale.scraperLoginToScreenscraper: 'Iniciar sesión en ScreenScraper',
+  AppLocale.scraperSubtitleBoth:
+      'Descargar metadatos de juegos desde RomM; ScreenScraper completa lo que falte en RomM',
+  AppLocale.scraperSubtitleRomm: 'Descargar metadatos de juegos desde RomM',
 };

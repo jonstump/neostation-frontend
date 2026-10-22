@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:path/path.dart' as path;
 import 'package:neostation/services/logger_service.dart';
 import '../models/rom_fingerprint.dart';
+import '../models/romm_scrape_step.dart';
 import '../models/screenscraper_game_candidate.dart';
 import '../repositories/game_repository.dart';
 import '../repositories/scraper_repository.dart';
@@ -859,7 +860,22 @@ class ScreenScraperService {
     }
   }
 
+  /// `source` value of a scrape result map when RomM scraped the game.
+  static const String scrapeSourceRomm = 'romm';
+
+  /// `source` value of a scrape result map when ScreenScraper handled it
+  /// (whether or not RomM was attempted first).
+  static const String scrapeSourceScreenscraper = 'screenscraper';
+
   /// Scrapes a single game by its filename and updates its local state.
+  ///
+  /// With a [rommStep] the game is offered to RomM first; when the step
+  /// scraped it the result is returned with `source` `romm` and ScreenScraper
+  /// — its credentials included — is never consulted. Otherwise, and when the
+  /// step is null, the ScreenScraper flow runs exactly as before. Every
+  /// result map carries `source` (`romm` | `screenscraper`) and
+  /// `rommAttempted` (whether a step was given), so a caller can say which
+  /// source handled the game and that RomM fell through.
   static Future<Map<String, dynamic>> scrapeSingleGame({
     required String appSystemId,
     required String romName,
@@ -868,12 +884,77 @@ class ScreenScraperService {
     String? gameName,
     Function(String status, double progress)? onProgress,
     bool forceOverwrite = false,
+    RommScrapeStep? rommStep,
   }) async {
+    final rommAttempted = rommStep != null;
+    Map<String, dynamic> screenscraperResult(bool success, String message) => {
+      'success': success,
+      'message': message,
+      'source': scrapeSourceScreenscraper,
+      'rommAttempted': rommAttempted,
+    };
+
+    // A RomM step that completed with nothing left to add, kept for the case
+    // below where there are no ScreenScraper credentials to fall through to.
+    var rommAlreadyComplete = false;
+
+    if (rommStep != null) {
+      onProgress?.call(AppLocale.scrapeFetchingFromRomm, 0.05);
+      final target = RommScrapeTarget(
+        appSystemId: appSystemId,
+        filename: romName,
+        systemFolder: systemFolder,
+        forceOverwrite: forceOverwrite,
+      );
+      RommScrapeStepResult stepResult;
+      try {
+        stepResult = await rommStep(target);
+      } catch (e) {
+        // A step never throws by contract; a throw is a failed step and the
+        // chain still falls through to ScreenScraper.
+        stepResult = RommScrapeStepResult.failed(e);
+      }
+      if (stepResult.scraped) {
+        return {
+          'success': true,
+          'message': AppLocale.scrapeSuccessful,
+          'source': scrapeSourceRomm,
+          'rommAttempted': true,
+        };
+      }
+      rommAlreadyComplete =
+          stepResult.status == RommScrapeStepStatus.alreadyComplete;
+      if (stepResult.status == RommScrapeStepStatus.failed) {
+        _log.w(
+          'RomM scrape step failed, falling through to ScreenScraper '
+          '(filename=$romName, system=$systemFolder, '
+          'error=${stepResult.error})',
+        );
+      } else {
+        _log.i(
+          'RomM scrape step ${stepResult.status.name}, '
+          'falling through to ScreenScraper '
+          '(filename=$romName, system=$systemFolder)',
+        );
+      }
+    }
+
     try {
       onProgress?.call(AppLocale.checkingCredentials, 0.05);
 
       if (!await hasSavedCredentials()) {
-        return {'success': false, 'message': AppLocale.scrapeNoCredentials};
+        // RomM already holds everything it carries for this game and there is
+        // no second source to consult, so this is a success, not a missing
+        // credential. (#233)
+        if (rommAlreadyComplete) {
+          return {
+            'success': true,
+            'message': AppLocale.scrapeSuccessful,
+            'source': scrapeSourceRomm,
+            'rommAttempted': true,
+          };
+        }
+        return screenscraperResult(false, AppLocale.scrapeNoCredentials);
       }
 
       final screenScraperSystemId = await _screenScraperSystemIdFor(
@@ -881,7 +962,7 @@ class ScreenScraperService {
       );
 
       if (screenScraperSystemId == null) {
-        return {'success': false, 'message': AppLocale.scrapeSystemNotMapped};
+        return screenscraperResult(false, AppLocale.scrapeSystemNotMapped);
       }
 
       onProgress?.call(AppLocale.fetchingMetadata, 0.1);
@@ -911,7 +992,7 @@ class ScreenScraperService {
       }
 
       if (gameInfoResult == null || gameInfoResult['gameInfo'] == null) {
-        return {'success': false, 'message': AppLocale.scrapeGameNotFound};
+        return screenscraperResult(false, AppLocale.scrapeGameNotFound);
       }
 
       final gameInfo = gameInfoResult['gameInfo'] as Map<String, dynamic>;
@@ -939,7 +1020,7 @@ class ScreenScraperService {
       final allowedMediaTypes = await ScraperRepository.getEnabledMediaTypes();
 
       if (allowedMediaTypes.isEmpty) {
-        return {'success': true, 'message': AppLocale.scrapeSuccessful};
+        return screenscraperResult(true, AppLocale.scrapeSuccessful);
       }
 
       final medias = gameInfo['medias'] as List<dynamic>? ?? [];
@@ -958,17 +1039,17 @@ class ScreenScraperService {
                 onProgress?.call(AppLocale.downloadingImages, 0.2 + (p * 0.8)),
           );
 
-      return {
-        'success': downloadResult['success'] == true,
-        'message': downloadResult['success'] == true
+      return screenscraperResult(
+        downloadResult['success'] == true,
+        downloadResult['success'] == true
             ? AppLocale.scrapeSuccessful
             : AppLocale.scrapeMediaDownloadsFailed,
-      };
+      );
     } on ScreenscraperQuotaExceededException {
-      return {'success': false, 'message': AppLocale.scrapeQuotaExceeded};
+      return screenscraperResult(false, AppLocale.scrapeQuotaExceeded);
     } catch (e) {
       _log.e('Error scraping single game: $e');
-      return {'success': false, 'message': AppLocale.scrapeUnexpectedError};
+      return screenscraperResult(false, AppLocale.scrapeUnexpectedError);
     }
   }
 
@@ -1169,14 +1250,29 @@ class ScreenScraperService {
     }
   }
 
+  /// Whether a bulk run may start: it needs ScreenScraper credentials, a RomM
+  /// step, or both. With neither the run refuses exactly as it always did.
+  static bool canStartBulkScrape({
+    required Map<String, String>? credentials,
+    required RommScrapeStep? rommStep,
+  }) => credentials != null || rommStep != null;
+
   /// Initiates a background scraping process for all detected ROMs.
   ///
   /// Coordinates system synchronization, batch processing, and thread-safe
   /// quota monitoring. Notifies the provided [ScrapingProvider] about progress.
+  ///
+  /// With a [rommStep] every worker offers its ROM to RomM first and only
+  /// falls through to ScreenScraper when the step did not scrape it (see
+  /// [processRomForBulk]). The run may then start without ScreenScraper
+  /// credentials, in which case a ROM the step neither scraped nor found
+  /// already complete is counted as failed and no ScreenScraper request is
+  /// made for it. The summary reports how many games each source scraped.
   static Future<bool> startMetadataScraping(
     BuildContext context,
     ScrapingProvider scrapingProvider, {
     bool Function()? shouldCancel,
+    RommScrapeStep? rommStep,
   }) async {
     try {
       if (_isMetadataScrapingRunning) return false;
@@ -1184,13 +1280,25 @@ class ScreenScraperService {
 
       final startTime = DateTime.now();
       final credentials = await getSavedCredentials();
-      if (credentials == null) return false;
+      if (!canStartBulkScrape(credentials: credentials, rommStep: rommStep)) {
+        return false;
+      }
+      final screenscraperAvailable = credentials != null;
+      if (!screenscraperAvailable) {
+        _log.i(
+          'Bulk scrape starting from RomM only: no ScreenScraper credentials',
+        );
+        // A RomM-only install may never have synced ScreenScraper systems, so
+        // make sure every mapped system has its (enabled) config row; the
+        // idempotent init is what syncSystemIds runs once systems are mapped.
+        await ScraperRepository.initializeScraperSystemConfig();
+      }
 
       ScreenscraperClient.initializeDailyCounter(0);
-      final maxThreads = int.tryParse(credentials['maxthreads'] ?? '4') ?? 4;
+      final maxThreads = int.tryParse(credentials?['maxthreads'] ?? '4') ?? 4;
       ScreenscraperClient.updateRequestSemaphore(maxThreads);
 
-      final preferredLanguage = credentials['preferred_language'] ?? 'en';
+      final preferredLanguage = credentials?['preferred_language'] ?? 'en';
       final scraperConfig = await getScraperConfig();
       final scrapeMode = scraperConfig['scrape_mode'].toString();
 
@@ -1246,6 +1354,12 @@ class ScreenScraperService {
       int totalProcessedGames = 0;
       int totalSuccessfulGames = 0;
       int totalFailedGames = 0;
+      // Per-source tallies: a game counts under the source that scraped it.
+      int rommGames = 0;
+      int screenscraperGames = 0;
+      // The overwrite flag the ScreenScraper branch uses for every ROM of
+      // this run; the RomM step maps it onto its writer mode.
+      final forceOverwrite = scrapeMode == 'all';
 
       final batches = <List<Map<String, dynamic>>>[];
       for (var i = 0; i < allRomsToProcess.length; i += maxThreads) {
@@ -1269,25 +1383,42 @@ class ScreenScraperService {
         final batchFutures = <Future<Map<String, dynamic>>>[];
         for (var threadIndex = 0; threadIndex < batch.length; threadIndex++) {
           final threadId = threadIndex + 1;
+          final rom = batch[threadIndex];
+          final String systemName = rom['system_name'];
+          final String systemFolder = rom['system_folder'];
+          final String appSystemId = rom['system_id'];
+          // Each worker runs the RomM step for its own ROM and only then the
+          // unchanged ScreenScraper worker.
           batchFutures.add(
-            _processRomInThread(
-              rom: batch[threadIndex],
+            processRomForBulk(
+              rom: rom,
               threadId: threadId,
-              systemName: batch[threadIndex]['system_name'],
-              systemFolder: batch[threadIndex]['system_folder'],
-              screenscraperSystemId:
-                  int.tryParse(
-                    batch[threadIndex]['screenscraper_system_id']?.toString() ??
-                        '0',
-                  ) ??
-                  0,
-              appSystemId: batch[threadIndex]['system_id'],
-              maxThreads: maxThreads,
-              maxDailyRequests: 100000,
-              preferredLanguage: preferredLanguage,
+              systemName: systemName,
+              systemFolder: systemFolder,
+              appSystemId: appSystemId,
+              forceOverwrite: forceOverwrite,
+              screenscraperAvailable: screenscraperAvailable,
+              rommStep: rommStep,
               scrapingProvider: scrapingProvider,
               shouldCancel: shouldCancel,
-              scraperConfig: scraperConfig,
+              scrapeWithScreenscraper: () => _processRomInThread(
+                rom: rom,
+                threadId: threadId,
+                systemName: systemName,
+                systemFolder: systemFolder,
+                screenscraperSystemId:
+                    int.tryParse(
+                      rom['screenscraper_system_id']?.toString() ?? '0',
+                    ) ??
+                    0,
+                appSystemId: appSystemId,
+                maxThreads: maxThreads,
+                maxDailyRequests: 100000,
+                preferredLanguage: preferredLanguage,
+                scrapingProvider: scrapingProvider,
+                shouldCancel: shouldCancel,
+                scraperConfig: scraperConfig,
+              ),
             ),
           );
         }
@@ -1297,6 +1428,11 @@ class ScreenScraperService {
           totalProcessedGames++;
           if (results[i]['success'] == true) {
             totalSuccessfulGames++;
+            if (results[i]['source'] == scrapeSourceRomm) {
+              rommGames++;
+            } else {
+              screenscraperGames++;
+            }
           } else if (results[i]['cancelled'] == true) {
             return false;
           } else {
@@ -1316,7 +1452,15 @@ class ScreenScraperService {
         }
       }
 
+      if (rommStep != null) {
+        _log.i(
+          'Bulk scrape sources: romm=$rommGames '
+          'screenscraper=$screenscraperGames failed=$totalFailedGames',
+        );
+      }
+
       if (context.mounted) {
+        // The per-source lines are only shown when RomM took part.
         _showScrapingSummaryDialog(
           context,
           totalGames: totalGamesToProcess,
@@ -1324,6 +1468,8 @@ class ScreenScraperService {
           failedGames: totalFailedGames,
           elapsedTime: '${DateTime.now().difference(startTime).inSeconds}s',
           totalRequests: 0,
+          rommGames: rommStep != null ? rommGames : null,
+          screenscraperGames: rommStep != null ? screenscraperGames : null,
         );
       }
 
@@ -1341,6 +1487,175 @@ class ScreenScraperService {
       _cachedCredentials = null;
       _isMetadataScrapingRunning = false;
     }
+  }
+
+  /// The per-ROM source chain of a bulk run, executed inside one worker.
+  ///
+  /// With a [rommStep] the ROM is offered to RomM first: the thread shows
+  /// [ThreadProcessingStep.fetchingFromRomm] while the step runs, and a
+  /// scraped result is returned with `source` `romm` without any
+  /// ScreenScraper work. Otherwise — and when there is no step —
+  /// [scrapeWithScreenscraper] (the unchanged ScreenScraper worker) runs and
+  /// its result is returned with `source` `screenscraper`. When ScreenScraper
+  /// is not available ([screenscraperAvailable] is false) a ROM the step did
+  /// not scrape is counted as failed and no ScreenScraper request is made —
+  /// except one the step reported [RommScrapeStepStatus.alreadyComplete] for,
+  /// which counts as scraped by RomM because there is nothing else to try.
+  ///
+  /// Cancellation is checked at the top, where the worker always checked it;
+  /// a step already in flight completes and keeps its write. The step is
+  /// called with nothing shared between workers but the target it is handed,
+  /// so several workers may run it at once.
+  @visibleForTesting
+  static Future<Map<String, dynamic>> processRomForBulk({
+    required Map<String, dynamic> rom,
+    required int threadId,
+    required String systemName,
+    required String systemFolder,
+    required String appSystemId,
+    required bool forceOverwrite,
+    required bool screenscraperAvailable,
+    required RommScrapeStep? rommStep,
+    required ScrapingProvider scrapingProvider,
+    required bool Function()? shouldCancel,
+    required Future<Map<String, dynamic>> Function() scrapeWithScreenscraper,
+  }) async {
+    final filename = rom['filename'].toString();
+    final rommAttempted = rommStep != null;
+
+    if (shouldCancel != null && shouldCancel()) {
+      return {'success': false, 'cancelled': true, 'requests': 0};
+    }
+
+    if (rommStep != null) {
+      scrapingProvider.updateThreadProgress(
+        threadId: threadId,
+        gameName: filename,
+        systemName: systemName,
+        isActive: true,
+        status: ThreadStatus.active,
+        currentStep: ThreadProcessingStep.fetchingFromRomm,
+        progress: 0.0,
+      );
+
+      final target = RommScrapeTarget(
+        appSystemId: appSystemId,
+        filename: filename,
+        systemFolder: systemFolder,
+        forceOverwrite: forceOverwrite,
+      );
+      RommScrapeStepResult stepResult;
+      try {
+        stepResult = await rommStep(target);
+      } catch (e) {
+        // A step never throws by contract; a throw is a failed step and the
+        // chain still falls through.
+        stepResult = RommScrapeStepResult.failed(e);
+      }
+
+      if (stepResult.scraped) {
+        scrapingProvider.updateThreadProgress(
+          threadId: threadId,
+          gameName: filename,
+          systemName: systemName,
+          isActive: false,
+          status: ThreadStatus.completed,
+          currentStep: ThreadProcessingStep.completed,
+          progress: 1.0,
+        );
+        return {
+          'success': true,
+          'cancelled': false,
+          'requests': 0,
+          'source': scrapeSourceRomm,
+          'rommAttempted': true,
+        };
+      }
+
+      if (!screenscraperAvailable) {
+        // RomM completed the fetch and only had nothing left to add. With no
+        // second source to offer the game to, that is as scraped as it gets —
+        // counting it failed would report a RomM-only library as all failures
+        // on its second pass. (#233)
+        if (stepResult.status == RommScrapeStepStatus.alreadyComplete) {
+          scrapingProvider.updateThreadProgress(
+            threadId: threadId,
+            gameName: filename,
+            systemName: systemName,
+            isActive: false,
+            status: ThreadStatus.completed,
+            currentStep: ThreadProcessingStep.completed,
+            progress: 1.0,
+          );
+          return {
+            'success': true,
+            'cancelled': false,
+            'requests': 0,
+            'source': scrapeSourceRomm,
+            'rommAttempted': true,
+          };
+        }
+        final log = stepResult.status == RommScrapeStepStatus.failed
+            ? _log.w
+            : _log.i;
+        log(
+          'RomM scrape step ${stepResult.status.name} and ScreenScraper is '
+          'not set up; counting as failed '
+          '(filename=$filename, system=$systemFolder'
+          '${stepResult.error == null ? '' : ', error=${stepResult.error}'})',
+        );
+        // Release the thread row so it does not keep showing the RomM step.
+        scrapingProvider.updateThreadProgress(
+          threadId: threadId,
+          gameName: filename,
+          systemName: systemName,
+          isActive: false,
+          status: ThreadStatus.idle,
+          currentStep: ThreadProcessingStep.completed,
+          progress: 1.0,
+        );
+        return {
+          'success': false,
+          'cancelled': false,
+          'requests': 0,
+          'source': scrapeSourceRomm,
+          'rommAttempted': true,
+        };
+      }
+
+      if (stepResult.status == RommScrapeStepStatus.failed) {
+        _log.w(
+          'RomM scrape step failed, falling through to ScreenScraper '
+          '(filename=$filename, system=$systemFolder, '
+          'error=${stepResult.error})',
+        );
+      } else {
+        _log.i(
+          'RomM scrape step ${stepResult.status.name}, '
+          'falling through to ScreenScraper '
+          '(filename=$filename, system=$systemFolder)',
+        );
+      }
+    }
+
+    if (!screenscraperAvailable) {
+      // Unreachable from startMetadataScraping (the start gate needs one
+      // source), kept so the chain never issues a request it cannot make.
+      return {
+        'success': false,
+        'cancelled': false,
+        'requests': 0,
+        'source': scrapeSourceScreenscraper,
+        'rommAttempted': rommAttempted,
+      };
+    }
+
+    final result = await scrapeWithScreenscraper();
+    return {
+      ...result,
+      'source': scrapeSourceScreenscraper,
+      'rommAttempted': rommAttempted,
+    };
   }
 
   /// Internal worker thread processing for a single ROM during a batch operation.
@@ -1597,6 +1912,8 @@ class ScreenScraperService {
     required int failedGames,
     required String elapsedTime,
     required int totalRequests,
+    int? rommGames,
+    int? screenscraperGames,
   }) async {
     await showDialog(
       context: context,
@@ -1606,6 +1923,8 @@ class ScreenScraperService {
         successfulGames: successfulGames,
         failedGames: failedGames,
         elapsedTime: elapsedTime,
+        rommGames: rommGames,
+        screenscraperGames: screenscraperGames,
       ),
     );
   }

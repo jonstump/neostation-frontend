@@ -1086,6 +1086,26 @@ mixin AppLocale {
   static const String identifyGame = 'identify_game';
   static const String identifySearchHint = 'identify_search_hint';
   static const String identifySearchFailed = 'identify_search_failed';
+  static const String scrapeFetchingFromRomm = 'scrape_fetching_from_romm';
+  static const String scrapeCompletedFromRomm = 'scrape_completed_from_romm';
+  static const String scrapeCompletedFromScreenscraper =
+      'scrape_completed_from_screenscraper';
+  static const String scrapeCompletedFallback = 'scrape_completed_fallback';
+  static const String scrapeFailedWithReason = 'scrape_failed_with_reason';
+  static const String scrapeSystemIdMissing = 'scrape_system_id_missing';
+  static const String scrapeSummaryFromRomm = 'scrape_summary_from_romm';
+  static const String scrapeSummaryFromScreenscraper =
+      'scrape_summary_from_screenscraper';
+  static const String scrapeBulkRommOnlyStarted =
+      'scrape_bulk_romm_only_started';
+  static const String scrapeBulkNoSourceAvailable =
+      'scrape_bulk_no_source_available';
+  static const String scraperScreenscraperOptional =
+      'scraper_screenscraper_optional';
+  static const String scraperLoginToScreenscraper =
+      'scraper_login_to_screenscraper';
+  static const String scraperSubtitleBoth = 'scraper_subtitle_both';
+  static const String scraperSubtitleRomm = 'scraper_subtitle_romm';
 
   // ---------------------------------------------------------------------------
   // User data location

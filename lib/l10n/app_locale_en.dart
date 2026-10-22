@@ -1475,4 +1475,23 @@ const Map<String, dynamic> appLocaleEn = {
       'Could not fetch RomM metadata for {system}: {error}',
   AppLocale.rommSystemFetchServerStop:
       'Stopped early: the RomM server stopped responding. Games already fetched keep their metadata.',
+  AppLocale.scrapeFetchingFromRomm: 'Fetching metadata from RomM…',
+  AppLocale.scrapeCompletedFromRomm: 'Scraped from RomM',
+  AppLocale.scrapeCompletedFromScreenscraper: 'Scraped from ScreenScraper',
+  AppLocale.scrapeCompletedFallback:
+      'RomM had nothing for this game; scraped from ScreenScraper',
+  AppLocale.scrapeFailedWithReason: 'Scraping failed: {reason}',
+  AppLocale.scrapeSystemIdMissing: 'Error: system ID is missing.',
+  AppLocale.scrapeSummaryFromRomm: 'From RomM: {count}',
+  AppLocale.scrapeSummaryFromScreenscraper: 'From ScreenScraper: {count}',
+  AppLocale.scrapeBulkRommOnlyStarted:
+      'Scraping from RomM only; ScreenScraper is not set up',
+  AppLocale.scrapeBulkNoSourceAvailable:
+      'Log in to ScreenScraper or connect to RomM before scraping',
+  AppLocale.scraperScreenscraperOptional:
+      'RomM is connected and is used first for scraping. Log in to ScreenScraper to add it as a fallback source.',
+  AppLocale.scraperLoginToScreenscraper: 'Log in to ScreenScraper',
+  AppLocale.scraperSubtitleBoth:
+      'Download game metadata from RomM, with ScreenScraper for anything RomM lacks',
+  AppLocale.scraperSubtitleRomm: 'Download game metadata from RomM',
 };

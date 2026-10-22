@@ -1502,4 +1502,23 @@ const Map<String, dynamic> appLocaleId = {
       'Tidak dapat mengambil metadata RomM untuk {system}: {error}',
   AppLocale.rommSystemFetchServerStop:
       'Dihentikan lebih awal: server RomM berhenti merespons. Game yang sudah diambil tetap menyimpan metadatanya.',
+  AppLocale.scrapeFetchingFromRomm: 'Mengambil metadata dari RomM…',
+  AppLocale.scrapeCompletedFromRomm: 'Data diambil dari RomM',
+  AppLocale.scrapeCompletedFromScreenscraper: 'Data diambil dari ScreenScraper',
+  AppLocale.scrapeCompletedFallback:
+      'RomM tidak memiliki data untuk game ini; data diambil dari ScreenScraper',
+  AppLocale.scrapeFailedWithReason: 'Scraping gagal: {reason}',
+  AppLocale.scrapeSystemIdMissing: 'Kesalahan: ID sistem tidak ada.',
+  AppLocale.scrapeSummaryFromRomm: 'Dari RomM: {count}',
+  AppLocale.scrapeSummaryFromScreenscraper: 'Dari ScreenScraper: {count}',
+  AppLocale.scrapeBulkRommOnlyStarted:
+      'Scraping hanya dari RomM; ScreenScraper belum disiapkan',
+  AppLocale.scrapeBulkNoSourceAvailable:
+      'Masuk ke ScreenScraper atau hubungkan RomM sebelum memulai scraping',
+  AppLocale.scraperScreenscraperOptional:
+      'RomM terhubung dan digunakan lebih dulu untuk scraping. Masuk ke ScreenScraper untuk menambahkannya sebagai sumber cadangan.',
+  AppLocale.scraperLoginToScreenscraper: 'Masuk ke ScreenScraper',
+  AppLocale.scraperSubtitleBoth:
+      'Unduh metadata game dari RomM, dengan ScreenScraper untuk yang tidak ada di RomM',
+  AppLocale.scraperSubtitleRomm: 'Unduh metadata game dari RomM',
 };

@@ -1358,4 +1358,23 @@ const Map<String, dynamic> appLocaleJa = {
       '{system} の RomM メタデータを取得できませんでした: {error}',
   AppLocale.rommSystemFetchServerStop:
       '途中で停止しました：RomMサーバーが応答しなくなりました。取得済みのゲームのメタデータは保持されます。',
+  AppLocale.scrapeFetchingFromRomm: 'RomM からメタデータを取得中…',
+  AppLocale.scrapeCompletedFromRomm: 'RomM からスクレイピングしました',
+  AppLocale.scrapeCompletedFromScreenscraper: 'ScreenScraper からスクレイピングしました',
+  AppLocale.scrapeCompletedFallback:
+      'RomM にはこのゲームのデータがなかったため、ScreenScraper からスクレイピングしました',
+  AppLocale.scrapeFailedWithReason: 'スクレイピングに失敗しました: {reason}',
+  AppLocale.scrapeSystemIdMissing: 'エラー: システム ID がありません。',
+  AppLocale.scrapeSummaryFromRomm: 'RomM から: {count}',
+  AppLocale.scrapeSummaryFromScreenscraper: 'ScreenScraper から: {count}',
+  AppLocale.scrapeBulkRommOnlyStarted:
+      'RomM のみからスクレイピングします。ScreenScraper は設定されていません',
+  AppLocale.scrapeBulkNoSourceAvailable:
+      'スクレイピングを始める前に ScreenScraper にログインするか RomM に接続してください',
+  AppLocale.scraperScreenscraperOptional:
+      'RomM に接続済みで、スクレイピングでは最初に使われます。ScreenScraper にログインすると予備のソースとして追加できます。',
+  AppLocale.scraperLoginToScreenscraper: 'ScreenScraper にログイン',
+  AppLocale.scraperSubtitleBoth:
+      'RomM からゲームのメタデータをダウンロードし、不足分は ScreenScraper で補完',
+  AppLocale.scraperSubtitleRomm: 'RomM からゲームのメタデータをダウンロード',
 };
