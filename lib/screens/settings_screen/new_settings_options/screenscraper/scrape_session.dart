@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/providers/file_provider.dart';
+import 'package:neostation/providers/romm_provider.dart';
 import 'package:neostation/providers/scraping_provider.dart';
 import 'package:neostation/services/global_notification_service.dart';
 import 'package:neostation/services/logger_service.dart';
@@ -11,9 +13,10 @@ import 'package:neostation/widgets/custom_notification.dart';
 
 final _log = LoggerService.instance;
 
-/// Starts a full ScreenScraper session: syncs system IDs, then scrapes every
+/// Starts a full scrape session: syncs system IDs, then scrapes every
 /// enabled system, reporting progress through the persistent global
-/// notification.
+/// notification. A connected RomM server takes part as the first source, and
+/// is enough on its own when no ScreenScraper account is signed in.
 ///
 /// The session outlives the widget that started it, so leaving the settings
 /// screen mid-scrape lets it finish and report through the notification.
@@ -43,8 +46,37 @@ Future<void> startScrapeSession(
     context,
   );
 
+  final rommProvider = context.read<RommProvider>();
+  final fileProvider = context.read<FileProvider>();
+
   final credentials = await ScreenScraperService.getSavedCredentials();
   final maxThreads = int.tryParse(credentials?['maxthreads'] ?? '4') ?? 4;
+  // RomM takes part when it is connected; the step is null otherwise.
+  final rommStep = await rommProvider.bulkScrapeStep(fileProvider);
+
+  // The run needs ScreenScraper credentials or a connected RomM; with
+  // neither it refuses here, before anything is started.
+  if (!ScreenScraperService.canStartBulkScrape(
+    credentials: credentials,
+    rommStep: rommStep,
+  )) {
+    if (context.mounted) {
+      AppNotification.showNotification(
+        context,
+        AppLocale.scrapeBulkNoSourceAvailable.getString(context),
+        type: NotificationType.error,
+      );
+    }
+    return;
+  }
+  final rommOnly = credentials == null;
+  if (rommOnly && context.mounted) {
+    AppNotification.showNotification(
+      context,
+      AppLocale.scrapeBulkRommOnlyStarted.getString(context),
+      type: NotificationType.info,
+    );
+  }
 
   scrapingProvider.startScraping(maxThreads: maxThreads);
 
@@ -64,14 +96,20 @@ Future<void> startScrapeSession(
     final syncSuccess = await ScreenScraperService.syncSystemIds();
 
     if (!syncSuccess) {
-      GlobalNotificationService().update(
-        id: notificationId,
-        message: localeSyncError,
-        type: GlobalNotificationType.error,
-        progress: null,
-      );
-      scrapingProvider.stopScraping();
-      return;
+      if (!rommOnly) {
+        GlobalNotificationService().update(
+          id: notificationId,
+          message: localeSyncError,
+          type: GlobalNotificationType.error,
+          progress: null,
+        );
+        scrapingProvider.stopScraping();
+        return;
+      }
+      // The ScreenScraper system sync needs credentials, so it cannot
+      // succeed on a RomM-only run; the run goes ahead with the systems
+      // that are already mapped.
+      _log.w('ScreenScraper system sync failed; continuing with RomM only');
     }
 
     _log.i('Step 2: Starting metadata scraping...');
@@ -85,6 +123,7 @@ Future<void> startScrapeSession(
       context,
       scrapingProvider,
       shouldCancel: () => !scrapingProvider.isScraping,
+      rommStep: rommStep,
     );
 
     if (scrapingSuccess) {

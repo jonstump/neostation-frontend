@@ -107,6 +107,8 @@ class ScrapingProgressPanel extends StatelessWidget {
         return AppLocale.scanningImages.getString(context);
       case ThreadProcessingStep.downloadingImages:
         return AppLocale.downloadingImages.getString(context);
+      case ThreadProcessingStep.fetchingFromRomm:
+        return AppLocale.scrapeFetchingFromRomm.getString(context);
       case ThreadProcessingStep.completed:
         return AppLocale.ok.getString(context);
     }
