@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'custom_sfx.dart';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:sub_screen/shared_state_manager.dart';
@@ -11,6 +12,11 @@ import 'secondary_achievement_item.dart';
 /// the main screen and a connected secondary display (e.g., in dual-screen
 /// handhelds like the Ayaneo Flip DS).
 class SecondaryDisplayStateData {
+  /// The system name pushed before any system is focused. A language-neutral
+  /// token in the shared state; the second screen shows it as its translated
+  /// welcome text.
+  static const String welcomeSystemName = 'WELCOME';
+
   /// Name of the system currently being browsed.
   final String systemName;
 
@@ -223,6 +229,7 @@ class SecondaryDisplayStateData {
   /// UI navigation sound volume (0.0–[SfxService.maxVolume]). User setting,
   /// pushed by the main engine for the same cross-engine reason as [sfxEnabled].
   final double sfxVolume;
+  final Map<SfxAction, CustomSfx> customSfx;
 
   /// Whether clocks use the 12-hour (AM/PM) form. User setting, pushed by the
   /// main engine so the Now Playing corner clock matches the primary header.
@@ -301,6 +308,7 @@ class SecondaryDisplayStateData {
     // like the persisted setting rather than silently muting or blasting.
     this.sfxEnabled = true,
     this.sfxVolume = 0.75,
+    this.customSfx = const {},
     this.use12HourClock,
   });
 
@@ -382,6 +390,7 @@ class SecondaryDisplayStateData {
     bool? setupWizardActive,
     bool? sfxEnabled,
     double? sfxVolume,
+    Map<SfxAction, CustomSfx>? customSfx,
     bool? use12HourClock,
   }) {
     return SecondaryDisplayStateData(
@@ -464,6 +473,7 @@ class SecondaryDisplayStateData {
       setupWizardActive: setupWizardActive ?? this.setupWizardActive,
       sfxEnabled: sfxEnabled ?? this.sfxEnabled,
       sfxVolume: sfxVolume ?? this.sfxVolume,
+      customSfx: customSfx ?? this.customSfx,
       use12HourClock: use12HourClock ?? this.use12HourClock,
     );
   }
@@ -548,6 +558,7 @@ class SecondaryDisplayStateData {
       setupWizardActive: json['setupWizardActive'] as bool? ?? false,
       sfxEnabled: json['sfxEnabled'] as bool? ?? true,
       sfxVolume: (json['sfxVolume'] as num?)?.toDouble() ?? 0.75,
+      customSfx: CustomSfx.decode(json['customSfx']),
       use12HourClock: json['use12HourClock'] as bool?,
     );
   }
@@ -615,6 +626,7 @@ class SecondaryDisplayStateData {
       'setupWizardActive': setupWizardActive,
       'sfxEnabled': sfxEnabled,
       'sfxVolume': sfxVolume,
+      'customSfx': jsonDecode(CustomSfx.encode(customSfx)),
       'use12HourClock': use12HourClock,
     };
   }
@@ -732,6 +744,7 @@ class SecondaryDisplayState extends SharedState<SecondaryDisplayStateData> {
     bool? setupWizardActive,
     bool? sfxEnabled,
     double? sfxVolume,
+    Map<SfxAction, CustomSfx>? customSfx,
     bool? use12HourClock,
   }) async {
     if (!Platform.isAndroid) return;
@@ -739,7 +752,10 @@ class SecondaryDisplayState extends SharedState<SecondaryDisplayStateData> {
     try {
       final current =
           value ??
-          SecondaryDisplayStateData(systemName: systemName ?? 'WELCOME');
+          SecondaryDisplayStateData(
+            systemName:
+                systemName ?? SecondaryDisplayStateData.welcomeSystemName,
+          );
       setState(
         current.copyWith(
           systemName: systemName,
@@ -818,6 +834,7 @@ class SecondaryDisplayState extends SharedState<SecondaryDisplayStateData> {
           setupWizardActive: setupWizardActive,
           sfxEnabled: sfxEnabled,
           sfxVolume: sfxVolume,
+          customSfx: customSfx,
           use12HourClock: use12HourClock,
         ),
       );

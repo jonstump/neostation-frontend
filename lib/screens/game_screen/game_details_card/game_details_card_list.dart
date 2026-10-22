@@ -1478,7 +1478,7 @@ class _GameDetailsCardListState extends State<GameDetailsCardList>
       if (!mounted) return;
       AppNotification.showNotification(
         context,
-        AppLocale.scrapeSystemIdMissing.getString(context),
+        AppLocale.errorSystemNotFound.getString(context),
         type: NotificationType.error,
       );
       return;

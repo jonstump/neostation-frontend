@@ -2,7 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqlite3/sqlite3.dart';
 import 'package:neostation/data/datasources/sqlite_migrations.dart';
 
-/// Tests for migration v169, which adds
+/// Tests for migration v173, which adds
 /// `user_screenscraper_metadata.metadata_source` — the column that records
 /// which writer (ScreenScraper, RomM, ES-DE, Steam, or the manual editor)
 /// produced a metadata row.
@@ -36,18 +36,18 @@ void main() {
     db.close();
   });
 
-  Future<void> runV169() => SqliteMigrations.migrateToVersion(db, 169);
+  Future<void> runV173() => SqliteMigrations.migrateToVersion(db, 173);
 
   List<String> metaColumns() => db
       .select('PRAGMA table_info(user_screenscraper_metadata)')
       .map((c) => c['name'].toString())
       .toList();
 
-  group('migration v169', () {
+  group('migration v173', () {
     test('adds metadata_source when the column is missing', () async {
       expect(metaColumns(), isNot(contains('metadata_source')));
 
-      await runV169();
+      await runV173();
 
       expect(metaColumns(), contains('metadata_source'));
     });
@@ -61,7 +61,7 @@ void main() {
         "('megadrive', 'Other.bin', 'Other', 0, 1)",
       );
 
-      await runV169();
+      await runV173();
 
       final rows = db.select(
         'SELECT app_system_id, filename, real_name, is_fully_scraped, '
@@ -96,7 +96,7 @@ void main() {
     test(
       'a row inserted after the migration defaults to a null source',
       () async {
-        await runV169();
+        await runV173();
         db.execute(
           "INSERT INTO user_screenscraper_metadata (app_system_id, filename) "
           "VALUES ('snes', 'Game.sfc')",
@@ -111,7 +111,7 @@ void main() {
     );
 
     test('stores each of the sources', () async {
-      await runV169();
+      await runV173();
       db.execute(
         "INSERT INTO user_screenscraper_metadata "
         "(app_system_id, filename, metadata_source) VALUES "
@@ -145,7 +145,7 @@ void main() {
         "VALUES ('snes', 'Game.sfc', 'romm')",
       );
 
-      await runV169();
+      await runV173();
 
       // A device that already has the column keeps the recorded source.
       final rows = db.select(
@@ -166,9 +166,9 @@ void main() {
         "VALUES ('snes', 'Game.sfc')",
       );
 
-      await runV169();
+      await runV173();
       final after = db.select('SELECT * FROM user_screenscraper_metadata');
-      await runV169();
+      await runV173();
 
       expect(metaColumns(), contains('metadata_source'));
       expect(metaColumns().where((c) => c == 'metadata_source').length, 1);

@@ -118,7 +118,7 @@ void main() {
 
         expect(map, {
           'success': false,
-          'message': AppLocale.scrapeNoCredentials,
+          'message': AppLocale.scrapeNoSourceForGame,
           'source': ScreenScraperService.scrapeSourceScreenscraper,
           'rommAttempted': true,
         });
@@ -154,7 +154,7 @@ void main() {
       },
     );
 
-    expect(map['message'], AppLocale.scrapeNoCredentials);
+    expect(map['message'], AppLocale.scrapeNoSourceForGame);
     expect(map['source'], ScreenScraperService.scrapeSourceScreenscraper);
     expect(map['rommAttempted'], isTrue);
   });

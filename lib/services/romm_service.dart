@@ -16,11 +16,72 @@ import '../models/romm_play_session.dart';
 import '../models/romm_rom.dart';
 import 'logger_service.dart';
 
-/// Raised when a RomM API call fails; [message] is safe to surface to the user.
+/// Why connecting to a RomM server failed, so the UI can say it in the app
+/// language. Everything else is [RommFailure.other].
+enum RommFailure {
+  /// The address answered, but not over TLS (most often an http-only server
+  /// reached as https://, which is what an address without a scheme becomes).
+  tls,
+
+  /// The server couldn't be reached at all; [RommException.detail] holds the
+  /// system's reason.
+  unreachable,
+
+  /// The server didn't answer in time.
+  timeout,
+
+  /// The username or password was rejected.
+  invalidCredentials,
+
+  /// The API key was rejected.
+  invalidApiKey,
+
+  /// The server answered with a status other than success or rejection;
+  /// [RommException.statusCode] holds it.
+  unexpectedStatus,
+
+  /// The server answered, but not like RomM (no token in its answer, or not
+  /// the JSON RomM sends).
+  notRomm,
+
+  /// A server already confirmed as RomM answered a request with an error
+  /// status; [RommException.statusCode] holds it.
+  serverError,
+
+  /// Any other failure: shown as the generic "connection failed".
+  other,
+}
+
+/// The start of a response body, whitespace collapsed, for the log: enough to
+/// tell a router's login page or another app from RomM.
+String _bodyExcerpt(String body) {
+  final text = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+  return text.length <= 160 ? text : '${text.substring(0, 160)}…';
+}
+
+/// Raised when a RomM API call fails. [message] is English, for the log; the
+/// UI says [kind] in the app language instead.
 class RommException implements Exception {
   final String message;
   final int? statusCode;
-  RommException(this.message, {this.statusCode});
+  final RommFailure kind;
+
+  /// A detail worth showing with [kind], e.g. the system's reason a server
+  /// couldn't be reached.
+  final String? detail;
+
+  /// The start of what the server answered (content type and a short,
+  /// whitespace-collapsed excerpt), for the log only: it tells a web server's
+  /// own error page from RomM's. Never shown to the user.
+  final String? serverResponse;
+
+  RommException(
+    this.message, {
+    this.statusCode,
+    this.serverResponse,
+    this.kind = RommFailure.other,
+    this.detail,
+  });
 
   @override
   String toString() => 'RommException($statusCode): $message';
@@ -247,6 +308,21 @@ class RommService {
   bool get playtimeSyncAvailable =>
       _playtimeScopeGranted && _playSessionsSupported;
 
+  /// Advanced by every [configure]. A request reads the server and credentials
+  /// only when it is sent, so one begun under an earlier connection must not
+  /// be sent, retried, or store a token under this one.
+  int _session = 0;
+
+  /// Identifies the current connection. Asset and ROM IDs are only meaningful
+  /// on the connection they came from: another server or account can reuse
+  /// them for unrelated files.
+  int get session => _session;
+
+  /// Throws when [configure] has run since [session] was read.
+  void _checkSession(int session) {
+    if (session != _session) throw RommException('Connection changed');
+  }
+
   String get baseUrl => _baseUrl;
 
   /// The account this connection belongs to. With the password grant it is
@@ -285,6 +361,7 @@ class RommService {
     String? refreshToken,
     int? tokenExpiresMs,
   }) {
+    _session++;
     // A different server (or a reconnect) knows nothing about the last one's
     // missing covers.
     _deadCovers.clear();
@@ -344,8 +421,8 @@ class RommService {
   }
 
   /// Establishes (or confirms) a usable credential, dispatching on the mode the
-  /// service was configured in. Throws [RommException] with a user-facing
-  /// message on failure.
+  /// service was configured in. Throws [RommException] on failure; its
+  /// [RommException.kind] says why.
   Future<void> authenticate() async {
     if (_baseUrl.isEmpty) {
       throw RommException('Server URL is empty');
@@ -360,41 +437,62 @@ class RommService {
   /// Nothing is cached: the key *is* the credential, so this is a validity
   /// check rather than a token exchange, and only ever runs on connect.
   Future<void> _verifyApiKey() async {
+    final session = _session;
     http.Response resp;
     try {
       resp = await _httpClient
           .get(_uri('/api/users/me'), headers: _authHeaders)
           .timeout(const Duration(seconds: 30));
     } on TimeoutException {
-      throw RommException('Connection timed out');
+      throw RommException('Connection timed out', kind: RommFailure.timeout);
     } on HandshakeException {
       throw RommException(
         'TLS handshake failed — try an http:// URL if the server is not HTTPS',
+        kind: RommFailure.tls,
       );
     } on SocketException catch (e) {
-      throw RommException('Cannot reach server: ${e.message}');
+      throw RommException(
+        'Cannot reach server: ${e.message}',
+        kind: RommFailure.unreachable,
+        detail: e.message,
+      );
     } catch (e) {
       throw RommException('Connection failed: $e');
     }
+    _checkSession(session);
 
     if (resp.statusCode == 401 || resp.statusCode == 403) {
-      throw RommException('Invalid API key', statusCode: resp.statusCode);
+      throw RommException(
+        'Invalid API key',
+        statusCode: resp.statusCode,
+        kind: RommFailure.invalidApiKey,
+      );
     }
     if (resp.statusCode != 200) {
       throw RommException(
         'Authentication failed (${resp.statusCode})',
         statusCode: resp.statusCode,
+        serverResponse: _bodyExcerpt(resp.body),
+        kind: RommFailure.unexpectedStatus,
       );
     }
 
+    // Anything can answer 200 at this path (a router's login page, a web
+    // app's catch-all), so an answer that isn't JSON isn't RomM. A JSON answer
+    // without the expected shape only costs us the display name.
+    final Object? decoded;
     try {
-      final decoded = jsonDecode(resp.body);
-      if (decoded is Map<String, dynamic>) {
-        final name = decoded['username']?.toString();
-        if (name != null && name.isNotEmpty) _username = name;
-      }
+      decoded = jsonDecode(resp.body);
     } catch (_) {
-      // The key works; a surprising body shape only costs us the display name.
+      throw RommException(
+        'Server did not answer like RomM',
+        serverResponse: _bodyExcerpt(resp.body),
+        kind: RommFailure.notRomm,
+      );
+    }
+    if (decoded is Map<String, dynamic>) {
+      final name = decoded['username']?.toString();
+      if (name != null && name.isNotEmpty) _username = name;
     }
   }
 
@@ -409,48 +507,60 @@ class RommService {
       'scope': scope,
     };
 
+    final session = _session;
     http.Response resp;
+    bool? playtimeGranted;
     try {
       resp = await _postTokenRequest(bodyFor('$_readScopes $_playtimeScopes'));
-      if (resp.statusCode == 403) {
+      if (resp.statusCode == 403 && session == _session) {
         // Either the account lacks the playtime scopes or the server predates
         // them — indistinguishable here, and both mean the same thing: keep the
         // connection, drop playtime sync. Bad credentials fail the retry too,
         // so the error path below is unchanged for them.
         final base = await _postTokenRequest(bodyFor(_readScopes));
-        if (base.statusCode == 200) {
-          _playtimeScopeGranted = false;
-          _log.w('RomM denied $_playtimeScopes — playtime sync disabled');
-        }
+        if (base.statusCode == 200) playtimeGranted = false;
         resp = base.statusCode == 200 ? base : resp;
       } else if (resp.statusCode == 200) {
-        _playtimeScopeGranted = true;
+        playtimeGranted = true;
       }
     } on TimeoutException {
-      throw RommException('Connection timed out');
+      throw RommException('Connection timed out', kind: RommFailure.timeout);
     } on HandshakeException {
       throw RommException(
         'TLS handshake failed — try an http:// URL if the server is not HTTPS',
+        kind: RommFailure.tls,
       );
     } on SocketException catch (e) {
-      throw RommException('Cannot reach server: ${e.message}');
+      throw RommException(
+        'Cannot reach server: ${e.message}',
+        kind: RommFailure.unreachable,
+        detail: e.message,
+      );
     } catch (e) {
       throw RommException('Connection failed: $e');
     }
+    _checkSession(session);
 
     if (resp.statusCode == 401 || resp.statusCode == 403) {
       throw RommException(
         'Invalid username or password',
         statusCode: resp.statusCode,
+        kind: RommFailure.invalidCredentials,
       );
     }
     if (resp.statusCode != 200) {
       throw RommException(
         'Authentication failed (${resp.statusCode})',
         statusCode: resp.statusCode,
+        serverResponse: _bodyExcerpt(resp.body),
+        kind: RommFailure.unexpectedStatus,
       );
     }
 
+    if (playtimeGranted != null) _playtimeScopeGranted = playtimeGranted;
+    if (playtimeGranted == false) {
+      _log.w('RomM denied $_playtimeScopes — playtime sync disabled');
+    }
     _applyTokenResponse(resp.body);
   }
 
@@ -464,27 +574,43 @@ class RommService {
       await authenticate();
       return;
     }
+    final session = _session;
     try {
       final resp = await _postTokenRequest({
         'grant_type': 'refresh_token',
         'refresh_token': refresh,
       });
-      if (resp.statusCode == 200) {
+      if (resp.statusCode == 200 && session == _session) {
         _applyTokenResponse(resp.body);
         return;
       }
     } catch (e) {
       _log.w('RomM token refresh failed, re-authenticating: $e');
     }
+    _checkSession(session);
     // Refresh failed for any reason: re-authenticate from credentials.
     await authenticate();
   }
 
   void _applyTokenResponse(String responseBody) {
-    final json = jsonDecode(responseBody) as Map<String, dynamic>;
+    // A server that isn't RomM (a router's login page, another app on the
+    // port) can answer 200 with something else entirely.
+    final Map<String, dynamic> json;
+    try {
+      json = jsonDecode(responseBody) as Map<String, dynamic>;
+    } catch (_) {
+      throw RommException(
+        'Server did not answer with a token',
+        serverResponse: _bodyExcerpt(responseBody),
+        kind: RommFailure.notRomm,
+      );
+    }
     final access = json['access_token']?.toString();
     if (access == null || access.isEmpty) {
-      throw RommException('Server did not return an access token');
+      throw RommException(
+        'Server did not return an access token',
+        kind: RommFailure.notRomm,
+      );
     }
     _accessToken = access;
     final refresh = json['refresh_token']?.toString();
@@ -521,7 +647,7 @@ class RommService {
       usesApiKey || (_accessToken != null && _accessToken!.isNotEmpty);
 
   /// Authenticates and performs a lightweight call to confirm the connection
-  /// and credentials are valid (used by the settings "Test" button).
+  /// and credentials are valid (used by [RommProvider.connect]).
   Future<void> verifyConnection() async {
     await authenticate();
     // In API-key mode authenticate() *is* the authorized `/api/users/me` call,
@@ -529,9 +655,26 @@ class RommService {
     if (usesApiKey) return;
     // A successful, authorized call confirms the token works end-to-end. Hit
     // the lightweight `/api/users/me` rather than downloading the full platform
-    // list — same auth guarantee, a fraction of the payload. Error mapping is
-    // unchanged: authenticate() surfaces bad credentials as 401/403, and any
-    // other failure surfaces as the shared "Request failed"/network message.
+    // list — same auth guarantee, a fraction of the payload. authenticate()
+    // surfaces bad credentials as 401/403. The token has just proven this is
+    // RomM, so an error status from this call is the server's
+    // ([RommFailure.serverError]), not a wrong address.
+    try {
+      await _authedGet('/api/users/me');
+    } on RommException catch (e) {
+      if (e.kind != RommFailure.other || e.statusCode == null) rethrow;
+      throw RommException(
+        e.message,
+        statusCode: e.statusCode,
+        serverResponse: e.serverResponse,
+        kind: RommFailure.serverError,
+      );
+    }
+  }
+
+  /// Validates a restored session, allowing cached tokens to refresh normally.
+  Future<void> verifyStoredConnection() async {
+    if (usesApiKey) return _verifyApiKey();
     await _authedGet('/api/users/me');
   }
 
@@ -549,28 +692,37 @@ class RommService {
   /// Works for both [http.Response] and [http.StreamedResponse] via [statusOf];
   /// this is the single retry policy shared by every authenticated call site
   /// (plain GETs, asset GETs, uploads and ROM downloads).
+  ///
+  /// Nothing is sent once [configure] has run since the call began, so a
+  /// request waiting on authentication can't reach a different server, or
+  /// carry its credentials to the original one.
   Future<T> _sendWithAuthRetry<T>(
     Future<T> Function() send, {
     required int Function(T resp) statusOf,
   }) async {
+    // Both attempts map a timeout or an unreachable server the same way, so a
+    // caller never sees a raw exception just because a token was refreshed.
+    Future<T> attempt() async {
+      try {
+        return await send();
+      } on TimeoutException {
+        throw RommException('Request timed out');
+      } on SocketException catch (e) {
+        throw RommException('Cannot reach server: ${e.message}');
+      }
+    }
+
+    final session = _session;
     await _ensureToken();
-    T resp;
-    try {
-      resp = await send();
-    } on TimeoutException {
-      throw RommException('Request timed out');
-    } on SocketException catch (e) {
-      throw RommException('Cannot reach server: ${e.message}');
-    }
+    _checkSession(session);
+    final resp = await attempt();
+    final status = statusOf(resp);
+    if (status != 401 && status != 403) return resp;
+    _checkSession(session);
     if (usesApiKey) return resp;
-    if (statusOf(resp) == 401) {
-      await _refreshAccessToken();
-      resp = await send();
-    } else if (statusOf(resp) == 403) {
-      await authenticate();
-      resp = await send();
-    }
-    return resp;
+    await (status == 401 ? _refreshAccessToken() : authenticate());
+    _checkSession(session);
+    return attempt();
   }
 
   /// Issues an authenticated GET for a server-relative path+query, applying the
@@ -1025,6 +1177,10 @@ class RommService {
     _deadCovers.add(url);
   }
 
+  /// Lets [urls] be asked for again: an explicit refresh retries artwork, and
+  /// the server may have gained an image since it answered with nothing.
+  void forgetDeadCovers(Iterable<String> urls) => _deadCovers.removeAll(urls);
+
   /// Whether [bytes] start with the magic numbers of an image format the app
   /// can decode. Deliberately content-based: RomM names every stored cover
   /// `big.png` whatever the source served, so the extension proves nothing.
@@ -1245,6 +1401,20 @@ class RommService {
 
   // ── Download ─────────────────────────────────────────────────────────────
 
+  /// How long [downloadRom] waits for the response headers.
+  @visibleForTesting
+  static const downloadRequestTimeout = Duration(seconds: 60);
+
+  /// How long [downloadRom] waits for the next chunk of the body. There is no
+  /// limit on the whole transfer: a multi-GB ROM over slow wifi is fine, as
+  /// long as it keeps arriving.
+  @visibleForTesting
+  static const downloadStallTimeout = Duration(seconds: 60);
+
+  /// How often [downloadRom] asks its `shouldCancel` while it waits on the
+  /// server, so a cancel reaches a download that has stopped arriving.
+  static const _cancelPollInterval = Duration(milliseconds: 250);
+
   /// Streams a ROM download to [destFilePath].
   ///
   /// Writes to a sibling `.part` temp file and renames it into place only on
@@ -1252,12 +1422,21 @@ class RommService {
   /// Streaming (not buffering) keeps memory flat for multi-GB ROMs.
   ///
   /// [onProgress] receives `(receivedBytes, totalBytes?)`. [shouldCancel] is
-  /// polled between chunks; returning true aborts and cleans up the temp file.
+  /// polled between chunks, and every [_cancelPollInterval] while waiting on
+  /// the server; returning true aborts with [RommCancelledException] and
+  /// cleans up the temp file.
+  ///
+  /// The headers must arrive within [requestTimeout] and each chunk of the
+  /// body within [stallTimeout] of the last, or the download fails with a
+  /// [RommException]. A timeout, a cancel or any other failure aborts the
+  /// request, which closes its connection.
   Future<void> downloadRom(
     RommRom rom, {
     required String destFilePath,
     void Function(int received, int? total)? onProgress,
     bool Function()? shouldCancel,
+    Duration requestTimeout = downloadRequestTimeout,
+    Duration stallTimeout = downloadStallTimeout,
   }) async {
     final fileName = rom.fsName.isNotEmpty ? rom.fsName : '${rom.id}';
     final endpoint =
@@ -1270,56 +1449,156 @@ class RommService {
     }
     await Directory(path.dirname(destFilePath)).create(recursive: true);
 
-    // Build a fresh request each attempt so the shared retry policy (401 →
-    // refresh, 403 → re-auth) picks up the new token on its second try.
-    final resp = await _sendWithAuthRetry<http.StreamedResponse>(
-      () => _httpClient.send(
-        http.Request('GET', _uri(endpoint))..headers.addAll(_authHeaders),
-      ),
-      statusOf: (r) => r.statusCode,
-    );
-
-    if (resp.statusCode != 200) {
-      throw RommException(
-        'Download failed (${resp.statusCode})',
-        statusCode: resp.statusCode,
-      );
+    // Completing [abort] tells the client to drop the request (and its
+    // socket). It is shared by both attempts of the auth retry and completed
+    // on every way out of this method; once the body has been read in full,
+    // completing it has no effect.
+    final abort = Completer<void>();
+    void fireAbort() {
+      if (!abort.isCompleted) abort.complete();
     }
 
-    final total = resp.contentLength;
-    var received = 0;
-    final sink = tmpFile.openWrite();
+    // Completes with null when [shouldCancel] says so. A plain value, never
+    // an error, so a cancel that lands after the download has moved on is
+    // nobody's unhandled exception. While the body streams, the poll also
+    // cancels [chunks], which ends a pending `moveNext` with false: racing
+    // every chunk against this future instead left a listener on it per
+    // chunk, hundreds of megabytes over a large download.
+    final cancelled = Completer<Never?>();
+    StreamIterator<List<int>>? chunks;
+    final cancelPoll = shouldCancel == null
+        ? null
+        : Timer.periodic(_cancelPollInterval, (_) {
+            if (!cancelled.isCompleted && shouldCancel()) {
+              cancelled.complete(null);
+              chunks?.cancel();
+            }
+          });
+
+    IOSink? sink;
+    // Only a failure while the body streams to disk is reported as a
+    // "Download error"; anything else reaches the caller as it was thrown.
+    var reading = false;
     try {
-      await for (final chunk in resp.stream) {
-        if (shouldCancel?.call() ?? false) {
-          await sink.close();
-          await tmpFile.delete();
-          throw RommCancelledException();
+      // Build a fresh request each attempt so the shared retry policy (401 →
+      // refresh, 403 → re-auth) picks up the new token on its second try.
+      final resp = await _sendWithAuthRetry<http.StreamedResponse>(() async {
+        final sent = _httpClient
+            .send(
+              http.AbortableRequest(
+                'GET',
+                _uri(endpoint),
+                abortTrigger: abort.future,
+              )..headers.addAll(_authHeaders),
+            )
+            .timeout(requestTimeout);
+        final answered = await Future.any<http.StreamedResponse?>([
+          sent,
+          cancelled.future,
+        ]);
+        if (answered == null) throw RommCancelledException();
+        return answered;
+      }, statusOf: (r) => r.statusCode);
+
+      if (resp.statusCode != 200) {
+        throw RommException(
+          'Download failed (${resp.statusCode})',
+          statusCode: resp.statusCode,
+          serverResponse: await responseExcerpt(resp),
+        );
+      }
+
+      final total = resp.contentLength;
+      var received = 0;
+      chunks = StreamIterator(resp.stream.timeout(stallTimeout));
+      final out = sink = tmpFile.openWrite();
+      reading = true;
+      while (true) {
+        final bool more;
+        try {
+          more = await chunks.moveNext();
+          if (cancelled.isCompleted) throw RommCancelledException();
+        } on TimeoutException {
+          throw RommException(
+            'Download stalled: no data for ${stallTimeout.inSeconds} s',
+          );
         }
-        sink.add(chunk);
+        if (!more) break;
+        if (shouldCancel?.call() ?? false) throw RommCancelledException();
+        final chunk = chunks.current;
+        out.add(chunk);
         received += chunk.length;
         onProgress?.call(received, total);
       }
-      await sink.flush();
-      await sink.close();
-    } catch (e) {
-      try {
-        await sink.close();
-      } catch (_) {}
-      if (await tmpFile.exists()) {
-        await tmpFile.delete();
-      }
-      if (e is RommException) rethrow;
-      throw RommException('Download error: $e');
-    }
+      await out.flush();
+      await out.close();
+      sink = null;
+      reading = false;
 
-    // Replace any existing destination, then move temp into place.
-    final destFile = File(destFilePath);
-    if (await destFile.exists()) {
-      await destFile.delete();
+      // Replace any existing destination, then move temp into place.
+      final destFile = File(destFilePath);
+      if (await destFile.exists()) {
+        await destFile.delete();
+      }
+      await tmpFile.rename(destFilePath);
+      _log.i('RomM download complete: $destFilePath ($received bytes)');
+    } catch (e) {
+      fireAbort();
+      try {
+        await sink?.close();
+      } catch (_) {}
+      try {
+        if (await tmpFile.exists()) await tmpFile.delete();
+      } catch (_) {}
+      if (e is RommException || !reading) rethrow;
+      throw RommException('Download error: $e');
+    } finally {
+      cancelPoll?.cancel();
+      fireAbort();
+      await chunks?.cancel();
     }
-    await tmpFile.rename(destFilePath);
-    _log.i('RomM download complete: $destFilePath ($received bytes)');
+  }
+
+  /// The content type and first [maxChars] characters of a failed [resp]'s
+  /// body, whitespace collapsed. Reads at most 1 KiB for about [timeout] (at
+  /// most twice that when the body stalls), then stops listening, which closes
+  /// the connection, so a large, slow or never-ending error body can't stall
+  /// the download flow. Best effort: answers what it got so far if reading
+  /// fails.
+  @visibleForTesting
+  static Future<String> responseExcerpt(
+    http.StreamedResponse resp, {
+    int maxChars = 200,
+    Duration timeout = const Duration(seconds: 5),
+  }) async {
+    const maxBytes = 1024;
+    final bytes = BytesBuilder(copy: false);
+    final elapsed = Stopwatch()..start();
+    var cut = false;
+    try {
+      // The stream timeout catches a body that stops arriving; the stopwatch
+      // one that keeps arriving a byte at a time.
+      await for (final chunk in resp.stream.timeout(timeout)) {
+        final room = maxBytes - bytes.length;
+        bytes.add(chunk.length > room ? chunk.sublist(0, room) : chunk);
+        if (bytes.length >= maxBytes || elapsed.elapsed >= timeout) {
+          cut = true;
+          break;
+        }
+      }
+    } catch (_) {}
+    // The cut may split a multi-byte character.
+    var text = utf8
+        .decode(bytes.takeBytes(), allowMalformed: true)
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    if (text.length > maxChars) {
+      text = '${text.substring(0, maxChars)}…';
+    } else if (cut) {
+      text = '$text…';
+    }
+    final type = resp.headers['content-type'];
+    return type == null ? text : '[$type] $text';
   }
 
   // ── Saves & states (asset sync) ──────────────────────────────────────────
@@ -1332,12 +1611,24 @@ class RommService {
   Future<List<RommAsset>> listStates({required int romId}) =>
       _listAssets('/api/states', romId: romId, isState: true);
 
+  /// Inventory for the Saves tab, including archival versions and backups.
+  /// Unlike per-game sync discovery, this lists all of the current user's files.
+  Future<List<RommAsset>> listSaveAssets() async {
+    final results = await Future.wait([
+      _listAssets('/api/saves', isState: false),
+      _listAssets('/api/states', isState: true),
+    ]);
+    return [...results[0], ...results[1]];
+  }
+
   Future<List<RommAsset>> _listAssets(
     String basePath, {
-    required int romId,
+    int? romId,
     required bool isState,
   }) async {
-    final resp = await _authedGet('$basePath?rom_id=$romId');
+    final resp = await _authedGet(
+      romId == null ? basePath : '$basePath?rom_id=$romId',
+    );
     return _itemsOf(jsonDecode(resp.body))
         .whereType<Map<String, dynamic>>()
         .map((j) => RommAsset.fromJson(j, isState: isState))
@@ -1586,6 +1877,42 @@ class RommService {
       decoded as Map<String, dynamic>,
       isState: isState,
     );
+  }
+
+  /// Permanently deletes save files from the server (`POST /api/saves/delete`,
+  /// body `{"saves": [...]}`). Requires the `assets.write` scope.
+  Future<void> deleteSaves(List<int> assetIds) =>
+      _deleteAssets('/api/saves', field: 'saves', assetIds: assetIds);
+
+  /// Permanently deletes save states from the server
+  /// (`POST /api/states/delete`, body `{"states": [...]}`).
+  Future<void> deleteStates(List<int> assetIds) =>
+      _deleteAssets('/api/states', field: 'states', assetIds: assetIds);
+
+  /// RomM answers 404 when any id is not one of the current user's assets.
+  Future<void> _deleteAssets(
+    String basePath, {
+    required String field,
+    required List<int> assetIds,
+  }) async {
+    if (assetIds.isEmpty) return;
+    final body = jsonEncode({field: assetIds});
+    final resp = await _sendWithAuthRetry<http.Response>(
+      () => _httpClient
+          .post(
+            _uri('$basePath/delete'),
+            headers: {..._authHeaders, 'Content-Type': 'application/json'},
+            body: body,
+          )
+          .timeout(const Duration(seconds: 30)),
+      statusOf: (r) => r.statusCode,
+    );
+    if (resp.statusCode != 200) {
+      throw RommException(
+        'Delete failed (${resp.statusCode})',
+        statusCode: resp.statusCode,
+      );
+    }
   }
 
   // ── Play sessions (playtime sync) ─────────────────────────────────────────

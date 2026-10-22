@@ -95,6 +95,21 @@ void main() {
       expect(message.tone, ScrapeResultTone.error);
     });
 
+    test('RomM had nothing and ScreenScraper is not signed in: info tone', () {
+      final message = scrapeResultMessageFor({
+        'success': false,
+        'message': AppLocale.scrapeNoSourceForGame,
+        'source': ScreenScraperService.scrapeSourceScreenscraper,
+        'rommAttempted': true,
+      });
+      expect(message.key, AppLocale.scrapeFailedWithReason);
+      expect(
+        message.localizedPlaceholders['reason'],
+        AppLocale.scrapeNoSourceForGame,
+      );
+      expect(message.tone, ScrapeResultTone.info);
+    });
+
     test('a missing-credentials failure keeps the info tone', () {
       final message = scrapeResultMessageFor({
         'success': false,
@@ -192,7 +207,8 @@ void main() {
         AppLocale.scrapeCompletedFromScreenscraper,
         AppLocale.scrapeCompletedFallback,
         AppLocale.scrapeFailedWithReason,
-        AppLocale.scrapeSystemIdMissing,
+        AppLocale.errorSystemNotFound,
+        AppLocale.scrapeNoSourceForGame,
       };
       for (final entry in _allLanguages.entries) {
         for (final key in keys) {

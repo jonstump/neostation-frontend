@@ -954,7 +954,15 @@ class ScreenScraperService {
             'rommAttempted': true,
           };
         }
-        return screenscraperResult(false, AppLocale.scrapeNoCredentials);
+        // RomM was tried and had nothing, and there is no ScreenScraper to
+        // fall through to: say so, instead of a bare sign-in demand for a
+        // game the user may never have meant to scrape from ScreenScraper.
+        return screenscraperResult(
+          false,
+          rommAttempted
+              ? AppLocale.scrapeNoSourceForGame
+              : AppLocale.scrapeNoCredentials,
+        );
       }
 
       final screenScraperSystemId = await _screenScraperSystemIdFor(

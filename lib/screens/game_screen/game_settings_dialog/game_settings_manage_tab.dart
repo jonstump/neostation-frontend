@@ -271,7 +271,7 @@ class GameSettingsManageTabState extends State<GameSettingsManageTab> {
       if (mounted) {
         AppNotification.showNotification(
           context,
-          'Play time reset',
+          AppLocale.playTimeResetDone.getString(context),
           type: NotificationType.success,
         );
       }

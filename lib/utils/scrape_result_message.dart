@@ -75,7 +75,9 @@ ScrapeResultMessage scrapeResultMessageFor(Map<String, dynamic> result) {
   // Missing credentials is a setup condition, not a failed attempt, and the
   // grid and card sites showed it as an info toast before the RomM-first
   // chain moved the check behind the step; keep that tone.
-  final tone = reasonKey == AppLocale.scrapeNoCredentials
+  final tone =
+      reasonKey == AppLocale.scrapeNoCredentials ||
+          reasonKey == AppLocale.scrapeNoSourceForGame
       ? ScrapeResultTone.info
       : ScrapeResultTone.error;
   return ScrapeResultMessage(

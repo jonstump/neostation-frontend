@@ -62,6 +62,9 @@ class GamepadNavigation {
   final VoidCallback? onPreviousTab;
   final VoidCallback? onNextTab;
   final VoidCallback? onSelectItem;
+
+  /// Disable when selection itself previews an audio clip.
+  final bool playSelectSound;
   final VoidCallback? onBack;
   final VoidCallback? onFavorite;
   final VoidCallback? onSettings;
@@ -71,6 +74,11 @@ class GamepadNavigation {
   final VoidCallback? onSelectButton;
   final VoidCallback? onLeftBumper;
   final VoidCallback? onRightBumper;
+
+  /// L2/R2. Fire once per pull, on press; holding does not repeat. Unbound
+  /// triggers stay silent.
+  final VoidCallback? onLeftTrigger;
+  final VoidCallback? onRightTrigger;
 
   /// Select (View) chord combos. On its own Select fires [onSelectButton], or
   /// [globalSelectTap] when the layer defines none.
@@ -350,6 +358,7 @@ class GamepadNavigation {
     this.onPreviousTab,
     this.onNextTab,
     this.onSelectItem,
+    this.playSelectSound = true,
     this.onBack,
     this.onFavorite,
     this.onSettings,
@@ -359,6 +368,8 @@ class GamepadNavigation {
     this.onSelectButton,
     this.onLeftBumper,
     this.onRightBumper,
+    this.onLeftTrigger,
+    this.onRightTrigger,
     this.onSelectModifierA,
     this.onSelectModifierB,
     this.onSelectModifierX,
@@ -849,7 +860,11 @@ class GamepadNavigation {
           }
           _lastShoulderDispatchTime = now;
           _shoulderReleasedSinceDispatch = false;
-        } else {
+        } else if (!GamepadEventTranslator.isTrigger(
+          translatedEvent.inputType,
+        )) {
+          // Triggers skip this: the translator already makes each pull one
+          // press, and a pull must not swallow the button pressed after it.
           // Select and any face button that lands during a Select chord bypass
           // the action debounce so a quick chord isn't swallowed.
           final isChordRelated =
@@ -927,7 +942,7 @@ class GamepadNavigation {
 
     bool shouldProcess;
 
-    // Directional and shoulder buttons usually fire on press.
+    // Directional, shoulder and trigger buttons usually fire on press.
     if (event.inputType == GamepadInputType.dpadUp ||
         event.inputType == GamepadInputType.dpadDown ||
         event.inputType == GamepadInputType.dpadLeft ||
@@ -936,6 +951,7 @@ class GamepadNavigation {
         event.inputType == GamepadInputType.leftStickY ||
         event.inputType == GamepadInputType.buttonLB ||
         event.inputType == GamepadInputType.buttonRB ||
+        event.inputType == GamepadInputType.buttonLT ||
         event.inputType == GamepadInputType.buttonRT) {
       shouldProcess = event.isPressed;
     } else {
@@ -1040,7 +1056,7 @@ class GamepadNavigation {
         break;
 
       case GamepadInputType.buttonA:
-        SfxService().playEnterSound();
+        if (playSelectSound) SfxService().playEnterSound();
         onSelectItem?.call();
         break;
 
@@ -1070,6 +1086,17 @@ class GamepadNavigation {
       case GamepadInputType.buttonLB:
       case GamepadInputType.buttonRB:
         if (_dispatchShoulder(event.inputType)) _startShoulderHold(event);
+        break;
+
+      case GamepadInputType.buttonLT:
+      case GamepadInputType.buttonRT:
+        final action = event.inputType == GamepadInputType.buttonLT
+            ? onLeftTrigger
+            : onRightTrigger;
+        if (action != null) {
+          SfxService().playNavSound();
+          action();
+        }
         break;
 
       // L3 (left stick click) only — the UI hint shows the Left-Stick-Click
@@ -1222,7 +1249,7 @@ class GamepadNavigation {
       handled = true;
     } else if (key == LogicalKeyboardKey.enter) {
       if (isKeyDown) {
-        SfxService().playEnterSound();
+        if (playSelectSound) SfxService().playEnterSound();
         onSelectItem?.call();
       }
       handled = true;

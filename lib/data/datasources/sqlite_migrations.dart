@@ -144,6 +144,8 @@ class SqliteMigrations {
     CREATE TABLE IF NOT EXISTS user_collections (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
+      collection_type TEXT NOT NULL DEFAULT 'manual',
+      rules_json TEXT,
       image_path TEXT,
       color1 TEXT,
       color2 TEXT,
@@ -636,11 +638,31 @@ class SqliteMigrations {
         // Backfill for installs that reached v165 without this PR’s v164.
         await _migrateToVersion164(db);
         break;
-      case 169:
-        await _migrateToVersion169(db);
+      case 168:
+        await _migrateToVersion168(db);
+        break;
+      case 170:
+        await _migrateToVersion170(db);
+        break;
+      case 173:
+        await _migrateToVersion173(db);
         break;
       default:
         _log.w('No migration defined for version $version');
+    }
+  }
+
+  /// Migration v168: durable custom sounds, renumbered from v166.
+  static Future<void> _migrateToVersion168(Database db) async {
+    // Devices on the former v166 build skipped main’s sorting and manual
+    // ScreenScraper migrations. Backfill both without changing preferences.
+    await _migrateToVersion164(db);
+    await _migrateToVersion165(db);
+    final columns = db
+        .select('PRAGMA table_info(user_config)')
+        .map((row) => row['name']);
+    if (!columns.contains('custom_sfx')) {
+      db.execute('ALTER TABLE user_config ADD COLUMN custom_sfx TEXT');
     }
   }
 
@@ -7184,6 +7206,30 @@ class SqliteMigrations {
     }
   }
 
+  /// Migration v170: adds smart definitions without changing manual memberships.
+  /// Above main’s v168 and the Android Games PR’s v169; devices already on
+  /// main must still run this migration to install smart definitions.
+  static Future<void> _migrateToVersion170(Database db) async {
+    // Test devices on the smart collections branch already ran its former
+    // v163 and therefore skipped upstream's RomM migration at that version.
+    await _migrateToVersion163(db);
+    // All three collection objects, not just the table: a database that
+    // skipped v139 would otherwise lack the items table and its index.
+    await _migrateToVersion139(db);
+    final columns = db
+        .select('PRAGMA table_info(user_collections)')
+        .map((row) => row['name'].toString())
+        .toSet();
+    if (!columns.contains('collection_type')) {
+      db.execute(
+        "ALTER TABLE user_collections ADD COLUMN collection_type TEXT NOT NULL DEFAULT 'manual'",
+      );
+    }
+    if (!columns.contains('rules_json')) {
+      db.execute('ALTER TABLE user_collections ADD COLUMN rules_json TEXT');
+    }
+  }
+
   /// Migration v165: adds `user_roms.ss_manual_game_id`, the ScreenScraper game
   /// a user picked by hand for a ROM with Identify….
   ///
@@ -7219,7 +7265,7 @@ class SqliteMigrations {
     }
   }
 
-  /// Migration v159: Adds `user_screenscraper_metadata.metadata_source`,
+  /// Migration v173: Adds `user_screenscraper_metadata.metadata_source`,
   /// recording which writer produced a metadata row (`screenscraper`, `romm`,
   /// `esde`, `steam`, or `manual`).
   ///
@@ -7228,9 +7274,12 @@ class SqliteMigrations {
   /// writers set the column only when they insert a row; whole-row writers set
   /// it on every write. Nullable and guarded by `PRAGMA table_info`, so a
   /// re-run is a no-op.
-  static Future<void> _migrateToVersion169(Database db) async {
+  ///
+  /// Numbered above every slot in use on `main` and on open branches, so a
+  /// device that already ran a later `main` migration still runs this one.
+  static Future<void> _migrateToVersion173(Database db) async {
     _log.i(
-      'Migration v169: Adding metadata_source to user_screenscraper_metadata',
+      'Migration v173: Adding metadata_source to user_screenscraper_metadata',
     );
     try {
       final tableInfo = db.select(
@@ -7241,13 +7290,13 @@ class SqliteMigrations {
         db.execute(
           'ALTER TABLE user_screenscraper_metadata ADD COLUMN metadata_source TEXT',
         );
-        _log.i('Column metadata_source added via v169');
+        _log.i('Column metadata_source added via v173');
       } else {
         _log.i('Column metadata_source already exists');
       }
-      _log.i('Migration v169 completed');
+      _log.i('Migration v173 completed');
     } catch (e, stackTrace) {
-      _log.e('Error in migration v169: $e');
+      _log.e('Error in migration v173: $e');
       _log.e('   StackTrace: $stackTrace');
       rethrow;
     }

@@ -44,6 +44,7 @@ import 'game_details_card/detail_tab.dart';
 import 'game_details_card/dialogs/screenscraper_match_picker_dialog.dart';
 import 'game_details_card/random_game_dialog.dart';
 import 'game_settings_dialog/game_settings_dialog.dart';
+import 'game_options_dialog.dart';
 import 'my_games_grid.dart';
 import 'my_games_carousel.dart';
 import 'game_list_view.dart';
@@ -53,7 +54,6 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import '../../providers/system_background_provider.dart';
 import '../../models/secondary_display_state.dart';
 import '../../widgets/context_menu/game_context_menu.dart';
-import '../../widgets/game_view_mode_dropdown.dart';
 import '../../widgets/letter_indicator.dart';
 import '../../constants/system_folder_names.dart';
 import '../search_screen/search_screen.dart';
@@ -362,6 +362,10 @@ class _SystemGamesListState extends State<SystemGamesList> {
   bool _deferFavoriteReseat = false;
   final Set<String> _pendingFavoriteReseats = {};
 
+  /// Guards the Options panel against a second Start press landing before the
+  /// dialog's own navigation layer is registered.
+  bool _gameOptionsOpen = false;
+
   // Scraping state.
   final Set<String> _scrapingGameRomnames = {};
   final Map<String, double> _scrapeProgress = {};
@@ -393,12 +397,47 @@ class _SystemGamesListState extends State<SystemGamesList> {
   late SqliteDatabaseProvider _databaseProvider;
   late ScrapingProvider _scrapingProvider;
   int _lastArtworkRevision = 0;
+  late CollectionsProvider _collectionsProvider;
+  int _lastCollectionRevision = 0;
+  bool _pendingCollectionRefresh = false;
+
+  bool _collectionLoadFailed = false;
+
+  int get _currentCollectionRevision => _collectionsProvider.collectionRevision(
+    SystemFolderNames.collectionIdOf(widget.system.folderName) ?? '',
+  );
+
+  /// The provider's evaluated matches when this list is a smart collection,
+  /// so opening or reloading it skips re-evaluating the whole library.
+  Set<String>? get _smartCollectionPaths {
+    final id = SystemFolderNames.collectionIdOf(widget.system.folderName);
+    return id == null ? null : _collectionsProvider.smartPathsFor(id);
+  }
+
+  void _onCollectionsUpdated() {
+    if (_lastCollectionRevision == _currentCollectionRevision) return;
+    _lastCollectionRevision = _currentCollectionRevision;
+    // The list is emptied to free RAM during gameplay and reloaded on return;
+    // refilling it now would undo that.
+    if (SystemFolderNames.isCollection(widget.system.folderName) &&
+        mounted &&
+        !_isNavigatingBack &&
+        !_isGameLaunching) {
+      if (_deferFavoriteReseat) {
+        _pendingCollectionRefresh = true;
+      } else {
+        _loadGames();
+      }
+    }
+  }
 
   @override
   void initState() {
     super.initState();
     _fileProvider = widget.fileProvider;
     _backButtonFocusNode = FocusNode(skipTraversal: true);
+    // Collection loads read cached smart matches before their first await.
+    _collectionsProvider = context.read<CollectionsProvider>();
     _loadGames();
     _initializeGamepad();
 
@@ -409,6 +448,11 @@ class _SystemGamesListState extends State<SystemGamesList> {
     );
 
     // Attach persistent listeners to global providers.
+    _lastCollectionRevision = _currentCollectionRevision;
+    _collectionsProvider.addListener(_onCollectionsUpdated);
+    if (SystemFolderNames.isCollection(widget.system.folderName)) {
+      _collectionsProvider.load();
+    }
     _databaseProvider = context.read<SqliteDatabaseProvider>();
     _databaseProvider.addListener(_onDatabaseUpdated);
 
@@ -508,6 +552,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
   @override
   void dispose() {
     // Detach listeners before disposal.
+    _collectionsProvider.removeListener(_onCollectionsUpdated);
     _configProvider.removeListener(_onConfigChanged);
     _databaseProvider.removeListener(_onDatabaseUpdated);
     _scrapingProvider.removeListener(_onScrapingUpdated);
@@ -574,7 +619,9 @@ class _SystemGamesListState extends State<SystemGamesList> {
         if (gameViewMode == 'grid' || gameViewMode == 'carousel') {
           _gamepadNav.deactivate();
         } else {
-          _gamepadNav.activate();
+          // Options can still be open when its view-mode write completes.
+          // Let the stack retain the modal rather than waking this list too.
+          GamepadNavigationManager.reactivate();
         }
       } catch (_) {}
     }
@@ -972,7 +1019,6 @@ class _SystemGamesListState extends State<SystemGamesList> {
             // Navigation Layer: Visual alphabetical feedback for rapid scrolling.
             if (_currentLetter != null && !_isGameLaunching)
               _buildLetterIndicator(),
-            GameViewModeDropdown(),
           ],
         ),
       ),
@@ -1033,6 +1079,12 @@ class _SystemGamesListState extends State<SystemGamesList> {
     final isAggregateView = SystemFolderNames.isAggregate(
       widget.system.folderName,
     );
+    final collectionId = SystemFolderNames.collectionIdOf(
+      widget.system.folderName,
+    );
+    final collection = collectionId == null
+        ? null
+        : _collectionsProvider.byId(collectionId);
 
     return Center(
       child: Container(
@@ -1092,7 +1144,13 @@ class _SystemGamesListState extends State<SystemGamesList> {
             ),
             SizedBox(height: 4.r),
             Text(
-              (SystemFolderNames.isCollection(widget.system.folderName)
+              (_collectionLoadFailed
+                      ? AppLocale.collectionLoadError
+                      : collection?.rulesInvalid == true
+                      ? AppLocale.smartInvalidRules
+                      : collection?.isSmart == true
+                      ? AppLocale.smartNoMatches
+                      : SystemFolderNames.isCollection(widget.system.folderName)
                       ? AppLocale.emptyCollection
                       : AppLocale.checkRomFiles)
                   .getString(context),
@@ -1407,10 +1465,10 @@ class _SystemGamesListState extends State<SystemGamesList> {
       onBack: _goBack,
       onPlay: _selectCurrentGame,
       onFavorite: _toggleFavorite,
-      onYButton: _openGameContextMenu,
+      onYButton: _openGameOptions,
       selectedItemKey: _selectedItemKey,
       onRandom: _showRandomGameDialog,
-      onSettings: _openGameSettingsDialog,
+      onOptions: _openGameOptions,
       onScrape: _scrapeSelectedGame,
       scrapingGameRomnames: _scrapingGameRomnames,
       scrapeProgress: _scrapeProgress,
@@ -1446,10 +1504,10 @@ class _SystemGamesListState extends State<SystemGamesList> {
       onBack: _goBack,
       onPlay: _selectCurrentGame,
       onFavorite: _toggleFavorite,
-      onYButton: _openGameContextMenu,
+      onYButton: _openGameOptions,
       selectedItemKey: _selectedItemKey,
       onRandom: _showRandomGameDialog,
-      onSettings: _openGameSettingsDialog,
+      onOptions: _openGameOptions,
       onScrape: _scrapeSelectedGame,
       scrapingGameRomnames: _scrapingGameRomnames,
       scrapeProgress: _scrapeProgress,
@@ -1624,7 +1682,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
                   systemColor: widget.system.colorAsColor,
                   onGameSelected: _selectGame,
                   onGameConfirmed: _selectCurrentGame,
-                  onGameOptions: _openGameContextMenuFor,
+                  onGameOptions: _openGameOptionsFor,
                   isAllMode: SystemFolderNames.isAggregate(
                     widget.system.folderName,
                   ),
@@ -1949,7 +2007,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
           onShowRandomGame: _showRandomGameDialog,
           onPlayGame: _selectCurrentGame,
           onToggleFavorite: _toggleFavorite,
-          onOpenGameSettings: _openGameSettingsDialog,
+          onOpenGameSettings: _openGameOptions,
           onBack: _goBack,
           onGameUpdated: _handleGameUpdated, // Sync UI after metadata edits.
           onFavoriteToggled: _handleFavoriteToggledFromCard,
@@ -1963,6 +2021,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
   /// The DB toggle already happened in the card; mirror it into _games. The
   /// game keeps its position until the list is reloaded.
   void _handleFavoriteToggledFromCard() {
+    _collectionsProvider.load();
     _applyFavoriteToLoadedList();
   }
 
@@ -1974,6 +2033,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
   /// Called after a game is permanently deleted. Removes it from the list and
   /// selects the previous game (or the next one if at the start).
   void _handleGameDeleted(String romname) {
+    _collectionsProvider.load();
     if (_games.isEmpty) return;
 
     _resetVideoState();
@@ -2009,6 +2069,7 @@ class _SystemGamesListState extends State<SystemGamesList> {
 
   /// Synchronizes the selected game's metadata and refreshes the list sorting.
   Future<void> _handleGameUpdated() async {
+    _collectionsProvider.load();
     if (_selectedGame == null) return;
 
     try {
