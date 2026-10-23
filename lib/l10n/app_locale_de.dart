@@ -1776,6 +1776,8 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.scrapeCompletedRommUnreachable:
       "RomM war nicht erreichbar; von ScreenScraper abgerufen",
   AppLocale.scrapeSummaryRommUnavailable: "RomM nicht erreichbar bei: {count}",
+  AppLocale.scrapeStoppedRommUnreachable:
+      "Scraping beendet: Der RomM-Server ist nicht erreichbar. Bisher gescrapte Spiele bleiben erhalten.",
   AppLocale.scrapeSummaryFromRomm: 'Von RomM: {count}',
   AppLocale.scrapeSummaryFromScreenscraper: 'Von ScreenScraper: {count}',
   AppLocale.scrapeBulkRommOnlyStarted:

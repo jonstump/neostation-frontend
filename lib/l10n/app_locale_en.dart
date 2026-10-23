@@ -1693,6 +1693,8 @@ const Map<String, dynamic> appLocaleEn = {
       "RomM could not be reached; scraped from ScreenScraper",
   AppLocale.scrapeSummaryRommUnavailable:
       "RomM could not be reached for: {count}",
+  AppLocale.scrapeStoppedRommUnreachable:
+      "Scraping stopped: the RomM server could not be reached. Games scraped so far were kept.",
   AppLocale.scrapeSummaryFromRomm: 'From RomM: {count}',
   AppLocale.scrapeSummaryFromScreenscraper: 'From ScreenScraper: {count}',
   AppLocale.scrapeBulkRommOnlyStarted:

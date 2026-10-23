@@ -1486,6 +1486,7 @@ const Map<String, dynamic> appLocaleZh = {
       "无法连接 RomM，且尚未登录 ScreenScraper。请检查 RomM 连接，或登录 ScreenScraper。",
   AppLocale.scrapeCompletedRommUnreachable: "无法连接 RomM；已从 ScreenScraper 获取",
   AppLocale.scrapeSummaryRommUnavailable: "无法连接 RomM 的游戏：{count}",
+  AppLocale.scrapeStoppedRommUnreachable: "已停止抓取：无法连接 RomM 服务器。已抓取的游戏已保留。",
   AppLocale.scrapeSummaryFromRomm: '来自 RomM：{count}',
   AppLocale.scrapeSummaryFromScreenscraper: '来自 ScreenScraper：{count}',
   AppLocale.scrapeBulkRommOnlyStarted: '仅从 RomM 抓取；尚未设置 ScreenScraper',

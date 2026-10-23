@@ -43,6 +43,8 @@ Future<void> startScrapeSession(
     context,
   );
   final localeMetadataError = AppLocale.metadataError.getString(context);
+  final localeRommUnreachableStopped = AppLocale.scrapeStoppedRommUnreachable
+      .getString(context);
   final localeScrapeQuotaExceeded = AppLocale.scrapeQuotaExceeded.getString(
     context,
   );
@@ -150,6 +152,15 @@ Future<void> startScrapeSession(
         id: notificationId,
         message: message,
         type: GlobalNotificationType.success,
+        progress: null,
+      );
+    } else if (rommOnly && rommGuard.tripped) {
+      // RomM was the only source and its server stopped answering: say so,
+      // rather than reporting a cancel or a generic metadata error.
+      GlobalNotificationService().update(
+        id: notificationId,
+        message: localeRommUnreachableStopped,
+        type: GlobalNotificationType.error,
         progress: null,
       );
     } else if (!scrapingProvider.isScraping) {

@@ -565,11 +565,11 @@ void main() {
     const workers = 4;
     const slack = RommServerGuard.defaultThreshold + workers - 1;
 
-    test('dead from the first request: RomM is not asked again after the trip, '
-        'and the run still completes', () async {
+    test('dead from the first request, RomM only: the run stops with an error '
+        'instead of failing every game', () async {
       final r = await runBulk((id, call) => unreachable);
 
-      expect(r.finished, isTrue);
+      expect(r.finished, isFalse, reason: 'the run is aborted, not completed');
       expect(r.guard.tripped, isTrue);
       expect(
         r.svc.detailCalls,
@@ -577,22 +577,22 @@ void main() {
         reason: 'the other games\' requests were never issued',
       );
       expect(
-        r.svc.detailCalls + r.guard.skipped,
-        40,
-        reason: 'every game was either asked once or skipped without a request',
+        r.scraping.processedGames,
+        lessThan(40),
+        reason: 'games after the stop were never processed or counted failed',
       );
-      expect(r.scraping.failedGames, 40);
       expect(r.scraping.successfulGames, 0);
+      expect(r.scraping.isScraping, isFalse);
     });
 
-    test('a dead server is not reported as "not found"', () async {
-      final r = await runBulk((id, call) => unreachable, games: 12);
+    test('the stop is logged as a stop, not as a finished run, and is never '
+        'a "not found"', () async {
+      await runBulk((id, call) => unreachable, games: 12);
 
       final log = LoggerService.instance.takeCapture().join('\n');
-      expect(log, contains('romm_unavailable=12'));
+      expect(log, contains('Bulk scrape stopped: RomM is the only source'));
       expect(log, contains('guard_tripped=true'));
-      expect(log, isNot(contains('romm_unavailable=0')));
-      expect(r.guard.transportFailures, greaterThanOrEqualTo(5));
+      expect(log, isNot(contains('Bulk scrape sources:')));
     });
 
     test('a server that dies mid-run keeps what was already written', () async {
@@ -604,10 +604,10 @@ void main() {
         },
       );
 
-      expect(r.finished, isTrue);
+      expect(r.finished, isFalse, reason: 'RomM went away: the run stops');
       expect(r.guard.tripped, isTrue);
       expect(r.scraping.successfulGames, 10, reason: 'the first ten rode RomM');
-      expect(r.scraping.failedGames, 30);
+      expect(r.scraping.failedGames, lessThan(30));
       // "Consecutive" is counted in completion order. A game that succeeded
       // before the server died costs six requests and finishes after a failed
       // one costs one, so a slow success still in flight can reset the streak
@@ -624,7 +624,6 @@ void main() {
         ),
       );
       expect(r.svc.detailCalls, lessThan(40));
-      expect(r.guard.skipped, greaterThan(0));
     });
 
     test(
@@ -781,7 +780,61 @@ void main() {
 
       expect(summary.filled, 4, reason: 'the pass ran to completion mid-pause');
       hold.complete();
-      expect(await bulk, isTrue);
+      // The 429s count toward the guard, and a RomM-only run stops when it
+      // trips; what matters here is that the pass was never blocked.
+      await bulk;
+    });
+  });
+
+  group('shouldAbortForRomm', () {
+    RommServerGuard tripped() {
+      final g = RommServerGuard();
+      for (var i = 0; i < RommServerGuard.defaultThreshold; i++) {
+        g.record(_transport());
+      }
+      expect(g.tripped, isTrue);
+      return g;
+    }
+
+    test('RomM is the only source and the guard tripped: abort', () {
+      expect(
+        ScreenScraperService.shouldAbortForRomm(
+          screenscraperAvailable: false,
+          guard: tripped(),
+        ),
+        isTrue,
+      );
+    });
+
+    test('ScreenScraper is set up: carry on without RomM, never abort', () {
+      expect(
+        ScreenScraperService.shouldAbortForRomm(
+          screenscraperAvailable: true,
+          guard: tripped(),
+        ),
+        isFalse,
+      );
+    });
+
+    test('the guard has not tripped: no abort', () {
+      final g = RommServerGuard()..record(_transport());
+      expect(
+        ScreenScraperService.shouldAbortForRomm(
+          screenscraperAvailable: false,
+          guard: g,
+        ),
+        isFalse,
+      );
+    });
+
+    test('no guard (RomM not in play): no abort', () {
+      expect(
+        ScreenScraperService.shouldAbortForRomm(
+          screenscraperAvailable: false,
+          guard: null,
+        ),
+        isFalse,
+      );
     });
   });
 

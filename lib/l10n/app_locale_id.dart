@@ -1722,6 +1722,8 @@ const Map<String, dynamic> appLocaleId = {
       "RomM tidak dapat dijangkau; diambil dari ScreenScraper",
   AppLocale.scrapeSummaryRommUnavailable:
       "RomM tidak dapat dijangkau untuk: {count}",
+  AppLocale.scrapeStoppedRommUnreachable:
+      "Scraping dihentikan: server RomM tidak dapat dijangkau. Game yang sudah di-scrape tetap tersimpan.",
   AppLocale.scrapeSummaryFromRomm: 'Dari RomM: {count}',
   AppLocale.scrapeSummaryFromScreenscraper: 'Dari ScreenScraper: {count}',
   AppLocale.scrapeBulkRommOnlyStarted:

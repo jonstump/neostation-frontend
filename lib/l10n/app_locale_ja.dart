@@ -1555,6 +1555,8 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.scrapeCompletedRommUnreachable:
       "RomMに接続できないため、ScreenScraperから取得しました",
   AppLocale.scrapeSummaryRommUnavailable: "RomMに接続できなかったゲーム: {count}",
+  AppLocale.scrapeStoppedRommUnreachable:
+      "スクレイピングを停止しました：RomMサーバーに接続できません。取得済みのゲームはそのまま保持されています。",
   AppLocale.scrapeSummaryFromRomm: 'RomM から: {count}',
   AppLocale.scrapeSummaryFromScreenscraper: 'ScreenScraper から: {count}',
   AppLocale.scrapeBulkRommOnlyStarted:

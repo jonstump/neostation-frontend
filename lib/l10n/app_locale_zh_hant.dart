@@ -1488,6 +1488,7 @@ const Map<String, dynamic> appLocaleZhHant = {
       "無法連線至 RomM，且尚未登入 ScreenScraper。請檢查 RomM 連線，或登入 ScreenScraper。",
   AppLocale.scrapeCompletedRommUnreachable: "無法連線至 RomM；已從 ScreenScraper 取得",
   AppLocale.scrapeSummaryRommUnavailable: "無法連線至 RomM 的遊戲：{count}",
+  AppLocale.scrapeStoppedRommUnreachable: "已停止擷取：無法連線至 RomM 伺服器。已擷取的遊戲已保留。",
   AppLocale.scrapeSummaryFromRomm: '來自 RomM：{count}',
   AppLocale.scrapeSummaryFromScreenscraper: '來自 ScreenScraper：{count}',
   AppLocale.scrapeBulkRommOnlyStarted: '僅從 RomM 擷取；尚未設定 ScreenScraper',

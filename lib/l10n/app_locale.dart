@@ -1252,6 +1252,8 @@ mixin AppLocale {
       'scrape_completed_romm_unreachable';
   static const String scrapeSummaryRommUnavailable =
       'scrape_summary_romm_unavailable';
+  static const String scrapeStoppedRommUnreachable =
+      'scrape_stopped_romm_unreachable';
   static const String scrapeBulkRommOnlyStarted =
       'scrape_bulk_romm_only_started';
   static const String scrapeBulkNoSourceAvailable =

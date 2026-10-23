@@ -1564,6 +1564,8 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.scrapeCompletedRommUnreachable:
       "RomM에 연결할 수 없어 ScreenScraper에서 가져왔습니다",
   AppLocale.scrapeSummaryRommUnavailable: "RomM에 연결할 수 없었던 게임: {count}",
+  AppLocale.scrapeStoppedRommUnreachable:
+      "스크래핑이 중단되었습니다: RomM 서버에 연결할 수 없습니다. 이미 가져온 게임은 유지됩니다.",
   AppLocale.scrapeSummaryFromRomm: 'RomM에서: {count}',
   AppLocale.scrapeSummaryFromScreenscraper: 'ScreenScraper에서: {count}',
   AppLocale.scrapeBulkRommOnlyStarted:

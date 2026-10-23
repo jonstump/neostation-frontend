@@ -1405,6 +1405,22 @@ class ScreenScraperService {
           scrapingProvider.stopScraping();
           return false;
         }
+        // RomM is the only source and the guard has given up on its server:
+        // nothing is left to try, so stop with an error instead of failing
+        // every remaining game. What was scraped before is kept.
+        if (shouldAbortForRomm(
+          screenscraperAvailable: screenscraperAvailable,
+          guard: rommGuard,
+        )) {
+          _log.w(
+            'Bulk scrape stopped: RomM is the only source and its server '
+            'could not be reached '
+            '(processed=$totalProcessedGames of $totalGamesToProcess)',
+          );
+          _logRommBulkLoad(rommLoad, rommGuard);
+          scrapingProvider.stopScraping();
+          return false;
+        }
 
         final batchFutures = <Future<Map<String, dynamic>>>[];
         for (var threadIndex = 0; threadIndex < batch.length; threadIndex++) {
@@ -1521,6 +1537,15 @@ class ScreenScraperService {
       _isMetadataScrapingRunning = false;
     }
   }
+
+  /// Whether a bulk run must stop because RomM is its only source and the
+  /// guard has tripped. With ScreenScraper set up the run goes on without
+  /// RomM instead, so this is false whatever the guard says.
+  @visibleForTesting
+  static bool shouldAbortForRomm({
+    required bool screenscraperAvailable,
+    required RommServerGuard? guard,
+  }) => !screenscraperAvailable && (guard?.tripped ?? false);
 
   /// The one info line a bulk scrape writes about the load it put on RomM:
   /// requests by kind, the peak in flight (shared with anything else that used
