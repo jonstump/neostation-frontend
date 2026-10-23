@@ -1557,7 +1557,8 @@ class ScreenScraperService {
     final load = RommMetadataNetwork.instance.closeWindow(window);
     _log.i(
       'RomM bulk scrape load: detail_requests=${load.detail} '
-      'media_requests=${load.media} peak_in_flight=${load.peak} '
+      'media_requests=${load.media} catalog_requests=${load.catalog} '
+      'peak_in_flight=${load.peak} '
       'transport_failures=${guard?.transportFailures ?? 0} '
       'pauses=${guard?.pauses ?? 0} '
       'paused_ms=${guard?.pausedTotal.inMilliseconds ?? 0} '
