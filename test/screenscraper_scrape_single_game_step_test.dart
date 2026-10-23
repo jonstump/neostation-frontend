@@ -60,6 +60,7 @@ void main() {
       'message': AppLocale.scrapeNoCredentials,
       'source': ScreenScraperService.scrapeSourceScreenscraper,
       'rommAttempted': false,
+      'rommUnavailable': false,
     });
     expect(progress.first, AppLocale.checkingCredentials);
     expect(progress, isNot(contains(AppLocale.scrapeFetchingFromRomm)));
@@ -121,6 +122,7 @@ void main() {
           'message': AppLocale.scrapeNoSourceForGame,
           'source': ScreenScraperService.scrapeSourceScreenscraper,
           'rommAttempted': true,
+          'rommUnavailable': false,
         });
         expect(calls, hasLength(1));
         expect(progress, [
