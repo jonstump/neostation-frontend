@@ -56,6 +56,14 @@ ScrapeResultMessage scrapeResultMessageFor(Map<String, dynamic> result) {
         tone: ScrapeResultTone.success,
       );
     }
+    // RomM could not be reached, which is not the same claim as "RomM had
+    // nothing for this game".
+    if (result['rommUnavailable'] == true) {
+      return const ScrapeResultMessage(
+        key: AppLocale.scrapeCompletedRommUnreachable,
+        tone: ScrapeResultTone.success,
+      );
+    }
     if (result['rommAttempted'] == true) {
       return const ScrapeResultMessage(
         key: AppLocale.scrapeCompletedFallback,
@@ -77,7 +85,8 @@ ScrapeResultMessage scrapeResultMessageFor(Map<String, dynamic> result) {
   // chain moved the check behind the step; keep that tone.
   final tone =
       reasonKey == AppLocale.scrapeNoCredentials ||
-          reasonKey == AppLocale.scrapeNoSourceForGame
+          reasonKey == AppLocale.scrapeNoSourceForGame ||
+          reasonKey == AppLocale.scrapeRommUnreachable
       ? ScrapeResultTone.info
       : ScrapeResultTone.error;
   return ScrapeResultMessage(

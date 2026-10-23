@@ -23,6 +23,11 @@ class ScrapingSummaryDialog extends StatefulWidget {
   final int? rommGames;
   final int? screenscraperGames;
 
+  /// Games RomM could not answer for a reason about the server (unreachable,
+  /// rate limiting, or skipped once the run stopped asking). Null or zero hides
+  /// the line.
+  final int? rommUnavailableGames;
+
   const ScrapingSummaryDialog({
     super.key,
     required this.totalGames,
@@ -31,6 +36,7 @@ class ScrapingSummaryDialog extends StatefulWidget {
     required this.elapsedTime,
     this.rommGames,
     this.screenscraperGames,
+    this.rommUnavailableGames,
   });
 
   @override
@@ -167,6 +173,13 @@ class _ScrapingSummaryDialogState extends State<ScrapingSummaryDialog> {
                       _buildSourceLine(
                         AppLocale.scrapeSummaryFromScreenscraper,
                         widget.screenscraperGames!,
+                      ),
+                    ],
+                    if ((widget.rommUnavailableGames ?? 0) > 0) ...[
+                      SizedBox(height: 4.h),
+                      _buildSourceLine(
+                        AppLocale.scrapeSummaryRommUnavailable,
+                        widget.rommUnavailableGames!,
                       ),
                     ],
                   ],

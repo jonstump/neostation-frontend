@@ -6,6 +6,8 @@ import 'package:path/path.dart' as path;
 import 'package:neostation/services/logger_service.dart';
 import '../models/rom_fingerprint.dart';
 import '../models/romm_scrape_step.dart';
+import 'romm/romm_metadata_fetch.dart';
+import 'romm/romm_server_guard.dart';
 import '../models/screenscraper_game_candidate.dart';
 import '../repositories/game_repository.dart';
 import '../repositories/scraper_repository.dart';
@@ -887,11 +889,15 @@ class ScreenScraperService {
     RommScrapeStep? rommStep,
   }) async {
     final rommAttempted = rommStep != null;
+    // RomM could not answer for a reason about the server (timeout, socket or
+    // TLS error, 5xx, 429), which is not the same as "RomM has nothing".
+    var rommUnavailable = false;
     Map<String, dynamic> screenscraperResult(bool success, String message) => {
       'success': success,
       'message': message,
       'source': scrapeSourceScreenscraper,
       'rommAttempted': rommAttempted,
+      'rommUnavailable': rommUnavailable,
     };
 
     // A RomM step that completed with nothing left to add, kept for the case
@@ -924,6 +930,7 @@ class ScreenScraperService {
       }
       rommAlreadyComplete =
           stepResult.status == RommScrapeStepStatus.alreadyComplete;
+      rommUnavailable = stepResult.serverUnavailable;
       if (stepResult.status == RommScrapeStepStatus.failed) {
         _log.w(
           'RomM scrape step failed, falling through to ScreenScraper '
@@ -959,7 +966,9 @@ class ScreenScraperService {
         // game the user may never have meant to scrape from ScreenScraper.
         return screenscraperResult(
           false,
-          rommAttempted
+          rommUnavailable
+              ? AppLocale.scrapeRommUnreachable
+              : rommAttempted
               ? AppLocale.scrapeNoSourceForGame
               : AppLocale.scrapeNoCredentials,
         );
@@ -1281,7 +1290,13 @@ class ScreenScraperService {
     ScrapingProvider scrapingProvider, {
     bool Function()? shouldCancel,
     RommScrapeStep? rommStep,
+    RommServerGuard? rommGuard,
   }) async {
+    // Measures the RomM load of this run (requests by kind, peak in flight);
+    // closed when the run ends, whichever way it ends.
+    final rommLoad = rommStep != null
+        ? RommMetadataNetwork.instance.openWindow()
+        : null;
     try {
       if (_isMetadataScrapingRunning) return false;
       _isMetadataScrapingRunning = true;
@@ -1365,6 +1380,9 @@ class ScreenScraperService {
       // Per-source tallies: a game counts under the source that scraped it.
       int rommGames = 0;
       int screenscraperGames = 0;
+      // Games RomM could not answer for a reason about the server (including
+      // those skipped once the guard tripped), whichever source then scraped.
+      int rommUnavailableGames = 0;
       // The overwrite flag the ScreenScraper branch uses for every ROM of
       // this run; the RomM step maps it onto its writer mode.
       final forceOverwrite = scrapeMode == 'all';
@@ -1434,6 +1452,7 @@ class ScreenScraperService {
         final results = await Future.wait(batchFutures);
         for (var i = 0; i < results.length; i++) {
           totalProcessedGames++;
+          if (results[i]['rommUnavailable'] == true) rommUnavailableGames++;
           if (results[i]['success'] == true) {
             totalSuccessfulGames++;
             if (results[i]['source'] == scrapeSourceRomm) {
@@ -1463,8 +1482,10 @@ class ScreenScraperService {
       if (rommStep != null) {
         _log.i(
           'Bulk scrape sources: romm=$rommGames '
-          'screenscraper=$screenscraperGames failed=$totalFailedGames',
+          'screenscraper=$screenscraperGames failed=$totalFailedGames '
+          'romm_unavailable=$rommUnavailableGames',
         );
+        _logRommBulkLoad(rommLoad, rommGuard);
       }
 
       if (context.mounted) {
@@ -1478,6 +1499,9 @@ class ScreenScraperService {
           totalRequests: 0,
           rommGames: rommStep != null ? rommGames : null,
           screenscraperGames: rommStep != null ? screenscraperGames : null,
+          rommUnavailableGames: rommUnavailableGames > 0
+              ? rommUnavailableGames
+              : null,
         );
       }
 
@@ -1492,9 +1516,29 @@ class ScreenScraperService {
       scrapingProvider.stopScraping();
       return false;
     } finally {
+      if (rommLoad != null) RommMetadataNetwork.instance.closeWindow(rommLoad);
       _cachedCredentials = null;
       _isMetadataScrapingRunning = false;
     }
+  }
+
+  /// The one info line a bulk scrape writes about the load it put on RomM:
+  /// requests by kind, the peak in flight (shared with anything else that used
+  /// the gate meanwhile, which is what the server saw), and what the guard did.
+  /// No host names and no library counts. Phrased without a `pass:` key,
+  /// which the log redactor would treat as a credential.
+  static void _logRommBulkLoad(RommLoadWindow? window, RommServerGuard? guard) {
+    if (window == null) return;
+    final load = RommMetadataNetwork.instance.closeWindow(window);
+    _log.i(
+      'RomM bulk scrape load: detail_requests=${load.detail} '
+      'media_requests=${load.media} peak_in_flight=${load.peak} '
+      'transport_failures=${guard?.transportFailures ?? 0} '
+      'pauses=${guard?.pauses ?? 0} '
+      'paused_ms=${guard?.pausedTotal.inMilliseconds ?? 0} '
+      'skipped=${guard?.skipped ?? 0} '
+      'guard_tripped=${guard?.tripped ?? false}',
+    );
   }
 
   /// The per-ROM source chain of a bulk run, executed inside one worker.
@@ -1530,6 +1574,7 @@ class ScreenScraperService {
   }) async {
     final filename = rom['filename'].toString();
     final rommAttempted = rommStep != null;
+    var rommUnavailable = false;
 
     if (shouldCancel != null && shouldCancel()) {
       return {'success': false, 'cancelled': true, 'requests': 0};
@@ -1580,6 +1625,10 @@ class ScreenScraperService {
         };
       }
 
+      rommUnavailable = stepResult.serverUnavailable;
+      final skippedByGuard =
+          stepResult.status == RommScrapeStepStatus.serverSkipped;
+
       if (!screenscraperAvailable) {
         // RomM completed the fetch and only had nothing left to add. With no
         // second source to offer the game to, that is as scraped as it gets —
@@ -1606,12 +1655,16 @@ class ScreenScraperService {
         final log = stepResult.status == RommScrapeStepStatus.failed
             ? _log.w
             : _log.i;
-        log(
-          'RomM scrape step ${stepResult.status.name} and ScreenScraper is '
-          'not set up; counting as failed '
-          '(filename=$filename, system=$systemFolder'
-          '${stepResult.error == null ? '' : ', error=${stepResult.error}'})',
-        );
+        // A skipped game made no request and the guard logged its trip once;
+        // a line per game would drown the log.
+        if (!skippedByGuard) {
+          log(
+            'RomM scrape step ${stepResult.status.name} and ScreenScraper is '
+            'not set up; counting as failed '
+            '(filename=$filename, system=$systemFolder'
+            '${stepResult.error == null ? '' : ', error=${stepResult.error}'})',
+          );
+        }
         // Release the thread row so it does not keep showing the RomM step.
         scrapingProvider.updateThreadProgress(
           threadId: threadId,
@@ -1628,10 +1681,13 @@ class ScreenScraperService {
           'requests': 0,
           'source': scrapeSourceRomm,
           'rommAttempted': true,
+          'rommUnavailable': rommUnavailable,
         };
       }
 
-      if (stepResult.status == RommScrapeStepStatus.failed) {
+      if (skippedByGuard) {
+        // No line per game: the guard logged its trip.
+      } else if (stepResult.status == RommScrapeStepStatus.failed) {
         _log.w(
           'RomM scrape step failed, falling through to ScreenScraper '
           '(filename=$filename, system=$systemFolder, '
@@ -1663,6 +1719,7 @@ class ScreenScraperService {
       ...result,
       'source': scrapeSourceScreenscraper,
       'rommAttempted': rommAttempted,
+      'rommUnavailable': rommUnavailable,
     };
   }
 
@@ -1922,6 +1979,7 @@ class ScreenScraperService {
     required int totalRequests,
     int? rommGames,
     int? screenscraperGames,
+    int? rommUnavailableGames,
   }) async {
     await showDialog(
       context: context,
@@ -1933,6 +1991,7 @@ class ScreenScraperService {
         elapsedTime: elapsedTime,
         rommGames: rommGames,
         screenscraperGames: screenscraperGames,
+        rommUnavailableGames: rommUnavailableGames,
       ),
     );
   }

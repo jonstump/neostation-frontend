@@ -66,6 +66,9 @@ class RommMetadataNetwork {
     _inFlight++;
     if (_inFlight > peakInFlight) peakInFlight = _inFlight;
     if (_sessionActive && _inFlight > _sessionPeak) _sessionPeak = _inFlight;
+    for (final window in _windows) {
+      if (_inFlight > window._peak) window._peak = _inFlight;
+    }
   }
 
   /// Leaves the bounded section, handing the slot to the oldest waiter.
@@ -116,6 +119,31 @@ class RommMetadataNetwork {
     return load;
   }
 
+  // ── Measurement windows ─────────────────────────────────────────────────
+  // A bulk scrape measures its own load the same way, but several runs may
+  // overlap a pass (each measuring what the server saw during it), so a window
+  // is its own object instead of the one shared session.
+
+  final Set<RommLoadWindow> _windows = {};
+
+  /// Opens a window that measures the requests and peak in-flight until
+  /// [closeWindow]. Safe alongside a pass's session and other windows.
+  RommLoadWindow openWindow() {
+    final window = RommLoadWindow._(detailRequests, mediaRequests);
+    _windows.add(window);
+    return window;
+  }
+
+  /// Closes [window] and returns what it measured. Idempotent.
+  ({int detail, int media, int peak}) closeWindow(RommLoadWindow window) {
+    _windows.remove(window);
+    return (
+      detail: detailRequests - window._startDetail,
+      media: mediaRequests - window._startMedia,
+      peak: window._peak,
+    );
+  }
+
   /// Clears the counters. Only for tests: with nothing inside the gate.
   @visibleForTesting
   static void resetForTesting() {
@@ -128,7 +156,18 @@ class RommMetadataNetwork {
     n._sessionPeak = 0;
     n._sessionStartDetail = 0;
     n._sessionStartMedia = 0;
+    n._windows.clear();
   }
+}
+
+/// One measurement window on [RommMetadataNetwork]; see
+/// [RommMetadataNetwork.openWindow].
+class RommLoadWindow {
+  final int _startDetail;
+  final int _startMedia;
+  int _peak = 0;
+
+  RommLoadWindow._(this._startDetail, this._startMedia);
 }
 
 /// The scanned games of one system — the library index, never the disk.

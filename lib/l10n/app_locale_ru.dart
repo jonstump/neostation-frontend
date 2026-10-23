@@ -1709,6 +1709,11 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.scrapeCompletedFallback:
       'В RomM ничего нет для этой игры; скрапинг выполнен из ScreenScraper',
   AppLocale.scrapeFailedWithReason: 'Ошибка скрапинга: {reason}',
+  AppLocale.scrapeRommUnreachable:
+      "Не удалось связаться с RomM, а вход в ScreenScraper не выполнен. Проверьте подключение к RomM или войдите в ScreenScraper.",
+  AppLocale.scrapeCompletedRommUnreachable:
+      "RomM недоступен; получено из ScreenScraper",
+  AppLocale.scrapeSummaryRommUnavailable: "RomM недоступен для: {count}",
   AppLocale.scrapeSummaryFromRomm: 'Из RomM: {count}',
   AppLocale.scrapeSummaryFromScreenscraper: 'Из ScreenScraper: {count}',
   AppLocale.scrapeBulkRommOnlyStarted:

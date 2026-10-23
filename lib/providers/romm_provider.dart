@@ -21,6 +21,7 @@ import '../repositories/system_repository.dart';
 import '../services/logger_service.dart';
 import '../services/romm_playtime_service.dart';
 import '../services/romm/romm_metadata_fetch.dart';
+import '../services/romm/romm_server_guard.dart';
 import '../services/romm_service.dart';
 import '../services/storage_space_service.dart';
 import '../services/user_data_location_service.dart';
@@ -2416,24 +2417,45 @@ class RommProvider extends ChangeNotifier {
   /// on-disk filename first, then its extension-stripped spelling — and the
   /// metadata row is keyed by the target's filename, exactly as that pass
   /// keys it.
-  Future<RommScrapeStep?> bulkScrapeStep(FileProvider fileProvider) async {
+  ///
+  /// Every worker's step goes through one [RommServerGuard] (the caller's, so
+  /// it can read the totals afterwards, or a fresh one): a `Retry-After` pauses
+  /// all of them, and after repeated transport failures the guard trips and
+  /// every remaining game is answered [RommScrapeStepResult.serverSkipped]
+  /// without a request. The guard sits outside the writer and holds nothing of
+  /// the shared gate, so the two cannot wait on each other.
+  Future<RommScrapeStep?> bulkScrapeStep(
+    FileProvider fileProvider, {
+    RommServerGuard? guard,
+  }) async {
     if (!isConnected) return null;
     final index = await RommSaveMapRepository.getRomIdIndex();
     final systems = <String, SystemModel?>{};
-    return (RommScrapeTarget target) => _runScrapeStep(
-      target,
-      fileProvider,
-      systems,
-      resolveRomId: () async {
-        final romId = _romIdFromIndex(
-          index,
-          target.filename,
-          target.systemFolder,
-        );
-        if (romId == null) return null;
-        return (romId: romId, indexedName: target.filename);
-      },
-    );
+    final serverGuard = guard ?? RommServerGuard();
+    return (RommScrapeTarget target) async {
+      if (serverGuard.tripped) return serverGuard.skip();
+      await serverGuard.waitTurn();
+      if (serverGuard.tripped) return serverGuard.skip();
+      if (serverGuard.stopRequested) {
+        return RommScrapeStepResult.failed(StateError('scrape cancelled'));
+      }
+      final result = await _runScrapeStep(
+        target,
+        fileProvider,
+        systems,
+        resolveRomId: () async {
+          final romId = _romIdFromIndex(
+            index,
+            target.filename,
+            target.systemFolder,
+          );
+          if (romId == null) return null;
+          return (romId: romId, indexedName: target.filename);
+        },
+      );
+      serverGuard.record(result);
+      return result;
+    };
   }
 
   /// The body both step builders share: resolve the link, resolve the

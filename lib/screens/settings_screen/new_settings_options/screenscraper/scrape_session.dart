@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'package:neostation/l10n/app_locale.dart';
 import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/providers/romm_provider.dart';
+import 'package:neostation/services/romm/romm_server_guard.dart';
 import 'package:neostation/providers/scraping_provider.dart';
 import 'package:neostation/services/global_notification_service.dart';
 import 'package:neostation/services/logger_service.dart';
@@ -52,7 +53,15 @@ Future<void> startScrapeSession(
   final credentials = await ScreenScraperService.getSavedCredentials();
   final maxThreads = int.tryParse(credentials?['maxthreads'] ?? '4') ?? 4;
   // RomM takes part when it is connected; the step is null otherwise.
-  final rommStep = await rommProvider.bulkScrapeStep(fileProvider);
+  // One guard for the whole run, so the service can report what it did and a
+  // cancel interrupts a Retry-After pause.
+  final rommGuard = RommServerGuard(
+    shouldStop: () => !scrapingProvider.isScraping,
+  );
+  final rommStep = await rommProvider.bulkScrapeStep(
+    fileProvider,
+    guard: rommGuard,
+  );
 
   // The run needs ScreenScraper credentials or a connected RomM; with
   // neither it refuses here, before anything is started.
@@ -124,6 +133,7 @@ Future<void> startScrapeSession(
       scrapingProvider,
       shouldCancel: () => !scrapingProvider.isScraping,
       rommStep: rommStep,
+      rommGuard: rommGuard,
     );
 
     if (scrapingSuccess) {

@@ -1716,6 +1716,12 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.scrapeCompletedFallback:
       'RomM tidak memiliki data untuk game ini; data diambil dari ScreenScraper',
   AppLocale.scrapeFailedWithReason: 'Scraping gagal: {reason}',
+  AppLocale.scrapeRommUnreachable:
+      "Tidak dapat menjangkau RomM dan ScreenScraper belum masuk. Periksa koneksi RomM, atau masuk ke ScreenScraper.",
+  AppLocale.scrapeCompletedRommUnreachable:
+      "RomM tidak dapat dijangkau; diambil dari ScreenScraper",
+  AppLocale.scrapeSummaryRommUnavailable:
+      "RomM tidak dapat dijangkau untuk: {count}",
   AppLocale.scrapeSummaryFromRomm: 'Dari RomM: {count}',
   AppLocale.scrapeSummaryFromScreenscraper: 'Dari ScreenScraper: {count}',
   AppLocale.scrapeBulkRommOnlyStarted:

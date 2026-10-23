@@ -1687,6 +1687,12 @@ const Map<String, dynamic> appLocaleEn = {
   AppLocale.scrapeCompletedFallback:
       'RomM had nothing for this game; scraped from ScreenScraper',
   AppLocale.scrapeFailedWithReason: 'Scraping failed: {reason}',
+  AppLocale.scrapeRommUnreachable:
+      "Could not reach RomM, and ScreenScraper is not signed in. Check the RomM connection, or log in to ScreenScraper.",
+  AppLocale.scrapeCompletedRommUnreachable:
+      "RomM could not be reached; scraped from ScreenScraper",
+  AppLocale.scrapeSummaryRommUnavailable:
+      "RomM could not be reached for: {count}",
   AppLocale.scrapeSummaryFromRomm: 'From RomM: {count}',
   AppLocale.scrapeSummaryFromScreenscraper: 'From ScreenScraper: {count}',
   AppLocale.scrapeBulkRommOnlyStarted:

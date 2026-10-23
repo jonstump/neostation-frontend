@@ -1247,6 +1247,11 @@ mixin AppLocale {
   static const String scrapeSummaryFromRomm = 'scrape_summary_from_romm';
   static const String scrapeSummaryFromScreenscraper =
       'scrape_summary_from_screenscraper';
+  static const String scrapeRommUnreachable = 'scrape_romm_unreachable';
+  static const String scrapeCompletedRommUnreachable =
+      'scrape_completed_romm_unreachable';
+  static const String scrapeSummaryRommUnavailable =
+      'scrape_summary_romm_unavailable';
   static const String scrapeBulkRommOnlyStarted =
       'scrape_bulk_romm_only_started';
   static const String scrapeBulkNoSourceAvailable =

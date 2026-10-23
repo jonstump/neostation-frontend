@@ -1550,6 +1550,11 @@ const Map<String, dynamic> appLocaleJa = {
   AppLocale.scrapeCompletedFallback:
       'RomM にはこのゲームのデータがなかったため、ScreenScraper からスクレイピングしました',
   AppLocale.scrapeFailedWithReason: 'スクレイピングに失敗しました: {reason}',
+  AppLocale.scrapeRommUnreachable:
+      "RomMに接続できず、ScreenScraperにもログインしていません。RomMの接続を確認するか、ScreenScraperにログインしてください。",
+  AppLocale.scrapeCompletedRommUnreachable:
+      "RomMに接続できないため、ScreenScraperから取得しました",
+  AppLocale.scrapeSummaryRommUnavailable: "RomMに接続できなかったゲーム: {count}",
   AppLocale.scrapeSummaryFromRomm: 'RomM から: {count}',
   AppLocale.scrapeSummaryFromScreenscraper: 'ScreenScraper から: {count}',
   AppLocale.scrapeBulkRommOnlyStarted:

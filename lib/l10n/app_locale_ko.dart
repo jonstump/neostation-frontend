@@ -1559,6 +1559,11 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.scrapeCompletedFallback:
       'RomM에 이 게임의 정보가 없어 ScreenScraper에서 가져왔습니다',
   AppLocale.scrapeFailedWithReason: '게임 정보 가져오기 실패: {reason}',
+  AppLocale.scrapeRommUnreachable:
+      "RomM에 연결할 수 없고 ScreenScraper에도 로그인되어 있지 않습니다. RomM 연결을 확인하거나 ScreenScraper에 로그인하세요.",
+  AppLocale.scrapeCompletedRommUnreachable:
+      "RomM에 연결할 수 없어 ScreenScraper에서 가져왔습니다",
+  AppLocale.scrapeSummaryRommUnavailable: "RomM에 연결할 수 없었던 게임: {count}",
   AppLocale.scrapeSummaryFromRomm: 'RomM에서: {count}',
   AppLocale.scrapeSummaryFromScreenscraper: 'ScreenScraper에서: {count}',
   AppLocale.scrapeBulkRommOnlyStarted:

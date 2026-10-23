@@ -68,6 +68,11 @@ enum RommScrapeStepStatus {
 
   /// The request or the write failed; see [RommScrapeStepResult.error].
   failed,
+
+  /// The step did not ask the server at all: a bulk run's guard stopped
+  /// sending RomM requests after repeated transport failures, so RomM is
+  /// skipped for the rest of that run. No request was made for this game.
+  serverSkipped,
 }
 
 /// The result of one RomM scrape step.
@@ -90,6 +95,9 @@ class RommScrapeStepResult {
   const RommScrapeStepResult.failed(Object error)
     : this(status: RommScrapeStepStatus.failed, error: error);
 
+  const RommScrapeStepResult.serverSkipped()
+    : this(status: RommScrapeStepStatus.serverSkipped);
+
   /// The result for a writer outcome, classified by [classifyOutcome].
   RommScrapeStepResult.fromOutcome(RommMetadataOutcome outcome)
     : this(
@@ -100,6 +108,15 @@ class RommScrapeStepResult {
 
   /// True when RomM handled the game and ScreenScraper must not run.
   bool get scraped => status == RommScrapeStepStatus.scraped;
+
+  /// True when RomM could not answer for a reason about the server rather than
+  /// the game: the request hit a transport-class failure (timeout, socket or
+  /// TLS error, `5xx`, `429`), or the bulk guard has already given up on the
+  /// server. This is not "RomM has nothing for this game", and callers say so.
+  /// A real `404` is [RommScrapeStepStatus.notFound] and never counts here.
+  bool get serverUnavailable =>
+      status == RommScrapeStepStatus.serverSkipped ||
+      (outcome?.transportClass ?? false);
 
   /// The one definition of "RomM scraped this game".
   ///
