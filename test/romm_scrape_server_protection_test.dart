@@ -704,7 +704,7 @@ void main() {
 
     test('a pause holds no gate: a per-system pass finishes while the bulk '
         'run is paused', () async {
-      await seedLinkedGames(6);
+      await seedLinkedGames(12);
       // The bulk run's only RomM answer is a 429; its pause is held open by
       // the test on a completer, so the workers sit in waitTurn.
       final svc = _ScriptedService(
