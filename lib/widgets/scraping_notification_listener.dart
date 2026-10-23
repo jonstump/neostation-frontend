@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localization/flutter_localization.dart';
 import 'package:provider/provider.dart';
 
-import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/utils/scraping_progress_message.dart';
 import 'package:neostation/providers/scraping_provider.dart';
 import 'package:neostation/services/global_notification_service.dart';
 
@@ -55,9 +55,14 @@ class _ScrapingNotificationListenerState
     final processed = provider.processedGames;
     GlobalNotificationService().update(
       id: _notificationId,
-      message: total > 0
-          ? '${AppLocale.scrapingInProgress.getString(context)} $processed / $total'
-          : AppLocale.scrapingInProgress.getString(context),
+      message: scrapingProgressText(
+        t: (key) => key.getString(context),
+        processed: processed,
+        total: total,
+        rommInPlay: provider.rommInPlay,
+        rommGames: provider.rommGames,
+        screenscraperGames: provider.screenscraperGames,
+      ),
       type: GlobalNotificationType.info,
       progress: total > 0 ? processed / total : null,
       ongoing: true,

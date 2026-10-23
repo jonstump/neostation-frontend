@@ -1383,6 +1383,14 @@ class ScreenScraperService {
       // Games RomM could not answer for a reason about the server (including
       // those skipped once the guard tripped), whichever source then scraped.
       int rommUnavailableGames = 0;
+      if (rommStep != null) {
+        scrapingProvider.updateSources(
+          rommInPlay: true,
+          rommGames: 0,
+          screenscraperGames: 0,
+          rommUnavailableGames: 0,
+        );
+      }
       // The overwrite flag the ScreenScraper branch uses for every ROM of
       // this run; the RomM step maps it onto its writer mode.
       final forceOverwrite = scrapeMode == 'all';
@@ -1482,6 +1490,14 @@ class ScreenScraperService {
             totalFailedGames++;
           }
 
+          if (rommStep != null) {
+            scrapingProvider.updateSources(
+              rommInPlay: true,
+              rommGames: rommGames,
+              screenscraperGames: screenscraperGames,
+              rommUnavailableGames: rommUnavailableGames,
+            );
+          }
           scrapingProvider.markThreadCompleted(i + 1);
           scrapingProvider.updateProgress(
             totalGames: totalGamesToProcess,

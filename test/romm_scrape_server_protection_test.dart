@@ -538,12 +538,14 @@ void main() {
       int games = 40,
       _FakeTime? time,
       Map<String, Uint8List> assets = const {},
+      void Function(ScrapingProvider scraping)? onProvider,
     }) async {
       await seedLinkedGames(games);
       final svc = _ScriptedService(detailScript: script, assets: assets);
       final provider = _TestProvider(svc);
       final t = time ?? _FakeTime();
       final scraping = ScrapingProvider()..startScraping(maxThreads: 4);
+      onProvider?.call(scraping);
       final guard = RommServerGuard(
         clock: t.clock,
         sleep: t.sleep,
@@ -583,6 +585,43 @@ void main() {
       );
       expect(r.scraping.successfulGames, 0);
       expect(r.scraping.isScraping, isFalse);
+      // The run says so while it goes: RomM took part and could not answer.
+      expect(r.scraping.rommInPlay, isTrue);
+      expect(r.scraping.rommUnavailableGames, greaterThan(0));
+      expect(r.scraping.rommGames, 0);
+    });
+
+    test('a run reports its games per source while it goes', () async {
+      final seen = <int>[];
+      final r = await runBulk(
+        (id, call) => ok(id),
+        games: 12,
+        assets: {
+          for (var i = 0; i < 12; i++)
+            '/assets/romm/resources/roms/1/$i/cover/big.png': _png,
+        },
+        onProvider: (scraping) =>
+            scraping.addListener(() => seen.add(scraping.rommGames)),
+      );
+
+      expect(r.finished, isTrue);
+      expect(r.scraping.rommInPlay, isTrue);
+      expect(r.scraping.rommGames, 12);
+      expect(r.scraping.screenscraperGames, 0);
+      expect(r.scraping.rommUnavailableGames, 0);
+      expect(
+        seen.last,
+        12,
+        reason: 'the tally reached the provider, not only the final summary',
+      );
+      expect(seen, isNotEmpty);
+      for (var i = 1; i < seen.length; i++) {
+        expect(
+          seen[i],
+          greaterThanOrEqualTo(seen[i - 1]),
+          reason: 'it only grows',
+        );
+      }
     });
 
     test('the stop is logged as a stop, not as a finished run, and is never '

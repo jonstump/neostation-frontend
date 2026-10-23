@@ -1746,6 +1746,16 @@ const Map<String, dynamic> appLocalePt = {
   AppLocale.scrapeSummaryRommUnavailable: "RomM inacessível para: {count}",
   AppLocale.scrapeStoppedRommUnreachable:
       "Scraping interrompido: não foi possível conectar ao servidor do RomM. Os jogos já obtidos foram mantidos.",
+  AppLocale.scrapingProgressSources:
+      "RomM {romm} · ScreenScraper {screenscraper}",
+  AppLocale.scrapeBulkRommFirstStarted:
+      "Scraping: primeiro o RomM, depois o ScreenScraper para os jogos que o RomM não tem",
+  AppLocale.metadataSourceLabel: "Fonte dos metadados: {source}",
+  AppLocale.metadataSourceRomm: "RomM",
+  AppLocale.metadataSourceScreenscraper: "ScreenScraper",
+  AppLocale.metadataSourceEsde: "ES-DE",
+  AppLocale.metadataSourceSteam: "Steam",
+  AppLocale.metadataSourceManual: "Editado manualmente",
   AppLocale.scrapeSummaryFromRomm: 'Do RomM: {count}',
   AppLocale.scrapeSummaryFromScreenscraper: 'Do ScreenScraper: {count}',
   AppLocale.scrapeBulkRommOnlyStarted:

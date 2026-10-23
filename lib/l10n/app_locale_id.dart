@@ -1724,6 +1724,16 @@ const Map<String, dynamic> appLocaleId = {
       "RomM tidak dapat dijangkau untuk: {count}",
   AppLocale.scrapeStoppedRommUnreachable:
       "Scraping dihentikan: server RomM tidak dapat dijangkau. Game yang sudah di-scrape tetap tersimpan.",
+  AppLocale.scrapingProgressSources:
+      "RomM {romm} · ScreenScraper {screenscraper}",
+  AppLocale.scrapeBulkRommFirstStarted:
+      "Scraping: RomM dulu, lalu ScreenScraper untuk game yang tidak ada di RomM",
+  AppLocale.metadataSourceLabel: "Sumber metadata: {source}",
+  AppLocale.metadataSourceRomm: "RomM",
+  AppLocale.metadataSourceScreenscraper: "ScreenScraper",
+  AppLocale.metadataSourceEsde: "ES-DE",
+  AppLocale.metadataSourceSteam: "Steam",
+  AppLocale.metadataSourceManual: "Diedit manual",
   AppLocale.scrapeSummaryFromRomm: 'Dari RomM: {count}',
   AppLocale.scrapeSummaryFromScreenscraper: 'Dari ScreenScraper: {count}',
   AppLocale.scrapeBulkRommOnlyStarted:

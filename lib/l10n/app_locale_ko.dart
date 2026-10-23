@@ -1566,6 +1566,16 @@ const Map<String, dynamic> appLocaleKo = {
   AppLocale.scrapeSummaryRommUnavailable: "RomM에 연결할 수 없었던 게임: {count}",
   AppLocale.scrapeStoppedRommUnreachable:
       "스크래핑이 중단되었습니다: RomM 서버에 연결할 수 없습니다. 이미 가져온 게임은 유지됩니다.",
+  AppLocale.scrapingProgressSources:
+      "RomM {romm} · ScreenScraper {screenscraper}",
+  AppLocale.scrapeBulkRommFirstStarted:
+      "스크래핑: 먼저 RomM, RomM에 없는 게임은 ScreenScraper에서 가져옵니다",
+  AppLocale.metadataSourceLabel: "메타데이터 출처: {source}",
+  AppLocale.metadataSourceRomm: "RomM",
+  AppLocale.metadataSourceScreenscraper: "ScreenScraper",
+  AppLocale.metadataSourceEsde: "ES-DE",
+  AppLocale.metadataSourceSteam: "Steam",
+  AppLocale.metadataSourceManual: "직접 편집",
   AppLocale.scrapeSummaryFromRomm: 'RomM에서: {count}',
   AppLocale.scrapeSummaryFromScreenscraper: 'ScreenScraper에서: {count}',
   AppLocale.scrapeBulkRommOnlyStarted:
