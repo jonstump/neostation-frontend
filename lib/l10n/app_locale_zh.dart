@@ -1487,6 +1487,16 @@ const Map<String, dynamic> appLocaleZh = {
   AppLocale.scrapeCompletedRommUnreachable: "无法连接 RomM；已从 ScreenScraper 获取",
   AppLocale.scrapeSummaryRommUnavailable: "无法连接 RomM 的游戏：{count}",
   AppLocale.scrapeStoppedRommUnreachable: "已停止抓取：无法连接 RomM 服务器。已抓取的游戏已保留。",
+  AppLocale.scrapingProgressSources:
+      "RomM {romm} · ScreenScraper {screenscraper}",
+  AppLocale.scrapeBulkRommFirstStarted:
+      "抓取：优先使用 RomM，RomM 没有的游戏使用 ScreenScraper",
+  AppLocale.metadataSourceLabel: "元数据来源：{source}",
+  AppLocale.metadataSourceRomm: "RomM",
+  AppLocale.metadataSourceScreenscraper: "ScreenScraper",
+  AppLocale.metadataSourceEsde: "ES-DE",
+  AppLocale.metadataSourceSteam: "Steam",
+  AppLocale.metadataSourceManual: "手动编辑",
   AppLocale.scrapeSummaryFromRomm: '来自 RomM：{count}',
   AppLocale.scrapeSummaryFromScreenscraper: '来自 ScreenScraper：{count}',
   AppLocale.scrapeBulkRommOnlyStarted: '仅从 RomM 抓取；尚未设置 ScreenScraper',

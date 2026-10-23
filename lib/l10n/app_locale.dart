@@ -1254,6 +1254,16 @@ mixin AppLocale {
       'scrape_summary_romm_unavailable';
   static const String scrapeStoppedRommUnreachable =
       'scrape_stopped_romm_unreachable';
+  static const String scrapingProgressSources = 'scraping_progress_sources';
+  static const String scrapeBulkRommFirstStarted =
+      'scrape_bulk_romm_first_started';
+  static const String metadataSourceLabel = 'metadata_source_label';
+  static const String metadataSourceRomm = 'metadata_source_romm';
+  static const String metadataSourceScreenscraper =
+      'metadata_source_screenscraper';
+  static const String metadataSourceEsde = 'metadata_source_esde';
+  static const String metadataSourceSteam = 'metadata_source_steam';
+  static const String metadataSourceManual = 'metadata_source_manual';
   static const String scrapeBulkRommOnlyStarted =
       'scrape_bulk_romm_only_started';
   static const String scrapeBulkNoSourceAvailable =

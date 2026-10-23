@@ -87,6 +87,13 @@ Future<void> startScrapeSession(
       AppLocale.scrapeBulkRommOnlyStarted.getString(context),
       type: NotificationType.info,
     );
+  } else if (rommStep != null && context.mounted) {
+    // Both sources: say which goes first, so the tally that follows reads.
+    AppNotification.showNotification(
+      context,
+      AppLocale.scrapeBulkRommFirstStarted.getString(context),
+      type: NotificationType.info,
+    );
   }
 
   scrapingProvider.startScraping(maxThreads: maxThreads);

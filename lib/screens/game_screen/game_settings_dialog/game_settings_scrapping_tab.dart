@@ -21,6 +21,7 @@ import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/screenscraper_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/artwork_cache.dart';
+import 'package:neostation/utils/metadata_source_label.dart';
 import 'package:neostation/utils/scrape_result_message.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 import 'package:provider/provider.dart';
@@ -153,6 +154,10 @@ class GameSettingsScrappingTabState extends State<GameSettingsScrappingTab> {
 
   // ── Data ────────────────────────────────────────────────────────────────
 
+  /// The `AppLocale` key naming where this game's metadata came from, or null
+  /// when its row records no source (nothing is shown then).
+  String? _metadataSourceKey;
+
   Future<void> _loadMetadata() async {
     final systemId = _systemId;
     Map<String, dynamic>? row;
@@ -164,6 +169,7 @@ class GameSettingsScrappingTabState extends State<GameSettingsScrappingTab> {
     }
     if (!mounted) return;
     setState(() {
+      _metadataSourceKey = metadataSourceKey(row?['metadata_source']);
       _titleController.text =
           (row?['real_name'] as String?) ??
           (widget.game.name.isNotEmpty ? widget.game.name : '');
@@ -621,6 +627,21 @@ class GameSettingsScrappingTabState extends State<GameSettingsScrappingTab> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (_metadataSourceKey != null)
+            Padding(
+              padding: EdgeInsets.only(bottom: 8.r),
+              child: Text(
+                AppLocale.metadataSourceLabel
+                    .getString(context)
+                    .replaceFirst(
+                      '{source}',
+                      _metadataSourceKey!.getString(context),
+                    ),
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: theme.colorScheme.onSurface.withValues(alpha: 0.7),
+                ),
+              ),
+            ),
           // Force Rescrape.
           _NavRow(
             key: _itemKey(_idxRescrape),
