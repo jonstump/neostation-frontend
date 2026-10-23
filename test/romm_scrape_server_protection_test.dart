@@ -721,11 +721,13 @@ void main() {
       );
       final provider = _TestProvider(svc);
       final hold = Completer<void>();
+      final inPause = Completer<void>();
       final time = _FakeTime();
       final scraping = ScrapingProvider()..startScraping(maxThreads: 4);
       final guard = RommServerGuard(
         clock: time.clock,
         sleep: (d) async {
+          if (!inPause.isCompleted) inPause.complete();
           if (!hold.isCompleted) await hold.future;
           await time.sleep(d);
         },
@@ -739,10 +741,13 @@ void main() {
         rommStep: step,
         rommGuard: guard,
       );
-      // Let the first worker's 429 arm the pause and the others queue on it.
-      for (var i = 0; i < 20; i++) {
-        await Future<void>.delayed(Duration.zero);
-      }
+      // Start the pass only once a worker is actually waiting out the pause:
+      // a fixed number of yields can run before any worker has got there, and
+      // the pass would then finish whether or not the pause held the gate.
+      await inPause.future.timeout(
+        const Duration(seconds: 10),
+        onTimeout: () => fail('no worker ever reached the pause'),
+      );
       expect(guard.pauses, greaterThanOrEqualTo(1));
 
       final pass = RommMetadataFetch(
