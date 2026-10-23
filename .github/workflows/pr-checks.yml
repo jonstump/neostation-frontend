@@ -1,10 +1,15 @@
 name: PR Checks
 
+# Fork only: draft PRs are work artifacts that are verified locally before every
+# push (format, analyze and the full suite), so CI waits for ready_for_review
+# instead of re-running the suite on each push to a draft. The push-to-main
+# trigger is gone as well: every change reaches main through a PR that already
+# ran this job. GitHub disabled this fork's workflows once for wasted compute;
+# in the six weeks before this change these two cost roughly 1,700 and 460
+# wall-minutes. Revert both hunks if CI on drafts or on main is wanted again.
 on:
   pull_request:
-  push:
-    branches:
-      - main
+    types: [opened, synchronize, reopened, ready_for_review]
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -16,6 +21,7 @@ concurrency:
 jobs:
   lint:
     name: Lint, Analysis & Test
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     permissions:
       # `contents: write` is only exercised by the Dependabot lockfile sync
