@@ -153,6 +153,15 @@ void main() {
     });
   });
 
+  group('a name that is only tags', () {
+    test('never matches a ROM whose own name is only tags', () {
+      final index = RommScrapeIndex.build([
+        rom(1, '(Unknown)', '(Unknown).sfc'),
+      ]);
+      expect(index.lookup('(USA).sfc').kind, RommScrapeMatchKind.none);
+    });
+  });
+
   group('empty and shape', () {
     test('an empty index matches nothing', () {
       expect(
