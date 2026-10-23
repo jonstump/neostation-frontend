@@ -6,6 +6,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/data/datasources/sqlite_migrations.dart';
 import 'package:neostation/data/datasources/sqlite_service.dart';
 import 'package:neostation/models/romm_metadata_fetch.dart';
+import 'package:neostation/models/romm_platform.dart';
+import 'package:neostation/models/romm_rom.dart';
+import 'package:neostation/models/romm_rom_page.dart';
 import 'package:neostation/models/romm_scrape_step.dart';
 import 'package:neostation/providers/file_provider.dart';
 import 'package:neostation/providers/romm_provider.dart';
@@ -85,6 +88,46 @@ class _FakeRommService extends RommService {
   Completer<void>? detailGate;
   int detailInFlight = 0;
   int maxDetailInFlight = 0;
+
+  /// The ROMs RomM has on its one platform, as the list endpoint returns them;
+  /// what the scrape lookup walks and searches for a game with no link.
+  List<Map<String, dynamic>> catalog = const [];
+  bool catalogThrows = false;
+  bool platformsThrow = false;
+  final List<({List<int> platforms, String? search, int offset})> pageRequests =
+      [];
+
+  @override
+  Future<List<RommPlatform>> getPlatforms() async {
+    if (platformsThrow) throw const SocketException('timeout');
+    return const [RommPlatform(id: 1, name: 'Super Nintendo', slug: 'snes')];
+  }
+
+  @override
+  Future<RommRomPage> getRomsPage({
+    List<int> platformIds = const [],
+    int? collectionId,
+    String? virtualCollectionId,
+    String? search,
+    List<String> genres = const [],
+    List<String> companies = const [],
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    pageRequests.add((platforms: platformIds, search: search, offset: offset));
+    if (catalogThrows) throw const SocketException('timeout');
+    final needle = search?.toLowerCase();
+    final matching = [
+      for (final rom in catalog)
+        if (needle == null ||
+            (rom['name'] as String).toLowerCase().contains(needle))
+          rom,
+    ];
+    return RommRomPage(
+      items: matching.skip(offset).take(limit).map(RommRom.fromJson).toList(),
+      total: matching.length,
+    );
+  }
 
   @override
   Future<RommDetailFetch> fetchRomDetail(int id) async {
@@ -377,16 +420,22 @@ void main() {
         expect(await provider.bulkScrapeStep(media), isNull);
       });
 
-      test('not linked: no request, nothing written', () async {
+      test('not linked and RomM has no such game: not found, no detail '
+          'request, nothing written', () async {
         final step = provider.scrapeStep(media)!;
 
         final result = await step(target);
 
-        expect(result.status, RommScrapeStepStatus.notLinked);
+        expect(result.status, RommScrapeStepStatus.notFound);
         expect(result.scraped, isFalse);
-        expect(result.outcome, isNull);
         expect(svc.detailRequests, isEmpty);
         expect(await row(), isNull);
+        expect(
+          svc.pageRequests,
+          hasLength(1),
+          reason: 'one search for the title, no catalog walk',
+        );
+        expect(svc.pageRequests.single.search, isNotNull);
       });
 
       test('linked, not overwriting: fills gaps, keyed by the row', () async {
@@ -566,9 +615,14 @@ void main() {
             RommScrapeStepStatus.scraped,
             reason: 'the stem spelling resolves like the fetch pass',
           );
-          expect(results['d.sfc']!.status, RommScrapeStepStatus.notLinked);
-          expect(results['e.sfc']!.status, RommScrapeStepStatus.notLinked);
+          expect(results['d.sfc']!.status, RommScrapeStepStatus.notFound);
+          expect(results['e.sfc']!.status, RommScrapeStepStatus.notFound);
           expect(svc.detailRequests, [1, 2, 3]);
+          expect(
+            svc.pageRequests,
+            hasLength(1),
+            reason: 'the two unlinked games shared one catalog load',
+          );
           // The bulk step keys the row by the target's filename.
           expect(await row('a.sfc'), isNotNull);
           expect(await row('c.sfc'), isNotNull);
@@ -611,7 +665,8 @@ void main() {
         },
       );
 
-      test('an unlinked game does not wait behind the bound', () async {
+      test('an unlinked game\'s lookup waits for the shared gate like any '
+          'other RomM request', () async {
         for (var id = 1; id <= 3; id++) {
           await link(romId: id, romname: 'g$id.sfc');
         }
@@ -628,26 +683,39 @@ void main() {
             ),
         ];
         await pumpEventQueue();
+        expect(svc.detailInFlight, RommPaging.concurrency);
 
-        // Every slot is taken, and this one still answers.
-        final unlinked = await step(
+        // Every slot is taken: the catalog request is queued, not sent.
+        final unlinked = step(
           const RommScrapeTarget(
             appSystemId: 'snes',
             filename: 'nope.sfc',
             systemFolder: 'snes',
           ),
         );
-        expect(unlinked.status, RommScrapeStepStatus.notLinked);
+        await pumpEventQueue();
+        expect(
+          svc.pageRequests,
+          isEmpty,
+          reason: 'the lookup is held to the same bound as the detail fetches',
+        );
 
         svc.detailGate!.complete();
         await Future.wait(held);
+        expect((await unlinked).status, RommScrapeStepStatus.notFound);
+        expect(svc.pageRequests, hasLength(1));
+        expect(
+          svc.maxDetailInFlight,
+          RommPaging.concurrency,
+          reason: 'and nothing exceeded the bound while it waited',
+        );
       });
 
       test('a per-game step sees the row the bulk step missed', () async {
         final bulk = (await provider.bulkScrapeStep(media))!;
         await link();
 
-        expect((await bulk(target)).status, RommScrapeStepStatus.notLinked);
+        expect((await bulk(target)).status, RommScrapeStepStatus.notFound);
         expect(
           (await provider.scrapeStep(media)!(target)).status,
           RommScrapeStepStatus.scraped,
