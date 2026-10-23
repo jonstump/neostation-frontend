@@ -1,7 +1,7 @@
 ---
 status: implemented
 date: 2026-09-05
-implements: [ADR-0006]
+implements: [ADR-0006, ADR-0026]
 extends: [SPEC-0005]
 requires: [SPEC-0001]
 ---
@@ -11,12 +11,13 @@ requires: [SPEC-0001]
 ## Graph Edges
 
 - **Implements:** [ADR-0006](../../adrs/ADR-0006-romm-first-scrape-with-screenscraper-fallback.md) — RomM-first scraping with ScreenScraper fallback
+- **Implements:** [ADR-0026](../../adrs/ADR-0026-romm-lookup-as-scrape-source-for-unlinked-games.md) — RomM as a lookup source for unlinked games (amends the linked-only rule)
 - **Extends:** [SPEC-0005](../romm-metadata-fetch/spec.md) — RomM metadata fetch (the writer, its modes, and provenance)
 - **Requires:** [SPEC-0001](../romm-existing-rom-linking/spec.md) — RomM existing ROM linking (the link rows the step resolves)
 
 ## Overview
 
-Every scrape action, per game and bulk, tries RomM first when the app is connected to a RomM server and the game is linked, and falls back to ScreenScraper when RomM does not supply the game. With no RomM connection the actions behave exactly as before. A user with RomM but no ScreenScraper account can scrape from the same actions. See ADR-0006.
+Every scrape action, per game and bulk, tries RomM first when the app is connected to a RomM server, looking the game up by name when it is not linked (ADR-0026), and falls back to ScreenScraper when RomM does not supply the game. With no RomM connection the actions behave exactly as before. A user with RomM but no ScreenScraper account can scrape from the same actions. See ADR-0006.
 
 The RomM part is the SPEC-0005 writer, driven through an injectable step so `ScreenScraperService` stays free of provider imports. The explicit RomM actions from SPEC-0005 (Manage tab row, per-system pass, link-confirm fill-gaps) are unchanged.
 
@@ -24,22 +25,51 @@ The RomM part is the SPEC-0005 writer, driven through an injectable step so `Scr
 
 ### Requirement: RomM Scrape Step
 
-The system SHALL define a RomM scrape step that `RommProvider` produces when connected and that is absent (`null`) when not connected. Given a scrape target (app system id, ROM filename with extension, system folder, overwrite flag) the step MUST resolve the game's `app_romm_rom_map` row, MUST return a "not linked" result when no row exists without contacting the server, and otherwise MUST run the SPEC-0005 writer in the mode mapped from the overwrite flag and return its outcome. For a bulk run the step MUST read the link index once and reuse it for every target. The step MUST NOT throw; failures are returned as outcomes.
+The system SHALL define a RomM scrape step that `RommProvider` produces when connected and that is absent (`null`) when not connected. Given a scrape target (app system id, ROM filename with extension, system folder, overwrite flag) the step MUST resolve the game's `app_romm_rom_map` row; when a row exists it MUST run the SPEC-0005 writer for that rom id, and when none exists it MUST look the game up in RomM (see "Lookup For Unlinked Games") and, on an unambiguous match, run the writer for the matched rom id. Whatever the route, it MUST run the SPEC-0005 writer in the mode mapped from the overwrite flag and return its outcome. For a bulk run the step MUST read the link index once and reuse it for every target. The step MUST NOT throw; failures are returned as outcomes.
 
 #### Scenario: Disconnected
 
 - **WHEN** RomM is not connected
 - **THEN** the step is absent and every scrape entry point runs ScreenScraper exactly as before
 
-#### Scenario: Not linked
+#### Scenario: Linked game
 
-- **WHEN** the step is asked for a game with no mapping row
-- **THEN** it returns not linked and makes no request
+- **WHEN** the step is asked for a game with a mapping row
+- **THEN** it runs the writer for that rom id and makes no lookup request
 
 #### Scenario: Bulk reuses the index
 
 - **WHEN** a bulk run scrapes 300 games
 - **THEN** the link index is read once and no per-game mapping query is made
+
+### Requirement: Lookup For Unlinked Games
+
+The step SHALL scrape a game that has no `app_romm_rom_map` row by looking it up in RomM, and MUST NOT write a mapping row when it does. The match MUST be unambiguous, in this order: the game's file name equals one of a RomM ROM's `RommLocalMatcher.candidateNames` under `RommLocalMatcher.normalizeName`; otherwise the game's normalized title equals the normalized title of exactly one RomM ROM on the same system. The title MUST drop the extension and any parenthesised or bracketed tags and MUST fold case, diacritics, `&` against "and", and a trailing ", The"; other punctuation is a space. A result with two or more candidates at a tier, or with no candidate, MUST be reported as not found and fall through to ScreenScraper. A bulk run MUST load each system's RomM catalog at most once for the run, shared by every worker, and MUST NOT retry a failed load; a single-game scrape MUST use one RomM search scoped to the system's platforms. Every lookup request MUST pass through the shared network gate and MUST be classified like a detail request: a timeout, socket or TLS error, `5xx` or `429` is transport-class and counts toward the server guard.
+
+#### Scenario: Unlinked game found by name
+
+- **WHEN** a game has no mapping row and RomM has exactly one ROM on the system whose file name matches
+- **THEN** the game is scraped from RomM, its row is written with provenance `romm`, and `app_romm_rom_map` is unchanged
+
+#### Scenario: Unlinked game found by title
+
+- **WHEN** no file name matches and exactly one RomM ROM on the system has the same normalized title
+- **THEN** that ROM is used
+
+#### Scenario: Ambiguous or missing
+
+- **WHEN** two RomM ROMs share the game's normalized title, or none match
+- **THEN** the step returns not found, makes no write, and the game falls through to ScreenScraper
+
+#### Scenario: One catalog walk per system
+
+- **WHEN** twelve workers each ask about an unlinked game of the same system
+- **THEN** the system's catalog is loaded once, with each page counted and held to the shared gate
+
+#### Scenario: Catalog load fails
+
+- **WHEN** a catalog page times out or answers `5xx`
+- **THEN** the step returns a transport-class failure that counts toward the server guard, and the load is not retried for that system during the run
 
 ### Requirement: Scrape Success Rule
 

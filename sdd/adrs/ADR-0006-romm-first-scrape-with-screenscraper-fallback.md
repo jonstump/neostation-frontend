@@ -4,7 +4,7 @@ status: accepted
 date: 2026-09-05
 decision-makers: [Jon Stump]
 extends: [ADR-0005]
-related: [ADR-0001, ADR-0004]
+related: [ADR-0001, ADR-0004, ADR-0026]
 ---
 
 # ADR-0006: RomM-first scraping with ScreenScraper fallback
@@ -118,4 +118,5 @@ flowchart TD
 
 * Key code: `lib/services/screenscraper_service.dart` (`scrapeSingleGame` :671, `startMetadataScraping` :780, `_processRomInThread`), `lib/providers/romm_provider.dart` (`fetchMetadataForRomId`, `fetchMetadata`, `isConnected`), `lib/repositories/romm_save_map_repository.dart` (`getMapping`, `getRomIdIndex`), entry points `lib/screens/game_screen/game_settings_dialog/game_settings_scrapping_tab.dart` (`_forceRescrape`), `lib/screens/game_screen/my_games_list.dart` (`_scrapeSelectedGame`), `lib/screens/game_screen/game_details_card/game_details_card_list.dart` (`_startSingleGameScrape`), `lib/screens/scraper_screen/scraper_contents/scraping_content.dart` (bulk start and summary).
 * Extends ADR-0005 (the writer, modes, provenance). Related to ADR-0001 (links make a game addressable in RomM) and ADR-0004 (manual links are what the step resolves).
+* Amended by ADR-0026: the step no longer requires a link. A game without one is looked up in RomM by name, so "not linked → no request" and "when the game is linked" above are replaced by "when RomM can supply the game".
 * This fork does not open upstream pull requests.
