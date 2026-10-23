@@ -10,58 +10,16 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
-  lint:
-    name: Lint, Analysis & Test
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Setup Flutter
-        uses: subosito/flutter-action@v2
-        with:
-          # Pinned via .fvmrc (the single source of truth for the SDK version),
-          # not `channel: stable`. An unpinned stable silently moves under CI:
-          # 3.47.0 shipped a `dart format` that relaid out a file nobody had
-          # touched and an `unawaited_return_in_try_block` lint that fires in
-          # four existing files, so main went red without a commit.
-          # Bump .fvmrc deliberately, in its own PR, with the fallout fixed.
-          flutter-version-file: .fvmrc
-          channel: 'stable'
-          cache: true
-
-      # --enforce-lockfile, so a pubspec.lock resolved on a different SDK fails
-      # here instead of being silently rewritten in the runner. See pr-checks.yml.
-      - name: Install dependencies
-        run: flutter pub get --enforce-lockfile
-
-      - name: Verify formatting
-        run: dart format --output=none --set-exit-if-changed .
-
-      - name: Analyze project
-        run: flutter analyze
-
-      - name: Run tests
-        run: flutter test
-
   build:
     name: Build ${{ matrix.target }}
-    needs: lint
     runs-on: ${{ matrix.os }}
     environment: Production
     strategy:
       fail-fast: false
       matrix:
         include:
-          - target: windows
-            os: windows-latest
-          - target: macos
-            os: macos-latest
           - target: android
             os: ubuntu-latest
-          - target: linux-x64
-            os: ubuntu-latest
-          - target: linux-arm
-            os: ubuntu-24.04-arm
 
     steps:
       - name: Checkout repository
@@ -187,49 +145,3 @@ jobs:
           name: neostation-${{ matrix.target }}
           path: release/*
           if-no-files-found: warn
-
-  release:
-    name: Publish Release
-    needs: build
-    if: startsWith(github.ref, 'refs/tags/') || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-        with:
-          fetch-depth: 0
-
-      - name: Download all artifacts
-        uses: actions/download-artifact@v8
-        with:
-          path: release-artifacts
-          pattern: neostation-*
-          merge-multiple: true
-
-      - name: Build Changelog
-        id: build_changelog
-        uses: mikepenz/release-changelog-builder-action@v6
-        with:
-          configuration: ".github/changelog-config.json"
-          ignorePreReleases: "false"
-          failOnError: "false"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Get version from pubspec
-        id: version
-        run: |
-          VERSION=$(grep '^version:' pubspec.yaml | head -1 | awk '{print $2}' | tr -d '\r')
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v3
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          name: NeoStation Beta ${{ steps.version.outputs.version }}
-          body: ${{ steps.build_changelog.outputs.changelog }}
-          files: release-artifacts/*
-          draft: true
