@@ -57,6 +57,9 @@ class RommMetadataNetwork {
   /// Media downloads issued through the gate.
   int mediaRequests = 0;
 
+  /// Catalog pages and searches issued through the gate by the scrape lookup.
+  int catalogRequests = 0;
+
   RommMetadataNetwork._();
 
   /// Enters the bounded section. Every caller must call [leave] exactly
@@ -66,6 +69,9 @@ class RommMetadataNetwork {
     _inFlight++;
     if (_inFlight > peakInFlight) peakInFlight = _inFlight;
     if (_sessionActive && _inFlight > _sessionPeak) _sessionPeak = _inFlight;
+    for (final window in _windows) {
+      if (_inFlight > window._peak) window._peak = _inFlight;
+    }
   }
 
   /// Leaves the bounded section, handing the slot to the oldest waiter.
@@ -80,6 +86,9 @@ class RommMetadataNetwork {
 
   /// Counts one media download.
   void recordMedia() => mediaRequests++;
+
+  /// Counts one catalog page or search made by the scrape lookup.
+  void recordCatalog() => catalogRequests++;
 
   // ── Measurement session ─────────────────────────────────────────────────
   // The counters above are cumulative for the process; a pass must report
@@ -116,6 +125,38 @@ class RommMetadataNetwork {
     return load;
   }
 
+  // ── Measurement windows ─────────────────────────────────────────────────
+  // A bulk scrape measures its own load the same way, but several runs may
+  // overlap a pass (each measuring what the server saw during it), so a window
+  // is its own object instead of the one shared session.
+
+  final Set<RommLoadWindow> _windows = {};
+
+  /// Opens a window that measures the requests and peak in-flight until
+  /// [closeWindow]. Safe alongside a pass's session and other windows.
+  RommLoadWindow openWindow() {
+    final window = RommLoadWindow._(
+      detailRequests,
+      mediaRequests,
+      catalogRequests,
+    );
+    _windows.add(window);
+    return window;
+  }
+
+  /// Closes [window] and returns what it measured. Idempotent.
+  ({int detail, int media, int catalog, int peak}) closeWindow(
+    RommLoadWindow window,
+  ) {
+    _windows.remove(window);
+    return (
+      detail: detailRequests - window._startDetail,
+      media: mediaRequests - window._startMedia,
+      catalog: catalogRequests - window._startCatalog,
+      peak: window._peak,
+    );
+  }
+
   /// Clears the counters. Only for tests: with nothing inside the gate.
   @visibleForTesting
   static void resetForTesting() {
@@ -124,11 +165,24 @@ class RommMetadataNetwork {
     n.peakInFlight = 0;
     n.detailRequests = 0;
     n.mediaRequests = 0;
+    n.catalogRequests = 0;
     n._sessionActive = false;
     n._sessionPeak = 0;
     n._sessionStartDetail = 0;
     n._sessionStartMedia = 0;
+    n._windows.clear();
   }
+}
+
+/// One measurement window on [RommMetadataNetwork]; see
+/// [RommMetadataNetwork.openWindow].
+class RommLoadWindow {
+  final int _startDetail;
+  final int _startMedia;
+  final int _startCatalog;
+  int _peak = 0;
+
+  RommLoadWindow._(this._startDetail, this._startMedia, this._startCatalog);
 }
 
 /// The scanned games of one system — the library index, never the disk.

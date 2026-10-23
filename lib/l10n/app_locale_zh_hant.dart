@@ -1074,6 +1074,8 @@ const Map<String, dynamic> appLocaleZhHant = {
 
   AppLocale.checkingCredentials: '正在檢查憑證...',
   AppLocale.scrapeNoCredentials: '未發現 ScreenScraper 憑證。請登入。',
+  AppLocale.scrapeNoSourceForGame:
+      "RomM 中沒有這款遊戲的資料，且尚未登入 ScreenScraper。請將遊戲連結到 RomM，或登入 ScreenScraper。",
   AppLocale.scrapeSystemNotMapped: '系統未對應到 ScreenScraper。',
   AppLocale.scrapeGameNotFound: '在 ScreenScraper 上未發現該遊戲。',
   AppLocale.scrapeFailedSaveMetadata: '儲存遊戲中繼資料失敗。',
@@ -1477,4 +1479,33 @@ const Map<String, dynamic> appLocaleZhHant = {
   AppLocale.rommSystemFetchBusy: '{system} 的 RomM 中繼資料取得仍在進行中。請等待其完成後再試。',
   AppLocale.rommSystemFetchFailedToStart: '無法取得 {system} 的 RomM 中繼資料：{error}',
   AppLocale.rommSystemFetchServerStop: '提前停止：RomM 伺服器已停止回應。已取得的遊戲會保留其資料。',
+  AppLocale.scrapeFetchingFromRomm: '正在從 RomM 取得元資料…',
+  AppLocale.scrapeCompletedFromRomm: '已從 RomM 抓取',
+  AppLocale.scrapeCompletedFromScreenscraper: '已從 ScreenScraper 抓取',
+  AppLocale.scrapeCompletedFallback: 'RomM 中沒有此遊戲的資料；已從 ScreenScraper 抓取',
+  AppLocale.scrapeFailedWithReason: '抓取失敗：{reason}',
+  AppLocale.scrapeRommUnreachable:
+      "無法連線至 RomM，且尚未登入 ScreenScraper。請檢查 RomM 連線，或登入 ScreenScraper。",
+  AppLocale.scrapeCompletedRommUnreachable: "無法連線至 RomM；已從 ScreenScraper 取得",
+  AppLocale.scrapeSummaryRommUnavailable: "無法連線至 RomM 的遊戲：{count}",
+  AppLocale.scrapeStoppedRommUnreachable: "已停止擷取：無法連線至 RomM 伺服器。已擷取的遊戲已保留。",
+  AppLocale.scrapingProgressSources:
+      "RomM {romm} · ScreenScraper {screenscraper}",
+  AppLocale.scrapeBulkRommFirstStarted:
+      "擷取：優先使用 RomM，RomM 沒有的遊戲使用 ScreenScraper",
+  AppLocale.metadataSourceLabel: "中繼資料來源：{source}",
+  AppLocale.metadataSourceRomm: "RomM",
+  AppLocale.metadataSourceScreenscraper: "ScreenScraper",
+  AppLocale.metadataSourceEsde: "ES-DE",
+  AppLocale.metadataSourceSteam: "Steam",
+  AppLocale.metadataSourceManual: "手動編輯",
+  AppLocale.scrapeSummaryFromRomm: '來自 RomM：{count}',
+  AppLocale.scrapeSummaryFromScreenscraper: '來自 ScreenScraper：{count}',
+  AppLocale.scrapeBulkRommOnlyStarted: '僅從 RomM 擷取；尚未設定 ScreenScraper',
+  AppLocale.scrapeBulkNoSourceAvailable: '開始擷取前請先登入 ScreenScraper 或連線 RomM',
+  AppLocale.scraperScreenscraperOptional:
+      '已連接 RomM，抓取時會優先使用。登入 ScreenScraper 可將其作為備用來源。',
+  AppLocale.scraperLoginToScreenscraper: '登入 ScreenScraper',
+  AppLocale.scraperSubtitleBoth: '從 RomM 下載遊戲中繼資料，RomM 缺少的部分由 ScreenScraper 補充',
+  AppLocale.scraperSubtitleRomm: '從 RomM 下載遊戲中繼資料',
 };

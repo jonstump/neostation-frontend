@@ -1217,6 +1217,8 @@ const Map<String, dynamic> appLocaleRu = {
   AppLocale.checkingCredentials: 'Проверка учетных данных...',
   AppLocale.scrapeNoCredentials:
       'Данные ScreenScraper не найдены. Войдите в систему.',
+  AppLocale.scrapeNoSourceForGame:
+      "В RomM нет данных об этой игре, а вход в ScreenScraper не выполнен. Свяжите игру с RomM или войдите в ScreenScraper.",
   AppLocale.scrapeSystemNotMapped: 'Система не сопоставлена со ScreenScraper.',
   AppLocale.scrapeGameNotFound: 'Игра не найдена в ScreenScraper.',
   AppLocale.scrapeFailedSaveMetadata: 'Не удалось сохранить метаданные.',
@@ -1700,4 +1702,40 @@ const Map<String, dynamic> appLocaleRu = {
       'Не удалось получить метаданные RomM для {system}: {error}',
   AppLocale.rommSystemFetchServerStop:
       'Остановлено досрочно: сервер RomM перестал отвечать. Метаданные уже полученных игр сохраняются.',
+  AppLocale.scrapeFetchingFromRomm: 'Получение метаданных из RomM…',
+  AppLocale.scrapeCompletedFromRomm: 'Скрапинг выполнен из RomM',
+  AppLocale.scrapeCompletedFromScreenscraper:
+      'Скрапинг выполнен из ScreenScraper',
+  AppLocale.scrapeCompletedFallback:
+      'В RomM ничего нет для этой игры; скрапинг выполнен из ScreenScraper',
+  AppLocale.scrapeFailedWithReason: 'Ошибка скрапинга: {reason}',
+  AppLocale.scrapeRommUnreachable:
+      "Не удалось связаться с RomM, а вход в ScreenScraper не выполнен. Проверьте подключение к RomM или войдите в ScreenScraper.",
+  AppLocale.scrapeCompletedRommUnreachable:
+      "RomM недоступен; получено из ScreenScraper",
+  AppLocale.scrapeSummaryRommUnavailable: "RomM недоступен для: {count}",
+  AppLocale.scrapeStoppedRommUnreachable:
+      "Скрейпинг остановлен: сервер RomM недоступен. Уже обработанные игры сохранены.",
+  AppLocale.scrapingProgressSources:
+      "RomM {romm} · ScreenScraper {screenscraper}",
+  AppLocale.scrapeBulkRommFirstStarted:
+      "Скрейпинг: сначала RomM, затем ScreenScraper для игр, которых нет в RomM",
+  AppLocale.metadataSourceLabel: "Источник метаданных: {source}",
+  AppLocale.metadataSourceRomm: "RomM",
+  AppLocale.metadataSourceScreenscraper: "ScreenScraper",
+  AppLocale.metadataSourceEsde: "ES-DE",
+  AppLocale.metadataSourceSteam: "Steam",
+  AppLocale.metadataSourceManual: "Изменено вручную",
+  AppLocale.scrapeSummaryFromRomm: 'Из RomM: {count}',
+  AppLocale.scrapeSummaryFromScreenscraper: 'Из ScreenScraper: {count}',
+  AppLocale.scrapeBulkRommOnlyStarted:
+      'Скрапинг только из RomM; ScreenScraper не настроен',
+  AppLocale.scrapeBulkNoSourceAvailable:
+      'Войдите в ScreenScraper или подключите RomM перед запуском скрапинга',
+  AppLocale.scraperScreenscraperOptional:
+      'RomM подключён и используется для скрапинга в первую очередь. Войдите в ScreenScraper, чтобы добавить его как резервный источник.',
+  AppLocale.scraperLoginToScreenscraper: 'Войти в ScreenScraper',
+  AppLocale.scraperSubtitleBoth:
+      'Загрузить метаданные игр из RomM, а недостающее — из ScreenScraper',
+  AppLocale.scraperSubtitleRomm: 'Загрузить метаданные игр из RomM',
 };

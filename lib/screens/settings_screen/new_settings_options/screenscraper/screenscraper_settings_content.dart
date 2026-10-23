@@ -4,12 +4,15 @@ import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:material_symbols_icons/symbols.dart';
 import 'package:provider/provider.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/providers/romm_provider.dart';
 import 'package:neostation/providers/scraping_provider.dart';
 import 'package:neostation/repositories/scraper_repository.dart';
 import 'package:neostation/services/logger_service.dart';
 import 'package:neostation/services/screenscraper_service.dart';
 import 'package:neostation/services/sfx_service.dart';
 import 'package:neostation/utils/adaptive_scroll.dart';
+import 'package:neostation/utils/scraper_entry_gate.dart';
+import 'package:neostation/utils/scraper_subtitle.dart';
 import 'package:neostation/widgets/confirm_action_dialog.dart';
 import 'package:neostation/widgets/custom_notification.dart';
 import 'package:neostation/widgets/custom_toggle_switch.dart';
@@ -25,8 +28,11 @@ import 'screenscraper_login_dialog.dart';
 /// The ScreenScraper settings category: account, scraping, and every scraper
 /// option on one scrolling page.
 ///
-/// Signed out, the page is a single sign-in row that opens
-/// [ScreenScraperLoginDialog]. Signed in, it owns one gamepad cursor over the
+/// Signed out with no RomM server connected, the page is a single sign-in row
+/// that opens [ScreenScraperLoginDialog]. A connected RomM server is a scrape
+/// source on its own, so it opens the options too: the account slot then
+/// offers the ScreenScraper sign-in instead of the member card. Either way the
+/// page owns one gamepad cursor over the
 /// account and scraping rows (start/stop, scrape mode, language), the
 /// enable-all row and a grid of system tiles, then the media type and region
 /// priority rows. The settings screen delegates D-pad, A and B here, like the Themes and System
@@ -122,6 +128,18 @@ class ScreenScraperSettingsContentState
       slot >= _regionStart && slot < _regionStart + _regions.length;
   bool _isGridSlot(int slot) => slot >= _gridStart && slot < _gridEnd;
 
+  /// Whether the options are shown rather than the lone sign-in row: with
+  /// ScreenScraper credentials, or on the strength of a RomM connection alone.
+  bool _optionsOpen({bool listen = false}) =>
+      scraperEntryFor(
+        hasScreenscraperCredentials: _signedIn,
+        rommConnected: Provider.of<RommProvider>(
+          context,
+          listen: listen,
+        ).isConnected,
+      ) ==
+      ScraperEntry.options;
+
   @override
   void initState() {
     super.initState();
@@ -147,17 +165,10 @@ class ScreenScraperSettingsContentState
   }
 
   Future<void> _load() async {
+    // The options load whether or not an account is signed in: a RomM
+    // connection can open the page without one, and it may arrive after this
+    // ran.
     final signedIn = await ScreenScraperService.hasSavedCredentials();
-    if (!signedIn) {
-      if (mounted) {
-        setState(() {
-          _signedIn = false;
-          _userInfo = null;
-          _isLoading = false;
-        });
-      }
-      return;
-    }
 
     try {
       final results = await Future.wait([
@@ -172,8 +183,8 @@ class ScreenScraperSettingsContentState
       final credentials = results[0] as Map<String, String>?;
       final config = results[1] as Map<String, dynamic>;
       setState(() {
-        _signedIn = true;
-        _userInfo = credentials;
+        _signedIn = signedIn;
+        _userInfo = signedIn ? credentials : null;
         _language = credentials?['preferred_language'] ?? 'en';
         _scrapeMode = config['scrape_mode']?.toString() ?? 'new_only';
         _enabledMediaTypes = List<String>.from(results[2] as List<String>);
@@ -186,7 +197,12 @@ class ScreenScraperSettingsContentState
       });
     } catch (e) {
       _log.e('Error loading ScreenScraper settings: $e');
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _signedIn = signedIn;
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -201,7 +217,7 @@ class ScreenScraperSettingsContentState
 
   int getItemCount() {
     if (_isLoading) return 0;
-    if (!_signedIn) return 1;
+    if (!_optionsOpen()) return 1;
     return _regionStart + _regions.length;
   }
 
@@ -276,13 +292,17 @@ class ScreenScraperSettingsContentState
 
   void selectItem() {
     if (_isLoading) return;
-    if (!_signedIn) {
+    if (!_optionsOpen()) {
       _signIn();
       return;
     }
     final slot = _cursor;
     if (slot == _accountSlot) {
-      _logout();
+      if (_signedIn) {
+        _logout();
+      } else {
+        _signIn();
+      }
     } else if (slot == _scrapeSlot) {
       _toggleScraping();
     } else if (slot == _scrapeModeSlot) {
@@ -541,7 +561,7 @@ class ScreenScraperSettingsContentState
               ? const Center(child: CircularProgressIndicator())
               : SingleChildScrollView(
                   controller: _scrollController,
-                  child: _signedIn
+                  child: _optionsOpen(listen: true)
                       ? _buildSignedIn(context)
                       : _buildSignedOut(context),
                 ),
@@ -593,6 +613,8 @@ class ScreenScraperSettingsContentState
             logoutFocused: _focused(_accountSlot),
             userInfo: _userInfo,
             onLogout: _logout,
+            loggedIn: _signedIn,
+            onLogin: _signIn,
           ),
         ),
         SizedBox(height: 16.r),
@@ -691,7 +713,10 @@ class ScreenScraperSettingsContentState
               title: AppLocale.scraping.getString(context),
               subtitle: scraping.isScraping
                   ? '${AppLocale.scrapingInProgress.getString(context)} ${scraping.maxThreads} threads'
-                  : AppLocale.scraperSubtitle.getString(context),
+                  : scraperSubtitleKeyFor(
+                      rommConnected: context.watch<RommProvider>().isConnected,
+                      screenScraperLoggedIn: _signedIn,
+                    ).getString(context),
               focused: _focused(_scrapeSlot),
               onTap: _toggleScraping,
               trailing: ElevatedButton.icon(

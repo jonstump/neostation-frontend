@@ -24,6 +24,9 @@ enum ThreadProcessingStep {
   /// Downloading missing media assets.
   downloadingImages,
 
+  /// Offering the ROM to RomM before any ScreenScraper work.
+  fetchingFromRomm,
+
   /// Processing successfully finished.
   completed,
 }
@@ -110,6 +113,17 @@ class ScrapingProvider extends ChangeNotifier {
   /// Count of games where scraping failed (e.g., game not found).
   int _failedGames = 0;
 
+  /// True when RomM takes part in the current run, so the per-source lines
+  /// are shown at all.
+  bool _rommInPlay = false;
+
+  /// Games scraped from RomM and from ScreenScraper so far, and games RomM
+  /// could not answer for (unreachable, rate limited, or skipped once the
+  /// run stopped asking), whichever source then scraped them.
+  int _rommGames = 0;
+  int _screenscraperGames = 0;
+  int _rommUnavailableGames = 0;
+
   /// Maximum number of concurrent worker threads.
   int _maxThreads = 4;
 
@@ -141,6 +155,10 @@ class ScrapingProvider extends ChangeNotifier {
   int get processedGames => _processedGames;
   int get successfulGames => _successfulGames;
   int get failedGames => _failedGames;
+  bool get rommInPlay => _rommInPlay;
+  int get rommGames => _rommGames;
+  int get screenscraperGames => _screenscraperGames;
+  int get rommUnavailableGames => _rommUnavailableGames;
   int get maxThreads => _maxThreads;
   List<ThreadProgress> get threads => _threads;
   Duration? get estimatedTimeRemaining => _estimatedTimeRemaining;
@@ -163,6 +181,10 @@ class ScrapingProvider extends ChangeNotifier {
     _processedGames = 0;
     _successfulGames = 0;
     _failedGames = 0;
+    _rommInPlay = false;
+    _rommGames = 0;
+    _screenscraperGames = 0;
+    _rommUnavailableGames = 0;
     _maxThreads = maxThreads ?? 4;
     _startTime = DateTime.now();
     _estimatedTimeRemaining = null;
@@ -180,6 +202,23 @@ class ScrapingProvider extends ChangeNotifier {
     );
 
     WakelockPlus.enable();
+    notifyListeners();
+  }
+
+  /// Records which source scraped how many games, for the live tally.
+  ///
+  /// [rommInPlay] says RomM took part in this run; without it the per-source
+  /// lines stay hidden, as they were before RomM was a source.
+  void updateSources({
+    required bool rommInPlay,
+    required int rommGames,
+    required int screenscraperGames,
+    required int rommUnavailableGames,
+  }) {
+    _rommInPlay = rommInPlay;
+    _rommGames = rommGames;
+    _screenscraperGames = screenscraperGames;
+    _rommUnavailableGames = rommUnavailableGames;
     notifyListeners();
   }
 

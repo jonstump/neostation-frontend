@@ -1260,6 +1260,8 @@ const Map<String, dynamic> appLocaleDe = {
   AppLocale.checkingCredentials: 'Anmeldedaten werden überprüft...',
   AppLocale.scrapeNoCredentials:
       'ScreenScraper-Anmeldedaten nicht gefunden. Bitte anmelden.',
+  AppLocale.scrapeNoSourceForGame:
+      "RomM hat keine Daten zu diesem Spiel und ScreenScraper ist nicht angemeldet. Verknüpfe das Spiel mit RomM oder melde dich bei ScreenScraper an.",
   AppLocale.scrapeSystemNotMapped: 'System in ScreenScraper nicht zugeordnet.',
   AppLocale.scrapeGameNotFound: 'Spiel in ScreenScraper nicht gefunden.',
   AppLocale.scrapeFailedSaveMetadata:
@@ -1763,4 +1765,39 @@ const Map<String, dynamic> appLocaleDe = {
       'RomM-Metadaten für {system} konnten nicht abgerufen werden: {error}',
   AppLocale.rommSystemFetchServerStop:
       'Früh abgebrochen: Der RomM-Server antwortet nicht mehr. Bereits geladene Spiele behalten ihre Metadaten.',
+  AppLocale.scrapeFetchingFromRomm: 'Metadaten werden von RomM abgerufen…',
+  AppLocale.scrapeCompletedFromRomm: 'Von RomM gescrapt',
+  AppLocale.scrapeCompletedFromScreenscraper: 'Von ScreenScraper gescrapt',
+  AppLocale.scrapeCompletedFallback:
+      'RomM hatte nichts zu diesem Spiel; von ScreenScraper gescrapt',
+  AppLocale.scrapeFailedWithReason: 'Scraping fehlgeschlagen: {reason}',
+  AppLocale.scrapeRommUnreachable:
+      "RomM ist nicht erreichbar und ScreenScraper ist nicht angemeldet. Prüfe die RomM-Verbindung oder melde dich bei ScreenScraper an.",
+  AppLocale.scrapeCompletedRommUnreachable:
+      "RomM war nicht erreichbar; von ScreenScraper abgerufen",
+  AppLocale.scrapeSummaryRommUnavailable: "RomM nicht erreichbar bei: {count}",
+  AppLocale.scrapeStoppedRommUnreachable:
+      "Scraping beendet: Der RomM-Server ist nicht erreichbar. Bisher gescrapte Spiele bleiben erhalten.",
+  AppLocale.scrapingProgressSources:
+      "RomM {romm} · ScreenScraper {screenscraper}",
+  AppLocale.scrapeBulkRommFirstStarted:
+      "Scraping: zuerst RomM, dann ScreenScraper für Spiele, die RomM nicht hat",
+  AppLocale.metadataSourceLabel: "Metadatenquelle: {source}",
+  AppLocale.metadataSourceRomm: "RomM",
+  AppLocale.metadataSourceScreenscraper: "ScreenScraper",
+  AppLocale.metadataSourceEsde: "ES-DE",
+  AppLocale.metadataSourceSteam: "Steam",
+  AppLocale.metadataSourceManual: "Manuell bearbeitet",
+  AppLocale.scrapeSummaryFromRomm: 'Von RomM: {count}',
+  AppLocale.scrapeSummaryFromScreenscraper: 'Von ScreenScraper: {count}',
+  AppLocale.scrapeBulkRommOnlyStarted:
+      'Scraping nur über RomM; ScreenScraper ist nicht eingerichtet',
+  AppLocale.scrapeBulkNoSourceAvailable:
+      'Bitte bei ScreenScraper anmelden oder RomM verbinden, bevor das Scraping gestartet wird',
+  AppLocale.scraperScreenscraperOptional:
+      'RomM ist verbunden und wird beim Scrapen zuerst genutzt. Melde dich bei ScreenScraper an, um es als Ausweichquelle hinzuzufügen.',
+  AppLocale.scraperLoginToScreenscraper: 'Bei ScreenScraper anmelden',
+  AppLocale.scraperSubtitleBoth:
+      'Spiel-Metadaten von RomM herunterladen, ScreenScraper ergänzt, was RomM fehlt',
+  AppLocale.scraperSubtitleRomm: 'Spiel-Metadaten von RomM herunterladen',
 };

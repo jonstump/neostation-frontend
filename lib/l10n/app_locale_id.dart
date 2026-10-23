@@ -1220,6 +1220,8 @@ const Map<String, dynamic> appLocaleId = {
   AppLocale.checkingCredentials: 'Memeriksa kredensial...',
   AppLocale.scrapeNoCredentials:
       'Kredensial ScreenScraper tidak ditemukan. Harap masuk.',
+  AppLocale.scrapeNoSourceForGame:
+      "RomM tidak memiliki data untuk game ini dan ScreenScraper belum masuk. Tautkan game ke RomM, atau masuk ke ScreenScraper.",
   AppLocale.scrapeSystemNotMapped: 'Sistem tidak dipetakan di ScreenScraper.',
   AppLocale.scrapeGameNotFound: 'Game tidak ditemukan di ScreenScraper.',
   AppLocale.scrapeFailedSaveMetadata: 'Gagal menyimpan metadata game.',
@@ -1708,4 +1710,40 @@ const Map<String, dynamic> appLocaleId = {
       'Tidak dapat mengambil metadata RomM untuk {system}: {error}',
   AppLocale.rommSystemFetchServerStop:
       'Dihentikan lebih awal: server RomM berhenti merespons. Game yang sudah diambil tetap menyimpan metadatanya.',
+  AppLocale.scrapeFetchingFromRomm: 'Mengambil metadata dari RomM…',
+  AppLocale.scrapeCompletedFromRomm: 'Data diambil dari RomM',
+  AppLocale.scrapeCompletedFromScreenscraper: 'Data diambil dari ScreenScraper',
+  AppLocale.scrapeCompletedFallback:
+      'RomM tidak memiliki data untuk game ini; data diambil dari ScreenScraper',
+  AppLocale.scrapeFailedWithReason: 'Scraping gagal: {reason}',
+  AppLocale.scrapeRommUnreachable:
+      "Tidak dapat menjangkau RomM dan ScreenScraper belum masuk. Periksa koneksi RomM, atau masuk ke ScreenScraper.",
+  AppLocale.scrapeCompletedRommUnreachable:
+      "RomM tidak dapat dijangkau; diambil dari ScreenScraper",
+  AppLocale.scrapeSummaryRommUnavailable:
+      "RomM tidak dapat dijangkau untuk: {count}",
+  AppLocale.scrapeStoppedRommUnreachable:
+      "Scraping dihentikan: server RomM tidak dapat dijangkau. Game yang sudah di-scrape tetap tersimpan.",
+  AppLocale.scrapingProgressSources:
+      "RomM {romm} · ScreenScraper {screenscraper}",
+  AppLocale.scrapeBulkRommFirstStarted:
+      "Scraping: RomM dulu, lalu ScreenScraper untuk game yang tidak ada di RomM",
+  AppLocale.metadataSourceLabel: "Sumber metadata: {source}",
+  AppLocale.metadataSourceRomm: "RomM",
+  AppLocale.metadataSourceScreenscraper: "ScreenScraper",
+  AppLocale.metadataSourceEsde: "ES-DE",
+  AppLocale.metadataSourceSteam: "Steam",
+  AppLocale.metadataSourceManual: "Diedit manual",
+  AppLocale.scrapeSummaryFromRomm: 'Dari RomM: {count}',
+  AppLocale.scrapeSummaryFromScreenscraper: 'Dari ScreenScraper: {count}',
+  AppLocale.scrapeBulkRommOnlyStarted:
+      'Scraping hanya dari RomM; ScreenScraper belum disiapkan',
+  AppLocale.scrapeBulkNoSourceAvailable:
+      'Masuk ke ScreenScraper atau hubungkan RomM sebelum memulai scraping',
+  AppLocale.scraperScreenscraperOptional:
+      'RomM terhubung dan digunakan lebih dulu untuk scraping. Masuk ke ScreenScraper untuk menambahkannya sebagai sumber cadangan.',
+  AppLocale.scraperLoginToScreenscraper: 'Masuk ke ScreenScraper',
+  AppLocale.scraperSubtitleBoth:
+      'Unduh metadata game dari RomM, dengan ScreenScraper untuk yang tidak ada di RomM',
+  AppLocale.scraperSubtitleRomm: 'Unduh metadata game dari RomM',
 };

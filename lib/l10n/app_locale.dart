@@ -1225,6 +1225,7 @@ mixin AppLocale {
   // ---------------------------------------------------------------------------
   static const String checkingCredentials = 'checking_credentials';
   static const String scrapeNoCredentials = 'scrape_no_credentials';
+  static const String scrapeNoSourceForGame = 'scrape_no_source_for_game';
   static const String scrapeSystemNotMapped = 'scrape_system_not_mapped';
   static const String scrapeGameNotFound = 'scrape_game_not_found';
   static const String scrapeFailedSaveMetadata = 'scrape_failed_save_metadata';
@@ -1237,6 +1238,42 @@ mixin AppLocale {
   static const String identifyGame = 'identify_game';
   static const String identifySearchHint = 'identify_search_hint';
   static const String identifySearchFailed = 'identify_search_failed';
+  static const String scrapeFetchingFromRomm = 'scrape_fetching_from_romm';
+  static const String scrapeCompletedFromRomm = 'scrape_completed_from_romm';
+  static const String scrapeCompletedFromScreenscraper =
+      'scrape_completed_from_screenscraper';
+  static const String scrapeCompletedFallback = 'scrape_completed_fallback';
+  static const String scrapeFailedWithReason = 'scrape_failed_with_reason';
+  static const String scrapeSummaryFromRomm = 'scrape_summary_from_romm';
+  static const String scrapeSummaryFromScreenscraper =
+      'scrape_summary_from_screenscraper';
+  static const String scrapeRommUnreachable = 'scrape_romm_unreachable';
+  static const String scrapeCompletedRommUnreachable =
+      'scrape_completed_romm_unreachable';
+  static const String scrapeSummaryRommUnavailable =
+      'scrape_summary_romm_unavailable';
+  static const String scrapeStoppedRommUnreachable =
+      'scrape_stopped_romm_unreachable';
+  static const String scrapingProgressSources = 'scraping_progress_sources';
+  static const String scrapeBulkRommFirstStarted =
+      'scrape_bulk_romm_first_started';
+  static const String metadataSourceLabel = 'metadata_source_label';
+  static const String metadataSourceRomm = 'metadata_source_romm';
+  static const String metadataSourceScreenscraper =
+      'metadata_source_screenscraper';
+  static const String metadataSourceEsde = 'metadata_source_esde';
+  static const String metadataSourceSteam = 'metadata_source_steam';
+  static const String metadataSourceManual = 'metadata_source_manual';
+  static const String scrapeBulkRommOnlyStarted =
+      'scrape_bulk_romm_only_started';
+  static const String scrapeBulkNoSourceAvailable =
+      'scrape_bulk_no_source_available';
+  static const String scraperScreenscraperOptional =
+      'scraper_screenscraper_optional';
+  static const String scraperLoginToScreenscraper =
+      'scraper_login_to_screenscraper';
+  static const String scraperSubtitleBoth = 'scraper_subtitle_both';
+  static const String scraperSubtitleRomm = 'scraper_subtitle_romm';
 
   // ---------------------------------------------------------------------------
   // User data location

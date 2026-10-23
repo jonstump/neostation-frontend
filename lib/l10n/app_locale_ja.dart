@@ -1108,6 +1108,8 @@ const Map<String, dynamic> appLocaleJa = {
 
   AppLocale.checkingCredentials: '資格情報を確認中...',
   AppLocale.scrapeNoCredentials: 'ScreenScraperの資格情報が見つかりません。ログインしてください。',
+  AppLocale.scrapeNoSourceForGame:
+      "このゲームのデータはRomMになく、ScreenScraperにもログインしていません。ゲームをRomMにリンクするか、ScreenScraperにログインしてください。",
   AppLocale.scrapeSystemNotMapped: 'ScreenScraperでシステムがマッピングされていません。',
   AppLocale.scrapeGameNotFound: 'ScreenScraperでゲームが見つかりません。',
   AppLocale.scrapeFailedSaveMetadata: 'ゲームメタデータの保存に失敗しました。',
@@ -1542,4 +1544,39 @@ const Map<String, dynamic> appLocaleJa = {
       '{system} の RomM メタデータを取得できませんでした: {error}',
   AppLocale.rommSystemFetchServerStop:
       '途中で停止しました：RomMサーバーが応答しなくなりました。取得済みのゲームのメタデータは保持されます。',
+  AppLocale.scrapeFetchingFromRomm: 'RomM からメタデータを取得中…',
+  AppLocale.scrapeCompletedFromRomm: 'RomM からスクレイピングしました',
+  AppLocale.scrapeCompletedFromScreenscraper: 'ScreenScraper からスクレイピングしました',
+  AppLocale.scrapeCompletedFallback:
+      'RomM にはこのゲームのデータがなかったため、ScreenScraper からスクレイピングしました',
+  AppLocale.scrapeFailedWithReason: 'スクレイピングに失敗しました: {reason}',
+  AppLocale.scrapeRommUnreachable:
+      "RomMに接続できず、ScreenScraperにもログインしていません。RomMの接続を確認するか、ScreenScraperにログインしてください。",
+  AppLocale.scrapeCompletedRommUnreachable:
+      "RomMに接続できないため、ScreenScraperから取得しました",
+  AppLocale.scrapeSummaryRommUnavailable: "RomMに接続できなかったゲーム: {count}",
+  AppLocale.scrapeStoppedRommUnreachable:
+      "スクレイピングを停止しました：RomMサーバーに接続できません。取得済みのゲームはそのまま保持されています。",
+  AppLocale.scrapingProgressSources:
+      "RomM {romm} · ScreenScraper {screenscraper}",
+  AppLocale.scrapeBulkRommFirstStarted:
+      "スクレイピング：まずRomM、RomMにないゲームはScreenScraperで取得します",
+  AppLocale.metadataSourceLabel: "メタデータの取得元: {source}",
+  AppLocale.metadataSourceRomm: "RomM",
+  AppLocale.metadataSourceScreenscraper: "ScreenScraper",
+  AppLocale.metadataSourceEsde: "ES-DE",
+  AppLocale.metadataSourceSteam: "Steam",
+  AppLocale.metadataSourceManual: "手動で編集",
+  AppLocale.scrapeSummaryFromRomm: 'RomM から: {count}',
+  AppLocale.scrapeSummaryFromScreenscraper: 'ScreenScraper から: {count}',
+  AppLocale.scrapeBulkRommOnlyStarted:
+      'RomM のみからスクレイピングします。ScreenScraper は設定されていません',
+  AppLocale.scrapeBulkNoSourceAvailable:
+      'スクレイピングを始める前に ScreenScraper にログインするか RomM に接続してください',
+  AppLocale.scraperScreenscraperOptional:
+      'RomM に接続済みで、スクレイピングでは最初に使われます。ScreenScraper にログインすると予備のソースとして追加できます。',
+  AppLocale.scraperLoginToScreenscraper: 'ScreenScraper にログイン',
+  AppLocale.scraperSubtitleBoth:
+      'RomM からゲームのメタデータをダウンロードし、不足分は ScreenScraper で補完',
+  AppLocale.scraperSubtitleRomm: 'RomM からゲームのメタデータをダウンロード',
 };

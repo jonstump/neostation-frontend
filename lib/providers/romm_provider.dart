@@ -11,6 +11,8 @@ import '../models/romm_collection.dart';
 import '../models/romm_metadata_fetch.dart';
 import '../models/romm_platform.dart';
 import '../models/romm_rom.dart';
+import '../models/romm_rom_page.dart';
+import '../models/romm_scrape_step.dart';
 import '../models/system_model.dart';
 import '../repositories/romm_repository.dart';
 import '../repositories/romm_save_map_repository.dart';
@@ -20,6 +22,9 @@ import '../repositories/system_repository.dart';
 import '../services/logger_service.dart';
 import '../services/romm_playtime_service.dart';
 import '../services/romm/romm_metadata_fetch.dart';
+import '../services/romm/romm_paging.dart';
+import '../services/romm/romm_scrape_lookup.dart';
+import '../services/romm/romm_server_guard.dart';
 import '../services/romm_service.dart';
 import '../services/storage_space_service.dart';
 import '../services/user_data_location_service.dart';
@@ -2374,6 +2379,342 @@ class RommProvider extends ChangeNotifier {
   static String? _scummVmId(String contents) {
     final id = contents.replaceFirst(RegExp(r'^\uFEFF'), '').trim();
     return RegExp(r'^[A-Za-z0-9_][A-Za-z0-9_-]*$').hasMatch(id) ? id : null;
+  }
+
+  /// The RomM half of a per-game scrape, or null when not connected — in
+  /// which case every scrape entry point runs ScreenScraper exactly as before.
+  ///
+  /// The step resolves the game's map row with
+  /// [RommSaveMapRepository.getMapping] (exact filename, then the
+  /// extension-stripped spelling, the way [fetchMetadata] does), answers
+  /// [RommScrapeStepStatus.notLinked] without a request when there is none,
+  /// and otherwise runs [fetchMetadataForRomId] keyed by the row's stored
+  /// `romname` in the mode [RommScrapeStepResult.modeFor] maps from the
+  /// target's overwrite flag. It never throws: a resolution or writer failure
+  /// is a [RommScrapeStepStatus.failed] result, logged with the rom id and
+  /// filename.
+  RommScrapeStep? scrapeStep(FileProvider fileProvider) {
+    if (!isConnected) return null;
+    final systems = <String, SystemModel?>{};
+    final lookup = _newScrapeLookup();
+    return (RommScrapeTarget target) => _runScrapeStep(
+      target,
+      fileProvider,
+      systems,
+      resolveRomId: () async {
+        final link = await RommSaveMapRepository.getMapping(
+          target.filename,
+          target.systemFolder,
+        );
+        if (link == null) return null;
+        return (romId: link.rommRomId, indexedName: link.romname);
+      },
+      // One game: a single RomM search for its title, not a whole catalog.
+      lookup: (target, system) => lookup.findBySearch(system, target.filename),
+    );
+  }
+
+  /// [scrapeStep] for a bulk run: reads the link map once, up front, and
+  /// resolves every target from that index, so a 300-game run makes no
+  /// per-game mapping query. Systems are resolved once per id as well.
+  /// Null when not connected.
+  ///
+  /// Targets resolve the way `RommMetadataFetch` resolves its games — the
+  /// on-disk filename first, then its extension-stripped spelling — and the
+  /// metadata row is keyed by the target's filename, exactly as that pass
+  /// keys it.
+  ///
+  /// Every worker's step goes through one [RommServerGuard] (the caller's, so
+  /// it can read the totals afterwards, or a fresh one): a `Retry-After` pauses
+  /// all of them, and after repeated transport failures the guard trips and
+  /// every remaining game is answered [RommScrapeStepResult.serverSkipped]
+  /// without a request. The guard sits outside the writer and holds nothing of
+  /// the shared gate, so the two cannot wait on each other.
+  Future<RommScrapeStep?> bulkScrapeStep(
+    FileProvider fileProvider, {
+    RommServerGuard? guard,
+  }) async {
+    if (!isConnected) return null;
+    final index = await RommSaveMapRepository.getRomIdIndex();
+    final systems = <String, SystemModel?>{};
+    final serverGuard = guard ?? RommServerGuard();
+    // One lookup for the whole run: each system's catalog is loaded at most
+    // once however many workers ask, and a failed load is not retried.
+    final lookup = _newScrapeLookup();
+    return (RommScrapeTarget target) async {
+      if (serverGuard.tripped) return serverGuard.skip();
+      await serverGuard.waitTurn();
+      if (serverGuard.tripped) return serverGuard.skip();
+      if (serverGuard.stopRequested) {
+        return RommScrapeStepResult.failed(StateError('scrape cancelled'));
+      }
+      final result = await _runScrapeStep(
+        target,
+        fileProvider,
+        systems,
+        resolveRomId: () async {
+          final romId = _romIdFromIndex(
+            index,
+            target.filename,
+            target.systemFolder,
+          );
+          if (romId == null) return null;
+          return (romId: romId, indexedName: target.filename);
+        },
+        lookup: (target, system) =>
+            lookup.findInCatalog(system, target.filename),
+      );
+      serverGuard.record(result);
+      return result;
+    };
+  }
+
+  /// The body both step builders share: resolve the game's RomM id, resolve
+  /// the system, run the writer, classify. Never throws.
+  ///
+  /// The id comes from the game's link when it has one. Without a link the game
+  /// is looked up in RomM through [lookup] and used only when the
+  /// match is unambiguous; no link row is written either way. A lookup that
+  /// matches nothing, or more than one ROM, is a plain "not found" that falls
+  /// through to ScreenScraper; a lookup whose request failed is a failure that
+  /// carries its transport class, so the server guard counts it.
+  Future<RommScrapeStepResult> _runScrapeStep(
+    RommScrapeTarget target,
+    FileProvider fileProvider,
+    Map<String, SystemModel?> systems, {
+    required Future<({int romId, String indexedName})?> Function() resolveRomId,
+    required Future<RommScrapeLookupResult> Function(
+      RommScrapeTarget target,
+      SystemModel system,
+    )
+    lookup,
+  }) async {
+    int? romId;
+    try {
+      final link = await resolveRomId();
+      final system = await _resolveScrapeSystem(target, systems);
+      String indexedName;
+
+      if (link != null) {
+        romId = link.romId;
+        indexedName = link.indexedName;
+        if (system == null) {
+          final error = RommMetadataFetchException(
+            stage: 'system',
+            romId: romId,
+            filename: target.filename,
+            cause: StateError(
+              'no system for id "${target.appSystemId}" '
+              'or folder "${target.systemFolder}"',
+            ),
+          );
+          _log.w(
+            'RomM scrape step failed: rom=$romId filename=${target.filename} '
+            'error=$error',
+          );
+          return RommScrapeStepResult.failed(error);
+        }
+      } else {
+        if (system == null) {
+          _log.i(
+            'RomM scrape step: not linked and no system to look in '
+            '(system=${target.systemFolder}, filename=${target.filename})',
+          );
+          return const RommScrapeStepResult.notLinked();
+        }
+        final found = await lookup(target, system);
+        if (found.failed) {
+          final error = RommMetadataFetchException(
+            stage: 'lookup',
+            filename: target.filename,
+            cause: found.error!,
+          );
+          _log.w(
+            'RomM scrape step: lookup failed '
+            '(system=${target.systemFolder}, filename=${target.filename}, '
+            'transport=${found.transport}): ${found.error}',
+          );
+          return RommScrapeStepResult.fromOutcome(
+            RommMetadataOutcome.failed(error, transportClass: found.transport),
+          );
+        }
+        final match = found.match!;
+        if (!match.isMatch) {
+          _log.i(
+            'RomM scrape step: no unambiguous match, '
+            '${match.kind.name} '
+            '(system=${target.systemFolder}, filename=${target.filename})',
+          );
+          return RommScrapeStepResult.fromOutcome(
+            const RommMetadataOutcome.notFound(),
+          );
+        }
+        romId = match.romId;
+        indexedName = target.filename;
+        _log.i(
+          'RomM scrape step: matched by ${match.tier!.name} '
+          '(rom=$romId, system=${target.systemFolder}, '
+          'filename=${target.filename})',
+        );
+      }
+
+      final outcome = await fetchMetadataForRomId(
+        romId: romId!,
+        system: system,
+        fileProvider: fileProvider,
+        indexedName: indexedName,
+        mode: RommScrapeStepResult.modeFor(target.forceOverwrite),
+      );
+      final result = RommScrapeStepResult.fromOutcome(outcome);
+      _log.i(
+        'RomM scrape step: ${result.status.name} '
+        '(rom=$romId, filename=${target.filename}, '
+        'mode=${RommScrapeStepResult.modeFor(target.forceOverwrite).name}, '
+        'outcome=$outcome)',
+      );
+      return result;
+    } catch (e, st) {
+      // The writer never throws, but the repository or a fake might; the
+      // chain must still fall through to ScreenScraper.
+      _log.e(
+        'RomM scrape step failed: rom=$romId filename=${target.filename} '
+        'error=$e',
+        error: e,
+        stackTrace: st,
+      );
+      return RommScrapeStepResult.failed(
+        RommMetadataFetchException(
+          stage: 'scrape',
+          romId: romId,
+          filename: target.filename,
+          cause: e,
+        ),
+      );
+    }
+  }
+
+  // ── Scrape lookup ──────────────────────────────────────────────
+
+  RommScrapeLookup _newScrapeLookup() => RommScrapeLookup(
+    loadCatalog: _loadScrapeCatalog,
+    search: _searchScrapeCandidates,
+  );
+
+  /// Every RomM ROM of the platforms that map onto [system]: the same paged
+  /// walk and page size the link pass uses, one request per page, each through
+  /// the shared gate. A page that fails throws, and the lookup classifies and
+  /// remembers it.
+  Future<List<RommRom>> _loadScrapeCatalog(SystemModel system) async {
+    final platformIds = await _scrapePlatformIds(system);
+    final roms = <RommRom>[];
+    for (final platformId in platformIds) {
+      for (var page = 0; page < RommPaging.maxPages; page++) {
+        final result = await _gatedCatalogPage(
+          platformIds: [platformId],
+          limit: RommPaging.pageSize,
+          offset: page * RommPaging.pageSize,
+        );
+        roms.addAll(result.items);
+        if (result.items.length < RommPaging.pageSize) break;
+      }
+    }
+    return roms;
+  }
+
+  /// One RomM search for [term] on [system]'s platforms.
+  Future<List<RommRom>> _searchScrapeCandidates(
+    SystemModel system,
+    String term,
+  ) async {
+    final platformIds = await _scrapePlatformIds(system);
+    if (platformIds.isEmpty) return const [];
+    final result = await _gatedCatalogPage(
+      platformIds: platformIds,
+      search: term,
+      limit: _scrapeSearchLimit,
+      offset: 0,
+    );
+    return result.items;
+  }
+
+  /// The RomM platform ids that map onto [system], for the lookup.
+  ///
+  /// [loadPlatforms] swallows a failure into `_lastError` and leaves the list
+  /// empty, which [platformIdsForSystemName] would then answer as "RomM has no
+  /// platform for this system": a dead server reported as a game RomM does not
+  /// have. A failed listing is raised here instead, so the lookup classifies it
+  /// as a transport failure and the server guard counts it. A server that
+  /// answered with no platforms at all is a real, empty answer.
+  Future<List<int>> _scrapePlatformIds(SystemModel system) async {
+    await loadPlatforms();
+    if (_platforms.isEmpty && _lastError != null) {
+      throw RommException('Could not list the RomM platforms: $_lastError');
+    }
+    return platformIdsForSystemName(system.realName);
+  }
+
+  /// RomM results a single-game search asks for; RomM orders by name, so a
+  /// title's close matches are within the first page.
+  static const int _scrapeSearchLimit = 50;
+
+  /// One catalog page or search, inside the shared gate and counted, so the
+  /// lookup shares its bound with the writer and shows in the run's load line.
+  Future<RommRomPage> _gatedCatalogPage({
+    required List<int> platformIds,
+    String? search,
+    required int limit,
+    required int offset,
+  }) async {
+    final network = RommMetadataNetwork.instance;
+    await network.enter();
+    try {
+      network.recordCatalog();
+      return await service.getRomsPage(
+        platformIds: platformIds,
+        search: search,
+        limit: limit,
+        offset: offset,
+      );
+    } finally {
+      network.leave();
+    }
+  }
+
+  /// The [SystemModel] the writer needs for [target]: by app system id first
+  /// (the FK the metadata row is filed under), then by folder. Memoized in
+  /// [systems] per id so a bulk run resolves each system once.
+  Future<SystemModel?> _resolveScrapeSystem(
+    RommScrapeTarget target,
+    Map<String, SystemModel?> systems,
+  ) async {
+    final key = target.appSystemId.isNotEmpty
+        ? target.appSystemId
+        : target.systemFolder;
+    if (systems.containsKey(key)) return systems[key];
+    SystemModel? system;
+    if (target.appSystemId.isNotEmpty) {
+      system = await SystemRepository.getSystemById(target.appSystemId);
+    }
+    system ??= await SystemRepository.getSystemByFolderName(
+      target.systemFolder,
+    );
+    systems[key] = system;
+    return system;
+  }
+
+  /// The rom id of a game's map row in a preloaded [index]: the on-disk
+  /// filename first, then its extension-stripped spelling — the same order
+  /// `RommMetadataFetch` tries for its games.
+  static int? _romIdFromIndex(
+    RommRomIdIndex index,
+    String filename,
+    String systemFolder,
+  ) {
+    final exact = index.lookup(filename, systemFolder);
+    if (exact != null) return exact;
+    final lastDot = filename.lastIndexOf('.');
+    if (lastDot <= 0) return null;
+    return index.lookup(filename.substring(0, lastDot), systemFolder);
   }
 
   /// The one RomM metadata writer, behind [fetchMetadata], [fillMetadataGaps]

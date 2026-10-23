@@ -3,7 +3,10 @@ import 'package:flutter_localization/flutter_localization.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:neostation/l10n/app_locale.dart';
+import 'package:neostation/providers/romm_provider.dart';
+import 'package:neostation/providers/scraping_provider.dart';
 import 'package:neostation/screens/settings_screen/new_settings_options/screenscraper/screenscraper_settings_content.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'database_test_helper.dart';
@@ -30,7 +33,10 @@ void main() {
     await dbHelper.tearDown();
   });
 
-  testWidgets('signed out, the page is a single sign-in row', (tester) async {
+  Future<GlobalKey<ScreenScraperSettingsContentState>> pumpPage(
+    WidgetTester tester, {
+    required bool rommConnected,
+  }) async {
     final key = GlobalKey<ScreenScraperSettingsContentState>();
     await tester.pumpWidget(
       MediaQuery(
@@ -41,10 +47,20 @@ void main() {
             localizationsDelegates:
                 FlutterLocalization.instance.localizationsDelegates,
             supportedLocales: FlutterLocalization.instance.supportedLocales,
-            home: Scaffold(
-              body: ScreenScraperSettingsContent(
-                key: key,
-                isContentFocused: true,
+            home: MultiProvider(
+              providers: [
+                ChangeNotifierProvider<RommProvider>.value(
+                  value: _FakeRomm(connected: rommConnected),
+                ),
+                ChangeNotifierProvider<ScrapingProvider>(
+                  create: (_) => ScrapingProvider(),
+                ),
+              ],
+              child: Scaffold(
+                body: ScreenScraperSettingsContent(
+                  key: key,
+                  isContentFocused: true,
+                ),
               ),
             ),
           ),
@@ -62,6 +78,11 @@ void main() {
       await tester.pump();
     }
     await tester.pump();
+    return key;
+  }
+
+  testWidgets('signed out, the page is a single sign-in row', (tester) async {
+    final key = await pumpPage(tester, rommConnected: false);
 
     expect(find.text('Metadata'), findsOneWidget);
     expect(find.text('ScreenScraper Login'), findsOneWidget);
@@ -70,4 +91,29 @@ void main() {
     expect(key.currentState!.navigateDown(), isFalse);
     expect(key.currentState!.navigateBack(), isFalse);
   });
+
+  testWidgets('signed out with RomM connected, the options are open', (
+    tester,
+  ) async {
+    final key = await pumpPage(tester, rommConnected: true);
+
+    // The lone sign-in row is gone; the account slot offers the sign-in
+    // instead, above the scraping rows a RomM-only run needs.
+    expect(find.text('ScreenScraper Login'), findsNothing);
+    expect(
+      find.text(AppLocale.en[AppLocale.scraperLoginToScreenscraper] as String),
+      findsOneWidget,
+    );
+    expect(key.currentState!.getItemCount(), greaterThan(1));
+    expect(key.currentState!.navigateDown(), isTrue);
+  });
+}
+
+class _FakeRomm extends RommProvider {
+  _FakeRomm({required this.connected});
+
+  final bool connected;
+
+  @override
+  bool get isConnected => connected;
 }

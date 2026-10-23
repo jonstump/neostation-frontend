@@ -1117,6 +1117,8 @@ const Map<String, dynamic> appLocaleKo = {
 
   AppLocale.checkingCredentials: '로그인 정보 확인 중...',
   AppLocale.scrapeNoCredentials: 'ScreenScraper 로그인 정보가 없습니다. 로그인해 주세요.',
+  AppLocale.scrapeNoSourceForGame:
+      "RomM에 이 게임의 데이터가 없고 ScreenScraper에도 로그인되어 있지 않습니다. 게임을 RomM에 연결하거나 ScreenScraper에 로그인하세요.",
   AppLocale.scrapeSystemNotMapped:
       '이 시스템이 ScreenScraper에 연결되어 있지 않습니다. 시스템 매핑을 확인하세요.',
   AppLocale.scrapeGameNotFound: 'ScreenScraper에서 게임을 찾지 못했습니다.',
@@ -1551,4 +1553,39 @@ const Map<String, dynamic> appLocaleKo = {
       '{system}의 RomM 메타데이터를 가져올 수 없습니다: {error}',
   AppLocale.rommSystemFetchServerStop:
       '조기 중단됨: RomM 서버가 응답하지 않습니다. 이미 가져온 게임은 메타데이터를 유지합니다.',
+  AppLocale.scrapeFetchingFromRomm: 'RomM에서 메타데이터를 가져오는 중…',
+  AppLocale.scrapeCompletedFromRomm: 'RomM에서 게임 정보를 가져왔습니다',
+  AppLocale.scrapeCompletedFromScreenscraper: 'ScreenScraper에서 게임 정보를 가져왔습니다',
+  AppLocale.scrapeCompletedFallback:
+      'RomM에 이 게임의 정보가 없어 ScreenScraper에서 가져왔습니다',
+  AppLocale.scrapeFailedWithReason: '게임 정보 가져오기 실패: {reason}',
+  AppLocale.scrapeRommUnreachable:
+      "RomM에 연결할 수 없고 ScreenScraper에도 로그인되어 있지 않습니다. RomM 연결을 확인하거나 ScreenScraper에 로그인하세요.",
+  AppLocale.scrapeCompletedRommUnreachable:
+      "RomM에 연결할 수 없어 ScreenScraper에서 가져왔습니다",
+  AppLocale.scrapeSummaryRommUnavailable: "RomM에 연결할 수 없었던 게임: {count}",
+  AppLocale.scrapeStoppedRommUnreachable:
+      "스크래핑이 중단되었습니다: RomM 서버에 연결할 수 없습니다. 이미 가져온 게임은 유지됩니다.",
+  AppLocale.scrapingProgressSources:
+      "RomM {romm} · ScreenScraper {screenscraper}",
+  AppLocale.scrapeBulkRommFirstStarted:
+      "스크래핑: 먼저 RomM, RomM에 없는 게임은 ScreenScraper에서 가져옵니다",
+  AppLocale.metadataSourceLabel: "메타데이터 출처: {source}",
+  AppLocale.metadataSourceRomm: "RomM",
+  AppLocale.metadataSourceScreenscraper: "ScreenScraper",
+  AppLocale.metadataSourceEsde: "ES-DE",
+  AppLocale.metadataSourceSteam: "Steam",
+  AppLocale.metadataSourceManual: "직접 편집",
+  AppLocale.scrapeSummaryFromRomm: 'RomM에서: {count}',
+  AppLocale.scrapeSummaryFromScreenscraper: 'ScreenScraper에서: {count}',
+  AppLocale.scrapeBulkRommOnlyStarted:
+      'RomM에서만 스크래핑합니다. ScreenScraper가 설정되지 않았습니다',
+  AppLocale.scrapeBulkNoSourceAvailable:
+      '스크래핑을 시작하기 전에 ScreenScraper에 로그인하거나 RomM에 연결하세요',
+  AppLocale.scraperScreenscraperOptional:
+      'RomM이 연결되어 스크래핑에 먼저 사용됩니다. ScreenScraper에 로그인하면 대체 소스로 추가됩니다.',
+  AppLocale.scraperLoginToScreenscraper: 'ScreenScraper 로그인',
+  AppLocale.scraperSubtitleBoth:
+      'RomM에서 게임 메타데이터를 다운로드하고, RomM에 없는 항목은 ScreenScraper로 보완',
+  AppLocale.scraperSubtitleRomm: 'RomM에서 게임 메타데이터 다운로드',
 };

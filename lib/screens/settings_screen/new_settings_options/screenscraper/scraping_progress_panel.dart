@@ -73,6 +73,31 @@ class ScrapingProgressPanel extends StatelessWidget {
             ),
           ],
         ),
+        if (provider.rommInPlay) ...[
+          SizedBox(height: 8.r),
+          Wrap(
+            spacing: 12.r,
+            runSpacing: 4.r,
+            children: [
+              _sourceText(
+                context,
+                AppLocale.scrapeSummaryFromRomm,
+                provider.rommGames,
+              ),
+              _sourceText(
+                context,
+                AppLocale.scrapeSummaryFromScreenscraper,
+                provider.screenscraperGames,
+              ),
+              if (provider.rommUnavailableGames > 0)
+                _sourceText(
+                  context,
+                  AppLocale.scrapeSummaryRommUnavailable,
+                  provider.rommUnavailableGames,
+                ),
+            ],
+          ),
+        ],
         SizedBox(height: 8.r),
         LayoutBuilder(
           builder: (context, constraints) {
@@ -107,6 +132,8 @@ class ScrapingProgressPanel extends StatelessWidget {
         return AppLocale.scanningImages.getString(context);
       case ThreadProcessingStep.downloadingImages:
         return AppLocale.downloadingImages.getString(context);
+      case ThreadProcessingStep.fetchingFromRomm:
+        return AppLocale.scrapeFetchingFromRomm.getString(context);
       case ThreadProcessingStep.completed:
         return AppLocale.ok.getString(context);
     }
@@ -124,6 +151,18 @@ class ScrapingProgressPanel extends StatelessWidget {
     } else {
       return '${seconds}s';
     }
+  }
+
+  /// One per-source line ("From RomM: N"), from a key with a `{count}`
+  /// placeholder.
+  Widget _sourceText(BuildContext context, String localeKey, int count) {
+    return Text(
+      localeKey.getString(context).replaceFirst('{count}', '$count'),
+      style: TextStyle(
+        fontSize: 10.r,
+        color: Theme.of(context).colorScheme.onSurface,
+      ),
+    );
   }
 
   Widget _buildStatCard(
